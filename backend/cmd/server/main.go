@@ -3,12 +3,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/nadun96/quizplatform/internal/app"
@@ -37,6 +39,25 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	defer a.Close()
+
+	// Bootstrap: `server create-admin <email> <name>` reads the password from
+	// stdin. There is no HTTP path to create an admin.
+	if len(os.Args) > 1 && os.Args[1] == "create-admin" {
+		if len(os.Args) != 4 {
+			return errors.New("usage: server create-admin <email> <name>  (password on stdin)")
+		}
+		pw, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && pw == "" {
+			return err
+		}
+		u, err := a.Auth.CreateAdmin(ctx, os.Args[2], os.Args[3], strings.TrimRight(pw, "\r\n"))
+		if err != nil {
+			return err
+		}
+		logger.Info("admin created", "id", u.ID, "email", u.Email)
+		return nil
+	}
+
 	if err := a.Start(ctx); err != nil {
 		return err
 	}

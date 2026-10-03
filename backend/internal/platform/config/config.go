@@ -21,6 +21,9 @@ type Config struct {
 	DevMode       bool   // relaxes nothing security-critical; enables verbose logs and console email
 	ShutdownWait  time.Duration
 	StaticDir     string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
+
+	SMTPAddr, SMTPFrom, SMTPUser string
+	SMTPPasswordFile             string // secret read from a file, like the KEK
 }
 
 func FromEnv() (Config, error) {
@@ -34,6 +37,11 @@ func FromEnv() (Config, error) {
 		DevMode:       os.Getenv("QP_DEV") == "1",
 		ShutdownWait:  10 * time.Second,
 		StaticDir:     os.Getenv("QP_STATIC_DIR"),
+
+		SMTPAddr:         os.Getenv("QP_SMTP_ADDR"),
+		SMTPFrom:         env("QP_SMTP_FROM", "no-reply@localhost"),
+		SMTPUser:         os.Getenv("QP_SMTP_USER"),
+		SMTPPasswordFile: os.Getenv("QP_SMTP_PASSWORD_FILE"),
 	}
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("QP_DATABASE_URL is required")

@@ -1,29 +1,24 @@
-package app
+package app_test
 
 import (
-	"io"
-	"log/slog"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/nadun96/quizplatform/internal/platform/config"
+	"github.com/nadun96/quizplatform/internal/app/apptest"
 	"github.com/nadun96/quizplatform/internal/platform/dbtest"
 )
 
 func TestMain(m *testing.M) { dbtest.Main(m) }
 
 func TestHealthz(t *testing.T) {
-	pool := dbtest.New(t)
-	a, err := Build(config.Config{BaseURL: "http://localhost"}, slog.New(slog.NewTextHandler(io.Discard, nil)), pool, false)
+	e := apptest.New(t)
+	resp, err := e.Server.Client().Get(e.Server.URL + "/healthz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := httptest.NewRecorder()
-	a.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
-	if rec.Code != 200 {
-		t.Fatalf("healthz = %d %s", rec.Code, rec.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("healthz = %d", resp.StatusCode)
 	}
-	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+	if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal("security headers missing")
 	}
 }
