@@ -32,6 +32,15 @@ Backend modules (`backend/internal/`), each owning one PostgreSQL schema:
 | `analytics` | Precomputed session/quiz analytics, public share links, CSV export (FR-RS, BA §11) |
 | `admin` | Usage, audit log, own-data export |
 
+## Developer documentation
+
+The frontend includes a developer documentation site at **`/docs`** (for example, <http://localhost:5173/docs> in development). It covers the architecture, every backend module, the data model, the configuration hierarchy, live sessions and timing, proctoring, marking, analytics, the frontend, the HTTP and WebSocket interfaces, security, deployment, testing and contributing, with Mermaid diagrams. The pages are Markdown in `frontend/src/lib/docs/pages/`; the decision log is rendered straight from `DECISIONS.md`. Tests fail if:
+
+- a page is missing from the navigation;
+- a cross-page link or anchor is broken;
+- a diagram doesn't parse;
+- a backend module, setting key or migration is undocumented.
+
 ## API documentation
 
 The server serves an OpenAPI 3.1 spec with an embedded Swagger UI (no CDN):

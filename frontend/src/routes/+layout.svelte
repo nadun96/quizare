@@ -13,6 +13,7 @@
 
 	// The live quiz and the projector are full-screen experiences without the nav.
 	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.startsWith('/r/'));
+	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
 
 	async function logout() {
 		await auth.logout();
@@ -49,3 +50,9 @@
 <main>
 	{@render children()}
 </main>
+
+{#if !bare && !isDocs}
+	<footer class="container small muted" style="padding-top:2rem;padding-bottom:2rem">
+		<a href="/docs/overview">Developer docs</a> · <a href="/api/docs" target="_blank" rel="noopener">API reference</a>
+	</footer>
+{/if}
