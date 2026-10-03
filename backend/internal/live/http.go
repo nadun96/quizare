@@ -108,6 +108,20 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		httpx.JSON(w, 200, map[string]any{"events": ev})
 		return nil
 	}))
+	r.Method("POST", "/sessions/{id}/release", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		if err := s.Release(r.Context(), uid(r), pid(r)); err != nil {
+			return err
+		}
+		w.WriteHeader(204)
+		return nil
+	}))
+	r.Method("POST", "/sessions/{id}/unrelease", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		if err := s.Unrelease(r.Context(), uid(r), pid(r)); err != nil {
+			return err
+		}
+		w.WriteHeader(204)
+		return nil
+	}))
 	r.Method("POST", "/attempts/{id}/reinstate", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in struct {
 			Reason string `json:"reason"`
@@ -210,6 +224,14 @@ func (s *Service) StudentRoutes(r chi.Router) {
 		return state(w, r, err)
 	}))
 	r.Method("POST", "/attempts/{id}/violations", httpx.Handler(s.handleViolation))
+	r.Method("GET", "/my/attempts", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		list, err := s.MyAttempts(r.Context(), uid(r))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, map[string]any{"attempts": list})
+		return nil
+	}))
 }
 
 func (s *Service) handleViolation(w http.ResponseWriter, r *http.Request) error {

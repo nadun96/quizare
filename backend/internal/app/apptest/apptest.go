@@ -205,6 +205,26 @@ func (e *Env) NewUser(role auth.Role) *Client {
 	return c
 }
 
+// TakeJobs returns the args of queued River jobs of a kind and deletes them,
+// so tests can run workers' logic deterministically.
+func (e *Env) TakeJobs(kind string) []json.RawMessage {
+	e.T.Helper()
+	rows, err := e.Pool.Query(context.Background(), `DELETE FROM river_job WHERE kind=$1 AND state='available' RETURNING args`, kind)
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	defer rows.Close()
+	var out []json.RawMessage
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			e.T.Fatal(err)
+		}
+		out = append(out, raw)
+	}
+	return out
+}
+
 var tokenRe = regexp.MustCompile(`token=([A-Za-z0-9_-]+)`)
 
 // LastEmailToken returns the token from the newest queued email to addr
