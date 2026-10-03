@@ -399,6 +399,30 @@ func (s *Service) ListTopics(ctx context.Context, teacherID, moduleID string) ([
 	})
 }
 
+// TopicDetail is a topic with its place in the hierarchy, for the topic page.
+type TopicDetail struct {
+	Topic
+	ClassroomID   string `json:"classroom_id"`
+	ClassroomName string `json:"classroom_name"`
+	ModuleName    string `json:"module_name"`
+}
+
+func (s *Service) GetTopic(ctx context.Context, teacherID, id string) (TopicDetail, error) {
+	var t TopicDetail
+	var raw []byte
+	err := s.pool.QueryRow(ctx, `SELECT t.id, t.module_id, t.name, t.position, t.settings, c.id, c.name, m.name
+		FROM content.topics t JOIN content.modules m ON m.id=t.module_id JOIN content.classrooms c ON c.id=m.classroom_id
+		WHERE t.id=$1 AND c.teacher_id=$2`, id, teacherID).Scan(&t.ID, &t.ModuleID, &t.Name, &t.Position, &raw, &t.ClassroomID, &t.ClassroomName, &t.ModuleName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return t, httpx.ErrNotFound
+	}
+	if err != nil {
+		return t, err
+	}
+	t.Settings, err = settings.Parse(raw)
+	return t, err
+}
+
 func (s *Service) UpdateTopic(ctx context.Context, teacherID, id string, in NodeInput) error {
 	name, err := in.validate(settings.LevelTopic, false)
 	if err != nil {
