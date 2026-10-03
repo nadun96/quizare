@@ -24,6 +24,8 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "marked": "^18.0.14",
+    "mermaid": "^11.17.2",
     "qrcode": "^1.5.4",
     "sortablejs": "^1.15.7"
   }
