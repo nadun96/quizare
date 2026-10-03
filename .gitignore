@@ -16,5 +16,9 @@ node_modules/
 .DS_Store
 ~$*
 
+# Private local notes and demo helpers (credentials) — never commit
+*.local.md
+/local/
+
 # Private reference documents (BA/architecture PDFs, spreadsheet) - kept locally, never committed
 /docs/
