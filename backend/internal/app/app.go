@@ -206,6 +206,9 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		b.Use(a.Auth.Middleware)
 		a.Live.BeaconRoutes(b)
 	})
+	if cfg.StaticDir != "" {
+		r.NotFound(httpx.SPA(cfg.StaticDir).ServeHTTP)
+	}
 	a.router = r
 	return a, nil
 }
