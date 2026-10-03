@@ -4,10 +4,10 @@ Timed, proctored in-class quizzes that students join by scanning a QR code, with
 answer-key and LLM-assisted marking, predefined and AI feedback, and configurable
 results publishing and analytics.
 
-- Requirements: `docs/QR Classroom Quiz Platform — Business Analysis Document.pdf`
-- Architecture & ADRs: `docs/QR Classroom Quiz Platform — Architecture Document.pdf`
-- Stack: `docs/tech_stack_recommendations.xlsx`
 - Choices that fill gaps in the BA document: `DECISIONS.md`
+- Requirements, architecture (ADRs) and stack documents are private and are **not in the repository**.
+  Keep them in a local `docs/` folder (git-ignored): the Business Analysis document, the Architecture
+  document and `tech_stack_recommendations.xlsx`.
 
 ## Layout
 
