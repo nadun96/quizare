@@ -6,6 +6,8 @@ const backend = process.env.QP_BACKEND ?? 'http://127.0.0.1:8080';
 export default defineConfig({
 	plugins: [sveltekit()],
 	server: {
+		// The docs import ../DECISIONS.md from the repository root.
+		fs: { allow: ['..'] },
 		// Same-origin in development so the __Host- cookie and Origin checks work.
 		proxy: {
 			'/api': { target: backend, changeOrigin: false },
