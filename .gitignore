@@ -15,6 +15,9 @@ node_modules/
 /backend/tmp/
 .DS_Store
 ~$*
+HOW-TO-RUN.local.md
+local/demo/demo_bots.py
+local/demo/demo_seed.py
 
 # Private reference documents (BA/architecture PDFs, spreadsheet) - kept locally, never committed
 /docs/
