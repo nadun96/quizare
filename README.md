@@ -110,3 +110,7 @@ Without `QP_SMTP_ADDR`, emails (verification, password reset) are written to the
 4. Install `deploy/quiz.service` (it sets `GOMEMLIMIT=700MiB` and `MemoryMax=900M`) and `deploy/Caddyfile` (with your domain).
 5. Enable backups: `deploy/backup.sh` with `quiz-backup.timer` (age-encrypted, 14 daily and 8 weekly copies). Test a restore every month.
 6. Before real classes, run `loadtest/classroom.js` with k6 against a staging copy.
+
+## License
+
+[MIT](LICENSE) © 2026 Nadun Udaraka
