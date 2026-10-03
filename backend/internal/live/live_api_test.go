@@ -1,6 +1,7 @@
 package live_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -561,7 +562,7 @@ func TestRestartRehydrates(t *testing.T) {
 	f.teacher.Call("POST", "/api/teacher/sessions/"+f.sess.ID+"/pause", map[string]any{"all": true}, 200, nil)
 
 	cfg := config.Config{BaseURL: f.e.Server.URL, Argon2Workers: 1}
-	restarted, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), f.e.Pool, app.Options{})
+	restarted, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), f.e.Pool, app.Options{KEK: bytes.Repeat([]byte{7}, 32)})
 	if err != nil {
 		t.Fatal(err)
 	}

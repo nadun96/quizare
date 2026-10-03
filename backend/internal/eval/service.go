@@ -528,3 +528,68 @@ func (s *Service) StudentResult(ctx context.Context, userID, attemptID string) (
 	}
 	return out, nil
 }
+
+// ---------- LLM results (written by the LLM gateway) ----------
+
+// LLMOutcome is a checked provider result for one answer.
+type LLMOutcome struct {
+	Score      float64
+	Feedback   string
+	Rationale  string
+	Flagged    bool
+	FlagReason string
+}
+
+// ApplyLLM stores an AI mark ("mark") or AI feedback ("feedback"). A teacher
+// override is never replaced: the teacher is the final authority (ADR-16).
+func (s *Service) ApplyLLM(ctx context.Context, attemptID, questionID, mode string, o LLMOutcome) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var status string
+		var max float64
+		err := tx.QueryRow(ctx, `SELECT status, max_score FROM eval.marks WHERE attempt_id=$1 AND question_id=$2 FOR UPDATE`, attemptID, questionID).Scan(&status, &max)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if mode == "feedback" || status == StatusOverridden {
+			_, err = tx.Exec(ctx, `UPDATE eval.marks SET ai_feedback=$3, updated_at=now() WHERE attempt_id=$1 AND question_id=$2`, attemptID, questionID, o.Feedback)
+			return err
+		}
+		frac := 0.0
+		if max > 0 {
+			frac = o.Score / max
+		}
+		if _, err := tx.Exec(ctx, `UPDATE eval.marks SET status='marked', score=$3, fraction=$4, correct=$5, ai_feedback=$6, ai_rationale=$7,
+			ai_marked=true, flagged=$8, flag_reason=$9, updated_at=now() WHERE attempt_id=$1 AND question_id=$2`,
+			attemptID, questionID, o.Score, frac, o.Score >= max, o.Feedback, o.Rationale, o.Flagged, o.FlagReason); err != nil {
+			return err
+		}
+		return s.Recompute(ctx, tx, attemptID)
+	})
+}
+
+// LLMFailed sends an answer to manual marking after a permanent or final
+// failure, and notifies the teacher through the flag (UC-04 exception).
+func (s *Service) LLMFailed(ctx context.Context, attemptID, questionID, mode, reason string) error {
+	if mode == "feedback" {
+		return nil // the mark stands; only the AI feedback is missing
+	}
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE eval.marks SET status='needs_manual', flagged=true, flag_reason=$3, updated_at=now()
+			WHERE attempt_id=$1 AND question_id=$2 AND status='pending'`, attemptID, questionID, "AI marking failed: "+reason)
+		if err != nil || tag.RowsAffected() == 0 {
+			return err
+		}
+		return s.Recompute(ctx, tx, attemptID)
+	})
+}
+
+// MarkPendingTx resets a mark to pending before an LLM re-run (FR-EV-09).
+func (s *Service) MarkPendingTx(ctx context.Context, tx pgx.Tx, attemptID, questionID string, max float64) error {
+	_, err := tx.Exec(ctx, `INSERT INTO eval.marks(attempt_id, question_id, method, status, max_score) VALUES ($1,$2,'llm','pending',$3)
+		ON CONFLICT (attempt_id, question_id) DO UPDATE SET method='llm', status='pending', score=NULL, ai_marked=false,
+			flagged=false, flag_reason='', overridden_by=NULL, overridden_at=NULL, updated_at=now()`, attemptID, questionID, max)
+	return err
+}

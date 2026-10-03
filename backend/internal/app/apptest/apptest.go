@@ -25,6 +25,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/app"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/imageurl"
+	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/dbtest"
@@ -38,8 +39,13 @@ type Env struct {
 	seq    atomic.Int64
 }
 
-// Config lets a test tweak configuration before the app is built.
-type Option func(*config.Config)
+// Option lets a test tweak configuration before the app is built.
+type Option func(*config.Config, *app.Options)
+
+// WithProviders replaces the LLM provider adapters.
+func WithProviders(p map[string]llm.Provider) Option {
+	return func(_ *config.Config, o *app.Options) { o.Providers = p }
+}
 
 func New(t testing.TB, opts ...Option) *Env {
 	t.Helper()
@@ -50,12 +56,13 @@ func New(t testing.TB, opts ...Option) *Env {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
 	t.Cleanup(srv.Close)
 	cfg := config.Config{BaseURL: srv.URL, Argon2Workers: 2, DBMaxConns: 8}
+	options := app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
+		Checker: imageurl.NewChecker(true), // tests check URLs on local httptest servers
+		KEK:     bytes.Repeat([]byte{7}, 32)}
 	for _, o := range opts {
-		o(&cfg)
+		o(&cfg, &options)
 	}
-	a, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), pool,
-		app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
-			Checker: imageurl.NewChecker(true)}) // tests check URLs on local httptest servers
+	a, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), pool, options)
 	if err != nil {
 		t.Fatal(err)
 	}
