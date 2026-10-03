@@ -62,6 +62,11 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		JSON(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
+	// A foreign key RESTRICT (e.g. deleting a topic that still has quizzes).
+	if errors.As(err, &pe) && pe.Code == "23503" {
+		JSON(w, http.StatusConflict, Conflict("this item is still in use; remove what depends on it first"))
+		return
+	}
 	slog.ErrorContext(r.Context(), "internal error", "err", err, "path", r.URL.Path)
 	JSON(w, http.StatusInternalServerError, NewError(500, "internal", "internal server error"))
 }
