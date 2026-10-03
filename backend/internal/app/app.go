@@ -16,11 +16,13 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/nadun96/quizplatform/internal/auth"
+	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
+	"github.com/nadun96/quizplatform/internal/settings"
 	"github.com/nadun96/quizplatform/migrations"
 )
 
@@ -32,7 +34,9 @@ type App struct {
 	router  chi.Router
 	ownPool bool
 
-	Auth *auth.Service
+	Auth     *auth.Service
+	Settings *settings.Store
+	Content  *content.Service
 }
 
 // Options let tests swap infrastructure.
@@ -89,6 +93,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.river = rc
 
 	a.Auth = auth.NewService(pool, auth.NewHasher(cfg.Argon2Workers), rc, cfg.BaseURL)
+	a.Settings = settings.NewStore(pool)
+	a.Content = content.NewService(pool, a.Settings, a.Auth)
 
 	r := chi.NewRouter()
 	r.Use(httpx.Recover, httpx.SecurityHeaders)
@@ -99,6 +105,16 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		api.Route("/admin", func(ad chi.Router) {
 			ad.Use(auth.RequireRole(auth.RoleAdmin))
 			a.Auth.AdminRoutes(ad)
+			ad.Route("/settings", a.Settings.AdminRoutes)
+		})
+		api.Route("/teacher", func(t chi.Router) {
+			t.Use(auth.RequireRole(auth.RoleTeacher))
+			t.Route("/settings", a.Settings.TeacherRoutes)
+			a.Content.TeacherRoutes(t)
+		})
+		api.Group(func(s chi.Router) {
+			s.Use(auth.RequireRole())
+			a.Content.StudentRoutes(s)
 		})
 	})
 	a.router = r

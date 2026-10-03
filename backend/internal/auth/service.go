@@ -429,6 +429,25 @@ func (s *Service) GetUser(ctx context.Context, id string) (User, error) {
 	return u, err
 }
 
+// UsersByID returns users keyed by id; unknown ids are omitted.
+func (s *Service) UsersByID(ctx context.Context, ids []string) (map[string]User, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, email, name, role, status, email_verified_at IS NOT NULL
+		FROM auth.users WHERE id = ANY($1::uuid[])`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]User, len(ids))
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified); err != nil {
+			return nil, err
+		}
+		out[u.ID] = u
+	}
+	return out, rows.Err()
+}
+
 // CreateAdmin is used by the CLI bootstrap command; there is no HTTP path to it.
 func (s *Service) CreateAdmin(ctx context.Context, email, name, password string) (User, error) {
 	in := RegisterInput{Email: email, Name: name, Password: password, Role: RoleStudent}
