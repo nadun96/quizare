@@ -17,11 +17,13 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
+	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
+	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 	"github.com/nadun96/quizplatform/migrations"
 )
@@ -37,12 +39,15 @@ type App struct {
 	Auth     *auth.Service
 	Settings *settings.Store
 	Content  *content.Service
+	Quiz     *quiz.Service
 }
 
 // Options let tests swap infrastructure.
 type Options struct {
 	RunJobs bool        // false: insert-only River client
 	Mailer  mail.Sender // nil: chosen from config
+	// Checker validates resource URLs; nil uses the SSRF-safe public checker.
+	Checker *imageurl.Checker
 }
 
 // New opens the database, applies migrations and builds the app.
@@ -79,8 +84,14 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			return nil, err
 		}
 	}
+	checker := opt.Checker
+	if checker == nil {
+		checker = imageurl.NewChecker(false)
+	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &mail.Worker{Sender: mailer})
+	quizWorker := &quiz.CheckResourcesWorker{}
+	river.AddWorker(workers, quizWorker)
 
 	var w *river.Workers
 	if opt.RunJobs {
@@ -95,6 +106,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Auth = auth.NewService(pool, auth.NewHasher(cfg.Argon2Workers), rc, cfg.BaseURL)
 	a.Settings = settings.NewStore(pool)
 	a.Content = content.NewService(pool, a.Settings, a.Auth)
+	a.Quiz = quiz.NewService(pool, a.Content, a.Settings, rc, checker)
+	quizWorker.Service = a.Quiz
 
 	r := chi.NewRouter()
 	r.Use(httpx.Recover, httpx.SecurityHeaders)
@@ -111,6 +124,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			t.Use(auth.RequireRole(auth.RoleTeacher))
 			t.Route("/settings", a.Settings.TeacherRoutes)
 			a.Content.TeacherRoutes(t)
+			a.Quiz.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())

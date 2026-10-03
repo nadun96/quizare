@@ -20,6 +20,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/app"
 	"github.com/nadun96/quizplatform/internal/auth"
+	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/dbtest"
@@ -49,7 +50,8 @@ func New(t testing.TB, opts ...Option) *Env {
 		o(&cfg)
 	}
 	a, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), pool,
-		app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))}})
+		app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
+			Checker: imageurl.NewChecker(true)}) // tests check URLs on local httptest servers
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +101,25 @@ func (c *Client) Do(method, path string, body any) (int, []byte) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, out
+}
+
+// Raw sends a non-JSON body (e.g. text/csv) and returns status and body.
+func (c *Client) Raw(method, path, contentType string, body []byte) (int, []byte) {
+	c.e.T.Helper()
+	req, err := http.NewRequest(method, c.e.Server.URL+path, bytes.NewReader(body))
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	req.Header.Set("Origin", c.e.Server.URL)
+	req.Header.Set("X-Requested-With", "fetch")
+	req.Header.Set("Content-Type", contentType)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		c.e.T.Fatal(err)
