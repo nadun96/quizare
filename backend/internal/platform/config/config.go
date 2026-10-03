@@ -22,6 +22,8 @@ type Config struct {
 	ShutdownWait  time.Duration
 	StaticDir     string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
 
+	APIDocs bool // serve the OpenAPI spec and Swagger UI at /api/docs (QP_API_DOCS=0 disables)
+
 	SMTPAddr, SMTPFrom, SMTPUser string
 	SMTPPasswordFile             string // secret read from a file, like the KEK
 }
@@ -38,6 +40,7 @@ func FromEnv() (Config, error) {
 		ShutdownWait:  10 * time.Second,
 		StaticDir:     os.Getenv("QP_STATIC_DIR"),
 
+		APIDocs:          os.Getenv("QP_API_DOCS") != "0",
 		SMTPAddr:         os.Getenv("QP_SMTP_ADDR"),
 		SMTPFrom:         env("QP_SMTP_FROM", "no-reply@localhost"),
 		SMTPUser:         os.Getenv("QP_SMTP_USER"),

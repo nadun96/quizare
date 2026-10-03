@@ -55,7 +55,7 @@ func New(t testing.TB, opts ...Option) *Env {
 	var handler http.Handler = http.NotFoundHandler()
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
 	t.Cleanup(srv.Close)
-	cfg := config.Config{BaseURL: srv.URL, Argon2Workers: 2, DBMaxConns: 8}
+	cfg := config.Config{BaseURL: srv.URL, Argon2Workers: 2, DBMaxConns: 8, APIDocs: true}
 	options := app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
 		Checker: imageurl.NewChecker(true), // tests check URLs on local httptest servers
 		KEK:     bytes.Repeat([]byte{7}, 32)}
