@@ -3,7 +3,8 @@ info:
   title: QR Classroom Quiz Platform API
   version: 1.0.0
   license:
-    name: Proprietary
+    name: MIT
+    url: https://opensource.org/licenses/MIT
   description: |
     REST API of the QR Classroom Quiz Platform (single Go binary, see the architecture document).
 
