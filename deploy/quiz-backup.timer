@@ -1,0 +1,11 @@
+# Runs deploy/backup.sh nightly via quiz-backup.service.
+[Unit]
+Description=Nightly quiz database backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
