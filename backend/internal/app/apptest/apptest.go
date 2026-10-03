@@ -1,0 +1,185 @@
+// Package apptest runs the full HTTP app against a real PostgreSQL for
+// end-to-end API tests.
+package apptest
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"regexp"
+	"sync/atomic"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/nadun96/quizplatform/internal/app"
+	"github.com/nadun96/quizplatform/internal/auth"
+	"github.com/nadun96/quizplatform/internal/imageurl"
+	"github.com/nadun96/quizplatform/internal/mail"
+	"github.com/nadun96/quizplatform/internal/platform/config"
+	"github.com/nadun96/quizplatform/internal/platform/dbtest"
+)
+
+type Env struct {
+	T      testing.TB
+	App    *app.App
+	Server *httptest.Server
+	Pool   *pgxpool.Pool
+	seq    atomic.Int64
+}
+
+// Config lets a test tweak configuration before the app is built.
+type Option func(*config.Config)
+
+func New(t testing.TB, opts ...Option) *Env {
+	t.Helper()
+	pool := dbtest.New(t)
+	e := &Env{T: t, Pool: pool}
+	// Start the server first so BaseURL (used for Origin checks) is known.
+	var handler http.Handler = http.NotFoundHandler()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
+	t.Cleanup(srv.Close)
+	cfg := config.Config{BaseURL: srv.URL, Argon2Workers: 2, DBMaxConns: 8}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	a, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), pool,
+		app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
+			Checker: imageurl.NewChecker(true)}) // tests check URLs on local httptest servers
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	handler = a.Handler()
+	e.App, e.Server = a, srv
+	return e
+}
+
+// Client is a browser-like client with its own cookie jar.
+type Client struct {
+	e    *Env
+	http *http.Client
+	User auth.User
+}
+
+func (e *Env) Client() *Client {
+	jar, _ := cookiejar.New(nil)
+	hc := *e.Server.Client() // copy: Server.Client() is shared
+	hc.Jar = jar
+	return &Client{e: e, http: &hc}
+}
+
+// Do sends a request with the SPA's CSRF header and same-origin Origin.
+func (c *Client) Do(method, path string, body any) (int, []byte) {
+	c.e.T.Helper()
+	var rd io.Reader
+	switch b := body.(type) {
+	case nil:
+	case []byte:
+		rd = bytes.NewReader(b)
+	case string:
+		rd = bytes.NewReader([]byte(b))
+	default:
+		raw, err := json.Marshal(b)
+		if err != nil {
+			c.e.T.Fatal(err)
+		}
+		rd = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(method, c.e.Server.URL+path, rd)
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	req.Header.Set("Origin", c.e.Server.URL)
+	req.Header.Set("X-Requested-With", "fetch")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, out
+}
+
+// Raw sends a non-JSON body (e.g. text/csv) and returns status and body.
+func (c *Client) Raw(method, path, contentType string, body []byte) (int, []byte) {
+	c.e.T.Helper()
+	req, err := http.NewRequest(method, c.e.Server.URL+path, bytes.NewReader(body))
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	req.Header.Set("Origin", c.e.Server.URL)
+	req.Header.Set("X-Requested-With", "fetch")
+	req.Header.Set("Content-Type", contentType)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, out
+}
+
+// Call sends a request, asserts the status and decodes the response into out.
+func (c *Client) Call(method, path string, body any, want int, out any) {
+	c.e.T.Helper()
+	status, raw := c.Do(method, path, body)
+	if status != want {
+		c.e.T.Fatalf("%s %s: status %d, want %d: %s", method, path, status, want, raw)
+	}
+	if out != nil {
+		if err := json.Unmarshal(raw, out); err != nil {
+			c.e.T.Fatalf("%s %s: decode %s: %v", method, path, raw, err)
+		}
+	}
+}
+
+// NewUser registers a user with the given role and returns a logged-in client.
+func (e *Env) NewUser(role auth.Role) *Client {
+	e.T.Helper()
+	n := e.seq.Add(1)
+	c := e.Client()
+	email := fmt.Sprintf("%s%d@example.com", role, n)
+	switch role {
+	case auth.RoleAdmin:
+		u, err := e.App.Auth.CreateAdmin(context.Background(), email, "Admin", "password123")
+		if err != nil {
+			e.T.Fatal(err)
+		}
+		c.Call("POST", "/api/auth/login", map[string]string{"email": email, "password": "password123"}, 200, &c.User)
+		_ = u
+	default:
+		c.Call("POST", "/api/auth/register", map[string]any{
+			"email": email, "name": fmt.Sprintf("%s %d", role, n), "password": "password123", "role": role,
+		}, 201, &c.User)
+	}
+	return c
+}
+
+var tokenRe = regexp.MustCompile(`token=([A-Za-z0-9_-]+)`)
+
+// LastEmailToken returns the token from the newest queued email to addr
+// with the given subject.
+func (e *Env) LastEmailToken(addr, subject string) string {
+	e.T.Helper()
+	var body string
+	err := e.Pool.QueryRow(context.Background(), `SELECT args->>'body' FROM river_job
+		WHERE kind='email' AND args->>'to'=$1 AND args->>'subject'=$2 ORDER BY id DESC LIMIT 1`, addr, subject).Scan(&body)
+	if err != nil {
+		e.T.Fatalf("no email %q to %s: %v", subject, addr, err)
+	}
+	m := tokenRe.FindStringSubmatch(body)
+	if m == nil {
+		e.T.Fatalf("no token in email body: %s", body)
+	}
+	return m[1]
+}
