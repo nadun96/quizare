@@ -34,7 +34,11 @@ type MarkingData struct {
 	UserID        string
 	StudentNumber *string
 	State         string
+	StartedAt     *time.Time
 	SubmittedAt   *time.Time
+	ExtensionSec  int
+	Warnings      int
+	Violations    int
 	Session       settings.Effective // session-level effective settings for this student
 	Released      bool               // results visible to the student (BR-12)
 	Items         []MarkingItem      // in the order the student saw them
@@ -90,7 +94,8 @@ func (s *Service) markingData(ctx context.Context, sess Session, a *Attempt) (*M
 	d := &MarkingData{
 		AttemptID: a.ID, SessionID: sess.ID, SessionTitle: sess.Title, QuizTitle: sess.Snapshot.QuizTitle,
 		TeacherID: sess.TeacherID, UserID: a.UserID, StudentNumber: a.StudentNumber, State: a.State,
-		SubmittedAt: a.SubmittedAt, Session: eff, Released: released(sess, a, eff),
+		StartedAt: a.StartedAt, SubmittedAt: a.SubmittedAt, ExtensionSec: a.ExtensionSec, Warnings: a.Warnings, Violations: a.Violations,
+		Session: eff, Released: released(sess, a, eff),
 	}
 	for i := range a.Order {
 		q := sess.question(a, i)
@@ -142,6 +147,78 @@ func (s *Service) SessionMarkingData(ctx context.Context, teacherID, sessionID s
 		out = append(out, d)
 	}
 	return out, nil
+}
+
+// SessionInfo is a session summary for analytics.
+type SessionInfo struct {
+	ID, QuizID, TeacherID, ClassroomID, Title, QuizTitle, Status string
+	CreatedAt                                                    time.Time
+	Effective                                                    settings.Effective
+	Questions                                                    []quiz.Question
+}
+
+func (s *Service) SessionInfo(ctx context.Context, teacherID, sessionID string) (SessionInfo, error) {
+	var sess *Session
+	var err error
+	if teacherID == "" {
+		sess, err = s.session(ctx, sessionID)
+	} else {
+		sess, err = s.ownedSession(ctx, teacherID, sessionID)
+	}
+	if err != nil {
+		return SessionInfo{}, err
+	}
+	v := s.sessionView(sess)
+	return SessionInfo{ID: v.ID, QuizID: v.QuizID, TeacherID: v.TeacherID, ClassroomID: v.ClassroomID, Title: v.Title,
+		QuizTitle: v.Snapshot.QuizTitle, Status: v.Status, CreatedAt: v.CreatedAt, Effective: v.Effective(nil, settings.Overrides{}),
+		Questions: v.Snapshot.Questions}, nil
+}
+
+// SessionIDsForQuiz lists a quiz's sessions, oldest first.
+func (s *Service) SessionIDsForQuiz(ctx context.Context, teacherID, quizID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id FROM live.sessions WHERE quiz_id=$1 AND teacher_id=$2 ORDER BY created_at`, quizID, teacherID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+// AttemptCounts returns how many students joined a session, by state.
+func (s *Service) AttemptCounts(ctx context.Context, sessionID string) (map[string]int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT state, count(*) FROM live.attempts WHERE session_id=$1 GROUP BY state`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var st string
+		var n int
+		if err := rows.Scan(&st, &n); err != nil {
+			return nil, err
+		}
+		out[st] = n
+	}
+	return out, rows.Err()
+}
+
+// PauseCounts returns how many times each attempt was paused.
+func (s *Service) PauseCounts(ctx context.Context, sessionID string) (map[string]int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT attempt_id::text, count(*) FROM live.events WHERE session_id=$1 AND kind='paused' GROUP BY attempt_id`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
 }
 
 // AttemptIDs lists a session's finished attempts in the given states.
