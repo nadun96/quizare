@@ -2,7 +2,7 @@
 
 The QR Classroom Quiz Platform runs timed, proctored quizzes in a classroom. A teacher projects a QR code, students scan it with their phones, the teacher admits them, and each student answers one question at a time against server-enforced timers. Answers are marked by answer key, by an LLM using the teacher's own API key, or by the teacher, and results are published privately or on a revocable public page.
 
-These pages describe how the system is built so you can change it safely. The product requirements live in the Business Analysis document (`docs/QR Classroom Quiz Platform — Business Analysis Document.pdf`) and the architecture rationale in the Architecture document (ADRs) in the same folder. Requirement IDs such as **FR-SS-05**, business rules such as **BR-12** and decisions such as **ADR-07** refer to those documents; **D-nn** refers to the [decision log](decisions.md).
+These pages describe how the system is built so you can change it safely. The product requirements live in the Business Analysis document and the architecture rationale in the Architecture document (ADRs). Both are private and are not in the repository; teams keep them in a local, git-ignored `docs/` folder. Requirement IDs such as **FR-SS-05**, business rules such as **BR-12** and decisions such as **ADR-07** refer to those documents; **D-nn** refers to the [decision log](decisions.md).
 
 ## The system in one picture
 
@@ -64,7 +64,8 @@ flowchart LR
 | `frontend/src/lib` | API client, socket, timers, offline answer queue, proctoring, shared components |
 | `deploy/` | Caddyfile, systemd units, PostgreSQL tuning, backup script |
 | `loadtest/` | k6 classroom scenario |
-| `docs/` | BA and architecture documents, `DECISIONS.md` |
+| `DECISIONS.md` | The decision log |
+| `docs/` (git-ignored) | Private BA and architecture documents, kept locally only |
 
 ## Where to go next
 
