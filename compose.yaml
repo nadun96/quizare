@@ -1,0 +1,110 @@
+# QR Classroom Quiz Platform: Docker Compose / Podman Compose (D-37).
+#
+#   cp .env.example .env              # set POSTGRES_PASSWORD
+#   docker compose up -d --build      # or: podman compose up -d --build
+#   open http://localhost:8080
+#
+# HTTPS through Caddy (needed when students connect over the LAN or a domain):
+#   set QP_DOMAIN and QP_BASE_URL in .env, then
+#   docker compose --profile tls up -d --build
+#
+# Create the first admin (the password is read from stdin):
+#   echo 'a-strong-password' | docker compose exec -T app /app/server create-admin admin@example.edu "Admin"
+
+name: quiz
+
+services:
+  db:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quiz
+      POSTGRES_USER: quiz
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # Tuning from deploy/postgresql.conf.d/quiz.conf (architecture §2.1, §5).
+    command:
+      - postgres
+      - -c
+      - max_connections=30
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - autovacuum_work_mem=64MB
+      - -c
+      - wal_compression=on
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - idle_in_transaction_session_timeout=30s
+      - -c
+      - statement_timeout=15s
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+    shm_size: 256m
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quiz -d quiz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No published port: only the app reaches the database (ADR-16).
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: localhost/quiz-platform:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      QP_DATABASE_URL: postgres://quiz:${POSTGRES_PASSWORD}@db:5432/quiz?sslmode=disable
+      QP_BASE_URL: ${QP_BASE_URL:-http://localhost:8080}
+      # First start writes a random 32-byte master key into the app volume.
+      # Back the volume up: without the key, stored LLM API keys are unreadable.
+      QP_KEK_GENERATE: "1"
+      QP_DB_WAIT_SECONDS: "90"
+      QP_API_DOCS: ${QP_API_DOCS:-1}
+      QP_SMTP_ADDR: ${QP_SMTP_ADDR:-}
+      QP_SMTP_FROM: ${QP_SMTP_FROM:-no-reply@localhost}
+      QP_SMTP_USER: ${QP_SMTP_USER:-}
+      GOMEMLIMIT: 700MiB
+    mem_limit: 900m
+    volumes:
+      - appdata:/var/lib/quiz
+    ports:
+      - "${QP_HTTP_BIND:-127.0.0.1:8080}:8080"
+
+  caddy:
+    image: docker.io/library/caddy:2-alpine
+    profiles: ["tls"]
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      QP_DOMAIN: ${QP_DOMAIN:-localhost}
+    ports:
+      # Rootless Podman cannot bind ports below 1024 by default; set
+      # CADDY_HTTP_PORT=8081 / CADDY_HTTPS_PORT=8443 (or lower
+      # net.ipv4.ip_unprivileged_port_start).
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./deploy/container/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+      - caddydata:/data
+      - caddyconfig:/config
+
+volumes:
+  pgdata:
+  appdata:
+  caddydata:
+  caddyconfig:

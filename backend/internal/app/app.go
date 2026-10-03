@@ -67,7 +67,7 @@ type Options struct {
 
 // New opens the database, applies migrations and builds the app.
 func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error) {
-	pool, err := db.Open(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
+	pool, err := db.OpenWait(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBWait)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +78,16 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	if err := jobs.Migrate(ctx, pool); err != nil {
 		pool.Close()
 		return nil, err
+	}
+	if cfg.KEKGenerate {
+		created, err := llm.EnsureKEK(cfg.KEKFile)
+		if err != nil {
+			pool.Close()
+			return nil, err
+		}
+		if created {
+			log.Warn("generated a new master key; back it up, losing it means teachers must re-enter their API keys", "path", cfg.KEKFile)
+		}
 	}
 	kek, err := llm.LoadKEK(cfg.KEKFile)
 	if err != nil {
