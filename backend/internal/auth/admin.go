@@ -83,6 +83,30 @@ func (s *Service) DeleteUser(ctx context.Context, actorID, userID string) error 
 	if actorID == userID {
 		return httpx.BadRequest("you cannot delete your own account here")
 	}
+	return s.anonymise(ctx, actorID, userID)
+}
+
+// DeleteOwnAccount lets a student or teacher delete their account after
+// re-entering their password (NFR-04). Admin accounts are removed by another admin.
+func (s *Service) DeleteOwnAccount(ctx context.Context, u User, password string) error {
+	if u.Role == RoleAdmin {
+		return httpx.BadRequest("ask another admin to remove an admin account")
+	}
+	var hash string
+	if err := s.pool.QueryRow(ctx, `SELECT password_hash FROM auth.users WHERE id=$1`, u.ID).Scan(&hash); err != nil {
+		return err
+	}
+	ok, err := s.hasher.Verify(ctx, password, hash)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errInvalidCredentials
+	}
+	return s.anonymise(ctx, u.ID, u.ID)
+}
+
+func (s *Service) anonymise(ctx context.Context, actorID, userID string) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE auth.users
 			SET status='deleted', email=$2, name='Deleted user', password_hash='!', email_verified_at=NULL, updated_at=now()

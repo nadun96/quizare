@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
+	"github.com/nadun96/quizplatform/internal/admin"
 	"github.com/nadun96/quizplatform/internal/analytics"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
@@ -48,6 +49,7 @@ type App struct {
 	Eval      *eval.Service
 	LLM       *llm.Service
 	Analytics *analytics.Service
+	Admin     *admin.Service
 }
 
 // Options let tests swap infrastructure.
@@ -149,6 +151,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Eval.SetLLM(a.LLM)
 	a.Analytics = analytics.NewService(pool, a.Live, a.Eval, a.Auth, rc)
 	analyticsWorker.Service = a.Analytics
+	a.Admin = admin.NewService(pool, a.Auth)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -171,6 +174,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			ad.Use(auth.RequireRole(auth.RoleAdmin))
 			a.Auth.AdminRoutes(ad)
 			ad.Route("/settings", a.Settings.AdminRoutes)
+			a.Admin.AdminRoutes(ad)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
@@ -185,6 +189,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
 			a.Content.StudentRoutes(s)
+			a.Admin.UserRoutes(s)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole(auth.RoleStudent))
