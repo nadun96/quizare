@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/dbtest"
@@ -27,4 +28,26 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if _, err := pool.Exec(ctx, `INSERT INTO audit.events(action,target_type,target_id) VALUES ('x','y','z')`); err != nil {
 		t.Fatalf("audit table missing: %v", err)
 	}
+}
+
+func TestOpenWaitGivesUp(t *testing.T) {
+	start := time.Now()
+	// Nothing listens on port 1: every attempt fails, so OpenWait must stop at the deadline.
+	_, err := db.OpenWait(context.Background(), "postgres://x:y@127.0.0.1:1/x?sslmode=disable&connect_timeout=1", 1, 2*time.Second)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if d := time.Since(start); d < time.Second || d > 10*time.Second {
+		t.Fatalf("gave up after %v, want about 2 s", d)
+	}
+}
+
+func TestOpenWaitSucceedsImmediately(t *testing.T) {
+	pool := dbtest.New(t)
+	url := pool.Config().ConnString()
+	p, err := db.OpenWait(context.Background(), url, 2, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
 }

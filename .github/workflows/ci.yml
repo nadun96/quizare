@@ -49,3 +49,16 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image (Podman, preinstalled on the runner)
+        run: podman build -t localhost/quiz-platform:ci .
+      - name: Compose smoke test (Docker)
+        run: |
+          printf 'POSTGRES_PASSWORD=ci-only-password\n' > .env
+          docker compose up -d --build --wait --wait-timeout 180
+          curl -fsS http://localhost:8080/healthz
+          docker compose down -v

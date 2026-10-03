@@ -48,6 +48,29 @@ flowchart LR
    - It keeps 14 daily and 8 weekly encrypted dumps. **Test a restore monthly.**
 9. **Load test** before real classes. Follow the header of `loadtest/classroom.js`: ramp to 300 sockets in 60 s, with thresholds p95 save < 150 ms, admit → countdown < 500 ms, and login p95 < 3 s.
 
+## Containers
+
+The alternative to the host install is `Dockerfile` with `compose.yaml` at the repository root. Both work with Docker and Podman.
+
+```mermaid
+flowchart LR
+  Browser((Browser)) -->|8080 or 443| Edge
+  subgraph Compose project quiz
+    Edge[caddy<br/>profile tls] -->|app:8080| App[app<br/>distroless, uid 65532<br/>GOMEMLIMIT 700MiB]
+    App -->|db:5432| DB[(db<br/>postgres:16-alpine)]
+    App --- V1[(appdata<br/>KEK)]
+    DB --- V2[(pgdata)]
+  end
+```
+
+- **Image.** A multi-stage build: Node builds the SPA, Go builds a static binary, and the runtime is `gcr.io/distroless/static-debian12:nonroot` (no shell). The binary serves the SPA (`QP_STATIC_DIR=/app/web`) and implements its own probe, `server healthcheck`, which the `HEALTHCHECK` uses.
+- **Start-up order.** Compose waits for `pg_isready`. The app also retries the database for `QP_DB_WAIT_SECONDS`, because some `podman-compose` versions ignore health conditions.
+- **Master key.** Bind-mounting a 0400 key file into a non-root container breaks on ownership. Instead, `QP_KEK_GENERATE=1` creates the key inside the `appdata` volume on first start and never overwrites it. The key is still never read from an environment variable (ADR-09). Back up `appdata` together with `pgdata`.
+- **HTTPS.** `__Host-` cookies need a secure context. `http://localhost` qualifies, a LAN address does not. The `tls` profile adds Caddy (`deploy/container/Caddyfile`) with automatic certificates for `QP_DOMAIN`, using the internal CA for `localhost` or an IP address.
+- **Database.** It has no published port. Tuning comes from `deploy/postgresql.conf.d/quiz.conf` and is passed as `-c` flags.
+- **Admin.** Run `echo 'pw' | docker compose exec -T app /app/server create-admin <email> <name>`.
+- **Backups.** Run `docker compose exec db pg_dump -U quiz -Fc quiz > quiz.dump`, or point `deploy/backup.sh` at the container.
+
 ## Upgrades
 
 Copy the new binary and `systemctl restart quiz`. Migrations run on start; each runs in its own transaction and is recorded. Deadlines are timestamps and sockets reconnect, so restarting during a quiz is safe (`TestRestartRehydrates`), though it is still better done between classes. Frontend assets are content-hashed, so replacing `build/` is atomic enough; clients load the new `index.html` on their next navigation.
