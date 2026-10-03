@@ -53,6 +53,9 @@ type Overrides struct {
 	ResultsVisibility    *string `json:"results_visibility,omitempty" levels:"quiz,session" enum:"private,public"`
 	ResultsView          *string `json:"results_view,omitempty" levels:"quiz,session" enum:"individual,question_pct,pass_rate"`
 	ResultsRelease       *string `json:"results_release,omitempty" levels:"quiz,session" enum:"immediate,on_session_end,manual"`
+	ResultsShowAnswers   *bool   `json:"results_show_answers,omitempty" levels:"quiz,session"`
+	ResultsShowCorrect   *bool   `json:"results_show_correct,omitempty" levels:"quiz,session"`
+	ResultsShowFeedback  *bool   `json:"results_show_feedback,omitempty" levels:"quiz,session"`
 	PassMarkPct          *int    `json:"pass_mark_pct,omitempty" levels:"classroom,quiz"`
 	StudentIDRequired    *bool   `json:"student_id_required,omitempty" levels:"classroom"`
 	EnrolmentApproval    *bool   `json:"enrolment_approval,omitempty" levels:"classroom"`
@@ -80,6 +83,9 @@ type Effective struct {
 	ResultsVisibility    string `json:"results_visibility"`
 	ResultsView          string `json:"results_view"`
 	ResultsRelease       string `json:"results_release"`
+	ResultsShowAnswers   bool   `json:"results_show_answers"`
+	ResultsShowCorrect   bool   `json:"results_show_correct"`
+	ResultsShowFeedback  bool   `json:"results_show_feedback"`
 	PassMarkPct          int    `json:"pass_mark_pct"`
 	StudentIDRequired    bool   `json:"student_id_required"`
 	EnrolmentApproval    bool   `json:"enrolment_approval"`
@@ -103,8 +109,12 @@ func Defaults() Effective {
 		ResultsVisibility:  "private",
 		ResultsView:        "individual",
 		ResultsRelease:     "on_session_end",
-		PassMarkPct:        50,
-		AutoEnrolOnJoin:    true, // BR-02, Q-06; see DECISIONS.md
+		// BA §11: score, answers, correct answers and feedback are each toggleable.
+		ResultsShowAnswers:  true,
+		ResultsShowCorrect:  true,
+		ResultsShowFeedback: true,
+		PassMarkPct:         50,
+		AutoEnrolOnJoin:     true, // BR-02, Q-06; see DECISIONS.md
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
+	"github.com/nadun96/quizplatform/internal/eval"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/mail"
@@ -42,6 +43,7 @@ type App struct {
 	Content  *content.Service
 	Quiz     *quiz.Service
 	Live     *live.Service
+	Eval     *eval.Service
 }
 
 // Options let tests swap infrastructure.
@@ -94,6 +96,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, &mail.Worker{Sender: mailer})
 	quizWorker := &quiz.CheckResourcesWorker{}
 	river.AddWorker(workers, quizWorker)
+	evalWorker := &eval.EvaluateWorker{}
+	river.AddWorker(workers, evalWorker)
 
 	var w *river.Workers
 	if opt.RunJobs {
@@ -113,6 +117,9 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Live = live.NewService(pool, a.Quiz, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Quiz.SetSessionGuard(a.Live.HasSessions) // BR-16: run quizzes are archived, not deleted
 	a.Content.SetDeleteGuard(a.Live.ClassroomHasSessions)
+	a.Eval = eval.NewService(pool, a.Live, rc)
+	evalWorker.Service = a.Eval
+	a.Live.SetHooks(live.Hooks{AttemptFinished: a.Eval.OnAttemptFinished, SessionEnded: a.Eval.OnSessionEnded})
 
 	r := chi.NewRouter()
 	r.Use(httpx.Recover, httpx.SecurityHeaders)
@@ -131,6 +138,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Content.TeacherRoutes(t)
 			a.Quiz.TeacherRoutes(t)
 			a.Live.TeacherRoutes(t)
+			a.Eval.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
@@ -139,6 +147,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole(auth.RoleStudent))
 			a.Live.StudentRoutes(s)
+			a.Eval.StudentRoutes(s)
 		})
 	})
 	// WebSockets: the upgrade checks Origin itself; no CSRF header is possible.
