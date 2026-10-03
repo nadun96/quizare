@@ -13,8 +13,12 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -127,6 +131,42 @@ func (c *Client) Raw(method, path, contentType string, body []byte) (int, []byte
 	defer resp.Body.Close()
 	out, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, out
+}
+
+// Dial opens a WebSocket to path with this client's cookies and our Origin.
+func (c *Client) Dial(path string) *websocket.Conn {
+	c.e.T.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, resp, err := websocket.Dial(ctx, "wss"+strings.TrimPrefix(c.e.Server.URL, "https")+path, &websocket.DialOptions{
+		HTTPClient: c.http, HTTPHeader: http.Header{"Origin": {c.e.Server.URL}},
+	})
+	if err != nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		c.e.T.Fatalf("dial %s: %v (status %d)", path, err, status)
+	}
+	c.e.T.Cleanup(func() { conn.CloseNow() })
+	return conn
+}
+
+// ReadUntil reads JSON messages until one has the given "type" or the timeout passes.
+func ReadUntil(t testing.TB, conn *websocket.Conn, typ string, timeout time.Duration) map[string]any {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("waiting for %q: %v", typ, err)
+		}
+		var m map[string]any
+		if json.Unmarshal(data, &m) == nil && m["type"] == typ {
+			return m
+		}
+	}
 }
 
 // Call sends a request, asserts the status and decodes the response into out.

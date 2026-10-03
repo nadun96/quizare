@@ -3,6 +3,7 @@ module github.com/nadun96/quizplatform
 go 1.26.3
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.11.0

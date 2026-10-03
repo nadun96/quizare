@@ -18,6 +18,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/imageurl"
+	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
@@ -40,6 +41,7 @@ type App struct {
 	Settings *settings.Store
 	Content  *content.Service
 	Quiz     *quiz.Service
+	Live     *live.Service
 }
 
 // Options let tests swap infrastructure.
@@ -108,6 +110,9 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Content = content.NewService(pool, a.Settings, a.Auth)
 	a.Quiz = quiz.NewService(pool, a.Content, a.Settings, rc, checker)
 	quizWorker.Service = a.Quiz
+	a.Live = live.NewService(pool, a.Quiz, a.Content, a.Auth, cfg.BaseURL, log)
+	a.Quiz.SetSessionGuard(a.Live.HasSessions) // BR-16: run quizzes are archived, not deleted
+	a.Content.SetDeleteGuard(a.Live.ClassroomHasSessions)
 
 	r := chi.NewRouter()
 	r.Use(httpx.Recover, httpx.SecurityHeaders)
@@ -125,11 +130,25 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			t.Route("/settings", a.Settings.TeacherRoutes)
 			a.Content.TeacherRoutes(t)
 			a.Quiz.TeacherRoutes(t)
+			a.Live.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
 			a.Content.StudentRoutes(s)
 		})
+		api.Group(func(s chi.Router) {
+			s.Use(auth.RequireRole(auth.RoleStudent))
+			a.Live.StudentRoutes(s)
+		})
+	})
+	// WebSockets: the upgrade checks Origin itself; no CSRF header is possible.
+	r.Route("/ws", func(ws chi.Router) {
+		ws.Use(a.Auth.Middleware)
+		a.Live.WSRoutes(ws)
+	})
+	r.Route("/beacon", func(b chi.Router) {
+		b.Use(a.Auth.Middleware)
+		a.Live.BeaconRoutes(b)
 	})
 	a.router = r
 	return a, nil
@@ -152,8 +171,11 @@ func newMailer(cfg config.Config, log *slog.Logger) (mail.Sender, error) {
 
 func (a *App) Handler() http.Handler { return a.router }
 
-// Start runs background workers.
-func (a *App) Start(ctx context.Context) error { return a.river.Start(ctx) }
+// Start runs background workers and the live-session ticker.
+func (a *App) Start(ctx context.Context) error {
+	go a.Live.Run(ctx)
+	return a.river.Start(ctx)
+}
 
 func (a *App) Close() {
 	_ = a.river.Stop(context.Background())
