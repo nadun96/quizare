@@ -20,6 +20,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/eval"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/live"
+	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
@@ -44,6 +45,7 @@ type App struct {
 	Quiz     *quiz.Service
 	Live     *live.Service
 	Eval     *eval.Service
+	LLM      *llm.Service
 }
 
 // Options let tests swap infrastructure.
@@ -52,6 +54,10 @@ type Options struct {
 	Mailer  mail.Sender // nil: chosen from config
 	// Checker validates resource URLs; nil uses the SSRF-safe public checker.
 	Checker *imageurl.Checker
+	// KEK is the 32-byte master key; New loads it from cfg.KEKFile.
+	KEK []byte
+	// Providers overrides the LLM adapters (tests point them at fakes).
+	Providers map[string]llm.Provider
 }
 
 // New opens the database, applies migrations and builds the app.
@@ -68,7 +74,12 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		pool.Close()
 		return nil, err
 	}
-	a, err := Build(cfg, log, pool, Options{RunJobs: true})
+	kek, err := llm.LoadKEK(cfg.KEKFile)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	a, err := Build(cfg, log, pool, Options{RunJobs: true, KEK: kek})
 	if err != nil {
 		pool.Close()
 		return nil, err
@@ -98,6 +109,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, quizWorker)
 	evalWorker := &eval.EvaluateWorker{}
 	river.AddWorker(workers, evalWorker)
+	llmWorker := &llm.Worker{}
+	river.AddWorker(workers, llmWorker)
 
 	var w *river.Workers
 	if opt.RunJobs {
@@ -119,6 +132,17 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Content.SetDeleteGuard(a.Live.ClassroomHasSessions)
 	a.Eval = eval.NewService(pool, a.Live, rc)
 	evalWorker.Service = a.Eval
+	vault, err := llm.NewVault(opt.KEK)
+	if err != nil {
+		return nil, err
+	}
+	providers := opt.Providers
+	if providers == nil {
+		providers = llm.DefaultProviders()
+	}
+	a.LLM = llm.NewService(pool, vault, providers, rc, a.Live, a.Eval, log)
+	llmWorker.Service = a.LLM
+	a.Eval.SetLLM(a.LLM)
 	a.Live.SetHooks(live.Hooks{AttemptFinished: a.Eval.OnAttemptFinished, SessionEnded: a.Eval.OnSessionEnded})
 
 	r := chi.NewRouter()
@@ -139,6 +163,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Quiz.TeacherRoutes(t)
 			a.Live.TeacherRoutes(t)
 			a.Eval.TeacherRoutes(t)
+			a.LLM.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
