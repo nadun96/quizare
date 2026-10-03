@@ -1,0 +1,20 @@
+# Go
+/backend/bin/
+*.exe
+*.test
+coverage.out
+# Node / SvelteKit
+node_modules/
+/frontend/.svelte-kit/
+/frontend/build/
+# Secrets & local
+*.key
+.env
+.env.*
+/backend/.data/
+/backend/tmp/
+.DS_Store
+~$*
+
+# Private reference documents (BA/architecture PDFs, spreadsheet) - kept locally, never committed
+/docs/
