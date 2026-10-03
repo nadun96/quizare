@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
+	"github.com/nadun96/quizplatform/internal/analytics"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/eval"
@@ -39,13 +40,14 @@ type App struct {
 	router  chi.Router
 	ownPool bool
 
-	Auth     *auth.Service
-	Settings *settings.Store
-	Content  *content.Service
-	Quiz     *quiz.Service
-	Live     *live.Service
-	Eval     *eval.Service
-	LLM      *llm.Service
+	Auth      *auth.Service
+	Settings  *settings.Store
+	Content   *content.Service
+	Quiz      *quiz.Service
+	Live      *live.Service
+	Eval      *eval.Service
+	LLM       *llm.Service
+	Analytics *analytics.Service
 }
 
 // Options let tests swap infrastructure.
@@ -111,6 +113,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, evalWorker)
 	llmWorker := &llm.Worker{}
 	river.AddWorker(workers, llmWorker)
+	analyticsWorker := &analytics.Worker{}
+	river.AddWorker(workers, analyticsWorker)
 
 	var w *river.Workers
 	if opt.RunJobs {
@@ -143,7 +147,18 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.LLM = llm.NewService(pool, vault, providers, rc, a.Live, a.Eval, log)
 	llmWorker.Service = a.LLM
 	a.Eval.SetLLM(a.LLM)
-	a.Live.SetHooks(live.Hooks{AttemptFinished: a.Eval.OnAttemptFinished, SessionEnded: a.Eval.OnSessionEnded})
+	a.Analytics = analytics.NewService(pool, a.Live, a.Eval, a.Auth, rc)
+	analyticsWorker.Service = a.Analytics
+	a.Eval.SetResultsHook(a.Analytics.OnResults)
+	a.Live.SetHooks(live.Hooks{
+		AttemptFinished: a.Eval.OnAttemptFinished,
+		SessionEnded: func(ctx context.Context, tx pgx.Tx, sessionID string) error {
+			if err := a.Eval.OnSessionEnded(ctx, tx, sessionID); err != nil {
+				return err
+			}
+			return a.Analytics.OnResults(ctx, tx, sessionID) // completion and invalidation rates change at the end
+		},
+	})
 
 	r := chi.NewRouter()
 	r.Use(httpx.Recover, httpx.SecurityHeaders)
@@ -151,6 +166,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	r.Route("/api", func(api chi.Router) {
 		api.Use(httpx.SameOrigin(cfg.BaseURL), a.Auth.Middleware)
 		api.Route("/auth", a.Auth.Routes)
+		api.Route("/public", a.Analytics.PublicRoutes)
 		api.Route("/admin", func(ad chi.Router) {
 			ad.Use(auth.RequireRole(auth.RoleAdmin))
 			a.Auth.AdminRoutes(ad)
@@ -164,6 +180,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Live.TeacherRoutes(t)
 			a.Eval.TeacherRoutes(t)
 			a.LLM.TeacherRoutes(t)
+			a.Analytics.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
