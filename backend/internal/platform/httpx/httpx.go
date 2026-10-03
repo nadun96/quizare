@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Error is an error with an HTTP status and a stable machine-readable code.
@@ -52,6 +54,12 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var he *Error
 	if errors.As(err, &he) {
 		JSON(w, he.Status, he)
+		return
+	}
+	// A malformed UUID in a path parameter can never match a row.
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "22P02" {
+		JSON(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	slog.ErrorContext(r.Context(), "internal error", "err", err, "path", r.URL.Path)

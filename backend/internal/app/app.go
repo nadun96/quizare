@@ -7,12 +7,16 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
+	"github.com/nadun96/quizplatform/internal/auth"
+	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
@@ -25,9 +29,16 @@ type App struct {
 	log     *slog.Logger
 	pool    *pgxpool.Pool
 	river   *river.Client[pgx.Tx]
-	workers *river.Workers
 	router  chi.Router
 	ownPool bool
+
+	Auth *auth.Service
+}
+
+// Options let tests swap infrastructure.
+type Options struct {
+	RunJobs bool        // false: insert-only River client
+	Mailer  mail.Sender // nil: chosen from config
 }
 
 // New opens the database, applies migrations and builds the app.
@@ -44,7 +55,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		pool.Close()
 		return nil, err
 	}
-	a, err := Build(cfg, log, pool, true)
+	a, err := Build(cfg, log, pool, Options{RunJobs: true})
 	if err != nil {
 		pool.Close()
 		return nil, err
@@ -53,25 +64,60 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	return a, nil
 }
 
-// Build wires modules onto an existing pool. runJobs=false gives an
-// insert-only River client (tests drive workers explicitly).
-func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, runJobs bool) (*App, error) {
-	a := &App{cfg: cfg, log: log, pool: pool, workers: river.NewWorkers()}
-	r := chi.NewRouter()
-	r.Use(httpx.Recover, httpx.SecurityHeaders)
-	r.Get("/healthz", a.health)
-	a.router = r
+// Build wires modules onto an existing pool.
+func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options) (*App, error) {
+	a := &App{cfg: cfg, log: log, pool: pool}
 
-	var workers *river.Workers
-	if runJobs {
-		workers = a.workers
+	mailer := opt.Mailer
+	if mailer == nil {
+		var err error
+		if mailer, err = newMailer(cfg, log); err != nil {
+			return nil, err
+		}
 	}
-	rc, err := jobs.NewClient(pool, workers, log)
+	workers := river.NewWorkers()
+	river.AddWorker(workers, &mail.Worker{Sender: mailer})
+
+	var w *river.Workers
+	if opt.RunJobs {
+		w = workers
+	}
+	rc, err := jobs.NewClient(pool, w, log)
 	if err != nil {
 		return nil, err
 	}
 	a.river = rc
+
+	a.Auth = auth.NewService(pool, auth.NewHasher(cfg.Argon2Workers), rc, cfg.BaseURL)
+
+	r := chi.NewRouter()
+	r.Use(httpx.Recover, httpx.SecurityHeaders)
+	r.Get("/healthz", a.health)
+	r.Route("/api", func(api chi.Router) {
+		api.Use(httpx.SameOrigin(cfg.BaseURL), a.Auth.Middleware)
+		api.Route("/auth", a.Auth.Routes)
+		api.Route("/admin", func(ad chi.Router) {
+			ad.Use(auth.RequireRole(auth.RoleAdmin))
+			a.Auth.AdminRoutes(ad)
+		})
+	})
+	a.router = r
 	return a, nil
+}
+
+func newMailer(cfg config.Config, log *slog.Logger) (mail.Sender, error) {
+	if cfg.SMTPAddr == "" {
+		return mail.LogSender{Log: log}, nil
+	}
+	s := mail.SMTPSender{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom, Username: cfg.SMTPUser}
+	if cfg.SMTPPasswordFile != "" {
+		b, err := os.ReadFile(cfg.SMTPPasswordFile)
+		if err != nil {
+			return nil, err
+		}
+		s.Password = strings.TrimSpace(string(b))
+	}
+	return s, nil
 }
 
 func (a *App) Handler() http.Handler { return a.router }
