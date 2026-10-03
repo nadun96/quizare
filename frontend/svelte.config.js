@@ -6,6 +6,12 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 export default {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter({ pages: 'build', assets: 'build', fallback: 'index.html', precompress: false, strict: true })
+		adapter: adapter({ pages: 'build', assets: 'build', fallback: 'index.html', precompress: false, strict: true }),
+		// Strict CSP without inline scripts (ADR-16): Kit hashes its own boot script
+		// into a <meta> CSP; Caddy's header CSP covers everything else.
+		csp: {
+			mode: 'hash',
+			directives: { 'script-src': ['self'], 'object-src': ['none'], 'base-uri': ['self'] }
+		}
 	}
 };

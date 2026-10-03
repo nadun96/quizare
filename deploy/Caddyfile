@@ -1,0 +1,44 @@
+# Caddy 2 (ADR-12): automatic HTTPS, HTTP/2+3, WebSocket proxying, precompressed static files.
+# Replace quiz.example.edu with your domain and set QP_BASE_URL=https://quiz.example.edu.
+
+quiz.example.edu {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		# Strict CSP (ADR-16). Browsers enforce this header AND the <meta> CSP SvelteKit
+		# writes into index.html; a script must satisfy both. The meta tag allows only
+		# 'self' plus the hash of Kit's boot script, so no other inline script can run,
+		# while 'unsafe-inline' here just avoids blocking that one hashed script.
+		# img-src allows https: because resources are teacher-supplied public URLs
+		# (BR-15), e.g. Google Drive thumbnails.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' wss:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# API, WebSockets and beacons go to the Go binary on loopback.
+	@backend path /api/* /ws/* /beacon/* /healthz
+	handle @backend {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	# The SvelteKit static build (ADR-11).
+	handle {
+		root * /srv/quiz/frontend
+		@immutable path /_app/immutable/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		@html path / /index.html
+		header @html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server {
+			precompressed br gzip
+		}
+	}
+
+	log {
+		output file /var/log/caddy/quiz-access.log
+		format json
+	}
+}

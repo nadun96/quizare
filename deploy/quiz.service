@@ -1,0 +1,53 @@
+# systemd unit for the Go binary (architecture §1.4, §2.1, §5).
+# Install: cp quiz.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now quiz
+[Unit]
+Description=QR Classroom Quiz Platform
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=quiz
+Group=quiz
+WorkingDirectory=/srv/quiz
+ExecStart=/srv/quiz/server
+Restart=always
+RestartSec=2
+
+Environment=QP_LISTEN=127.0.0.1:8080
+Environment=QP_BASE_URL=https://quiz.example.edu
+Environment=QP_DATABASE_URL=postgres://quiz@/quiz?host=/var/run/postgresql
+Environment=QP_DB_MAX_CONNS=15
+Environment=QP_ARGON2_WORKERS=2
+# Optional SMTP relay; the password comes from a file, never the environment.
+#Environment=QP_SMTP_ADDR=smtp.example.edu:587
+#Environment=QP_SMTP_FROM=quiz@example.edu
+#Environment=QP_SMTP_USER=quiz
+#Environment=QP_SMTP_PASSWORD_FILE=%d/smtp_password
+
+# Master key (KEK) from a root-owned 0400 file exposed only to this service (ADR-09).
+# The binary finds it at $CREDENTIALS_DIRECTORY/kek.
+LoadCredential=kek:/etc/quiz/kek.key
+#LoadCredential=smtp_password:/etc/quiz/smtp_password
+
+# Memory budget: soft limit for the Go GC, hard backstop from systemd (§2.1).
+Environment=GOMEMLIMIT=700MiB
+MemoryMax=900M
+
+# Hardening.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/srv/quiz/data
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
