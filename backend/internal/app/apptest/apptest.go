@@ -13,14 +13,19 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nadun96/quizplatform/internal/app"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/imageurl"
+	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/dbtest"
@@ -34,8 +39,13 @@ type Env struct {
 	seq    atomic.Int64
 }
 
-// Config lets a test tweak configuration before the app is built.
-type Option func(*config.Config)
+// Option lets a test tweak configuration before the app is built.
+type Option func(*config.Config, *app.Options)
+
+// WithProviders replaces the LLM provider adapters.
+func WithProviders(p map[string]llm.Provider) Option {
+	return func(_ *config.Config, o *app.Options) { o.Providers = p }
+}
 
 func New(t testing.TB, opts ...Option) *Env {
 	t.Helper()
@@ -46,12 +56,13 @@ func New(t testing.TB, opts ...Option) *Env {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
 	t.Cleanup(srv.Close)
 	cfg := config.Config{BaseURL: srv.URL, Argon2Workers: 2, DBMaxConns: 8}
+	options := app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
+		Checker: imageurl.NewChecker(true), // tests check URLs on local httptest servers
+		KEK:     bytes.Repeat([]byte{7}, 32)}
 	for _, o := range opts {
-		o(&cfg)
+		o(&cfg, &options)
 	}
-	a, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), pool,
-		app.Options{Mailer: mail.LogSender{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
-			Checker: imageurl.NewChecker(true)}) // tests check URLs on local httptest servers
+	a, err := app.Build(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), pool, options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,6 +140,42 @@ func (c *Client) Raw(method, path, contentType string, body []byte) (int, []byte
 	return resp.StatusCode, out
 }
 
+// Dial opens a WebSocket to path with this client's cookies and our Origin.
+func (c *Client) Dial(path string) *websocket.Conn {
+	c.e.T.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, resp, err := websocket.Dial(ctx, "wss"+strings.TrimPrefix(c.e.Server.URL, "https")+path, &websocket.DialOptions{
+		HTTPClient: c.http, HTTPHeader: http.Header{"Origin": {c.e.Server.URL}},
+	})
+	if err != nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		c.e.T.Fatalf("dial %s: %v (status %d)", path, err, status)
+	}
+	c.e.T.Cleanup(func() { conn.CloseNow() })
+	return conn
+}
+
+// ReadUntil reads JSON messages until one has the given "type" or the timeout passes.
+func ReadUntil(t testing.TB, conn *websocket.Conn, typ string, timeout time.Duration) map[string]any {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("waiting for %q: %v", typ, err)
+		}
+		var m map[string]any
+		if json.Unmarshal(data, &m) == nil && m["type"] == typ {
+			return m
+		}
+	}
+}
+
 // Call sends a request, asserts the status and decodes the response into out.
 func (c *Client) Call(method, path string, body any, want int, out any) {
 	c.e.T.Helper()
@@ -163,6 +210,26 @@ func (e *Env) NewUser(role auth.Role) *Client {
 		}, 201, &c.User)
 	}
 	return c
+}
+
+// TakeJobs returns the args of queued River jobs of a kind and deletes them,
+// so tests can run workers' logic deterministically.
+func (e *Env) TakeJobs(kind string) []json.RawMessage {
+	e.T.Helper()
+	rows, err := e.Pool.Query(context.Background(), `DELETE FROM river_job WHERE kind=$1 AND state='available' RETURNING args`, kind)
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	defer rows.Close()
+	var out []json.RawMessage
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			e.T.Fatal(err)
+		}
+		out = append(out, raw)
+	}
+	return out
 }
 
 var tokenRe = regexp.MustCompile(`token=([A-Za-z0-9_-]+)`)

@@ -97,6 +97,7 @@ func (s *Service) Routes(r chi.Router) {
 	r.Method("POST", "/login", httpx.Handler(s.handleLogin))
 	r.Method("POST", "/logout", httpx.Handler(s.handleLogout))
 	r.Method("GET", "/me", httpx.Handler(s.handleMe))
+	r.Method("DELETE", "/me", httpx.Handler(s.handleDeleteMe))
 	r.Method("POST", "/verify-email", httpx.Handler(s.handleVerifyEmail))
 	r.Method("POST", "/password-reset/request", httpx.Handler(s.handleResetRequest))
 	r.Method("POST", "/password-reset/confirm", httpx.Handler(s.handleResetConfirm))
@@ -288,5 +289,28 @@ func (s *Service) handleSetPolicy(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	httpx.JSON(w, http.StatusOK, p)
+	return nil
+}
+
+func (s *Service) handleDeleteMe(w http.ResponseWriter, r *http.Request) error {
+	u, ok := CurrentUser(r.Context())
+	if !ok {
+		return httpx.ErrUnauthorized
+	}
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	err := s.DeleteOwnAccount(r.Context(), u, in.Password)
+	if writeBusy(w, err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
