@@ -65,7 +65,8 @@ func setup() {
 		pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
 			Version(embeddedpostgres.V16).Port(uint32(port)).
 			CachePath(filepath.Join(cache, "quizplatform-pg")).
-			RuntimePath(rt).Logger(io.Discard))
+			RuntimePath(rt).Logger(io.Discard).
+			StartParameters(map[string]string{"fsync": "off", "max_connections": "200"}))
 		if err := pg.Start(); err != nil {
 			setupErr = fmt.Errorf("start embedded postgres: %w", err)
 			return
