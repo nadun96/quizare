@@ -30,6 +30,8 @@ jobs:
       - run: go vet ./...
       - run: go test -race -count=1 ./...
       - run: go build -o bin/server ./cmd/server
+      - name: Lint OpenAPI spec
+        run: npx --yes @redocly/cli@latest lint internal/apidocs/openapi.yaml --format=summary
 
   frontend:
     runs-on: ubuntu-latest
