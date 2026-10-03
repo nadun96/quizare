@@ -32,6 +32,18 @@ Backend modules (`backend/internal/`), each owning one PostgreSQL schema:
 | `analytics` | Precomputed session/quiz analytics, public share links, CSV export (FR-RS, BA §11) |
 | `admin` | Usage, audit log, own-data export |
 
+## API documentation
+
+The server serves an OpenAPI 3.1 spec with an embedded Swagger UI (no CDN):
+
+| URL | What |
+|-----|------|
+| `/api/docs` | Swagger UI. "Try it out" works after logging in on the same origin: the UI sends the session cookie and the CSRF header |
+| `/api/docs/openapi.yaml` | The spec (source: `backend/internal/apidocs/openapi.yaml`) |
+| `/api/docs/openapi.json` | The same spec as JSON, for code generators |
+
+`go test ./internal/app` fails if a route is missing from the spec, the spec lists a route that doesn't exist, a `$ref` doesn't resolve, or an operationId is missing or duplicated. CI also lints the spec with Redocly. Set `QP_API_DOCS=0` to stop serving the docs.
+
 ## Branching
 
 - `main`: released code only.
@@ -79,6 +91,7 @@ Without `QP_SMTP_ADDR`, emails (verification, password reset) are written to the
 | `QP_ARGON2_WORKERS` | 2 | Concurrent password hashes (login-burst memory cap) |
 | `QP_SMTP_ADDR`, `QP_SMTP_FROM`, `QP_SMTP_USER`, `QP_SMTP_PASSWORD_FILE` | | Optional SMTP relay |
 | `QP_STATIC_DIR` | | Serve the SPA build from Go (dev / single binary) |
+| `QP_API_DOCS` | on | `0` stops serving `/api/docs` |
 
 ## Deployment (Ubuntu, single 4 GB host)
 

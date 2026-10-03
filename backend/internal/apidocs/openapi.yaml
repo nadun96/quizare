@@ -1,0 +1,1507 @@
+openapi: 3.1.0
+info:
+  title: QR Classroom Quiz Platform API
+  version: 1.0.0
+  license:
+    name: Proprietary
+  description: |
+    REST API of the QR Classroom Quiz Platform (single Go binary, see the architecture document).
+
+    **Authentication.** Log in with `POST /api/auth/login`. The server sets an HttpOnly
+    `__Host-sid` session cookie (ADR-13); browsers send it automatically. Tokens are never
+    returned in a response body.
+
+    **CSRF.** Every state-changing request (POST, PUT, PATCH, DELETE) must send the header
+    `X-Requested-With` (any value, e.g. `fetch`). If an `Origin` header is present it must match
+    the server's base URL. Swagger UI on this page adds the header for you.
+
+    **Errors** share one shape (`Error`): `code` is stable and machine-readable; validation
+    failures (422) list per-field messages in `fields`.
+
+    **Real time.** `GET /ws/attempts/{id}` (student) and `GET /ws/sessions/{id}` (teacher) upgrade
+    to WebSockets; messages are JSON objects with a `type` field. See the descriptions on those
+    operations.
+servers:
+  - url: /
+security:
+  - session: []
+tags:
+  - name: auth
+    description: Accounts and sessions (FR-ACC)
+  - name: admin
+    description: Platform administration (admin role)
+  - name: settings
+    description: Hierarchical configuration (BA §7)
+  - name: classrooms
+    description: Classrooms, modules, topics and enrolments (FR-CLS)
+  - name: quizzes
+    description: Quizzes, questions, CSV import and resources (FR-QZ)
+  - name: sessions
+    description: Live sessions, teacher controls (FR-SS, FR-PR)
+  - name: student
+    description: Joining, answering and own results (student role)
+  - name: marking
+    description: Evaluation, review and LLM marking (FR-EV)
+  - name: llm-keys
+    description: Per-teacher LLM API keys (BR-10)
+  - name: analytics
+    description: Analytics, sharing and export (FR-RS)
+  - name: public
+    description: Unauthenticated endpoints
+  - name: realtime
+    description: WebSockets and beacons
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      tags: [public]
+      summary: Liveness and database check
+      security: []
+      responses:
+        '200': { description: 'Healthy', content: { application/json: { schema: { type: object, properties: { status: { type: string, example: ok } } } } } }
+        '503': { description: 'Database unavailable' }
+
+  # ---------------- auth ----------------
+  /api/auth/register:
+    post:
+      operationId: postAuthRegister
+      tags: [auth]
+      summary: Self-register a student or teacher (FR-ACC-01/02)
+      description: Logs the user in immediately unless the account needs admin approval. Queues a verification email.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterInput' } } } }
+      responses:
+        '201': { description: 'Created (Set-Cookie when active)', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Busy' }
+  /api/auth/login:
+    post:
+      operationId: postAuthLogin
+      tags: [auth]
+      summary: Log in
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginInput' } } } }
+      responses:
+        '200': { description: 'Logged in; sets the `__Host-sid` cookie', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { description: 'Suspended or awaiting approval (`account_suspended`, `pending_approval`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Busy' }
+  /api/auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags: [auth]
+      summary: Log out (revokes this session)
+      responses: { '204': { description: 'Logged out' } }
+  /api/auth/me:
+    get:
+      operationId: getAuthMe
+      tags: [auth]
+      summary: The current user
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      operationId: deleteAuthMe
+      tags: [auth]
+      summary: Delete (anonymise) my own account (NFR-04)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [password], properties: { password: { type: string } } } } } }
+      responses:
+        '204': { description: 'Deleted' }
+        '400': { description: 'Admin accounts cannot self-delete' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/auth/verify-email:
+    post:
+      operationId: postAuthVerifyEmail
+      tags: [auth]
+      summary: Confirm an email address with the emailed token
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TokenInput' } } } }
+      responses: { '204': { description: 'Verified' }, '400': { $ref: '#/components/responses/Error' } }
+  /api/auth/password-reset/request:
+    post:
+      operationId: postAuthPasswordResetRequest
+      tags: [auth]
+      summary: Email a password reset link (always 202, no account enumeration)
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      responses: { '202': { description: 'Accepted' }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/auth/password-reset/confirm:
+    post:
+      operationId: postAuthPasswordResetConfirm
+      tags: [auth]
+      summary: Set a new password; revokes all sessions
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token, password], properties: { token: { type: string }, password: { type: string, minLength: 8 } } } } } }
+      responses: { '204': { description: 'Changed' }, '400': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Invalid' } }
+
+  # ---------------- admin ----------------
+  /api/admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: List and search users
+      parameters:
+        - { name: role, in: query, schema: { type: string, enum: [student, teacher, admin] } }
+        - { name: status, in: query, schema: { type: string, enum: [active, pending_approval, suspended] } }
+        - { name: q, in: query, description: 'Name or email contains', schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { users: { type: array, items: { $ref: '#/components/schemas/User' } } } } } } } }
+  /api/admin/users/{id}/status:
+    post:
+      operationId: postAdminUsersStatus
+      tags: [admin]
+      summary: Activate/approve or suspend a user (FR-ACC-04/05)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, suspended] } } } } } }
+      responses: { '204': { description: 'Updated' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/admin/users/{id}:
+    delete:
+      operationId: deleteAdminUsersById
+      tags: [admin]
+      summary: Delete (anonymise) a user; results are kept
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/admin/auth-policy:
+    get:
+      operationId: getAdminAuthPolicy
+      tags: [admin]
+      summary: Teacher-approval policy
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/AuthPolicy' } } } } }
+    put:
+      operationId: putAdminAuthPolicy
+      tags: [admin]
+      summary: Change the teacher-approval policy
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AuthPolicy' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/AuthPolicy' } } } } }
+  /api/admin/settings:
+    get:
+      operationId: getAdminSettings
+      tags: [admin, settings]
+      summary: Platform default settings
+      responses: { '200': { $ref: '#/components/responses/Layer' } }
+    put:
+      operationId: putAdminSettings
+      tags: [admin, settings]
+      summary: Set platform default settings
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Overrides' } } } }
+      responses: { '200': { $ref: '#/components/responses/Layer' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/usage:
+    get:
+      operationId: getAdminUsage
+      tags: [admin]
+      summary: Platform usage counts (no content, answers or keys)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Usage' } } } } }
+  /api/admin/audit:
+    get:
+      operationId: getAdminAudit
+      tags: [admin]
+      summary: Audit log, newest first (NFR-15)
+      parameters:
+        - { name: action, in: query, schema: { type: string } }
+        - { name: target_type, in: query, schema: { type: string } }
+        - { name: before_id, in: query, description: 'Page backwards from this id', schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, maximum: 200 } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { events: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } } } } } } } }
+
+  # ---------------- teacher settings ----------------
+  /api/teacher/settings:
+    get:
+      operationId: getTeacherSettings
+      tags: [settings]
+      summary: My teacher-level defaults and what they resolve to
+      responses: { '200': { $ref: '#/components/responses/Layer' } }
+    put:
+      operationId: putTeacherSettings
+      tags: [settings]
+      summary: Set my teacher-level defaults
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Overrides' } } } }
+      responses: { '200': { $ref: '#/components/responses/Layer' }, '422': { $ref: '#/components/responses/Invalid' } }
+
+  # ---------------- classrooms ----------------
+  /api/teacher/classrooms:
+    get:
+      operationId: getTeacherClassrooms
+      tags: [classrooms]
+      summary: My classrooms
+      parameters: [{ name: archived, in: query, description: '`1` to include archived', schema: { type: string, enum: ['1'] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classrooms: { type: array, items: { $ref: '#/components/schemas/Classroom' } } } } } } } }
+    post:
+      operationId: postTeacherClassrooms
+      tags: [classrooms]
+      summary: Create a classroom (FR-CLS-01)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ClassroomInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Classroom' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomsById
+      tags: [classrooms]
+      summary: A classroom with effective settings
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Classroom' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      operationId: patchTeacherClassroomsById
+      tags: [classrooms]
+      summary: Update name, description or settings
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ClassroomInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Classroom' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteTeacherClassroomsById
+      tags: [classrooms]
+      summary: Delete a classroom (refused when it has session results; archive instead)
+      responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/teacher/classrooms/{id}/archive:
+    post: { operationId: postTeacherClassroomsArchive, tags: [classrooms], summary: Archive a classroom, parameters: [{ $ref: '#/components/parameters/id' }], responses: { '204': { description: 'Archived' } } }
+  /api/teacher/classrooms/{id}/unarchive:
+    post: { operationId: postTeacherClassroomsUnarchive, tags: [classrooms], summary: Unarchive a classroom, parameters: [{ $ref: '#/components/parameters/id' }], responses: { '204': { description: 'Unarchived' } } }
+  /api/teacher/classrooms/{id}/join-code:
+    post:
+      operationId: postTeacherClassroomsJoinCode
+      tags: [classrooms]
+      summary: Generate a new classroom join code (the old one stops working)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { join_code: { type: string } } } } } } }
+  /api/teacher/classrooms/{id}/enrolments:
+    get:
+      operationId: getTeacherClassroomsEnrolments
+      tags: [classrooms]
+      summary: Students enrolled in a classroom
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
+  /api/teacher/enrolments/{id}:
+    patch:
+      operationId: patchTeacherEnrolmentsById
+      tags: [classrooms]
+      summary: Approve, reject or remove an enrolment, or correct the student ID (FR-CLS-04)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [active, rejected, removed] }, student_number: { type: string } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Enrolment' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/modules:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomsModules
+      tags: [classrooms]
+      summary: Modules of a classroom, in order
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { modules: { type: array, items: { $ref: '#/components/schemas/Module' } } } } } } } }
+    post:
+      operationId: postTeacherClassroomsModules
+      tags: [classrooms]
+      summary: Create a module (FR-CLS-02)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NodeInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Module' } } } } }
+  /api/teacher/modules/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    patch:
+      operationId: patchTeacherModulesById
+      tags: [classrooms]
+      summary: Rename, reorder or configure a module
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NodeInput' } } } }
+      responses: { '204': { description: 'Updated' } }
+    delete: { operationId: deleteTeacherModulesById, tags: [classrooms], summary: Delete a module, responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /api/teacher/modules/{id}/topics:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherModulesTopics
+      tags: [classrooms]
+      summary: Topics of a module, in order
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { topics: { type: array, items: { $ref: '#/components/schemas/Topic' } } } } } } } }
+    post:
+      operationId: postTeacherModulesTopics
+      tags: [classrooms]
+      summary: Create a topic
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NodeInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Topic' } } } } }
+  /api/teacher/topics/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherTopicsById
+      tags: [classrooms]
+      summary: A topic with its classroom and module
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TopicDetail' } } } } }
+    patch:
+      operationId: patchTeacherTopicsById
+      tags: [classrooms]
+      summary: Rename, reorder or configure a topic
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NodeInput' } } } }
+      responses: { '204': { description: 'Updated' } }
+    delete: { operationId: deleteTeacherTopicsById, tags: [classrooms], summary: Delete a topic (refused while it has quizzes), responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } } }
+
+  # ---------------- quizzes ----------------
+  /api/teacher/topics/{id}/quizzes:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherTopicsQuizzes
+      tags: [quizzes]
+      summary: Quizzes of a topic
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { quizzes: { type: array, items: { $ref: '#/components/schemas/Quiz' } } } } } } } }
+    post:
+      operationId: postTeacherTopicsQuizzes
+      tags: [quizzes]
+      summary: Create a quiz (FR-QZ-01)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/QuizInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/quizzes/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherQuizzesById
+      tags: [quizzes]
+      summary: A quiz with effective settings
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } } }
+    patch:
+      operationId: patchTeacherQuizzesById
+      tags: [quizzes]
+      summary: Update title, description or settings
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/QuizInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } } }
+    delete:
+      operationId: deleteTeacherQuizzesById
+      tags: [quizzes]
+      summary: Delete a quiz, or archive it if it has session results (BR-16)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { deleted: { type: boolean }, archived: { type: boolean } } } } } } }
+  /api/teacher/quizzes/{id}/status:
+    post:
+      operationId: postTeacherQuizzesStatus
+      tags: [quizzes]
+      summary: Mark Ready or back to draft (UC-01 step 7)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [draft, ready] }, accept_warnings: { type: boolean, description: 'Accept broken resource links (UC-01 6a)' } } } } } }
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } }
+        '409': { description: '`quiz_not_ready` or `quiz_has_warnings`', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/teacher/quizzes/{id}/readiness:
+    get:
+      operationId: getTeacherQuizzesReadiness
+      tags: [quizzes]
+      summary: What blocks the quiz from being Ready
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { blocking: { type: array, items: { type: string } }, warnings: { type: array, items: { type: string } } } } } } } }
+  /api/teacher/quizzes/{id}/preview:
+    get:
+      operationId: getTeacherQuizzesPreview
+      tags: [quizzes]
+      summary: The quiz as a student sees it, without keys (FR-QZ-10)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { questions: { type: array, items: { $ref: '#/components/schemas/StudentQuestion' } } } } } } } }
+  /api/teacher/quizzes/{id}/questions:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherQuizzesQuestions
+      tags: [quizzes]
+      summary: Questions in order, with keys and resources
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { questions: { type: array, items: { $ref: '#/components/schemas/Question' } } } } } } } }
+    post:
+      operationId: postTeacherQuizzesQuestions
+      tags: [quizzes]
+      summary: Add one question (FR-QZ-04)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/QuestionInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Question' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/quizzes/{id}/questions/order:
+    put:
+      operationId: putTeacherQuizzesQuestionsOrder
+      tags: [quizzes]
+      summary: Reorder questions (list every id once)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [ids], properties: { ids: { type: array, items: { type: string, format: uuid } } } } } } }
+      responses: { '204': { description: 'Reordered' }, '400': { $ref: '#/components/responses/Error' } }
+  /api/teacher/quizzes/{id}/questions/import:
+    post:
+      operationId: postTeacherQuizzesQuestionsImport
+      tags: [quizzes]
+      summary: Bulk import questions from CSV (FR-QZ-05, BA §10.3)
+      description: Valid rows are imported; invalid rows are reported with row numbers and reasons. Limits 2 MB and 1000 rows.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { $ref: '#/components/requestBodies/CSV' }
+      responses: { '200': { description: 'Report', content: { application/json: { schema: { $ref: '#/components/schemas/ImportReport' } } } }, '400': { $ref: '#/components/responses/Error' } }
+  /api/teacher/quizzes/{id}/resources/import:
+    post:
+      operationId: postTeacherQuizzesResourcesImport
+      tags: [quizzes]
+      summary: Attach resources from a mapping CSV (FR-QZ-06, BA §10.4)
+      description: 'Columns `resource_name,url,alt_text`; names are `<question_code>_<Q|O|F>_<n>`.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { $ref: '#/components/requestBodies/CSV' }
+      responses: { '200': { description: 'Report', content: { application/json: { schema: { $ref: '#/components/schemas/ImportReport' } } } } }
+  /api/teacher/quizzes/{id}/resources/check:
+    post:
+      operationId: postTeacherQuizzesResourcesCheck
+      tags: [quizzes]
+      summary: Re-check every resource link in the background (FR-QZ-11)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '202': { description: 'Queued' } }
+  /api/teacher/questions/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherQuestionsById
+      tags: [quizzes]
+      summary: One question
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Question' } } } } }
+    put:
+      operationId: putTeacherQuestionsById
+      tags: [quizzes]
+      summary: Replace a question's content (resources are kept)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/QuestionInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Question' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete: { operationId: deleteTeacherQuestionsById, tags: [quizzes], summary: Delete a question, responses: { '204': { description: 'Deleted' } } }
+  /api/teacher/questions/{id}/duplicate:
+    post:
+      operationId: postTeacherQuestionsDuplicate
+      tags: [quizzes]
+      summary: Duplicate a question (code gets a -copy suffix)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Question' } } } } }
+  /api/teacher/questions/{id}/resources:
+    put:
+      operationId: putTeacherQuestionsResources
+      tags: [quizzes]
+      summary: Attach or replace one resource (image by public URL; BR-15)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ResourceInput' } } } }
+      responses: { '200': { description: 'The updated question', content: { application/json: { schema: { $ref: '#/components/schemas/Question' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/resources/{id}:
+    delete: { operationId: deleteTeacherResourcesById, tags: [quizzes], summary: Remove a resource, parameters: [{ $ref: '#/components/parameters/id' }], responses: { '204': { description: 'Deleted' } } }
+  /api/teacher/quiz-template.csv:
+    get:
+      operationId: getTeacherQuizTemplateCsv
+      tags: [quizzes]
+      summary: Download the CSV template (one example per question type)
+      responses: { '200': { description: 'CSV', content: { text/csv: { schema: { type: string } } } } }
+
+  # ---------------- sessions (teacher) ----------------
+  /api/teacher/quizzes/{id}/sessions:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherQuizzesSessions
+      tags: [sessions]
+      summary: Sessions of a quiz
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { sessions: { type: array, items: { $ref: '#/components/schemas/Session' } } } } } } } }
+    post:
+      operationId: postTeacherQuizzesSessions
+      tags: [sessions]
+      summary: Create a session with its own QR code and short link (FR-SS-01/02)
+      description: The quiz must be Ready. Questions and settings are frozen into the session (ADR-14).
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { title: { type: string }, settings: { $ref: '#/components/schemas/Overrides' } } } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/teacher/sessions/{id}:
+    get:
+      operationId: getTeacherSessionsById
+      tags: [sessions]
+      summary: Live dashboard snapshot (FR-SS-10)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } } } }
+  /api/teacher/sessions/{id}/settings:
+    put:
+      operationId: putTeacherSessionsSettings
+      tags: [sessions]
+      summary: Replace session-level settings (e.g. countdown before admitting the next group)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Overrides' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }, '410': { $ref: '#/components/responses/Gone' } }
+  /api/teacher/sessions/{id}/admit:
+    post:
+      operationId: postTeacherSessionsAdmit
+      tags: [sessions]
+      summary: Admit waiting students (FR-SS-04); starts their countdown
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { $ref: '#/components/requestBodies/Target' }
+      responses: { '200': { $ref: '#/components/responses/Affected' }, '410': { $ref: '#/components/responses/Gone' } }
+  /api/teacher/sessions/{id}/pause:
+    post:
+      operationId: postTeacherSessionsPause
+      tags: [sessions]
+      summary: Pause running attempts; timers stop (FR-SS-08)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { $ref: '#/components/requestBodies/Target' }
+      responses: { '200': { $ref: '#/components/responses/Affected' } }
+  /api/teacher/sessions/{id}/resume:
+    post:
+      operationId: postTeacherSessionsResume
+      tags: [sessions]
+      summary: Resume paused attempts
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { $ref: '#/components/requestBodies/Target' }
+      responses: { '200': { $ref: '#/components/responses/Affected' } }
+  /api/teacher/sessions/{id}/extend:
+    post:
+      operationId: postTeacherSessionsExtend
+      tags: [sessions]
+      summary: Extend time for students or the whole session (FR-SS-09)
+      description: With `all`, the extension is session-wide and also applies to students who start later.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/Target' }, { type: object, required: [seconds], properties: { seconds: { type: integer, minimum: 1, maximum: 86400 } } }] } } }
+      responses: { '200': { $ref: '#/components/responses/Affected' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/sessions/{id}/end:
+    post:
+      operationId: postTeacherSessionsEnd
+      tags: [sessions]
+      summary: End the session (FR-SS-11); running attempts are submitted
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Ended' }, '410': { $ref: '#/components/responses/Gone' } }
+  /api/teacher/sessions/{id}/events:
+    get:
+      operationId: getTeacherSessionsEvents
+      tags: [sessions]
+      summary: Integrity log (joins, admissions, pauses, extensions, violations, reinstatements)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { events: { type: array, items: { $ref: '#/components/schemas/SessionEvent' } } } } } } } }
+  /api/teacher/sessions/{id}/release:
+    post:
+      operationId: postTeacherSessionsRelease
+      tags: [sessions, marking]
+      summary: Release results to students now
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Released' } }
+  /api/teacher/sessions/{id}/unrelease:
+    post:
+      operationId: postTeacherSessionsUnrelease
+      tags: [sessions, marking]
+      summary: Hide released results again
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Hidden' } }
+  /api/teacher/attempts/{id}/reinstate:
+    post:
+      operationId: postTeacherAttemptsReinstate
+      tags: [sessions]
+      summary: Reinstate an invalidated attempt with a logged reason (FR-SS-12, BR-08)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Attempt' } } } }, '409': { $ref: '#/components/responses/Conflict' }, '410': { $ref: '#/components/responses/Gone' } }
+
+  # ---------------- marking ----------------
+  /api/teacher/sessions/{id}/results:
+    get:
+      operationId: getTeacherSessionsResults
+      tags: [marking]
+      summary: Every finished attempt with its marks, for review (FR-EV-06)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { results: { type: array, items: { $ref: '#/components/schemas/AttemptResult' } } } } } } } }
+  /api/teacher/marks/{attempt}/{question}:
+    put:
+      operationId: putTeacherMarksById
+      tags: [marking]
+      summary: Override a mark and/or feedback (audited)
+      parameters: [{ $ref: '#/components/parameters/attempt' }, { $ref: '#/components/parameters/question' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { score: { type: number }, feedback: { type: string, maxLength: 5000 } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/MarkView' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/marks/{attempt}/{question}/remark:
+    post:
+      operationId: postTeacherMarksRemark
+      tags: [marking]
+      summary: Re-run LLM marking for one answer (FR-EV-09)
+      parameters: [{ $ref: '#/components/parameters/attempt' }, { $ref: '#/components/parameters/question' }]
+      responses: { '202': { description: 'Queued' }, '400': { $ref: '#/components/responses/Error' }, '409': { description: No usable API key } }
+  /api/teacher/sessions/{id}/llm-estimate:
+    get:
+      operationId: getTeacherSessionsLlmEstimate
+      tags: [marking]
+      summary: Answers needing the LLM and an approximate token count (NFR-16)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { answers: { type: integer }, estimated_tokens: { type: integer } } } } } } }
+
+  # ---------------- llm keys ----------------
+  /api/teacher/llm-keys:
+    get:
+      operationId: getTeacherLlmKeys
+      tags: [llm-keys]
+      summary: My keys, masked to the last 4 characters (AC-11)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { keys: { type: array, items: { $ref: '#/components/schemas/LLMKey' } } } } } } } }
+    post:
+      operationId: postTeacherLlmKeys
+      tags: [llm-keys]
+      summary: Add a key (encrypted; it can never be read back)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LLMKeyInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/LLMKey' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/llm-keys/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    patch:
+      operationId: patchTeacherLlmKeysById
+      tags: [llm-keys]
+      summary: Change label, model or default flag
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { label: { type: string }, model: { type: string }, is_default: { type: boolean } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/LLMKey' } } } } }
+    delete: { operationId: deleteTeacherLlmKeysById, tags: [llm-keys], summary: Delete a key, responses: { '204': { description: 'Deleted' } } }
+  /api/teacher/llm-keys/{id}/test:
+    post:
+      operationId: postTeacherLlmKeysTest
+      tags: [llm-keys]
+      summary: Send a tiny marking request to check the key works
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'Result recorded on the key', content: { application/json: { schema: { $ref: '#/components/schemas/LLMKey' } } } } }
+
+  # ---------------- analytics ----------------
+  /api/teacher/sessions/{id}/analytics:
+    get:
+      operationId: getTeacherSessionsAnalytics
+      tags: [analytics]
+      summary: Session analytics by class, question and student (FR-RS-03)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/SessionStats' } } } } }
+  /api/teacher/quizzes/{id}/analytics:
+    get:
+      operationId: getTeacherQuizzesAnalytics
+      tags: [analytics]
+      summary: Quiz analytics across sessions, with session comparison
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/QuizStats' } } } } }
+  /api/teacher/sessions/{id}/export.csv:
+    get:
+      operationId: getTeacherSessionsExportCsv
+      tags: [analytics]
+      summary: Export session results as CSV (FR-RS-05; formula injection neutralised)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'CSV', content: { text/csv: { schema: { type: string } } } } }
+  /api/teacher/share-links:
+    get:
+      operationId: getTeacherShareLinks
+      tags: [analytics]
+      summary: My public links (tokens are never listed)
+      parameters: [{ name: target_id, in: query, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { links: { type: array, items: { $ref: '#/components/schemas/ShareLink' } } } } } } } }
+    post:
+      operationId: postTeacherShareLinks
+      tags: [analytics]
+      summary: Create a public link (FR-RS-04); the token is returned once
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ShareInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/ShareLink' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/share-links/{id}:
+    delete: { operationId: deleteTeacherShareLinksById, tags: [analytics], summary: Revoke a link, parameters: [{ $ref: '#/components/parameters/id' }], responses: { '204': { description: 'Revoked' } } }
+  /api/teacher/share-links/{id}/regenerate:
+    post:
+      operationId: postTeacherShareLinksRegenerate
+      tags: [analytics]
+      summary: Replace the token; the old URL stops working
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ShareLink' } } } } }
+  /api/public/results/{token}:
+    get:
+      operationId: getPublicResultsById
+      tags: [public]
+      summary: Public results page data (no names or emails; BR-13)
+      security: []
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: 'OK (sent with `X-Robots-Tag: noindex`)', content: { application/json: { schema: { $ref: '#/components/schemas/PublicView' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { description: 'Expired or revoked', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ---------------- student ----------------
+  /api/join/classrooms/{code}:
+    get:
+      operationId: getJoinClassroomsById
+      tags: [student]
+      summary: Classroom join preview (any logged-in user)
+      parameters: [{ $ref: '#/components/parameters/code' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ClassroomPreview' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/enrolments:
+    post:
+      operationId: postEnrolments
+      tags: [student]
+      summary: Enrol in a classroom by join code (FR-CLS-03/05)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [join_code], properties: { join_code: { type: string }, student_number: { type: string, maxLength: 64 } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Enrolment' } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/classrooms:
+    get:
+      operationId: getMyClassrooms
+      tags: [student]
+      summary: Classrooms I am enrolled in
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classrooms: { type: array, items: { type: object, properties: { classroom_id: { type: string }, name: { type: string }, status: { type: string }, student_number: { type: [string, 'null'] } } } } } } } } } }
+  /api/my/data:
+    get:
+      operationId: getMyData
+      tags: [student]
+      summary: Download everything stored about me (NFR-04)
+      responses: { '200': { description: 'JSON export', content: { application/json: { schema: { type: object } } } } }
+  /api/join/sessions/{code}:
+    parameters: [{ $ref: '#/components/parameters/code' }]
+    get:
+      operationId: getJoinSessionsById
+      tags: [student]
+      summary: Session join preview (student role)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/JoinPreview' } } } }, '410': { $ref: '#/components/responses/Gone' } }
+    post:
+      operationId: postJoinSessions
+      tags: [student]
+      summary: Join the session's waiting room (FR-SS-03, BR-01, BR-02)
+      description: Auto-enrols when the classroom allows it. Under auto-admit the student is admitted at once.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { student_number: { type: string } } } } } }
+      responses:
+        '200': { description: 'Current state', content: { application/json: { schema: { $ref: '#/components/schemas/StudentState' } } } }
+        '403': { description: '`not_enrolled`, `enrolment_pending` or `enrolment_rejected`', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '410': { $ref: '#/components/responses/Gone' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /api/attempts/{id}:
+    get:
+      operationId: getAttemptsById
+      tags: [student]
+      summary: Current attempt state (REST fallback for the WebSocket)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { $ref: '#/components/responses/State' } }
+  /api/attempts/{id}/start:
+    post:
+      operationId: postAttemptsStart
+      tags: [student]
+      summary: Start during the countdown (FR-SS-05)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { $ref: '#/components/responses/State' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/attempts/{id}/answers/{qid}:
+    put:
+      operationId: putAttemptsAnswersById
+      tags: [student]
+      summary: Save an answer (NFR-11); older `seq` values never overwrite newer ones
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: qid, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [response], properties: { response: { $ref: '#/components/schemas/Response' }, seq: { type: integer, format: int64 } } } } } }
+      responses:
+        '200': { description: 'Saved', content: { application/json: { schema: { type: object, properties: { saved: { type: boolean }, server_time: { type: integer, format: int64 } } } } } }
+        '409': { description: 'Paused, time up, or not the current question (`wrong_state`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /api/attempts/{id}/advance:
+    post:
+      operationId: postAttemptsAdvance
+      tags: [student]
+      summary: Move past the current question; submits after the last (idempotent by question id)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [question_id], properties: { question_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { $ref: '#/components/responses/State' } }
+  /api/attempts/{id}/goto:
+    post:
+      operationId: postAttemptsGoto
+      tags: [student]
+      summary: Jump to a question (only when navigation is not one-way; BR-09)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [index], properties: { index: { type: integer, minimum: 0 } } } } } }
+      responses: { '200': { $ref: '#/components/responses/State' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/attempts/{id}/submit:
+    post:
+      operationId: postAttemptsSubmit
+      tags: [student]
+      summary: Finish the attempt now
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { $ref: '#/components/responses/State' } }
+  /api/attempts/{id}/violations:
+    post:
+      operationId: postAttemptsViolations
+      tags: [student]
+      summary: Report leaving the quiz (FR-PR-02/03); the configured policy is applied
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ViolationInput' } } } }
+      responses: { '204': { description: 'Recorded' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/attempts:
+    get:
+      operationId: getMyAttempts
+      tags: [student]
+      summary: My attempts and whether their results are released
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { attempts: { type: array, items: { $ref: '#/components/schemas/StudentAttempt' } } } } } } } }
+  /api/my/attempts/{id}/result:
+    get:
+      operationId: getMyAttemptsResult
+      tags: [student]
+      summary: My released result with answers, correct answers and feedback as configured (FR-EV-08)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/StudentResult' } } } }
+        '403': { description: '`results_not_released` (BR-12)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ---------------- realtime ----------------
+  /ws/attempts/{id}:
+    get:
+      operationId: getWsAttemptsById
+      tags: [realtime]
+      summary: Student WebSocket (upgrade)
+      description: |
+        Server → client: `state` (full `StudentState`, sent on connect and on every change),
+        `time` (`server_time` every 15 s), `pong` (`t` echoed, `server_time`), `error` (`code`, `message`).
+        Client → server: `{"type":"ping","t":<ms>}` about every 10 s, `{"type":"start"}`,
+        `{"type":"violation","kind":"tab_hidden|window_blur|page_close|fullscreen_exit","client_ts":<ms>}`.
+        A socket that closes during an attempt and does not reconnect within `disconnect_grace_sec`
+        counts as a `disconnected` violation. The upgrade checks `Origin`.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '101': { description: 'Switching protocols' }, '401': { $ref: '#/components/responses/Unauthorized' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /ws/sessions/{id}:
+    get:
+      operationId: getWsSessionsById
+      tags: [realtime]
+      summary: Teacher dashboard WebSocket (upgrade)
+      description: |
+        Server → client: `dashboard` (full `Dashboard`, on connect and at most every 500 ms while changing),
+        `alert` (`attempt_id`, `student_name`, `student_number`, `kind`, `action`, `state`) as soon as a violation happens,
+        `session_ended`, `time`, `pong`. Client → server: `ping`.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '101': { description: 'Switching protocols' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /beacon/attempts/{id}/violations:
+    post:
+      operationId: postBeaconAttemptsViolations
+      tags: [realtime]
+      summary: navigator.sendBeacon fallback for violation reports
+      description: 'Same as `POST /api/attempts/{id}/violations`, but checks `Origin` only (beacons cannot set headers). Send JSON as `text/plain`.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { text/plain: { schema: { $ref: '#/components/schemas/ViolationInput' } } } }
+      responses: { '204': { description: 'Recorded' }, '403': { $ref: '#/components/responses/Forbidden' } }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: __Host-sid
+      description: HttpOnly session cookie set by `POST /api/auth/login` or `/register`.
+
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    attempt: { name: attempt, in: path, required: true, schema: { type: string, format: uuid } }
+    question: { name: question, in: path, required: true, schema: { type: string, format: uuid } }
+    code: { name: code, in: path, required: true, description: 'Join code', schema: { type: string, example: K7Q2XM } }
+
+  requestBodies:
+    CSV:
+      required: true
+      content:
+        text/csv: { schema: { type: string } }
+        multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } }
+    Target:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/Target' } } }
+
+  responses:
+    Error: { description: 'Error', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Invalid: { description: 'Validation failed (`validation_failed`, see `fields`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthorized: { description: 'Login required', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: 'Not allowed', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: 'Not found (also returned for other users'' resources)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: 'Conflict', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Gone: { description: 'The session has ended (`session_ended`; BR-04)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    RateLimited: { description: 'Too many attempts', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Busy:
+      description: Password hashing queue is full during a login burst; retry after `Retry-After` seconds
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Affected: { description: 'Number of students affected', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } }
+    State: { description: 'Attempt state', content: { application/json: { schema: { $ref: '#/components/schemas/StudentState' } } } }
+    Layer:
+      description: Overrides at this level and the resolved effective settings
+      content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: validation_failed }
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { type: string, enum: [student, teacher, admin] }
+        status: { type: string, enum: [active, pending_approval, suspended, deleted] }
+        email_verified: { type: boolean }
+    RegisterInput:
+      type: object
+      required: [email, name, password, role]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string, maxLength: 100 }
+        password: { type: string, minLength: 8, maxLength: 128 }
+        role: { type: string, enum: [student, teacher] }
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties: { email: { type: string, format: email }, password: { type: string } }
+    TokenInput: { type: object, required: [token], properties: { token: { type: string } } }
+    AuthPolicy: { type: object, properties: { require_teacher_approval: { type: boolean } } }
+    Usage:
+      type: object
+      properties:
+        users_by_role: { type: object, additionalProperties: { type: integer } }
+        users_by_status: { type: object, additionalProperties: { type: integer } }
+        classrooms: { type: integer }
+        quizzes: { type: integer }
+        sessions: { type: integer }
+        sessions_30d: { type: integer }
+        live_sessions: { type: integer }
+        attempts_30d: { type: integer }
+        violations_30d: { type: integer }
+        teachers_with_llm_keys: { type: integer }
+        jobs_by_queue_state: { type: object, additionalProperties: { type: integer } }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        actor_id: { type: [string, 'null'] }
+        actor_name: { type: string }
+        action: { type: string }
+        target_type: { type: string }
+        target_id: { type: string }
+        details: { type: object }
+        created_at: { type: string, format: date-time }
+
+    Overrides:
+      description: |
+        Sparse settings for one level (BA §7). Omitted keys inherit from the level above; each key
+        may be set only at the levels listed (the platform level may set any key). 0 means "no limit".
+      type: object
+      additionalProperties: false
+      properties:
+        countdown_seconds: { type: integer, minimum: 0, maximum: 3600, description: 'teacher, classroom, quiz, session' }
+        question_time_limit_sec: { type: integer, minimum: 0, description: 'quiz, question' }
+        quiz_time_limit_sec: { type: integer, minimum: 0, description: 'topic, quiz, session, student' }
+        admission_mode: { type: string, enum: [manual, auto], description: 'classroom, session' }
+        evaluation_method: { type: string, enum: [key, llm, manual], description: 'teacher, quiz, question' }
+        llm_key_id: { type: string, description: 'teacher, quiz, question' }
+        llm_model: { type: string, description: 'teacher, quiz, question' }
+        feedback_mode: { type: string, enum: [none, predefined, ai, both], description: 'teacher, quiz, question' }
+        violation_policy: { type: string, enum: [invalidate, warn_then_invalidate, log_only], description: 'classroom, quiz, session' }
+        allowed_warnings: { type: integer, minimum: 0, description: 'classroom, quiz, session' }
+        blur_grace_ms: { type: integer, minimum: 0, description: 'classroom, quiz, session' }
+        disconnect_grace_sec: { type: integer, minimum: 0, description: 'classroom, quiz, session' }
+        question_order: { type: string, enum: [fixed, shuffled], description: 'quiz, session' }
+        option_order: { type: string, enum: [fixed, shuffled], description: 'quiz, question' }
+        one_way_navigation: { type: boolean, description: 'quiz' }
+        results_visibility: { type: string, enum: [private, public], description: 'quiz, session' }
+        results_view: { type: string, enum: [individual, question_pct, pass_rate], description: 'quiz, session' }
+        results_release: { type: string, enum: [immediate, on_session_end, manual], description: 'quiz, session' }
+        results_show_answers: { type: boolean, description: 'quiz, session' }
+        results_show_correct: { type: boolean, description: 'quiz, session' }
+        results_show_feedback: { type: boolean, description: 'quiz, session' }
+        pass_mark_pct: { type: integer, minimum: 0, maximum: 100, description: 'classroom, quiz' }
+        student_id_required: { type: boolean, description: 'classroom' }
+        enrolment_approval: { type: boolean, description: 'classroom' }
+        auto_enrol_on_join: { type: boolean, description: 'classroom' }
+    Effective:
+      description: Fully resolved settings; every key from `Overrides` has a value.
+      type: object
+      additionalProperties: true
+
+    Classroom:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        teacher_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        join_code: { type: string, example: K7Q2XMAB }
+        settings: { $ref: '#/components/schemas/Overrides' }
+        effective: { $ref: '#/components/schemas/Effective' }
+        archived: { type: boolean }
+        created_at: { type: string, format: date-time }
+    ClassroomInput:
+      type: object
+      properties: { name: { type: string, maxLength: 200 }, description: { type: string }, settings: { $ref: '#/components/schemas/Overrides' } }
+    NodeInput:
+      type: object
+      properties: { name: { type: string, maxLength: 200 }, position: { type: integer }, settings: { $ref: '#/components/schemas/Overrides' } }
+    Module:
+      type: object
+      properties: { id: { type: string, format: uuid }, classroom_id: { type: string, format: uuid }, name: { type: string }, position: { type: integer }, settings: { $ref: '#/components/schemas/Overrides' } }
+    Topic:
+      type: object
+      properties: { id: { type: string, format: uuid }, module_id: { type: string, format: uuid }, name: { type: string }, position: { type: integer }, settings: { $ref: '#/components/schemas/Overrides' } }
+    TopicDetail:
+      allOf:
+        - $ref: '#/components/schemas/Topic'
+        - type: object
+          properties: { classroom_id: { type: string, format: uuid }, classroom_name: { type: string }, module_name: { type: string } }
+    Enrolment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        classroom_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        student_number: { type: [string, 'null'], description: 'Classroom-specific student ID (BR-03)' }
+        status: { type: string, enum: [pending, active, rejected, removed] }
+        created_at: { type: string, format: date-time }
+        student_name: { type: string }
+        student_email: { type: string }
+    ClassroomPreview:
+      type: object
+      properties:
+        classroom_id: { type: string, format: uuid }
+        name: { type: string }
+        student_id_required: { type: boolean }
+        enrolment: { oneOf: [{ $ref: '#/components/schemas/Enrolment' }, { type: 'null' }] }
+
+    Quiz:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        topic_id: { type: string, format: uuid }
+        teacher_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [draft, ready, archived] }
+        warnings_accepted: { type: boolean }
+        settings: { $ref: '#/components/schemas/Overrides' }
+        effective: { $ref: '#/components/schemas/Effective' }
+        question_count: { type: integer }
+        total_marks: { type: number }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    QuizInput:
+      type: object
+      properties: { title: { type: string, maxLength: 200 }, description: { type: string }, settings: { $ref: '#/components/schemas/Overrides' } }
+    QuestionType:
+      type: string
+      enum: [SINGLE, MULTI, MATCH, BLANK_OPT, BLANK_TEXT, DRAG, ESSAY]
+      description: BA §10.1 question types.
+    Choice: { type: object, properties: { id: { type: string, example: o1 }, text: { type: string } } }
+    Body:
+      description: Student-visible structure. Choice ids are assigned (o1, l1, r1, z1…) when missing.
+      type: object
+      properties:
+        options: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'SINGLE, MULTI, BLANK_OPT (shared pool), DRAG items' }
+        left: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'MATCH' }
+        right: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'MATCH' }
+        zones: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'DRAG into boxes; empty means DRAG ordering' }
+        blanks: { type: array, items: { type: string }, readOnly: true, description: 'Derived from [[n]] markers in the text' }
+        word_limit: { type: integer, description: 'ESSAY' }
+    Key:
+      description: Answer key. Never sent to students before results are released (BR-12).
+      type: object
+      properties:
+        correct: { type: array, items: { type: string }, description: 'SINGLE/MULTI option ids' }
+        pairs: { type: object, additionalProperties: { type: string }, description: 'MATCH left→right; DRAG item→zone' }
+        blanks: { type: object, additionalProperties: { type: array, items: { type: string } }, description: 'BLANK_OPT: blank→[option id]; BLANK_TEXT: blank→accepted answers' }
+        order: { type: array, items: { type: string }, description: 'DRAG ordering' }
+        case_sensitive: { type: boolean }
+        tolerance: { type: integer, minimum: 0, maximum: 3, description: 'BLANK_TEXT spelling tolerance (edits)' }
+        model_answer: { type: string }
+        rubric: { type: string }
+    Feedback:
+      type: object
+      properties:
+        correct: { type: string }
+        incorrect: { type: string }
+        options: { type: object, additionalProperties: { type: string }, description: 'Per option id or blank id' }
+        bands: { type: array, items: { type: object, properties: { min_pct: { type: integer }, max_pct: { type: integer }, text: { type: string } } } }
+    Resource:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        question_id: { type: string, format: uuid }
+        role: { type: string, enum: [Q, O, F], description: 'Question stem, option n, or feedback' }
+        n: { type: integer }
+        source_url: { type: string }
+        url: { type: string, description: 'Normalised embeddable URL (Drive links → thumbnail form)' }
+        alt_text: { type: string }
+        status: { type: string, enum: [unchecked, ok, broken] }
+        message: { type: string }
+        checked_at: { type: [string, 'null'], format: date-time }
+    ResourceInput:
+      type: object
+      required: [role, n, url]
+      properties: { role: { type: string, enum: [Q, O, F] }, n: { type: integer, minimum: 1, maximum: 50 }, url: { type: string }, alt_text: { type: string } }
+    QuestionInput:
+      type: object
+      required: [code, type, text]
+      properties:
+        code: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$' }
+        type: { $ref: '#/components/schemas/QuestionType' }
+        text: { type: string, maxLength: 5000 }
+        body: { $ref: '#/components/schemas/Body' }
+        key: { $ref: '#/components/schemas/Key' }
+        feedback: { $ref: '#/components/schemas/Feedback' }
+        marks: { type: number, default: 1 }
+        negative_marks: { type: number, default: 0 }
+        partial_credit: { type: boolean, description: 'Defaults by type (BA §10.1)' }
+        settings:
+          type: object
+          description: Question-level overrides
+          properties:
+            question_time_limit_sec: { type: integer }
+            evaluation_method: { type: string, enum: [key, llm, manual] }
+            llm_key_id: { type: string }
+            llm_model: { type: string }
+            feedback_mode: { type: string, enum: [none, predefined, ai, both] }
+            option_order: { type: string, enum: [fixed, shuffled] }
+      example:
+        code: Q001
+        type: SINGLE
+        text: What is the capital of France?
+        body: { options: [{ text: Paris }, { text: Rome }, { text: Madrid }] }
+        key: { correct: [o1] }
+        marks: 1
+        settings: { question_time_limit_sec: 30 }
+    Question:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        quiz_id: { type: string, format: uuid }
+        code: { type: string }
+        position: { type: integer }
+        type: { $ref: '#/components/schemas/QuestionType' }
+        text: { type: string }
+        body: { $ref: '#/components/schemas/Body' }
+        key: { $ref: '#/components/schemas/Key' }
+        feedback: { $ref: '#/components/schemas/Feedback' }
+        marks: { type: number }
+        negative_marks: { type: number }
+        partial_credit: { type: boolean }
+        settings: { $ref: '#/components/schemas/Overrides' }
+        resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
+    StudentQuestion:
+      description: A question as students see it, without key, feedback or rubric.
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        type: { $ref: '#/components/schemas/QuestionType' }
+        text: { type: string }
+        body: { $ref: '#/components/schemas/Body' }
+        marks: { type: number }
+        resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
+    Response:
+      description: |
+        A student's answer. SINGLE/MULTI → `selected`; MATCH → `pairs` (left→right);
+        BLANK_OPT → `blanks` (blank→option id); BLANK_TEXT → `blanks` (blank→text);
+        DRAG ordering → `order`; DRAG boxes → `pairs` (item→zone); ESSAY → `text`.
+      type: object
+      properties:
+        selected: { type: array, items: { type: string } }
+        pairs: { type: object, additionalProperties: { type: string } }
+        blanks: { type: object, additionalProperties: { type: string } }
+        order: { type: array, items: { type: string } }
+        text: { type: string }
+    ImportReport:
+      type: object
+      properties:
+        imported: { type: integer }
+        rejected:
+          type: array
+          items:
+            type: object
+            properties: { row: { type: integer, description: 'Line number (header is 1)' }, code: { type: string }, errors: { type: object, additionalProperties: { type: string } } }
+
+    Target:
+      type: object
+      description: Choose students by attempt id, or all.
+      properties: { all: { type: boolean }, attempt_ids: { type: array, items: { type: string, format: uuid } } }
+    Session:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        quiz_id: { type: string, format: uuid }
+        teacher_id: { type: string, format: uuid }
+        classroom_id: { type: string, format: uuid }
+        title: { type: string }
+        join_code: { type: string, example: K7Q2XM }
+        join_url: { type: string, description: 'Encode this in the QR code' }
+        status: { type: string, enum: [open, live, ended] }
+        settings: { $ref: '#/components/schemas/Overrides' }
+        extension_sec: { type: integer, description: 'Session-wide extension' }
+        created_at: { type: string, format: date-time }
+        ended_at: { type: [string, 'null'], format: date-time }
+        results_released_at: { type: [string, 'null'], format: date-time }
+    AttemptState: { type: string, enum: [waiting, admitted, in_progress, paused, submitted, invalidated, not_started] }
+    Attempt:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        student_number: { type: [string, 'null'] }
+        state: { $ref: '#/components/schemas/AttemptState' }
+        extension_sec: { type: integer }
+        warnings: { type: integer }
+        violations: { type: integer }
+        invalid_reason: { type: string }
+    StudentState:
+      description: Full attempt state. Deadlines are server epoch milliseconds; render `deadline - (Date.now() + offset)` with the offset from `server_time` (ADR-07).
+      type: object
+      properties:
+        type: { type: string, const: state }
+        server_time: { type: integer, format: int64 }
+        attempt_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        session_title: { type: string }
+        quiz_title: { type: string }
+        session_status: { type: string, enum: [open, live, ended] }
+        state: { $ref: '#/components/schemas/AttemptState' }
+        student_number: { type: [string, 'null'] }
+        countdown_deadline: { type: [integer, 'null'], format: int64 }
+        quiz_deadline: { type: [integer, 'null'], format: int64 }
+        question_deadline: { type: [integer, 'null'], format: int64, description: 'Capped by the quiz deadline' }
+        quiz_remaining_ms: { type: [integer, 'null'], description: 'Set while paused' }
+        question_remaining_ms: { type: [integer, 'null'] }
+        index: { type: integer }
+        total: { type: integer }
+        answered: { type: [array, 'null'], items: { type: boolean } }
+        one_way: { type: boolean }
+        question: { oneOf: [{ $ref: '#/components/schemas/StudentQuestion' }, { type: 'null' }], description: 'Only while in progress' }
+        answer: { oneOf: [{ $ref: '#/components/schemas/Response' }, { type: 'null' }], description: 'Saved answer for the current question' }
+        violation_policy: { type: string }
+        warnings: { type: integer }
+        allowed_warnings: { type: integer }
+        blur_grace_ms: { type: integer }
+        invalid_reason: { type: string }
+    JoinPreview:
+      type: object
+      properties:
+        session_id: { type: string, format: uuid }
+        title: { type: string }
+        quiz_title: { type: string }
+        status: { type: string }
+        student_id_required: { type: boolean }
+        attempt: { oneOf: [{ $ref: '#/components/schemas/Attempt' }, { type: 'null' }] }
+    ViolationInput:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [tab_hidden, window_blur, page_close, fullscreen_exit] }
+        client_ts: { type: integer, format: int64, description: 'Client clock, evidence only' }
+    Dashboard:
+      type: object
+      properties:
+        type: { type: string, const: dashboard }
+        server_time: { type: integer, format: int64 }
+        session: { $ref: '#/components/schemas/Session' }
+        counts: { type: object, additionalProperties: { type: integer }, description: 'Attempts per state' }
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              attempt_id: { type: string, format: uuid }
+              user_id: { type: string, format: uuid }
+              name: { type: string }
+              student_number: { type: [string, 'null'] }
+              state: { $ref: '#/components/schemas/AttemptState' }
+              index: { type: integer }
+              total: { type: integer }
+              answered: { type: integer }
+              warnings: { type: integer }
+              violations: { type: integer }
+              extension_sec: { type: integer }
+              quiz_deadline: { type: [integer, 'null'], format: int64 }
+              remaining_ms: { type: [integer, 'null'] }
+              connected: { type: boolean }
+              invalid_reason: { type: string }
+    SessionEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        attempt_id: { type: [string, 'null'] }
+        actor_id: { type: [string, 'null'] }
+        kind: { type: string, example: violation }
+        details: { type: object }
+        created_at: { type: string, format: date-time }
+
+    MarkView:
+      type: object
+      properties:
+        question_id: { type: string, format: uuid }
+        code: { type: string }
+        type: { $ref: '#/components/schemas/QuestionType' }
+        text: { type: string }
+        response: { oneOf: [{ $ref: '#/components/schemas/Response' }, { type: 'null' }] }
+        key: { $ref: '#/components/schemas/Key' }
+        method: { type: string, enum: [key, llm, manual] }
+        status: { type: string, enum: [marked, pending, needs_manual, overridden] }
+        score: { type: [number, 'null'] }
+        max_score: { type: number }
+        correct: { type: [boolean, 'null'] }
+        feedback: { type: string }
+        ai_feedback: { type: string }
+        ai_rationale: { type: string }
+        ai_marked: { type: boolean }
+        flagged: { type: boolean }
+        flag_reason: { type: string }
+    AttemptResult:
+      type: object
+      properties:
+        attempt_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        student_number: { type: [string, 'null'] }
+        state: { $ref: '#/components/schemas/AttemptState' }
+        score: { type: number }
+        max_score: { type: number }
+        pct: { type: number }
+        pass_mark_pct: { type: integer }
+        passed: { type: boolean }
+        complete: { type: boolean, description: 'False while LLM or manual marks are outstanding' }
+        invalidated: { type: boolean }
+        marks: { type: array, items: { $ref: '#/components/schemas/MarkView' } }
+    StudentAttempt:
+      type: object
+      properties:
+        attempt_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        session_title: { type: string }
+        quiz_title: { type: string }
+        state: { $ref: '#/components/schemas/AttemptState' }
+        released: { type: boolean }
+        submitted_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+    StudentResult:
+      type: object
+      properties:
+        attempt_id: { type: string, format: uuid }
+        session_title: { type: string }
+        quiz_title: { type: string }
+        state: { $ref: '#/components/schemas/AttemptState' }
+        student_number: { type: [string, 'null'] }
+        score: { type: number }
+        max_score: { type: number }
+        pct: { type: number }
+        pass_mark_pct: { type: integer }
+        passed: { type: boolean }
+        complete: { type: boolean }
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              question: { $ref: '#/components/schemas/StudentQuestion' }
+              response: { $ref: '#/components/schemas/Response' }
+              correct_answer: { $ref: '#/components/schemas/Key' }
+              score: { type: [number, 'null'] }
+              max_score: { type: number }
+              status: { type: string }
+              correct: { type: [boolean, 'null'] }
+              feedback: { type: string }
+              ai_feedback: { type: string }
+              ai_marked: { type: boolean }
+              feedback_resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
+
+    LLMKey:
+      type: object
+      description: Masked view; the key itself is never returned (BR-10, AC-11).
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string, enum: [anthropic, openai, google] }
+        label: { type: string }
+        model: { type: string }
+        last4: { type: string }
+        is_default: { type: boolean }
+        last_test_at: { type: [string, 'null'], format: date-time }
+        last_test_ok: { type: [boolean, 'null'] }
+        last_test_error: { type: string }
+        created_at: { type: string, format: date-time }
+    LLMKeyInput:
+      type: object
+      required: [provider, api_key]
+      properties:
+        provider: { type: string, enum: [anthropic, openai, google] }
+        model: { type: string, description: 'Required for openai and google; anthropic defaults to claude-opus-5-5' }
+        label: { type: string }
+        api_key: { type: string, writeOnly: true }
+        is_default: { type: boolean }
+
+    ClassStats:
+      type: object
+      properties:
+        joined: { type: integer }
+        finished: { type: integer }
+        marked: { type: integer }
+        mean_pct: { type: number }
+        median_pct: { type: number }
+        pass_rate: { type: number }
+        pass_mark_pct: { type: integer }
+        completion_rate: { type: number }
+        invalidation_rate: { type: number }
+        distribution: { type: array, items: { type: integer }, minItems: 10, maxItems: 10, description: 'Counts per 10-point band' }
+        pending: { type: integer }
+    QuestionStats:
+      type: object
+      properties:
+        question_id: { type: string, format: uuid }
+        code: { type: string }
+        text: { type: string }
+        type: { $ref: '#/components/schemas/QuestionType' }
+        max_score: { type: number }
+        answered: { type: integer }
+        pct_correct: { type: number }
+        avg_score: { type: number }
+        option_counts: { type: object, additionalProperties: { type: integer } }
+        option_labels: { type: object, additionalProperties: { type: string } }
+        common_wrong: { type: array, items: { type: object, properties: { answer: { type: string }, count: { type: integer } } } }
+        discrimination: { type: [number, 'null'], description: 'Upper 27% minus lower 27% correct rate' }
+    StudentStats:
+      type: object
+      properties:
+        attempt_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        name: { type: string }
+        student_number: { type: [string, 'null'] }
+        state: { $ref: '#/components/schemas/AttemptState' }
+        score: { type: number }
+        max_score: { type: number }
+        pct: { type: number }
+        passed: { type: boolean }
+        complete: { type: boolean }
+        time_taken_sec: { type: [integer, 'null'] }
+        violations: { type: integer }
+        extension_sec: { type: integer }
+        pauses: { type: integer }
+        answers: { type: array, items: { type: object, properties: { question_id: { type: string }, code: { type: string }, response: { $ref: '#/components/schemas/Response' }, score: { type: [number, 'null'] }, correct: { type: [boolean, 'null'] } } } }
+    SessionStats:
+      type: object
+      properties:
+        session_id: { type: string, format: uuid }
+        title: { type: string }
+        quiz_title: { type: string }
+        created_at: { type: string, format: date-time }
+        class: { $ref: '#/components/schemas/ClassStats' }
+        questions: { type: array, items: { $ref: '#/components/schemas/QuestionStats' } }
+        students: { type: array, items: { $ref: '#/components/schemas/StudentStats' } }
+        computed_at: { type: string, format: date-time }
+    QuizStats:
+      type: object
+      properties:
+        quiz_id: { type: string, format: uuid }
+        quiz_title: { type: string }
+        class: { $ref: '#/components/schemas/ClassStats' }
+        questions: { type: array, items: { $ref: '#/components/schemas/QuestionStats' } }
+        students: { type: array, items: { $ref: '#/components/schemas/StudentStats' } }
+        comparison:
+          type: array
+          items: { type: object, properties: { session_id: { type: string }, title: { type: string }, created_at: { type: string, format: date-time }, class: { $ref: '#/components/schemas/ClassStats' } } }
+    ShareInput:
+      type: object
+      required: [scope, target_id]
+      properties:
+        scope: { type: string, enum: [session, quiz] }
+        target_id: { type: string, format: uuid }
+        views: { type: array, items: { type: string, enum: [individual, question_pct, pass_rate] }, description: 'Defaults to the session''s results_view' }
+        identify: { type: string, enum: [anonymous, student_id], default: anonymous }
+        show_answers: { type: boolean, default: false }
+        label: { type: string }
+        expires_at: { type: [string, 'null'], format: date-time }
+    ShareLink:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        token: { type: string, description: 'Only in create/regenerate responses; the public URL is /r/{token}' }
+        scope: { type: string, enum: [session, quiz] }
+        target_id: { type: string, format: uuid }
+        views: { type: array, items: { type: string } }
+        identify: { type: string }
+        show_answers: { type: boolean }
+        label: { type: string }
+        expires_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+    PublicView:
+      type: object
+      properties:
+        title: { type: string }
+        quiz_title: { type: string }
+        views: { type: array, items: { type: string } }
+        pass_rate: { type: object, properties: { pass_rate: { type: number }, pass_mark_pct: { type: integer }, finished: { type: integer }, mean_pct: { type: number } } }
+        questions: { type: array, items: { type: object, properties: { code: { type: string }, text: { type: string }, pct_correct: { type: number }, answered: { type: integer } } } }
+        students:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string, description: '"Student N" or the classroom student ID — never a name or email' }
+              score: { type: number }
+              max_score: { type: number }
+              pct: { type: number }
+              passed: { type: boolean }
+              answers: { type: array, items: { type: object } }

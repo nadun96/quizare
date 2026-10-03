@@ -17,6 +17,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/admin"
 	"github.com/nadun96/quizplatform/internal/analytics"
+	"github.com/nadun96/quizplatform/internal/apidocs"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/eval"
@@ -170,6 +171,9 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		api.Use(httpx.SameOrigin(cfg.BaseURL), a.Auth.Middleware)
 		api.Route("/auth", a.Auth.Routes)
 		api.Route("/public", a.Analytics.PublicRoutes)
+		if cfg.APIDocs {
+			api.Route("/docs", apidocs.Routes)
+		}
 		api.Route("/admin", func(ad chi.Router) {
 			ad.Use(auth.RequireRole(auth.RoleAdmin))
 			a.Auth.AdminRoutes(ad)
