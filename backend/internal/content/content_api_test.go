@@ -58,6 +58,12 @@ func TestClassroomCRUDAndHierarchy(t *testing.T) {
 		t.Fatalf("topic context = %+v, %v", tc, err)
 	}
 
+	var td content.TopicDetail
+	teacher.Call("GET", "/api/teacher/topics/"+topic.ID, nil, 200, &td)
+	if td.Name != "Motion" || td.ClassroomID != c.ID || td.ModuleName != "Term 1" || *td.Settings.QuizTimeLimitSec != 600 {
+		t.Fatalf("topic detail = %+v", td)
+	}
+
 	// Settings are validated against the level they are set at.
 	teacher.Call("POST", "/api/teacher/modules/"+m1.ID+"/topics", map[string]any{"name": "X", "settings": map[string]any{"admission_mode": "auto"}}, 422, nil)
 

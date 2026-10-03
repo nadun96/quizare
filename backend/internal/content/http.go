@@ -28,6 +28,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("DELETE", "/modules/{id}", httpx.Handler(s.hDeleteModule))
 	r.Method("GET", "/modules/{id}/topics", httpx.Handler(s.hListTopics))
 	r.Method("POST", "/modules/{id}/topics", httpx.Handler(s.hCreateTopic))
+	r.Method("GET", "/topics/{id}", httpx.Handler(s.hGetTopic))
 	r.Method("PATCH", "/topics/{id}", httpx.Handler(s.hUpdateTopic))
 	r.Method("DELETE", "/topics/{id}", httpx.Handler(s.hDeleteTopic))
 }
@@ -199,6 +200,15 @@ func (s *Service) hCreateTopic(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.JSON(w, 201, t)
+	return nil
+}
+
+func (s *Service) hGetTopic(w http.ResponseWriter, r *http.Request) error {
+	t, err := s.GetTopic(r.Context(), uid(r), chi.URLParam(r, "id"))
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, t)
 	return nil
 }
 
