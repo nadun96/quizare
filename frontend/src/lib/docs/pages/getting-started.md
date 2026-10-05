@@ -25,21 +25,19 @@ Without `QP_TEST_DATABASE_URL`, each test package starts its own embedded server
 
 ## Run the app locally
 
-1. Create a database and a master key (the key is read from a file, never from an environment variable; ADR-09):
+1. Start PostgreSQL. `go run ./cmd/testdb` (from `backend/`, left running) starts an embedded PostgreSQL 16 on port 54329 and creates a `qp_dev` database for the app; the test databases are separate. Or point `QP_DATABASE_URL` at your own server.
 
-   ```sh
-   openssl rand 32 > kek.key && chmod 0400 kek.key
-   ```
-
-2. Start the backend. It migrates the database on start:
+2. Start the backend from `backend/`. It migrates the database on start. The master key is read from a file, never from an environment variable (ADR-09); `QP_KEK_GENERATE=1` creates it on first start and never overwrites it:
 
    ```sh
    cd backend
    export QP_DATABASE_URL='postgres://postgres:postgres@localhost:54329/qp_dev?sslmode=disable'
-   export QP_KEK_FILE=../kek.key
-   export QP_BASE_URL=http://localhost:5173   # the origin the browser uses
+   export QP_KEK_FILE=.data/kek QP_KEK_GENERATE=1   # git-ignored; keep this file
+   export QP_BASE_URL=http://localhost:5173          # the origin the browser uses
    go run ./cmd/server
    ```
+
+   For a real server, create the key once and never overwrite it; losing it makes saved LLM API keys unreadable: `[ -f kek.key ] || { openssl rand 32 > kek.key && chmod 0400 kek.key; }`
 
 3. Start the frontend dev server, which proxies `/api`, `/ws` and `/beacon` to `127.0.0.1:8080`:
 
@@ -51,6 +49,7 @@ Without `QP_TEST_DATABASE_URL`, each test package starts its own embedded server
 4. Create an admin (there is no HTTP route for this; D-05):
 
    ```sh
+   cd backend   # in a new terminal, with the same QP_DATABASE_URL and QP_KEK_FILE exported
    echo 'a-strong-password' | go run ./cmd/server create-admin admin@school.edu "Admin"
    ```
 
