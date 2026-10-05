@@ -16,14 +16,14 @@
 </script>
 
 <div class="narrow">
-	<form class="card stack" onsubmit={submit}>
+	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={submit}>
 		<h1>Choose a new password</h1>
 		{#if done}
-			<p class="alert ok">Your password was changed and you were signed out everywhere. <a href="/login">Log in</a>.</p>
+			<p class="alert alert-soft alert-success">Your password was changed and you were signed out everywhere. <a href="/login">Log in</a>.</p>
 		{:else}
-			<div><label for="pw">New password</label><input id="pw" type="password" autocomplete="new-password" minlength="8" bind:value={password} required /></div>
-			{#if error}<p class="alert danger">{error}</p>{/if}
-			<button class="primary">Change password</button>
+			<div><label for="pw">New password</label><input class="input w-full" id="pw" type="password" autocomplete="new-password" minlength="8" bind:value={password} required /></div>
+			{#if error}<p class="alert alert-soft alert-error">{error}</p>{/if}
+			<button class="btn btn-primary">Change password</button>
 		{/if}
 	</form>
 </div>

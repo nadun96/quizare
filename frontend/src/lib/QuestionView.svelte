@@ -114,7 +114,7 @@
 	const unplaced = $derived(opts.filter((o) => !r.pairs?.[o.id]));
 </script>
 
-<div class="question stack">
+<div class="question vstack">
 	{#if !isBlank}
 		<RichText class="qtext" text={question.text} format={question.body.format} />
 	{/if}
@@ -128,13 +128,15 @@
 			{#each opts as o, i (o.id)}
 				<label class="choice" class:on={r.selected?.includes(o.id)}>
 					<input
+						class="sr-only"
 						type={question.type === 'SINGLE' ? 'radio' : 'checkbox'}
 						name={'q' + question.id}
 						checked={r.selected?.includes(o.id) ?? false}
 						{disabled}
 						onchange={() => toggle(o.id)}
 					/>
-					<span>{o.text}</span>
+					<span class="letter" class:square={question.type === 'MULTI'} aria-hidden="true">{#if r.selected?.includes(o.id)}<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>{:else}{String.fromCharCode(65 + i)}{/if}</span>
+					<span class="choice-text">{o.text}</span>
 					{#if optionImage(i)}<img class="res small-res" src={optionImage(i)!.url} alt={optionImage(i)!.alt_text} referrerpolicy="no-referrer" />{/if}
 				</label>
 			{/each}
@@ -144,7 +146,7 @@
 		{#each question.body.left ?? [] as l (l.id)}
 			<div class="match">
 				<span>{l.text}</span>
-				<select aria-label={'Match for ' + l.text} value={r.pairs?.[l.id] ?? ''} {disabled} onchange={(e) => setPair(l.id, e.currentTarget.value)}>
+				<select class="select w-full" aria-label={'Match for ' + l.text} value={r.pairs?.[l.id] ?? ''} {disabled} onchange={(e) => setPair(l.id, e.currentTarget.value)}>
 					<option value="">Choose…</option>
 					{#each question.body.right ?? [] as rt (rt.id)}<option value={rt.id}>{rt.text}</option>{/each}
 				</select>
@@ -154,7 +156,7 @@
 		<RichText class="qtext blanks" text={question.text} format={question.body.format}>
 			{#snippet blank(b)}
 				{#if question.type === 'BLANK_OPT'}
-					<select aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled} onchange={(e) => setBlank(b, e.currentTarget.value)}>
+					<select class="select" aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled} onchange={(e) => setBlank(b, e.currentTarget.value)}>
 						<option value="">…</option>
 						{#each opts as o (o.id)}<option value={o.id}>{o.text}</option>{/each}
 					</select>
@@ -188,10 +190,11 @@
 			</div>
 		{/if}
 	{:else if question.type === 'ESSAY'}
-		<textarea aria-label="Your answer" value={r.text ?? ''} {disabled} oninput={(e) => setText(e.currentTarget.value)} onblur={emit} rows="10"></textarea>
-		<p class="small muted" class:over={!!question.body.word_limit && words > question.body.word_limit}>
-			{words} words{question.body.word_limit ? ` of ${question.body.word_limit}` : ''}
-		</p>
+		<textarea class="textarea w-full essay" aria-label="Your answer" value={r.text ?? ''} {disabled} oninput={(e) => setText(e.currentTarget.value)} onblur={emit} rows="8"></textarea>
+		<div class="flex items-center gap-3 small muted" class:over={!!question.body.word_limit && words > question.body.word_limit}>
+			<span class="tabular" aria-live="polite">{words} word{words === 1 ? '' : 's'}{question.body.word_limit ? ` of ${question.body.word_limit}` : ''}</span>
+			{#if question.body.word_limit}<progress class="progress flex-1" class:progress-error={words > question.body.word_limit} class:progress-primary={words <= question.body.word_limit} value={Math.min(words, question.body.word_limit)} max={question.body.word_limit} aria-hidden="true"></progress>{/if}
+		</div>
 	{/if}
 </div>
 
@@ -201,14 +204,30 @@
 	.question :global(.blanks select), .question :global(.blank) { width: auto; min-width: 7rem; max-width: 100%; display: inline-block; margin: 0 0.25rem; line-height: 1.3; padding: 0.35rem 0.6rem; min-height: 2.4rem; vertical-align: middle; }
 	.res { max-width: 100%; max-height: 50vh; border-radius: 8px; }
 	.small-res { max-height: 80px; }
-	.choices { display: grid; gap: 0.5rem; }
-	.choice { display: flex; gap: 0.75rem; align-items: center; font-weight: 400; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-height: 48px; }
-	.choice.on { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
-	.match { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+	/* Answer tiles: 56 px targets, a letter marker (A, B, C…) so options can be
+	   named aloud and told apart without colour, and a check when selected. */
+	.choices { display: grid; gap: 0.625rem; }
+	.choice { display: flex; gap: 0.875rem; align-items: center; font-weight: 400; font-size: 1.05rem; line-height: 1.45; padding: 0.75rem 1rem; border: 1.5px solid var(--color-base-300); border-radius: var(--radius-box); background: var(--color-base-100); min-height: 3.5rem; margin: 0; cursor: pointer; transition: border-color var(--motion-fast), background-color var(--motion-fast), transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast); }
+	.choice:hover { border-color: color-mix(in oklab, var(--color-primary) 45%, var(--color-base-300)); }
+	.choice:active { transform: scale(0.99); }
+	.choice:has(input:focus-visible) { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+	.choice:has(input:disabled) { cursor: default; opacity: 0.7; }
+	.choice.on { border-color: var(--color-primary); background: color-mix(in oklab, var(--color-primary) 7%, var(--color-base-100)); box-shadow: 0 0 0 1px var(--color-primary); }
+	.letter { flex: none; width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 999px; font-weight: 700; font-size: 0.875rem; border: 1.5px solid var(--color-field); color: var(--color-muted); transition: background-color var(--motion-fast), color var(--motion-fast), transform var(--motion) var(--ease-out); }
+	.letter.square { border-radius: 0.45rem; }
+	.on .letter { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-content); animation: pop var(--motion) var(--ease-out); }
+	@keyframes pop { 0% { transform: scale(0.7); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+	.choice-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+	.match { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem 0.75rem; align-items: center; margin-bottom: 0.625rem; }
+	@media (max-width: 480px) { .match { grid-template-columns: 1fr; gap: 0.25rem; margin-bottom: 1rem; } }
 	.drag-list { padding: 0; list-style: none; display: grid; gap: 0.5rem; }
-	.drag-item { padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: grab; touch-action: none; user-select: none; }
-	.drag-pool, .zone-drop { min-height: 56px; padding: 0.5rem; border: 2px dashed var(--border); border-radius: 8px; display: grid; gap: 0.5rem; }
+	.drag-item { padding: 0.75rem 1rem; min-height: 3rem; display: flex; align-items: center; border: 1.5px solid var(--color-base-300); border-radius: var(--radius-field); background: var(--color-base-100); cursor: grab; touch-action: none; user-select: none; transition: box-shadow var(--motion-fast), border-color var(--motion-fast); }
+	.drag-item:hover { border-color: color-mix(in oklab, var(--color-primary) 45%, var(--color-base-300)); }
+	:global(.sortable-chosen) { box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--color-base-content) 35%, transparent); border-color: var(--color-primary) !important; }
+	.drag-pool, .zone-drop { min-height: 3.5rem; padding: 0.5rem; border: 2px dashed var(--color-field); border-radius: var(--radius-box); display: grid; gap: 0.5rem; transition: background-color var(--motion-fast); }
+	.zone-drop:has(:global(.sortable-ghost)) { background: color-mix(in oklab, var(--color-primary) 6%, transparent); }
+	.essay { font-size: 1.05rem; line-height: 1.6; }
 	.zones { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-	.over { color: var(--danger); }
+	.over { color: var(--color-error); }
 	:global(.sortable-ghost) { opacity: 0.4; }
 </style>

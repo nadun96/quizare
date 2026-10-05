@@ -1,10 +1,11 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
 const backend = process.env.QP_BACKEND ?? 'http://127.0.0.1:8080';
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	plugins: [tailwindcss(), sveltekit()],
 	server: {
 		// The docs import ../DECISIONS.md from the repository root.
 		fs: { allow: ['..'] },

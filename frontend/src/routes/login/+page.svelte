@@ -27,12 +27,12 @@
 </script>
 
 <div class="narrow">
-	<form class="card stack" onsubmit={submit}>
+	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={submit}>
 		<h1>Log in</h1>
-		<div><label for="email">Email</label><input id="email" type="email" autocomplete="email" bind:value={email} required /></div>
-		<div><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" bind:value={password} required /></div>
-		{#if error}<p class="alert danger" role="alert">{error}</p>{/if}
-		<button class="primary" disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button>
+		<div><label for="email">Email</label><input class="input w-full" id="email" type="email" autocomplete="email" bind:value={email} required /></div>
+		<div><label for="pw">Password</label><input class="input w-full" id="pw" type="password" autocomplete="current-password" bind:value={password} required /></div>
+		{#if error}<p class="alert alert-soft alert-error" role="alert">{error}</p>{/if}
+		<button class="btn btn-primary" disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button>
 		<p class="small"><a href="/forgot-password">Forgot your password?</a></p>
 		<p class="small">New here? <a href={'/register' + (next ? '?next=' + encodeURIComponent(next) : '')}>Create an account</a></p>
 	</form>

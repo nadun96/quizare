@@ -115,4 +115,14 @@ export const STATE_LABEL: Record<string, string> = {
 	invalidated: 'Invalidated',
 	not_started: 'Not started'
 };
+/** Shape icons, so attempt state never depends on colour alone (WCAG 1.4.1). */
+export const STATE_ICON: Record<string, string> = {
+	waiting: '◷',
+	admitted: '→',
+	in_progress: '▶',
+	paused: '⏸',
+	submitted: '✓',
+	invalidated: '⚠',
+	not_started: '○'
+};
 export const STATE_BADGE: Record<string, string> = { in_progress: 'ok', submitted: 'ok', paused: 'warn', admitted: 'warn', invalidated: 'danger' };

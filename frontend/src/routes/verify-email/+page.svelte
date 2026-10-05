@@ -15,9 +15,9 @@
 	});
 </script>
 
-<div class="narrow card">
+<div class="narrow card card-border bg-base-100 shadow-sm p-4 sm:p-6">
 	<h1>Email verification</h1>
 	{#if status === 'working'}<p>Verifying…</p>
-	{:else if status === 'ok'}<p class="alert ok">Your email address is verified. <a href="/">Continue</a></p>
-	{:else}<p class="alert danger">{message}</p>{/if}
+	{:else if status === 'ok'}<p class="alert alert-soft alert-success">Your email address is verified. <a href="/">Continue</a></p>
+	{:else}<p class="alert alert-soft alert-error">{message}</p>{/if}
 </div>
