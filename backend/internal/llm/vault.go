@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -58,6 +59,35 @@ func LoadKEK(path string) ([]byte, error) {
 		return b, nil
 	}
 	return nil, errors.New("master key file must contain 32 raw bytes, 64 hex characters or base64 of 32 bytes")
+}
+
+// EnsureKEK creates a new random master key at path if no file exists there
+// (mode 0400, parent directory 0700) and reports whether it created one.
+// It is meant for containers, where the key lives in a persistent volume
+// owned by the service user. An existing file is never overwritten.
+func EnsureKEK(path string) (bool, error) {
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return false, err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+	if errors.Is(err, os.ErrExist) {
+		return false, nil // created concurrently by another process
+	}
+	if err != nil {
+		return false, err
+	}
+	key := random(32)
+	defer zero(key)
+	if _, err := f.Write(key); err != nil {
+		f.Close()
+		return false, err
+	}
+	return true, f.Close()
 }
 
 // Sealed is what the database stores for one secret.

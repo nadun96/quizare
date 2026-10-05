@@ -1,0 +1,18 @@
+# Keep the build context small and free of secrets (also read by Podman/Buildah).
+.git
+docs
+local
+*.local.md
+.env
+.env.*
+**/node_modules
+frontend/.svelte-kit
+frontend/build
+backend/bin
+backend/.data
+backend/tmp
+*.key
+*.exe
+*.test
+coverage.out
+loadtest

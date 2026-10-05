@@ -1,0 +1,29 @@
+.doc-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 2rem; padding: 1.5rem 2rem 4rem; }
+.doc { max-width: 860px; min-width: 0; line-height: 1.65; }
+.doc h1 { font-size: 2rem; margin-top: 0.25rem; }
+.doc h2 { font-size: 1.4rem; margin-top: 2.25rem; padding-top: 0.5rem; border-top: 1px solid var(--color-base-300); }
+.doc h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+.doc h1, .doc h2, .doc h3, .doc h4 { position: relative; scroll-margin-top: 5rem; }
+.doc .anchor { position: absolute; left: -1.1rem; opacity: 0; text-decoration: none; color: var(--muted); }
+.doc h2:hover .anchor, .doc h3:hover .anchor { opacity: 1; }
+.doc code { font-family: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace; font-size: 0.88em; background: var(--bg); border: 1px solid var(--color-base-300); border-radius: 4px; padding: 0.05rem 0.3rem; }
+.doc pre.code { background: var(--bg); border: 1px solid var(--color-base-300); border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto; line-height: 1.45; }
+.doc pre.code code { background: none; border: none; padding: 0; font-size: 0.85rem; }
+.doc pre.mermaid { background: var(--surface); border: 1px solid var(--color-base-300); border-radius: 8px; padding: 1rem; text-align: center; overflow-x: auto; }
+.doc pre.mermaid:not([data-processed]) { color: transparent; min-height: 6rem; }
+.doc blockquote { margin: 1rem 0; padding: 0.6rem 1rem; border-left: 4px solid var(--accent); background: var(--bg); border-radius: 0 8px 8px 0; }
+.doc blockquote p { margin: 0.25rem 0; }
+.doc table { font-size: 0.92rem; }
+.doc td code, .doc th code { white-space: nowrap; }
+.doc ul, .doc ol { padding-left: 1.4rem; }
+.doc li + li { margin-top: 0.2rem; }
+.doc img { max-width: 100%; }
+.doc .pager { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 3rem; }
+.doc .pager a { text-decoration: none; color: inherit; display: grid; gap: 0.2rem; }
+.toc { position: sticky; top: 1rem; align-self: start; display: grid; gap: 0.3rem; font-size: 0.85rem; max-height: calc(100dvh - 2rem); overflow-y: auto; }
+.toc a { text-decoration: none; color: var(--muted); }
+.toc a:hover { color: var(--accent); }
+.toc a.sub { padding-left: 0.8rem; }
+@media (max-width: 1100px) { .doc-wrap { grid-template-columns: minmax(0, 1fr); padding: 1rem; } .toc { display: none; } .doc .anchor { display: none; } }
+.doc pre.mermaid svg { max-width: 100%; height: auto; }
+.doc :not(pre) > code { overflow-wrap: anywhere; }

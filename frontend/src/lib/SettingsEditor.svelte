@@ -45,28 +45,28 @@
 	}
 </script>
 
-<form class="stack" onsubmit={save}>
+<form class="vstack" onsubmit={save}>
 	<div class="settings">
 		{#each metas as m (m.key)}
 			<div class="setting">
 				<label for={'s-' + m.key}>{m.label}{m.unit ? ` (${m.unit})` : ''}</label>
 				{#if m.kind === 'enum'}
-					<select id={'s-' + m.key} value={draft[m.key] ?? ''} onchange={(e) => set(m.key, e.currentTarget.value || undefined)}>
+					<select class="select w-full" id={'s-' + m.key} value={draft[m.key] ?? ''} onchange={(e) => set(m.key, e.currentTarget.value || undefined)}>
 						<option value="">Inherit ({m.options?.find((o) => o[0] === effective[m.key])?.[1] ?? inherited(m.key)})</option>
 						{#each m.options ?? [] as [v, l] (v)}<option value={v}>{l}</option>{/each}
 					</select>
 				{:else if m.kind === 'bool'}
-					<select id={'s-' + m.key} value={draft[m.key] === undefined ? '' : String(draft[m.key])}
+					<select class="select w-full" id={'s-' + m.key} value={draft[m.key] === undefined ? '' : String(draft[m.key])}
 						onchange={(e) => set(m.key, e.currentTarget.value === '' ? undefined : e.currentTarget.value === 'true')}>
 						<option value="">Inherit ({inherited(m.key)})</option>
 						<option value="true">On</option>
 						<option value="false">Off</option>
 					</select>
 				{:else if m.kind === 'int'}
-					<input id={'s-' + m.key} type="number" min="0" inputmode="numeric" placeholder={'Inherit: ' + inherited(m.key)}
+					<input class="input w-full" id={'s-' + m.key} type="number" min="0" inputmode="numeric" placeholder={'Inherit: ' + inherited(m.key)}
 						value={draft[m.key] ?? ''} oninput={(e) => set(m.key, e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))} />
 				{:else}
-					<input id={'s-' + m.key} placeholder={'Inherit: ' + inherited(m.key)} value={draft[m.key] ?? ''} oninput={(e) => set(m.key, e.currentTarget.value || undefined)} />
+					<input class="input w-full" id={'s-' + m.key} placeholder={'Inherit: ' + inherited(m.key)} value={draft[m.key] ?? ''} oninput={(e) => set(m.key, e.currentTarget.value || undefined)} />
 				{/if}
 				{#if m.help}<p class="small muted">{m.help}</p>{/if}
 				{#if errors['settings.' + m.key] || errors[m.key]}<p class="field-error">{errors['settings.' + m.key] ?? errors[m.key]}</p>{/if}
@@ -74,8 +74,8 @@
 		{/each}
 	</div>
 	<div class="row">
-		<button class="primary" disabled={saving}>Save settings</button>
-		{#if saved}<span class="badge ok">Saved</span>{/if}
+		<button class="btn btn-primary" disabled={saving}>Save settings</button>
+		{#if saved}<span class="badge badge-soft badge-success">Saved</span>{/if}
 	</div>
 </form>
 

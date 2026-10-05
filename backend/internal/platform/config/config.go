@@ -24,6 +24,9 @@ type Config struct {
 
 	APIDocs bool // serve the OpenAPI spec and Swagger UI at /api/docs (QP_API_DOCS=0 disables)
 
+	KEKGenerate bool          // create the KEK file on first start if missing (containers; QP_KEK_GENERATE=1)
+	DBWait      time.Duration // keep retrying the database for this long at startup (QP_DB_WAIT_SECONDS, default 60)
+
 	SMTPAddr, SMTPFrom, SMTPUser string
 	SMTPPasswordFile             string // secret read from a file, like the KEK
 }
@@ -41,6 +44,8 @@ func FromEnv() (Config, error) {
 		StaticDir:     os.Getenv("QP_STATIC_DIR"),
 
 		APIDocs:          os.Getenv("QP_API_DOCS") != "0",
+		KEKGenerate:      os.Getenv("QP_KEK_GENERATE") == "1",
+		DBWait:           time.Duration(envInt("QP_DB_WAIT_SECONDS", 60)) * time.Second,
 		SMTPAddr:         os.Getenv("QP_SMTP_ADDR"),
 		SMTPFrom:         env("QP_SMTP_FROM", "no-reply@localhost"),
 		SMTPUser:         os.Getenv("QP_SMTP_USER"),

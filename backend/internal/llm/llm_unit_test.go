@@ -75,6 +75,26 @@ func TestLoadKEKFormats(t *testing.T) {
 	}
 }
 
+func TestEnsureKEK(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secrets", "kek")
+	created, err := EnsureKEK(path)
+	if err != nil || !created {
+		t.Fatalf("first call: created=%v err=%v", created, err)
+	}
+	first, err := LoadKEK(path) // also enforces the file mode on Unix
+	if err != nil || len(first) != 32 {
+		t.Fatalf("load: %v", err)
+	}
+	created, err = EnsureKEK(path)
+	if err != nil || created {
+		t.Fatalf("second call must keep the existing key: created=%v err=%v", created, err)
+	}
+	again, _ := LoadKEK(path)
+	if !bytes.Equal(first, again) {
+		t.Fatal("existing key was overwritten")
+	}
+}
+
 func TestScrubAndPromptDelimiting(t *testing.T) {
 	got := Scrub("Contact me at jane.doe@school.edu or +94 77 123 4567 please")
 	if strings.Contains(got, "jane") || strings.Contains(got, "4567") {

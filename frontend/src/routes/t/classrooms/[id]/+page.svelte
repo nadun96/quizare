@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
@@ -49,7 +51,7 @@
 		}
 	}
 	async function remove(kind: 'modules' | 'topics', itemId: string) {
-		if (!confirm('Delete this ' + kind.slice(0, -1) + '?')) return;
+if (!(await confirmDialog({ title: 'Delete this ' + kind.slice(0, -1) + '?', body: 'Everything inside it is deleted too.', confirm: 'Delete', danger: true }))) return;
 		try {
 			await api.del('/api/teacher/' + kind + '/' + itemId);
 			load();
@@ -81,7 +83,7 @@
 		}
 	}
 	async function newCode() {
-		if (!confirm('Generate a new join code? The old code and QR stop working.')) return;
+if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old code and QR code stop working straight away.', confirm: 'New code', danger: true }))) return;
 		await api.post('/api/teacher/classrooms/' + id + '/join-code');
 		load();
 	}
@@ -90,7 +92,7 @@
 		load();
 	}
 	async function del() {
-		if (!confirm('Delete this classroom and everything in it?')) return;
+if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules, topics, quizzes and enrolments are deleted too.', confirm: 'Delete classroom', danger: true }))) return;
 		try {
 			await api.del('/api/teacher/classrooms/' + id);
 			goto('/t');
@@ -101,55 +103,55 @@
 	const joinUrl = $derived(c ? location.origin + '/c/' + c.join_code : '');
 </script>
 
-<div class="container stack">
+<div class="page-container vstack">
 	{#if c}
 		<div class="row"><a href="/t">← Classrooms</a></div>
-		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge">archived</span>{/if}</div>
-		{#if notice}<p class="alert">{notice}</p>{/if}
-		<div class="tabs" role="tablist">
+		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}</div>
+		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
+		<div class="tabs tabs-border tabs-scroll" role="tablist">
 			{#each [['content', 'Modules & topics'], ['students', `Students (${enrolments.length})`], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
-				<button role="tab" aria-selected={tab === k} class:active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
+				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
 
 		{#if tab === 'content'}
 			{#each modules as m (m.id)}
-				<div class="card stack">
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 					<div class="row"><h3 style="margin:0">{m.name}</h3><span class="spacer"></span>
-						<button class="small" onclick={() => rename('modules', m.id, m.name)}>Rename</button>
-						<button class="small danger" onclick={() => remove('modules', m.id)}>Delete</button></div>
+						<button class="btn btn-sm" onclick={() => rename('modules', m.id, m.name)}>Rename</button>
+						<button class="btn btn-sm btn-error btn-outline" onclick={() => remove('modules', m.id)}>Delete</button></div>
 					{#each m.topics as t (t.id)}
 						<div class="row">
 							<a href={'/t/topics/' + t.id + '?name=' + encodeURIComponent(t.name)}>{t.name}</a>
 							<span class="spacer"></span>
-							<button class="small" onclick={() => rename('topics', t.id, t.name)}>Rename</button>
-							<button class="small danger" onclick={() => remove('topics', t.id)}>Delete</button>
+							<button class="btn btn-sm" onclick={() => rename('topics', t.id, t.name)}>Rename</button>
+							<button class="btn btn-sm btn-error btn-outline" onclick={() => remove('topics', t.id)}>Delete</button>
 						</div>
 					{/each}
 					<form class="row" onsubmit={(e) => addTopic(m.id, e)}>
-						<input style="flex:1" placeholder="New topic" bind:value={newTopic[m.id]} required aria-label="New topic name" />
-						<button class="small">Add topic</button>
+						<input class="input w-full" style="flex:1" placeholder="New topic" bind:value={newTopic[m.id]} required aria-label="New topic name" />
+						<button class="btn btn-sm">Add topic</button>
 					</form>
 				</div>
 			{/each}
-			<form class="card row" onsubmit={addModule}>
-				<input style="flex:1" placeholder="New module (e.g. Term 1)" bind:value={newModule} required aria-label="New module name" />
-				<button class="primary">Add module</button>
+			<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={addModule}>
+				<input class="input w-full" style="flex:1" placeholder="New module (e.g. Term 1)" bind:value={newModule} required aria-label="New module name" />
+				<button class="btn btn-primary">Add module</button>
 			</form>
 		{:else if tab === 'students'}
-			<div class="card table-wrap">
-				<table>
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+				<table class="table">
 					<thead><tr><th>Name</th><th>Student ID</th><th>Status</th><th></th></tr></thead>
 					<tbody>
 						{#each enrolments as en (en.id)}
 							<tr>
 								<td>{en.student_name}<br /><span class="small muted">{en.student_email}</span></td>
-								<td>{en.student_number ?? '—'} <button class="small" onclick={() => editNumber(en)}>Edit</button></td>
-								<td><span class="badge {en.status === 'active' ? 'ok' : en.status === 'pending' ? 'warn' : ''}">{en.status}</span></td>
+								<td>{en.student_number ?? '—'} <button class="btn btn-sm" onclick={() => editNumber(en)}>Edit</button></td>
+								<td><span class="badge badge-soft {en.status === 'active' ? 'ok' : en.status === 'pending' ? 'warn' : ''}">{en.status}</span></td>
 								<td class="row">
-									{#if en.status !== 'active'}<button class="small" onclick={() => setEnrolment(en, 'active')}>Approve</button>{/if}
-									{#if en.status === 'pending'}<button class="small" onclick={() => setEnrolment(en, 'rejected')}>Reject</button>{/if}
-									{#if en.status === 'active'}<button class="small danger" onclick={() => setEnrolment(en, 'removed')}>Remove</button>{/if}
+									{#if en.status !== 'active'}<button class="btn btn-sm" onclick={() => setEnrolment(en, 'active')}>Approve</button>{/if}
+									{#if en.status === 'pending'}<button class="btn btn-sm" onclick={() => setEnrolment(en, 'rejected')}>Reject</button>{/if}
+									{#if en.status === 'active'}<button class="btn btn-sm btn-error btn-outline" onclick={() => setEnrolment(en, 'removed')}>Remove</button>{/if}
 								</td>
 							</tr>
 						{:else}<tr><td colspan="4" class="muted">No students yet. Share the join code.</td></tr>{/each}
@@ -157,18 +159,18 @@
 				</table>
 			</div>
 		{:else if tab === 'settings'}
-			<div class="card"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
-			<div class="card row">
-				<button onclick={() => archive(!c!.archived)}>{c.archived ? 'Unarchive' : 'Archive'} classroom</button>
-				<button class="danger" onclick={del}>Delete classroom</button>
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">
+				<button class="btn" onclick={() => archive(!c!.archived)}>{c.archived ? 'Unarchive' : 'Archive'} classroom</button>
+				<button class="btn btn-error btn-outline" onclick={del}>Delete classroom</button>
 			</div>
 		{:else}
-			<div class="card stack" style="text-align:center">
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" style="text-align:center">
 				<p>Students enrol with this code, link or QR.</p>
 				<p style="font-size:2rem;font-weight:700;letter-spacing:0.1em">{c.join_code}</p>
 				<QrCode text={joinUrl} size={260} />
 				<p class="small"><a href={joinUrl}>{joinUrl}</a></p>
-				<div><button onclick={newCode}>Generate a new code</button></div>
+				<div><button class="btn" onclick={newCode}>Generate a new code</button></div>
 			</div>
 		{/if}
 	{/if}

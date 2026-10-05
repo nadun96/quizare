@@ -2,6 +2,7 @@
 	// One-by-one question authoring for all seven types (FR-QZ-02/03/04/07/09).
 	import { api, ApiError } from './api';
 	import { QTYPES, QTYPE_LABEL, type QType, type Question } from './types';
+	import RichTextEditor from './richtext/RichTextEditor.svelte';
 
 	let { quizId, question = null, onsaved, oncancel }: { quizId: string; question?: Question | null; onsaved: (q: Question) => void; oncancel: () => void } = $props();
 
@@ -25,6 +26,8 @@
 	let caseSensitive = $state(q?.key?.case_sensitive ?? false);
 	let tolerance = $state(q?.key?.tolerance ?? 0);
 	let dragMode = $state<'order' | 'zones'>(q?.body?.zones?.length ? 'zones' : 'order');
+	// Plain-text questions (CSV import) open converted; saving stores Markdown.
+	const format = q?.body?.format ?? '';
 
 	// Options (SINGLE/MULTI/BLANK_OPT), items (DRAG) — in authored order.
 	let rows = $state<Row[]>(
@@ -54,7 +57,7 @@
 
 	function payload() {
 		const opt = rows.map((r, i) => ({ id: 'o' + (i + 1), text: r.text }));
-		const body: Record<string, unknown> = {};
+		const body: Record<string, unknown> = { format: 'markdown' };
 		const key: Record<string, unknown> = {};
 		switch (type) {
 			case 'SINGLE':
@@ -104,6 +107,10 @@
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
+		if (!text.trim()) {
+			errors = { text: 'question text is required' };
+			return;
+		}
 		saving = true;
 		errors = {};
 		try {
@@ -121,124 +128,124 @@
 	const errorList = $derived(Object.entries(errors));
 </script>
 
-<form class="stack" onsubmit={save}>
+<form class="vstack" onsubmit={save}>
 	<div class="row">
-		<div style="width:9rem"><label for="code">Code</label><input id="code" bind:value={code} required placeholder="Q001" /></div>
+		<div style="width:9rem"><label for="code">Code</label><input class="input w-full" id="code" bind:value={code} required placeholder="Q001" /></div>
 		<div style="flex:1;min-width:12rem"><label for="type">Type</label>
-			<select id="type" bind:value={type} disabled={!!q}>{#each QTYPES as t (t)}<option value={t}>{QTYPE_LABEL[t]}</option>{/each}</select></div>
-		<div style="width:7rem"><label for="marks">Marks</label><input id="marks" type="number" min="0.25" step="0.25" bind:value={marks} /></div>
+			<select class="select w-full" id="type" bind:value={type} disabled={!!q}>{#each QTYPES as t (t)}<option value={t}>{QTYPE_LABEL[t]}</option>{/each}</select></div>
+		<div style="width:7rem"><label for="marks">Marks</label><input class="input w-full" id="marks" type="number" min="0.25" step="0.25" bind:value={marks} /></div>
 	</div>
 	<div>
 		<label for="text">Question text</label>
-		<textarea id="text" bind:value={text} rows="3" required></textarea>
-		{#if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}<p class="small muted">Mark blanks as [[1]], [[2]] … in the text.</p>{/if}
+		<RichTextEditor id="text" label="Question text" bind:value={text} {format} required blanks={type === 'BLANK_OPT' || type === 'BLANK_TEXT'} placeholder="Write the question…" />
+		{#if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}<p class="small muted">Add blanks with <strong>+ Blank</strong> or by typing [[1]], [[2]] …</p>{/if}
 	</div>
 
 	{#if usesOptions}
-		<fieldset class="stack">
+		<fieldset class="vstack">
 			<legend><strong>{type === 'DRAG' ? (dragMode === 'order' ? 'Items, in the correct order' : 'Items') : 'Options'}</strong></legend>
 			{#if type === 'DRAG'}
 				<div class="row small">
-					<label class="row" style="font-weight:400"><input type="radio" bind:group={dragMode} value="order" /> Put in order</label>
-					<label class="row" style="font-weight:400"><input type="radio" bind:group={dragMode} value="zones" /> Sort into boxes</label>
+					<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={dragMode} value="order" /> Put in order</label>
+					<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={dragMode} value="zones" /> Sort into boxes</label>
 				</div>
 			{/if}
 			{#each rows as r, i (i)}
 				<div class="row">
-					{#if type === 'SINGLE'}<input type="radio" name="correct" aria-label="Correct" checked={r.correct} onchange={() => rows.forEach((x, j) => (x.correct = j === i))} />{/if}
-					{#if type === 'MULTI'}<input type="checkbox" aria-label="Correct" bind:checked={r.correct} />{/if}
-					<input style="flex:1" aria-label={'Option ' + (i + 1)} bind:value={r.text} required />
+					{#if type === 'SINGLE'}<input class="radio" type="radio" name="correct" aria-label="Correct" checked={r.correct} onchange={() => rows.forEach((x, j) => (x.correct = j === i))} />{/if}
+					{#if type === 'MULTI'}<input class="checkbox" type="checkbox" aria-label="Correct" bind:checked={r.correct} />{/if}
+					<input class="input w-full" style="flex:1" aria-label={'Option ' + (i + 1)} bind:value={r.text} required />
 					{#if type === 'DRAG' && dragMode === 'zones'}
-						<select style="width:10rem" aria-label="Box" bind:value={r.zone}>
+						<select class="select w-full" style="width:10rem" aria-label="Box" bind:value={r.zone}>
 							<option value="">Box…</option>
 							{#each zones as z, zi (zi)}<option value={String(zi)}>{z || 'Box ' + (zi + 1)}</option>{/each}
 						</select>
 					{/if}
-					<button type="button" class="small" onclick={() => rows.splice(i, 1)} disabled={rows.length <= 2}>✕</button>
+					<button type="button" class="btn btn-sm" onclick={() => rows.splice(i, 1)} disabled={rows.length <= 2}>✕</button>
 				</div>
 			{/each}
-			<button type="button" class="small" onclick={() => rows.push({ text: '', correct: false, zone: '' })}>Add {type === 'DRAG' ? 'item' : 'option'}</button>
+			<button type="button" class="btn btn-sm" onclick={() => rows.push({ text: '', correct: false, zone: '' })}>Add {type === 'DRAG' ? 'item' : 'option'}</button>
 			{#if type === 'DRAG' && dragMode === 'zones'}
 				<strong>Boxes</strong>
 				{#each zones as _z, i (i)}
-					<div class="row"><input style="flex:1" aria-label={'Box ' + (i + 1)} bind:value={zones[i]} required /><button type="button" class="small" onclick={() => zones.splice(i, 1)} disabled={zones.length <= 1}>✕</button></div>
+					<div class="row"><input class="input w-full" style="flex:1" aria-label={'Box ' + (i + 1)} bind:value={zones[i]} required /><button type="button" class="btn btn-sm" onclick={() => zones.splice(i, 1)} disabled={zones.length <= 1}>✕</button></div>
 				{/each}
-				<button type="button" class="small" onclick={() => zones.push('')}>Add box</button>
+				<button type="button" class="btn btn-sm" onclick={() => zones.push('')}>Add box</button>
 			{/if}
 		</fieldset>
 	{/if}
 
 	{#if type === 'MATCH'}
-		<fieldset class="stack">
+		<fieldset class="vstack">
 			<legend><strong>Correct pairs</strong> <span class="small muted">(the right side is shuffled for students)</span></legend>
 			{#each pairs as p, i (i)}
-				<div class="row"><input style="flex:1" aria-label="Left" bind:value={p.left} required /> → <input style="flex:1" aria-label="Right" bind:value={p.right} required />
-					<button type="button" class="small" onclick={() => pairs.splice(i, 1)} disabled={pairs.length <= 2}>✕</button></div>
+				<div class="row"><input class="input w-full" style="flex:1" aria-label="Left" bind:value={p.left} required /> → <input class="input w-full" style="flex:1" aria-label="Right" bind:value={p.right} required />
+					<button type="button" class="btn btn-sm" onclick={() => pairs.splice(i, 1)} disabled={pairs.length <= 2}>✕</button></div>
 			{/each}
-			<button type="button" class="small" onclick={() => pairs.push({ left: '', right: '' })}>Add pair</button>
+			<button type="button" class="btn btn-sm" onclick={() => pairs.push({ left: '', right: '' })}>Add pair</button>
 		</fieldset>
 	{/if}
 
 	{#if (type === 'BLANK_OPT' || type === 'BLANK_TEXT') && blanks.length}
-		<fieldset class="stack">
+		<fieldset class="vstack">
 			<legend><strong>Answers per blank</strong></legend>
 			{#each blanks as b (b)}
 				<div class="row">
 					<span style="width:4rem">[[{b}]]</span>
 					{#if type === 'BLANK_OPT'}
-						<select style="flex:1" bind:value={blankKeys[b]} aria-label={'Answer for blank ' + b}>
+						<select class="select w-full" style="flex:1" bind:value={blankKeys[b]} aria-label={'Answer for blank ' + b}>
 							<option value="">Choose…</option>
 							{#each rows as r, i (i)}<option value={String(i)}>{r.text || 'Option ' + (i + 1)}</option>{/each}
 						</select>
 					{:else}
-						<input style="flex:1" bind:value={blankKeys[b]} placeholder="accepted answers, separated by |" aria-label={'Answers for blank ' + b} />
+						<input class="input w-full" style="flex:1" bind:value={blankKeys[b]} placeholder="accepted answers, separated by |" aria-label={'Answers for blank ' + b} />
 					{/if}
 				</div>
 			{/each}
 			{#if type === 'BLANK_TEXT'}
 				<div class="row">
-					<label class="row" style="font-weight:400"><input type="checkbox" bind:checked={caseSensitive} /> Case-sensitive</label>
+					<label class="row" style="font-weight:400"><input class="checkbox" type="checkbox" bind:checked={caseSensitive} /> Case-sensitive</label>
 					<label for="tol" style="font-weight:400">Spelling tolerance</label>
-					<select id="tol" style="width:6rem" bind:value={tolerance}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select>
+					<select class="select w-full" id="tol" style="width:6rem" bind:value={tolerance}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select>
 				</div>
 			{/if}
 		</fieldset>
 	{/if}
 
 	{#if type === 'ESSAY' || (type === 'BLANK_TEXT' && evaluation === 'llm')}
-		<div><label for="model">Model answer</label><textarea id="model" bind:value={modelAnswer} rows="3"></textarea></div>
-		<div><label for="rubric">Rubric (for LLM marking)</label><textarea id="rubric" bind:value={rubric} rows="3"></textarea></div>
-		{#if type === 'ESSAY'}<div style="width:10rem"><label for="wl">Word limit (0 = none)</label><input id="wl" type="number" min="0" bind:value={wordLimit} /></div>{/if}
+		<div><label for="model">Model answer</label><textarea class="textarea w-full" id="model" bind:value={modelAnswer} rows="3"></textarea></div>
+		<div><label for="rubric">Rubric (for LLM marking)</label><textarea class="textarea w-full" id="rubric" bind:value={rubric} rows="3"></textarea></div>
+		{#if type === 'ESSAY'}<div style="width:10rem"><label for="wl">Word limit (0 = none)</label><input class="input w-full" id="wl" type="number" min="0" bind:value={wordLimit} /></div>{/if}
 	{/if}
 
 	<details>
 		<summary>Timing, marking and feedback</summary>
-		<div class="grid" style="margin-top:0.75rem">
-			<div><label for="tl">Time limit (seconds)</label><input id="tl" type="number" min="0" bind:value={timeLimit} placeholder="Inherit from quiz" /></div>
+		<div class="auto-grid" style="margin-top:0.75rem">
+			<div><label for="tl">Time limit (seconds)</label><input class="input w-full" id="tl" type="number" min="0" bind:value={timeLimit} placeholder="Inherit from quiz" /></div>
 			<div><label for="ev">Marking</label>
-				<select id="ev" bind:value={evaluation}>
+				<select class="select w-full" id="ev" bind:value={evaluation}>
 					<option value="">Default for the type</option>
 					{#if type !== 'ESSAY'}<option value="key">Answer key</option>{/if}
 					{#if type === 'ESSAY' || type === 'BLANK_TEXT'}<option value="llm">LLM</option>{/if}
 					<option value="manual">Manual</option>
 				</select></div>
-			<div><label for="neg">Negative marks</label><input id="neg" type="number" min="0" step="0.25" bind:value={negative} /></div>
+			<div><label for="neg">Negative marks</label><input class="input w-full" id="neg" type="number" min="0" step="0.25" bind:value={negative} /></div>
 			<div><label for="pc">Partial credit</label>
-				<select id="pc" value={partial === null ? '' : String(partial)} onchange={(e) => (partial = e.currentTarget.value === '' ? null : e.currentTarget.value === 'true')}>
+				<select class="select w-full" id="pc" value={partial === null ? '' : String(partial)} onchange={(e) => (partial = e.currentTarget.value === '' ? null : e.currentTarget.value === 'true')}>
 					<option value="">Default for the type</option><option value="true">Yes</option><option value="false">No</option>
 				</select></div>
 		</div>
-		<div class="grid" style="margin-top:0.75rem">
-			<div><label for="fc">Feedback when correct</label><input id="fc" bind:value={fbCorrect} /></div>
-			<div><label for="fi">Feedback when incorrect</label><input id="fi" bind:value={fbIncorrect} /></div>
+		<div class="auto-grid" style="margin-top:0.75rem">
+			<div><label for="fc">Feedback when correct</label><RichTextEditor id="fc" label="Feedback when correct" bind:value={fbCorrect} {format} compact /></div>
+			<div><label for="fi">Feedback when incorrect</label><RichTextEditor id="fi" label="Feedback when incorrect" bind:value={fbIncorrect} {format} compact /></div>
 		</div>
 	</details>
 
 	{#if errorList.length}
-		<div class="alert danger"><ul style="margin:0;padding-left:1.2rem">{#each errorList as [k, v] (k)}<li>{k === '_' ? '' : k + ': '}{v}</li>{/each}</ul></div>
+		<div class="alert alert-soft alert-error"><ul style="margin:0;padding-left:1.2rem">{#each errorList as [k, v] (k)}<li>{k === '_' ? '' : k + ': '}{v}</li>{/each}</ul></div>
 	{/if}
 	<div class="row">
-		<button class="primary" disabled={saving}>{q ? 'Save question' : 'Add question'}</button>
-		<button type="button" onclick={oncancel}>Cancel</button>
+		<button class="btn btn-primary" disabled={saving}>{q ? 'Save question' : 'Add question'}</button>
+		<button class="btn" type="button" onclick={oncancel}>Cancel</button>
 	</div>
 </form>

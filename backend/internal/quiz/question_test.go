@@ -171,3 +171,43 @@ func TestParseResourcesCSVFromBA(t *testing.T) {
 		t.Fatalf("%+v", rows[1])
 	}
 }
+
+func TestTextFormat(t *testing.T) {
+	single := func(format, text string) Question {
+		q := Question{Code: "Q1", Type: Single, Text: text, Body: Body{Format: format, Options: []Choice{{Text: "a"}, {Text: "b"}}}, Key: Key{Correct: []string{"o1"}}}
+		q.Normalise()
+		return q
+	}
+	if f := single(" Markdown ", "**Bold** question").Validate(); len(f) != 0 {
+		t.Fatalf("markdown question rejected: %v", f)
+	}
+	if q := single(" Markdown ", "x"); q.Body.Format != FormatMarkdown {
+		t.Fatalf("format not normalised: %q", q.Body.Format)
+	}
+	if f := single("html", "<b>x</b>").Validate(); f["body.format"] == "" {
+		t.Fatal("unknown format accepted")
+	}
+	long := strings.Repeat("a", 6000)
+	if f := single("", long).Validate(); f["text"] == "" {
+		t.Fatal("6000-character plain text accepted")
+	}
+	if f := single(FormatMarkdown, long).Validate(); f["text"] != "" {
+		t.Fatalf("6000-character markdown rejected: %v", f)
+	}
+	if f := single(FormatMarkdown, strings.Repeat("a", 10001)).Validate(); f["text"] == "" {
+		t.Fatal("10001-character markdown accepted")
+	}
+
+	// Blanks keep working inside formatted text, and CSV imports stay plain.
+	q := Question{Code: "Q2", Type: BlankText, Text: "**Water** boils at [[1]] °C\n\n- at sea level, [[2]]", Body: Body{Format: FormatMarkdown}}
+	q.Normalise()
+	if strings.Join(q.Body.Blanks, ",") != "1,2" {
+		t.Fatalf("blanks %v", q.Body.Blanks)
+	}
+	rows, _ := ParseQuestionsCSV([]byte(Template))
+	for _, r := range rows {
+		if r.Question.Body.Format != "" {
+			t.Errorf("%s: CSV import set format %q", r.Question.Code, r.Question.Body.Format)
+		}
+	}
+}

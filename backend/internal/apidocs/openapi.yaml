@@ -3,7 +3,8 @@ info:
   title: QR Classroom Quiz Platform API
   version: 1.0.0
   license:
-    name: Proprietary
+    name: MIT
+    url: https://opensource.org/licenses/MIT
   description: |
     REST API of the QR Classroom Quiz Platform (single Go binary, see the architecture document).
 
@@ -50,6 +51,8 @@ tags:
     description: Unauthenticated endpoints
   - name: realtime
     description: WebSockets and beacons
+  - name: polls
+    description: Live polls, anonymous or identified (D-40)
 
 paths:
   /healthz:
@@ -820,6 +823,158 @@ paths:
         counts as a `disconnected` violation. The upgrade checks `Origin`.
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '101': { description: 'Switching protocols' }, '401': { $ref: '#/components/responses/Unauthorized' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/polls:
+    get:
+      operationId: getTeacherPolls
+      tags: [polls]
+      summary: The teacher's polls, newest first
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { polls: { type: array, items: { $ref: '#/components/schemas/Poll' } } } } } } } }
+    post:
+      operationId: postTeacherPolls
+      tags: [polls]
+      summary: Create a poll (draft). Defaults to anonymous, anyone with the code, self-paced, results after answering.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}:
+    get:
+      operationId: getTeacherPollsById
+      tags: [polls]
+      summary: A poll with its questions
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putTeacherPollsById
+      tags: [polls]
+      summary: Change title, classroom or settings. Identity can't change once people have joined.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteTeacherPollsById
+      tags: [polls]
+      summary: Delete the poll with every answer and file
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Deleted' } }
+  /api/teacher/polls/{id}/status:
+    post:
+      operationId: postTeacherPollsStatus
+      tags: [polls]
+      summary: Open, close or return the poll to draft
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [open, closed, draft] } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/teacher/polls/{id}/present:
+    post:
+      operationId: postTeacherPollsPresent
+      tags: [polls]
+      summary: Presenter pacing — show question `index` to everyone, optionally revealing its results
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { index: { type: integer }, revealed: { type: boolean } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}/reset:
+    post:
+      operationId: postTeacherPollsReset
+      tags: [polls]
+      summary: Delete every participant, answer and file; keep the questions
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Reset' } }
+  /api/teacher/polls/{id}/questions:
+    post:
+      operationId: postTeacherPollsQuestions
+      tags: [polls]
+      summary: Add a question (any of the 20 types)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestionInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestion' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}/questions/order:
+    put:
+      operationId: putTeacherPollsQuestionsOrder
+      tags: [polls]
+      summary: Reorder questions
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: string, format: uuid } } } } } } }
+      responses: { '204': { description: 'Reordered' } }
+  /api/teacher/poll-questions/{id}:
+    put:
+      operationId: putTeacherPollQuestionsById
+      tags: [polls]
+      summary: Update a question; its type can't change once it has answers
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestionInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestion' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+    delete:
+      operationId: deleteTeacherPollQuestionsById
+      tags: [polls]
+      summary: Delete a question and its answers
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Deleted' } }
+  /api/teacher/polls/{id}/results:
+    get:
+      operationId: getTeacherPollsResults
+      tags: [polls]
+      summary: Full live results (names of identified participants, moderated items flagged, file list)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PollTeacherResults' } } } } }
+  /api/teacher/polls/{id}/export.csv:
+    get:
+      operationId: getTeacherPollsExport
+      tags: [polls]
+      summary: One row per participant, one column per question (formula-safe)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'CSV', content: { text/csv: { schema: { type: string } } } } }
+  /api/teacher/polls/{id}/moderation:
+    post:
+      operationId: postTeacherPollsModeration
+      tags: [polls]
+      summary: Hide (or show again) one participant's answer, or a word from a word cloud
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [question_id, hidden], properties: { question_id: { type: string, format: uuid }, participant_id: { type: string, format: uuid }, word: { type: string }, hidden: { type: boolean } } } } } }
+      responses: { '204': { description: 'Done' } }
+  /api/teacher/polls/{id}/files/{file}:
+    get:
+      operationId: getTeacherPollsFile
+      tags: [polls]
+      summary: Download a file, audio or video answer (owner only; sandboxed)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: file, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'The file; images, audio and video inline, other types as attachments' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/polls/{code}:
+    get:
+      operationId: getPollsByCode
+      tags: [polls, public]
+      summary: The poll as this participant sees it (own answers, results they may see)
+      description: Send `X-Poll-Token` for an anonymous participant. Presenter-paced polls return only the current question.
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/pollToken' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PublicPoll' } } } }, '409': { description: 'Draft poll (`poll_not_open`)' } }
+  /api/polls/{code}/join:
+    post:
+      operationId: postPollsJoin
+      tags: [polls, public]
+      summary: Join. Anonymous participants receive a device token; identified polls need a login.
+      description: 'Joining again returns the same participant. Errors: `login_required` (401), `not_enrolled` (403, classroom-only polls), `poll_closed` (409), `rate_limited` (429).'
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/pollToken' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { identify: { type: boolean, description: 'Optional-identity polls: answer under the logged-in account' } } } } } }
+      responses: { '200': { description: 'Joined', content: { application/json: { schema: { $ref: '#/components/schemas/PollJoinResult' } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/polls/{code}/answers/{question}:
+    put:
+      operationId: putPollsAnswer
+      tags: [polls, public]
+      summary: Save an answer; an empty value clears it
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/question' }, { $ref: '#/components/parameters/pollToken' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' } } } } } }
+      responses: { '200': { description: 'Saved (normalised)', content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' } } } } } }, '409': { description: '`poll_closed`, `question_not_active` or editing is off' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/polls/{code}/files/{question}:
+    post:
+      operationId: postPollsFile
+      tags: [polls, public]
+      summary: Upload a file, audio or video answer (raw body; name in `X-File-Name`, URL-encoded)
+      description: 'Type is decided by content sniffing. Limits: files up to 5 MB (per question), audio 3 MB, video 12 MB, 200 MB per poll.'
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/question' }, { $ref: '#/components/parameters/pollToken' }, { name: X-File-Name, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses: { '200': { description: 'Stored', content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /ws/sessions/{id}:
     get:
       operationId: getWsSessionsById
@@ -829,6 +984,23 @@ paths:
         Server → client: `dashboard` (full `Dashboard`, on connect and at most every 500 ms while changing),
         `alert` (`attempt_id`, `student_name`, `student_number`, `kind`, `action`, `state`) as soon as a violation happens,
         `session_ended`, `time`, `pong`. Client → server: `ping`.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '101': { description: 'Switching protocols' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /ws/polls/{code}:
+    get:
+      operationId: getWsPollsByCode
+      tags: [realtime, polls]
+      summary: Participant poll WebSocket (upgrade; read-only, no identity)
+      description: Server → client `update` (a `PublicPoll` without answers) on connect and at most every 500 ms while answers arrive; `deleted`; `pong`. Client → server `ping`.
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }]
+      responses: { '101': { description: 'Switching protocols' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /ws/teacher/polls/{id}:
+    get:
+      operationId: getWsTeacherPollsById
+      tags: [realtime, polls]
+      summary: Presenter WebSocket (upgrade); full live results
+      description: Server → client `results` (a `PollTeacherResults`) on connect and at most every 500 ms while changing; `deleted`; `pong`.
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '101': { description: 'Switching protocols' }, '404': { $ref: '#/components/responses/NotFound' } }
   /beacon/attempts/{id}/violations:
@@ -854,6 +1026,7 @@ components:
     attempt: { name: attempt, in: path, required: true, schema: { type: string, format: uuid } }
     question: { name: question, in: path, required: true, schema: { type: string, format: uuid } }
     code: { name: code, in: path, required: true, description: 'Join code', schema: { type: string, example: K7Q2XM } }
+    pollToken: { name: X-Poll-Token, in: header, required: false, description: 'Anonymous participant token from join', schema: { type: string } }
 
   requestBodies:
     CSV:
@@ -1060,6 +1233,7 @@ components:
         zones: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'DRAG into boxes; empty means DRAG ordering' }
         blanks: { type: array, items: { type: string }, readOnly: true, description: 'Derived from [[n]] markers in the text' }
         word_limit: { type: integer, description: 'ESSAY' }
+        format: { type: string, enum: ['', markdown], description: 'Text format of the question text and predefined feedback. Empty means plain text (CSV import); markdown is written by the rich text editor (bold, italic, underline as ++text++, lists, tables, code, links, $math$).' }
     Key:
       description: Answer key. Never sent to students before results are released (BR-12).
       type: object
@@ -1298,6 +1472,7 @@ components:
         code: { type: string }
         type: { $ref: '#/components/schemas/QuestionType' }
         text: { type: string }
+        format: { type: string, enum: ['', markdown], description: 'Text format of the question text and feedback (Body.format)' }
         response: { oneOf: [{ $ref: '#/components/schemas/Response' }, { type: 'null' }] }
         key: { $ref: '#/components/schemas/Key' }
         method: { type: string, enum: [key, llm, manual] }
@@ -1412,6 +1587,7 @@ components:
         question_id: { type: string, format: uuid }
         code: { type: string }
         text: { type: string }
+        format: { type: string, enum: ['', markdown], description: 'Text format of the question text and feedback (Body.format)' }
         type: { $ref: '#/components/schemas/QuestionType' }
         max_score: { type: number }
         answered: { type: integer }
@@ -1493,7 +1669,7 @@ components:
         quiz_title: { type: string }
         views: { type: array, items: { type: string } }
         pass_rate: { type: object, properties: { pass_rate: { type: number }, pass_mark_pct: { type: integer }, finished: { type: integer }, mean_pct: { type: number } } }
-        questions: { type: array, items: { type: object, properties: { code: { type: string }, text: { type: string }, pct_correct: { type: number }, answered: { type: integer } } } }
+        questions: { type: array, items: { type: object, properties: { code: { type: string }, text: { type: string }, format: { type: string, enum: ['', markdown] }, pct_correct: { type: number }, answered: { type: integer } } } }
         students:
           type: array
           items:
@@ -1505,3 +1681,143 @@ components:
               pct: { type: number }
               passed: { type: boolean }
               answers: { type: array, items: { type: object } }
+    PollSettings:
+      type: object
+      properties:
+        identity: { type: string, enum: [anonymous, identified, optional], description: 'anonymous: nobody is identified (no account is stored, even when logged in); identified: login required; optional: each participant chooses' }
+        audience: { type: string, enum: [anyone, classroom], description: 'classroom requires identified and classroom_id' }
+        pacing: { type: string, enum: [self, presenter] }
+        show_results: { type: string, enum: [live, after_answer, presenter, never], description: 'What participants see. after_answer is applied by each browser; never is enforced by the server.' }
+        allow_edit: { type: boolean }
+    PollInput:
+      type: object
+      properties:
+        title: { type: string }
+        classroom_id: { type: [string, 'null'], format: uuid }
+        settings: { $ref: '#/components/schemas/PollSettings' }
+    Poll:
+      allOf:
+        - $ref: '#/components/schemas/PollSettings'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            title: { type: string }
+            classroom_id: { type: [string, 'null'], format: uuid }
+            join_code: { type: string, example: PK7Q2X }
+            join_url: { type: string }
+            status: { type: string, enum: [draft, open, closed] }
+            current_index: { type: integer }
+            revealed: { type: boolean }
+            participants: { type: integer }
+            questions: { type: array, items: { $ref: '#/components/schemas/PollQuestion' } }
+    PollQuestionInput:
+      type: object
+      required: [type, text]
+      properties:
+        type: { type: string, enum: [SINGLE, MULTI, MATCH, BLANK_OPT, BLANK_TEXT, DRAG, ESSAY, SHORT_TEXT, WORD_CLOUD, NUMBER, DATE, TIME, RATING, SLIDER, LIKERT, MATRIX, FILE, AUDIO, VIDEO, CODE] }
+        text: { type: string, description: 'Blanks as [[1]], [[2]] for BLANK_*' }
+        required: { type: boolean }
+        body: { $ref: '#/components/schemas/PollBody' }
+    PollQuestion:
+      allOf:
+        - $ref: '#/components/schemas/PollQuestionInput'
+        - type: object
+          properties: { id: { type: string, format: uuid }, poll_id: { type: string, format: uuid }, position: { type: integer } }
+    PollBody:
+      type: object
+      description: Each type uses some fields; ids (o1, l1, r1, z1, row1, col1) are assigned when missing.
+      properties:
+        format: { type: string, enum: ['', markdown] }
+        options: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'SINGLE, MULTI, BLANK_OPT, DRAG' }
+        display: { type: string, enum: [radio, dropdown], description: SINGLE }
+        max_choices: { type: integer, description: 'MULTI (0 = any)' }
+        left: { type: array, items: { $ref: '#/components/schemas/Choice' } }
+        right: { type: array, items: { $ref: '#/components/schemas/Choice' } }
+        zones: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'DRAG into boxes; empty = ranking' }
+        rows: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'MATRIX rows, LIKERT statements' }
+        columns: { type: array, items: { $ref: '#/components/schemas/Choice' } }
+        mode: { type: string, enum: [single, multi, text], description: MATRIX }
+        scale: { type: array, items: { type: string }, description: 'LIKERT: 5 or 7 labels' }
+        min: { type: number }
+        max: { type: number }
+        step: { type: number }
+        min_label: { type: string }
+        max_label: { type: string }
+        unit: { type: string }
+        from: { type: string, description: 'DATE YYYY-MM-DD or TIME HH:MM' }
+        to: { type: string }
+        points: { type: integer, description: 'RATING: 3-10 stars' }
+        max_length: { type: integer }
+        max_words: { type: integer }
+        max_entries: { type: integer, description: 'WORD_CLOUD: 1-5' }
+        language: { type: string, description: CODE }
+        accept: { type: array, items: { type: string, enum: [image, pdf, document, any] } }
+        max_mb: { type: integer, description: 'FILE: 1-5' }
+        max_seconds: { type: integer, description: 'AUDIO 5-60, VIDEO 5-30' }
+    PollAnswer:
+      type: object
+      description: Each type uses some fields (see the developer docs, Polls).
+      properties:
+        selected: { type: array, items: { type: string } }
+        pairs: { type: object, additionalProperties: { type: string } }
+        blanks: { type: object, additionalProperties: { type: string } }
+        order: { type: array, items: { type: string } }
+        text: { type: string }
+        words: { type: array, items: { type: string } }
+        number: { type: number }
+        date: { type: string }
+        time: { type: string }
+        rows: { type: object, additionalProperties: { type: string } }
+        multi: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        cells: { type: object, additionalProperties: { type: string } }
+        file: { type: object, readOnly: true, properties: { id: { type: string }, name: { type: string }, size: { type: integer }, content_type: { type: string } } }
+    PollJoinResult:
+      type: object
+      properties:
+        participant_id: { type: string, format: uuid }
+        identified: { type: boolean }
+        token: { type: string, description: 'Anonymous only: send as X-Poll-Token' }
+    PollResult:
+      type: object
+      description: Live summary of one question; fields depend on the type.
+      properties:
+        question_id: { type: string }
+        type: { type: string }
+        responses: { type: integer }
+        counts: { type: object, additionalProperties: { type: integer } }
+        grid: { type: object, additionalProperties: { type: object, additionalProperties: { type: integer } } }
+        row_means: { type: object, additionalProperties: { type: number } }
+        ranks: { type: array, items: { type: object, properties: { id: { type: string }, avg_rank: { type: number }, first: { type: integer } } } }
+        words: { type: array, items: { type: object, properties: { word: { type: string }, count: { type: integer }, hidden: { type: boolean } } } }
+        blank_words: { type: object, additionalProperties: { type: array, items: { type: object } } }
+        texts: { type: array, items: { type: object, properties: { text: { type: string }, cell: { type: string }, name: { type: string }, participant_id: { type: string }, hidden: { type: boolean }, at: { type: integer } } } }
+        stats: { type: object, properties: { count: { type: integer }, mean: { type: number }, median: { type: number }, min: { type: number }, max: { type: number }, buckets: { type: array, items: { type: object } } } }
+        values: { type: array, items: { type: object, properties: { value: { type: string }, count: { type: integer } } } }
+        files: { type: array, items: { type: object }, description: Teacher view only }
+    PublicPoll:
+      type: object
+      properties:
+        type: { type: string, enum: [poll, update] }
+        code: { type: string }
+        title: { type: string }
+        identity: { type: string }
+        audience: { type: string }
+        pacing: { type: string }
+        show_results: { type: string }
+        allow_edit: { type: boolean }
+        status: { type: string }
+        current_index: { type: integer }
+        revealed: { type: boolean }
+        total: { type: integer }
+        questions: { type: array, items: { $ref: '#/components/schemas/PollQuestion' } }
+        joined: { type: boolean }
+        identified: { type: boolean }
+        answers: { type: object, additionalProperties: { $ref: '#/components/schemas/PollAnswer' } }
+        results: { type: object, additionalProperties: { $ref: '#/components/schemas/PollResult' } }
+    PollTeacherResults:
+      type: object
+      properties:
+        type: { type: string, enum: [results] }
+        poll: { $ref: '#/components/schemas/Poll' }
+        participants: { type: integer }
+        results: { type: object, additionalProperties: { $ref: '#/components/schemas/PollResult' } }

@@ -1,5 +1,8 @@
 <script lang="ts">
 	// Classroom screen: big QR + code + link, with a live joined count (UC-02 step 2).
+	import { Tween } from 'svelte/motion';
+	import Skeleton from '$lib/ui/Skeleton.svelte';
+	import { reduced } from '$lib/ui/motion';
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { requireRole } from '$lib/guard.svelte';
@@ -21,6 +24,10 @@
 	});
 	onDestroy(() => socket?.close());
 	const joined = $derived(d ? Object.values(d.counts).reduce((a, b) => a + b, 0) : 0);
+	const shown = new Tween(0, { duration: 500 });
+	$effect(() => {
+		shown.set(joined, reduced() ? { duration: 0 } : undefined);
+	});
 </script>
 
 <div class="proj">
@@ -29,8 +36,8 @@
 		<QrCode text={d.session.join_url} {size} />
 		<p class="code">{d.session.join_code}</p>
 		<p class="url">{d.session.join_url.replace(/^https?:\/\//, '')}</p>
-		<p class="count">{joined} joined</p>
-	{:else}<p>Loading…</p>{/if}
+		<p class="count" aria-live="polite"><span class="tabular">{Math.round(shown.current)}</span> joined</p>
+	{:else}<Skeleton lines={4} />{/if}
 </div>
 
 <style>

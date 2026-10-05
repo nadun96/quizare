@@ -1,11 +1,14 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
 const backend = process.env.QP_BACKEND ?? 'http://127.0.0.1:8080';
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	plugins: [tailwindcss(), sveltekit()],
 	server: {
+		// The docs import ../DECISIONS.md from the repository root.
+		fs: { allow: ['..'] },
 		// Same-origin in development so the __Host- cookie and Origin checks work.
 		proxy: {
 			'/api': { target: backend, changeOrigin: false },
@@ -13,5 +16,7 @@ export default defineConfig({
 			'/ws': { target: backend, ws: true, changeOrigin: false }
 		}
 	},
-	test: { include: ['src/**/*.test.ts'], environment: 'jsdom' }
+	// Component tests mount Svelte in jsdom, so they need its browser build.
+	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
+	test: { include: ['src/**/*.test.ts'], environment: 'jsdom', setupFiles: ['src/test-setup.ts'] }
 });

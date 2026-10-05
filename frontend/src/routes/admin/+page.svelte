@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
 	import SettingsEditor from '$lib/SettingsEditor.svelte';
@@ -46,13 +48,13 @@
 		}
 	}
 	async function del(u: U) {
-		if (!confirm(`Delete ${u.name}? Their personal data is removed; results stay anonymised.`)) return;
+if (!(await confirmDialog({ title: `Delete ${u.name}?`, body: 'Their personal data is removed; results stay anonymised.', confirm: 'Delete user', danger: true }))) return;
 		await api.del('/api/admin/users/' + u.id);
 		loadUsers();
 	}
 	async function savePolicy() {
 		await api.put('/api/admin/auth-policy', policy);
-		notice = 'Saved';
+		toast('Settings saved');
 	}
 	async function savePlatform(o: Overrides) {
 		errors = {};
@@ -65,56 +67,56 @@
 	}
 </script>
 
-<div class="container stack">
+<div class="page-container vstack">
 	<h1>Admin</h1>
-	{#if notice}<p class="alert small">{notice}</p>{/if}
-	<div class="tabs">
-		<button class:active={tab === 'users'} onclick={() => open('users')}>Users</button>
-		<button class:active={tab === 'usage'} onclick={() => open('usage')}>Usage</button>
-		<button class:active={tab === 'settings'} onclick={() => open('settings')}>Platform settings</button>
-		<button class:active={tab === 'audit'} onclick={() => open('audit')}>Audit log</button>
+	{#if notice}<p class="alert alert-soft alert-warning small">{notice}</p>{/if}
+	<div class="tabs tabs-border tabs-scroll" role="tablist">
+		<button class="tab" role="tab" aria-selected={tab === 'users'} class:tab-active={tab === 'users'} onclick={() => open('users')}>Users</button>
+		<button class="tab" role="tab" aria-selected={tab === 'usage'} class:tab-active={tab === 'usage'} onclick={() => open('usage')}>Usage</button>
+		<button class="tab" role="tab" aria-selected={tab === 'settings'} class:tab-active={tab === 'settings'} onclick={() => open('settings')}>Platform settings</button>
+		<button class="tab" role="tab" aria-selected={tab === 'audit'} class:tab-active={tab === 'audit'} onclick={() => open('audit')}>Audit log</button>
 	</div>
 	{#if tab === 'users'}
 		<form class="row" onsubmit={(e) => { e.preventDefault(); loadUsers(); }}>
-			<input style="flex:1;min-width:12rem" placeholder="Search name or email" bind:value={q} aria-label="Search" />
-			<select style="width:9rem" bind:value={role} aria-label="Role"><option value="">All roles</option><option>student</option><option>teacher</option><option>admin</option></select>
-			<select style="width:11rem" bind:value={status} aria-label="Status"><option value="">All statuses</option><option value="active">active</option><option value="pending_approval">pending approval</option><option value="suspended">suspended</option></select>
-			<button>Search</button>
+			<input class="input w-full" style="flex:1;min-width:12rem" placeholder="Search name or email" bind:value={q} aria-label="Search" />
+			<select class="select w-full" style="width:9rem" bind:value={role} aria-label="Role"><option value="">All roles</option><option>student</option><option>teacher</option><option>admin</option></select>
+			<select class="select w-full" style="width:11rem" bind:value={status} aria-label="Status"><option value="">All statuses</option><option value="active">active</option><option value="pending_approval">pending approval</option><option value="suspended">suspended</option></select>
+			<button class="btn">Search</button>
 		</form>
-		<div class="card table-wrap">
-			<table><thead><tr><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>
+		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+			<table class="table"><thead><tr><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>
 				{#each users as u (u.id)}
 					<tr>
 						<td>{u.name}<br /><span class="small muted">{u.email}{u.email_verified ? '' : ' · unverified'}</span></td>
 						<td>{u.role}</td>
-						<td><span class="badge {u.status === 'active' ? 'ok' : u.status === 'suspended' ? 'danger' : 'warn'}">{u.status.replace('_', ' ')}</span></td>
+						<td><span class="badge badge-soft {u.status === 'active' ? 'ok' : u.status === 'suspended' ? 'danger' : 'warn'}">{u.status.replace('_', ' ')}</span></td>
 						<td class="row">
-							{#if u.status === 'pending_approval'}<button class="small primary" onclick={() => setStatus(u, 'active')}>Approve</button>
-							{:else if u.status === 'suspended'}<button class="small" onclick={() => setStatus(u, 'active')}>Activate</button>
-							{:else}<button class="small" onclick={() => setStatus(u, 'suspended')}>Suspend</button>{/if}
-							<button class="small danger" onclick={() => del(u)}>Delete</button>
+							{#if u.status === 'pending_approval'}<button class="btn btn-sm btn-primary" onclick={() => setStatus(u, 'active')}>Approve</button>
+							{:else if u.status === 'suspended'}<button class="btn btn-sm" onclick={() => setStatus(u, 'active')}>Activate</button>
+							{:else}<button class="btn btn-sm" onclick={() => setStatus(u, 'suspended')}>Suspend</button>{/if}
+							<button class="btn btn-sm btn-error btn-outline" onclick={() => del(u)}>Delete</button>
 						</td>
 					</tr>
 				{/each}
 			</tbody></table>
 		</div>
 	{:else if tab === 'usage' && usage}
-		<div class="grid">
+		<div class="auto-grid">
 			{#each [['Teachers', usage.users_by_role.teacher ?? 0], ['Students', usage.users_by_role.student ?? 0], ['Classrooms', usage.classrooms], ['Quizzes', usage.quizzes], ['Sessions (30 days)', usage.sessions_30d], ['Live now', usage.live_sessions], ['Attempts (30 days)', usage.attempts_30d], ['Violations (30 days)', usage.violations_30d], ['Teachers with LLM keys', usage.teachers_with_llm_keys]] as [l, v] (l)}
-				<div class="card"><div class="small muted">{l}</div><div style="font-size:1.5rem;font-weight:700">{v}</div></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">{l}</div><div style="font-size:1.5rem;font-weight:700">{v}</div></div>
 			{/each}
 		</div>
-		<div class="card small"><strong>Background jobs</strong><br />{Object.entries(usage.jobs_by_queue_state).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'none'}</div>
+		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 small"><strong>Background jobs</strong><br />{Object.entries(usage.jobs_by_queue_state).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'none'}</div>
 	{:else if tab === 'settings'}
-		<div class="card stack">
-			<label class="row" style="font-weight:400"><input type="checkbox" bind:checked={policy.require_teacher_approval} /> New teacher accounts need admin approval</label>
-			<div><button onclick={savePolicy}>Save</button></div>
+		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
+			<label class="row" style="font-weight:400"><input class="checkbox" type="checkbox" bind:checked={policy.require_teacher_approval} /> New teacher accounts need admin approval</label>
+			<div><button class="btn" onclick={savePolicy}>Save</button></div>
 		</div>
 		<h2>Platform defaults</h2>
-		<div class="card"><SettingsEditor level="platform" value={platform.overrides} effective={platform.effective} onsave={savePlatform} {errors} /></div>
+		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="platform" value={platform.overrides} effective={platform.effective} onsave={savePlatform} {errors} /></div>
 	{:else if tab === 'audit'}
-		<div class="card table-wrap">
-			<table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th></tr></thead><tbody>
+		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+			<table class="table"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th></tr></thead><tbody>
 				{#each events as e (e.id)}
 					<tr><td class="small">{new Date(e.created_at).toLocaleString()}</td><td>{e.actor_name || 'system'}</td><td>{e.action.replaceAll('_', ' ')}</td><td class="small">{e.target_type} {e.target_id}</td></tr>
 				{/each}

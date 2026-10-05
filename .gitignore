@@ -11,6 +11,7 @@ node_modules/
 *.key
 .env
 .env.*
+!.env.example
 /backend/.data/
 /backend/tmp/
 .DS_Store
@@ -19,5 +20,10 @@ HOW-TO-RUN.local.md
 local/demo/demo_bots.py
 local/demo/demo_seed.py
 
+# Private local notes and demo helpers (credentials) — never commit
+*.local.md
+/local/
+
 # Private reference documents (BA/architecture PDFs, spreadsheet) - kept locally, never committed
 /docs/
+.vscode/settings.json

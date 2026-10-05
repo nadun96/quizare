@@ -38,29 +38,29 @@
 	}
 </script>
 
-<div class="container stack">
+<div class="page-container vstack">
 	{#if topic}
 		<p class="small"><a href={'/t/classrooms/' + topic.classroom_id}>← {topic.classroom_name}</a> · {topic.module_name}</p>
 		<h1>{topic.name}</h1>
-		<div class="card table-wrap">
-			<table>
+		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+			<table class="table">
 				<thead><tr><th>Quiz</th><th>Questions</th><th>Status</th></tr></thead>
 				<tbody>
 					{#each quizzes as q (q.id)}
 						<tr>
 							<td><a href={'/t/quizzes/' + q.id}>{q.title}</a></td>
 							<td>{q.question_count} ({q.total_marks} marks)</td>
-							<td><span class="badge {q.status === 'ready' ? 'ok' : ''}">{q.status}</span></td>
+							<td><span class="badge badge-soft {q.status === 'ready' ? 'ok' : ''}">{q.status}</span></td>
 						</tr>
 					{:else}<tr><td colspan="3" class="muted">No quizzes yet.</td></tr>{/each}
 				</tbody>
 			</table>
 		</div>
-		<form class="card row" onsubmit={create}>
-			<input style="flex:1" bind:value={title} placeholder="New quiz title" required aria-label="Quiz title" />
-			<button class="primary">Create quiz</button>
+		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={create}>
+			<input class="input w-full" style="flex:1" bind:value={title} placeholder="New quiz title" required aria-label="Quiz title" />
+			<button class="btn btn-primary">Create quiz</button>
 		</form>
-		<details class="card">
+		<details class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
 			<summary><strong>Topic settings</strong></summary>
 			<div style="margin-top:1rem"><SettingsEditor level="topic" value={topic.settings} onsave={saveSettings} {errors} /></div>
 		</details>
