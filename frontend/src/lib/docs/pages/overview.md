@@ -2,6 +2,8 @@
 
 The QR Classroom Quiz Platform runs timed, proctored quizzes in a classroom. A teacher projects a QR code, students scan it with their phones, the teacher admits them, and each student answers one question at a time against server-enforced timers. Answers are marked by answer key, by an LLM using the teacher's own API key, or by the teacher, and results are published privately or on a revocable public page.
 
+Alongside quizzes, teachers run **live polls**: ungraded questions of 20 input types (word clouds, ratings, Likert scales, matrices, file and voice answers…) that anyone can answer with a code, anonymously or under their name, with results that update live on the presenter's screen ([Live polls](polls.md)).
+
 These pages describe how the system is built so you can change it safely. The product requirements live in the Business Analysis document and the architecture rationale in the Architecture document (ADRs). Both are private and are not in the repository; teams keep them in a local, git-ignored `docs/` folder. Requirement IDs such as **FR-SS-05**, business rules such as **BR-12** and decisions such as **ADR-07** refer to those documents; **D-nn** refers to the [decision log](decisions.md).
 
 ## The system in one picture
@@ -13,6 +15,7 @@ flowchart LR
     S[Student phone<br/>SvelteKit SPA]
     T[Teacher dashboard<br/>SvelteKit SPA]
     A[Admin console]
+    V[Poll participant<br/>any device, login optional]
   end
   subgraph Host["Single 4 GB host"]
     C[Caddy<br/>TLS, static files,<br/>reverse proxy]
@@ -24,6 +27,7 @@ flowchart LR
   S -- HTTPS + WSS --> C
   T -- HTTPS + WSS --> C
   A -- HTTPS --> C
+  V -- HTTPS + WSS --> C
   P -. renders join URL .-> T
   C -- /api /ws /beacon --> G
   G -- pgx --> DB
@@ -37,7 +41,8 @@ flowchart LR
 | Role | What they do | Key restriction |
 |------|--------------|-----------------|
 | **Student** | Registers, enrols in classrooms, scans a QR to join a session, answers, sees released results | Cannot leave the quiz tab once started (proctoring) and never receives answer keys before release (BR-12) |
-| **Teacher** | Builds classrooms → modules → topics → quizzes, imports questions from CSV, runs live sessions, marks, publishes results | Sees only their own data (BR-14) |
+| **Teacher** | Builds classrooms → modules → topics → quizzes, imports questions from CSV, runs live sessions, marks, publishes results, runs polls | Sees only their own data (BR-14) |
+| **Poll participant** | Anyone with a poll code: answers anonymously, or logged in when the poll identifies people | Never sees other participants' names or files (D-40) |
 | **Admin** | Manages accounts, platform defaults and policy; reads usage and the audit log | Cannot read teachers' API keys or quiz content |
 
 ## Technology

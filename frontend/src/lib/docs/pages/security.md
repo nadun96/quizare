@@ -61,7 +61,17 @@ Resource link checks use `imageurl.Checker`. The dialer refuses non-public IPs (
 - SQL is always parameterised (pgx).
 - JSON decoding rejects unknown fields; bodies are limited to 1 MiB.
 - CSV import: 2 MB, 1000 rows, UTF-8 only (a BOM is tolerated), strict per-row validation.
-- CSV export neutralises formula injection.
+- CSV export neutralises formula injection (quiz analytics and poll exports).
+- Rich text (question text and feedback) is stored as Markdown and rendered with raw HTML escaped, only `http(s):`/`mailto:` links, no images, and a DOMPurify allowlist (D-38).
+- Poll uploads are read with a hard size cap per question type before anything is stored.
+
+## Polls (D-40)
+
+- **Anonymous participants** get a random 256-bit token at join. Only its SHA-256 is stored; the browser sends it as `X-Poll-Token`. It can only answer as that participant in that poll. An anonymous poll never stores a user id, even for a logged-in visitor.
+- **Identified polls** use the normal session cookie; classroom-only polls also require an active enrolment.
+- **Participants never see** names, participant ids, uploaded files or moderated answers. The participant WebSocket is read-only and carries no identity.
+- **Uploads** (file, audio, video) are typed by sniffing the bytes, not by the browser's claim, and limited to 5 MB, 3 MB and 12 MB respectively, with 200 MB per poll. Only the poll owner can download them. Downloads are sent with `Content-Security-Policy: sandbox`, `nosniff` and `no-store`, and only images, audio and video are shown inline.
+- Joins are rate-limited per IP address, and answers and uploads per participant.
 
 ## Privacy (NFR-04, BR-13)
 

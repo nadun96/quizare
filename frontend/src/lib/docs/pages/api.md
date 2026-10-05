@@ -45,8 +45,11 @@ The full reference, with schemas for every request and response, is the OpenAPI 
 | `/api/teacher/llm-keys…` | teacher | API keys (never readable) |
 | `/api/teacher/…/analytics`, `/share-links…`, `/export.csv` | teacher | analytics, sharing, export |
 | `/api/join/…`, `/api/enrolments`, `/api/my/…`, `/api/attempts/…` | student (any role for classroom join and own data) | joining, answering, results |
+| `/api/teacher/polls…`, `/api/teacher/poll-questions/{id}` | teacher | polls: questions, settings, status, presenter control, results, moderation, files, CSV |
+| `/api/polls/{code}…` | anyone (login if the poll identifies people; `X-Poll-Token` for anonymous participants) | view, join, answer, upload; see [Live polls](polls.md) |
 | `/api/public/results/{token}` | public | shared results |
 | `/ws/attempts/{id}`, `/ws/sessions/{id}` | student / teacher | see [WebSocket protocol](realtime.md) |
+| `/ws/polls/{code}`, `/ws/teacher/polls/{id}` | anyone / poll owner | live poll updates and results |
 | `/beacon/attempts/{id}/violations` | student | `sendBeacon` fallback |
 | `/healthz` | public | liveness and DB ping |
 
