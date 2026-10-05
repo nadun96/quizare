@@ -23,10 +23,11 @@ export const NAV: { section: string; pages: [slug: string, title: string][] }[] 
 			['live-sessions', 'Live sessions & timing'],
 			['proctoring', 'Proctoring'],
 			['marking', 'Marking & feedback'],
-			['analytics', 'Results & analytics']
+			['analytics', 'Results & analytics'],
+			['polls', 'Live polls']
 		]
 	},
-	{ section: 'Frontend', pages: [['frontend', 'Frontend app']] },
+	{ section: 'Frontend', pages: [['frontend', 'Frontend app'], ['ux-research', 'UX research & design rules']] },
 	{ section: 'Interfaces', pages: [['api', 'HTTP API'], ['realtime', 'WebSocket protocol']] },
 	{ section: 'Operations', pages: [['security', 'Security & privacy'], ['deployment', 'Deployment'], ['testing', 'Testing']] },
 	{ section: 'Contributing', pages: [['contributing', 'Contributing'], ['decisions', 'Decision log']] }

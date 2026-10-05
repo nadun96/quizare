@@ -35,29 +35,29 @@
 </script>
 
 <div class="narrow">
-	<form class="card stack" onsubmit={submit}>
+	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={submit}>
 		<h1>Create an account</h1>
-		{#if message}<p class="alert ok">{message}</p>{/if}
+		{#if message}<p class="alert alert-soft alert-success">{message}</p>{/if}
 		<fieldset class="row" style="border:none;padding:0">
 			<legend class="sr-only">I am a</legend>
-			<label class="row" style="font-weight:400"><input type="radio" bind:group={role} value="student" /> Student</label>
-			<label class="row" style="font-weight:400"><input type="radio" bind:group={role} value="teacher" /> Teacher</label>
+			<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={role} value="student" /> Student</label>
+			<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={role} value="teacher" /> Teacher</label>
 		</fieldset>
 		<div>
-			<label for="name">Full name</label><input id="name" autocomplete="name" bind:value={name} required />
+			<label for="name">Full name</label><input class="input w-full" id="name" autocomplete="name" bind:value={name} required />
 			{#if errors.name}<p class="field-error">{errors.name}</p>{/if}
 		</div>
 		<div>
-			<label for="email">Email</label><input id="email" type="email" autocomplete="email" bind:value={email} required />
+			<label for="email">Email</label><input class="input w-full" id="email" type="email" autocomplete="email" bind:value={email} required />
 			{#if errors.email}<p class="field-error">{errors.email}</p>{/if}
 		</div>
 		<div>
 			<label for="pw">Password (at least 8 characters)</label>
-			<input id="pw" type="password" autocomplete="new-password" minlength="8" bind:value={password} required />
+			<input class="input w-full" id="pw" type="password" autocomplete="new-password" minlength="8" bind:value={password} required />
 			{#if errors.password}<p class="field-error">{errors.password}</p>{/if}
 		</div>
-		{#if errors._}<p class="alert danger">{errors._}</p>{/if}
-		<button class="primary" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
+		{#if errors._}<p class="alert alert-soft alert-error">{errors._}</p>{/if}
+		<button class="btn btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
 		<p class="small">Already registered? <a href={'/login' + (next ? '?next=' + encodeURIComponent(next) : '')}>Log in</a></p>
 	</form>
 </div>

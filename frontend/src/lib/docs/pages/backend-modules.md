@@ -91,6 +91,10 @@ The LLM gateway (FR-EV-02/03/05, ADR-09, ADR-16).
 
 `compute.go` turns results into class, question and student statistics. `service.go` stores them per session (`session_stats`), rolls them up per quiz, handles share links and the public view, and exports CSV. See [Results & analytics](analytics.md).
 
+## poll (schema `poll`)
+
+Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
+
 ## admin (no schema)
 
 Usage counts and the audit log for admins, plus `/api/my/data` (own-data export) for every user.

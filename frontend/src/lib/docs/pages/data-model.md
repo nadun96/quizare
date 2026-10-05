@@ -12,6 +12,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0006_eval.sql` | `eval.marks`, `eval.results` |
 | `0007_llm.sql` | `llm.keys` |
 | `0008_analytics.sql` | `analytics.session_stats`, `analytics.share_links` |
+| `0009_poll.sql` | `poll.polls`, `poll.questions`, `poll.participants`, `poll.responses`, `poll.hidden_words`, `poll.files` |
 
 River's own tables (`river_job`, ...) are created by `jobs.Migrate`.
 
@@ -30,7 +31,7 @@ erDiagram
 ```
 
 - Classrooms, modules, topics and questions carry a `settings jsonb` column with sparse overrides; quizzes do too.
-- `quiz.questions` stores `body`, `answer_key` and `feedback` as JSONB, plus `marks`, `negative_marks`, `partial_credit` and `settings`. `UNIQUE (quiz_id, code)`.
+- `quiz.questions` stores `body`, `answer_key` and `feedback` as JSONB, plus `marks`, `negative_marks`, `partial_credit` and `settings`. `UNIQUE (quiz_id, code)`. `body.format` is `markdown` for text written in the rich text editor and absent for plain text (CSV import, older questions); it applies to the question text and the predefined feedback.
 - `quiz.resources` is `UNIQUE (question_id, role, n)`, with `status` one of `unchecked`, `ok`, `broken`.
 - `content.enrolments` is `UNIQUE (classroom_id, user_id)`, with a partial unique index on `(classroom_id, lower(student_number))` for current members (FR-CLS-06).
 - `quiz.quizzes.topic_id` is `ON DELETE RESTRICT`: a topic with quizzes cannot be deleted (the API returns 409).
@@ -89,6 +90,10 @@ Primary key `(attempt_id, question_id)`. `question_id` refers to the **snapshot*
 - `analytics.share_links`: `token_hash` (SHA-256 of a 128-bit token), `scope` (`session` or `quiz`), `views text[]`, `identify`, `show_answers`, `expires_at`, `revoked_at`.
 - `audit.events`: actor, action, target and details JSON. Written inside the transaction of the action (mark overrides, reinstatements, status changes, key changes, releases, share links).
 - `live.events`: the per-session integrity timeline shown to teachers (`joined`, `admitted`, `started`, `paused`, `resumed`, `extended`, `violation`, `reinstated`, `question_timed_out`, `submitted`, `session_ended`, `results_released`, ...).
+
+## Polls
+
+`poll.polls` holds the settings (`identity`, `audience`, `pacing`, `show_results`, `allow_edit`), the status and, for presenter pacing, `current_index` and `revealed`. A check constraint makes classroom-only polls identified. `poll.participants` has **either** a `user_id` (identified) **or** a `token_hash` (anonymous), never both, unique per poll. `poll.responses` has one JSON value per participant and question, with `hidden` for moderation; `poll.hidden_words` hides words from word clouds. `poll.files` stores uploads as `bytea` (12 MB cap per row). Everything cascades from the poll. See [Live polls](polls.md).
 
 ## Deletion and anonymisation
 

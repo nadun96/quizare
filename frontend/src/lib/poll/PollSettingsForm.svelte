@@ -1,0 +1,93 @@
+<script lang="ts">
+	// How a poll runs: who is identified, who may answer, pacing, and what
+	// participants see (D-40). Each choice says what it means for students.
+	import Icon, { type IconName } from '../ui/Icon.svelte';
+	import type { Classroom } from '../types';
+	import type { PollSettings } from './types';
+
+	let { settings = $bindable(), classroomId = $bindable(null), classrooms = [], locked = false }: { settings: PollSettings; classroomId?: string | null; classrooms?: Classroom[]; locked?: boolean } = $props();
+
+	const identities: { v: PollSettings['identity']; icon: IconName; title: string; body: string }[] = [
+		{ v: 'anonymous', icon: 'eye-off', title: 'Anonymous', body: 'No login. Nobody, not even you, can see who answered what.' },
+		{ v: 'identified', icon: 'user', title: 'Identified', body: 'Participants log in; you see names next to answers. Classmates never do.' },
+		{ v: 'optional', icon: 'users', title: 'Participant chooses', body: 'Logged-in participants may put their name to their answers, or stay anonymous.' }
+	];
+	$effect(() => {
+		if (settings.audience === 'classroom' && settings.identity !== 'identified') settings.audience = 'anyone';
+		if (settings.show_results === 'presenter' && settings.pacing !== 'presenter') settings.show_results = 'after_answer';
+	});
+</script>
+
+<div class="vstack">
+	<fieldset class="group" disabled={locked}>
+		<legend>Identity</legend>
+		{#if locked}<p class="small muted m-0 mb-2">People have joined, so identity is fixed. Reset the responses to change it.</p>{/if}
+		<div class="cards">
+			{#each identities as o (o.v)}
+				<label class="opt" class:on={settings.identity === o.v}>
+					<input type="radio" class="sr-only" name="identity" value={o.v} bind:group={settings.identity} />
+					<span class="opt-icon" aria-hidden="true"><Icon name={o.icon} size={18} /></span>
+					<span><span class="block font-semibold">{o.title}</span><span class="small muted block">{o.body}</span></span>
+				</label>
+			{/each}
+		</div>
+	</fieldset>
+
+	<fieldset class="group">
+		<legend>Who can answer</legend>
+		<div class="join flex-wrap">
+			<button type="button" class="btn btn-sm join-item" class:btn-primary={settings.audience === 'anyone'} onclick={() => (settings.audience = 'anyone')}>Anyone with the code</button>
+			<button type="button" class="btn btn-sm join-item" class:btn-primary={settings.audience === 'classroom'} disabled={settings.identity !== 'identified'} onclick={() => (settings.audience = 'classroom')}>Students of one classroom</button>
+		</div>
+		{#if settings.identity !== 'identified'}<p class="small muted m-0 mt-1">Classroom-only polls need identified participants.</p>{/if}
+		{#if settings.audience === 'classroom' || classrooms.length}
+			<div class="mt-2 max-w-md">
+				<label for="ps-class">Classroom {settings.audience === 'classroom' ? '' : '(optional, for your own organising)'}</label>
+				<select id="ps-class" class="select select-sm w-full" value={classroomId ?? ''} onchange={(e) => (classroomId = e.currentTarget.value || null)}>
+					<option value="">None</option>
+					{#each classrooms as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+				</select>
+			</div>
+		{/if}
+	</fieldset>
+
+	<fieldset class="group">
+		<legend>Pacing</legend>
+		<div class="cards two">
+			<label class="opt" class:on={settings.pacing === 'self'}>
+				<input type="radio" class="sr-only" name="pacing" value="self" bind:group={settings.pacing} />
+				<span class="opt-icon" aria-hidden="true"><Icon name="menu" size={18} /></span>
+				<span><span class="block font-semibold">Self-paced</span><span class="small muted block">Everyone sees all questions and answers in any order.</span></span>
+			</label>
+			<label class="opt" class:on={settings.pacing === 'presenter'}>
+				<input type="radio" class="sr-only" name="pacing" value="presenter" bind:group={settings.pacing} />
+				<span class="opt-icon" aria-hidden="true"><Icon name="play" size={18} /></span>
+				<span><span class="block font-semibold">Presenter-led</span><span class="small muted block">You move everyone through one question at a time from the screen.</span></span>
+			</label>
+		</div>
+	</fieldset>
+
+	<fieldset class="group">
+		<legend>Results for participants</legend>
+		<div class="join flex-wrap">
+			{#each [['live', 'Live, always'], ['after_answer', 'After they answer'], ['presenter', 'When I reveal'], ['never', 'Never']] as [v, l] (v)}
+				<button type="button" class="btn btn-sm join-item" class:btn-primary={settings.show_results === v} disabled={v === 'presenter' && settings.pacing !== 'presenter'} onclick={() => (settings.show_results = v as PollSettings['show_results'])}>{l}</button>
+			{/each}
+		</div>
+		<p class="small muted m-0 mt-1">You always see live results. Participants never see names.</p>
+		<label class="mt-2 flex items-center gap-2 font-normal"><input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={settings.allow_edit} />Participants can change their answers while the poll is open</label>
+	</fieldset>
+</div>
+
+<style>
+	.group { border: 0; padding: 0; margin: 0; }
+	.group legend { font-weight: 650; margin-bottom: 0.4rem; padding: 0; }
+	.cards { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr)); }
+	.opt { display: flex; gap: 0.75rem; align-items: flex-start; margin: 0; padding: 0.75rem; border-radius: var(--radius-box); border: 1.5px solid var(--color-base-300); background: var(--color-base-100); cursor: pointer; font-weight: 400; transition: border-color var(--motion-fast), background-color var(--motion-fast); }
+	.opt:hover { border-color: color-mix(in oklab, var(--color-primary) 45%, var(--color-base-300)); }
+	.opt:has(input:focus-visible) { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+	.opt.on { border-color: var(--color-primary); background: color-mix(in oklab, var(--color-primary) 7%, var(--color-base-100)); }
+	.opt-icon { width: 2.1rem; height: 2.1rem; flex: none; display: grid; place-items: center; border-radius: 0.55rem; background: var(--color-base-200); color: var(--color-muted); }
+	.on .opt-icon { background: var(--color-primary); color: var(--color-primary-content); }
+	fieldset:disabled .opt { opacity: 0.6; cursor: not-allowed; }
+</style>

@@ -13,7 +13,9 @@ export const QTYPE_LABEL: Record<QType, string> = {
 };
 
 export type Choice = { id: string; text: string };
-export type Body = { options?: Choice[]; left?: Choice[]; right?: Choice[]; zones?: Choice[]; blanks?: string[]; word_limit?: number };
+/** '' is plain text (CSV import, older questions); 'markdown' comes from the rich text editor (D-38). */
+export type TextFormat = '' | 'markdown';
+export type Body = { options?: Choice[]; left?: Choice[]; right?: Choice[]; zones?: Choice[]; blanks?: string[]; word_limit?: number; format?: TextFormat };
 export type Key = {
 	correct?: string[];
 	pairs?: Record<string, string>;
@@ -112,5 +114,15 @@ export const STATE_LABEL: Record<string, string> = {
 	submitted: 'Submitted',
 	invalidated: 'Invalidated',
 	not_started: 'Not started'
+};
+/** Shape icons, so attempt state never depends on colour alone (WCAG 1.4.1). */
+export const STATE_ICON: Record<string, string> = {
+	waiting: '◷',
+	admitted: '→',
+	in_progress: '▶',
+	paused: '⏸',
+	submitted: '✓',
+	invalidated: '⚠',
+	not_started: '○'
 };
 export const STATE_BADGE: Record<string, string> = { in_progress: 'ok', submitted: 'ok', paused: 'warn', admitted: 'warn', invalidated: 'danger' };

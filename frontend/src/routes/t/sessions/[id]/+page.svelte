@@ -6,7 +6,13 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
 	import { LiveSocket } from '$lib/socket';
-	import { STATE_BADGE, STATE_LABEL, type Dashboard } from '$lib/types';
+	import { STATE_BADGE, STATE_ICON, STATE_LABEL, type Dashboard } from '$lib/types';
+	import Icon from '$lib/ui/Icon.svelte';
+	import Skeleton from '$lib/ui/Skeleton.svelte';
+	import StatCounter from '$lib/ui/StatCounter.svelte';
+	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { fadeIn, flyIn } from '$lib/ui/motion';
+	import { toast } from '$lib/ui/toast.svelte';
 
 	type Alert = { attempt_id: string; student_name: string; student_number: string | null; kind: string; action: string; at: number };
 	const ready = requireRole('teacher');
@@ -29,7 +35,9 @@
 		socket.onMessage = (m) => {
 			if (m.type === 'dashboard') d = m as unknown as Dashboard;
 			else if (m.type === 'alert') {
-				alerts = [{ ...(m as unknown as Alert), at: Date.now() }, ...alerts].slice(0, 50);
+				const a = { ...(m as unknown as Alert), at: Date.now() };
+				alerts = [a, ...alerts].slice(0, 50);
+				toast(`${a.student_name}: ${a.kind.replace('_', ' ')} → ${a.action}`, a.action === 'invalidated' ? 'error' : 'warning');
 				if ('vibrate' in navigator) navigator.vibrate(200);
 			}
 		};
@@ -64,23 +72,27 @@
 		notice = '';
 		try {
 			const r = await api.post<{ affected: number }>('/api/teacher/sessions/' + id + '/' + action, { all, attempt_ids: all ? [] : [...selected], ...extra });
-			notice = `${action}: ${r.affected} student(s)`;
+			const verb: Record<string, string> = { admit: 'Admitted', pause: 'Paused', resume: 'Resumed', extend: 'Extended time for' };
+			toast(`${verb[action] ?? action} ${r.affected} student${r.affected === 1 ? '' : 's'}`, r.affected ? 'success' : 'info');
 			if (!all) selected = new Set();
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Command failed';
+			toast(e instanceof ApiError ? e.message : 'Command failed', 'error');
 		}
 	}
 	async function end() {
-		if (!confirm('End the session now? Running attempts are submitted as they are.')) return;
+		const ok = await confirmDialog({ title: 'End the session now?', body: 'Running attempts are submitted as they are, and nobody else can join.', confirm: 'End session', danger: true });
+		if (!ok) return;
 		await api.post('/api/teacher/sessions/' + id + '/end');
+		toast('Session ended');
 	}
 	async function reinstate(attemptId: string) {
 		const reason = prompt('Reason for reinstating this attempt (logged):');
 		if (!reason) return;
 		try {
 			await api.post('/api/teacher/attempts/' + attemptId + '/reinstate', { reason });
+			toast('Attempt reinstated');
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Could not reinstate';
+			toast(e instanceof ApiError ? e.message : 'Could not reinstate', 'error');
 		}
 	}
 	async function saveSessionSettings() {
@@ -90,8 +102,11 @@
 		if (admission) o.admission_mode = admission;
 		else delete o.admission_mode;
 		await api.put('/api/teacher/sessions/' + id + '/settings', o);
-		notice = 'Session settings saved';
+		toast('Session settings saved');
 	}
+	const total = $derived(rows.length);
+	const flagged = $derived(rows.filter((r) => r.violations > 0 || r.state === 'invalidated').length);
+	const finished = $derived((d?.counts.submitted ?? 0) + (d?.counts.invalidated ?? 0));
 	function left(r: Dashboard['rows'][number]) {
 		void now;
 		if (r.remaining_ms != null) return r.remaining_ms;
@@ -99,44 +114,46 @@
 	}
 </script>
 
-<div class="container stack" style="max-width:1300px">
+<div class="page-container vstack" style="max-width:1300px">
 	{#if d}
 		<p class="small"><a href={'/t/quizzes/' + d.session.quiz_id}>← Quiz</a></p>
-		<div class="row">
-			<h1 style="margin:0">{d.session.title}</h1>
-			<span class="badge {d.session.status === 'live' ? 'ok' : ''}">{d.session.status}</span>
-			{#if !connected}<span class="badge warn">reconnecting…</span>{/if}
-			<span class="spacer"></span>
-			<a class="button" href={'/t/sessions/' + id + '/projector'} target="_blank">Show QR full screen</a>
-			<a class="button" href={'/t/sessions/' + id + '/results'}>Results</a>
-			{#if !ended}<button class="danger" onclick={end}>End session</button>{/if}
-		</div>
+			<div class="row">
+				<h1 class="m-0">{d.session.title}</h1>
+				<span class="badge badge-soft gap-1 {d.session.status === 'live' ? 'ok' : ''}">{#if d.session.status === 'live'}<span class="live-dot" aria-hidden="true"></span>{/if}{d.session.status}</span>
+				{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={13} />reconnecting…</span>{/if}
+				<span class="spacer"></span>
+				<a class="btn" href={'/t/sessions/' + id + '/projector'} target="_blank"><Icon name="qr" size={16} />Show QR full screen</a>
+				<a class="btn" href={'/t/sessions/' + id + '/results'}><Icon name="chart" size={16} />Results</a>
+				{#if !ended}<button class="btn btn-error btn-outline" onclick={end}>End session</button>{/if}
+			</div>
+
+			<div class="stats-grid" role="list" aria-label="Session counts">
+				<StatCounter label="Joined" value={total} icon="users" />
+				<StatCounter label="Waiting" value={d.counts.waiting ?? 0} icon="clock" tone={d.counts.waiting ? 'warning' : ''} />
+				<StatCounter label="In progress" value={(d.counts.in_progress ?? 0) + (d.counts.admitted ?? 0)} icon="play" tone="primary" />
+				<StatCounter label="Finished" value={finished} icon="check-circle" tone="success" sub={total ? `${Math.round((finished / total) * 100)}%` : ''} />
+				<StatCounter label="Flagged" value={flagged} icon="flag" tone={flagged ? 'error' : ''} />
+			</div>
 
 		<div class="layout">
-			<aside class="stack">
-				<div class="card stack" style="text-align:center">
+			<aside class="vstack">
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" style="text-align:center">
 					<QrCode text={d.session.join_url} size={220} />
 					<p style="font-size:1.6rem;font-weight:700;letter-spacing:0.1em;margin:0">{d.session.join_code}</p>
 					<p class="small" style="word-break:break-all">{d.session.join_url}</p>
 				</div>
-				<div class="card stack">
-					<strong>Counts</strong>
-					{#each Object.entries(STATE_LABEL) as [k, l] (k)}
-						{#if d.counts[k]}<div class="row small"><span>{l}</span><span class="spacer"></span><strong>{d.counts[k]}</strong></div>{/if}
-					{/each}
-				</div>
 				{#if !ended}
-					<div class="card stack">
+					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 						<strong>Session settings</strong>
-						<div><label for="cd">Countdown (seconds)</label><input id="cd" type="number" min="0" bind:value={countdown} placeholder="inherit" /></div>
-						<div><label for="adm">Admission</label><select id="adm" bind:value={admission}><option value="">Inherit</option><option value="manual">I admit students</option><option value="auto">Admit automatically</option></select></div>
-						<button class="small" onclick={saveSessionSettings}>Save</button>
+						<div><label for="cd">Countdown (seconds)</label><input class="input w-full" id="cd" type="number" min="0" bind:value={countdown} placeholder="inherit" /></div>
+						<div><label for="adm">Admission</label><select class="select w-full" id="adm" bind:value={admission}><option value="">Inherit</option><option value="manual">I admit students</option><option value="auto">Admit automatically</option></select></div>
+						<button class="btn btn-sm" onclick={saveSessionSettings}>Save</button>
 					</div>
 				{/if}
-				<div class="card stack">
-					<strong>Alerts</strong>
-					{#each alerts as a (a.at + a.attempt_id)}
-						<div class="small alert {a.action === 'invalidated' ? 'danger' : ''}">
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
+						<strong class="flex items-center gap-2"><Icon name="flag" size={16} />Integrity alerts</strong>
+						{#each alerts as a (a.at + a.attempt_id)}
+							<div class="small alert alert-soft {a.action === 'invalidated' ? 'danger' : ''}" in:flyIn>
 							<strong>{a.student_name}</strong>{a.student_number ? ` (${a.student_number})` : ''}: {a.kind.replace('_', ' ')} → {a.action}
 							<br /><span class="muted">{new Date(a.at).toLocaleTimeString()}</span>
 						</div>
@@ -144,51 +161,59 @@
 				</div>
 			</aside>
 
-			<section class="stack">
+			<section class="vstack">
 				{#if !ended}
-					<div class="card row">
-						<button class="primary" onclick={() => cmd('admit', true)} disabled={!d.counts.waiting}>Admit all waiting ({d.counts.waiting ?? 0})</button>
-						<button onclick={() => cmd('admit', false)} disabled={!selected.size}>Admit selected</button>
-						<button onclick={() => cmd('pause', selected.size === 0)}>Pause {selected.size ? 'selected' : 'all'}</button>
-						<button onclick={() => cmd('resume', selected.size === 0)}>Resume {selected.size ? 'selected' : 'all'}</button>
-						<span class="row"><input type="number" min="1" style="width:5rem" bind:value={extendMin} aria-label="Minutes" />
-							<button onclick={() => cmd('extend', selected.size === 0, { seconds: extendMin * 60 })}>+ min {selected.size ? 'selected' : 'everyone'}</button></span>
+						<div class="card card-border command-bar bg-base-100 shadow-sm p-3 sm:p-4 row">
+						<button class="btn btn-primary" onclick={() => cmd('admit', true)} disabled={!d.counts.waiting}>Admit all waiting ({d.counts.waiting ?? 0})</button>
+						<button class="btn" onclick={() => cmd('admit', false)} disabled={!selected.size}>Admit selected</button>
+						<button class="btn" onclick={() => cmd('pause', selected.size === 0)}>Pause {selected.size ? 'selected' : 'all'}</button>
+						<button class="btn" onclick={() => cmd('resume', selected.size === 0)}>Resume {selected.size ? 'selected' : 'all'}</button>
+						<span class="row"><input class="input w-full" type="number" min="1" style="width:5rem" bind:value={extendMin} aria-label="Minutes" />
+							<button class="btn" onclick={() => cmd('extend', selected.size === 0, { seconds: extendMin * 60 })}>+ min {selected.size ? 'selected' : 'everyone'}</button></span>
 					</div>
-					<div class="row small">
-						Select: <button class="small" onclick={() => selectState('waiting')}>waiting</button>
-						<button class="small" onclick={() => selectState('in_progress')}>in progress</button>
-						<button class="small" onclick={() => selectState('paused')}>paused</button>
-						<button class="small" onclick={() => (selected = new Set())}>none</button>
+						<div class="row small">
+							<span class="muted">Select:</span> <button class="btn btn-sm" onclick={() => selectState('waiting')}>waiting</button>
+						<button class="btn btn-sm" onclick={() => selectState('in_progress')}>in progress</button>
+						<button class="btn btn-sm" onclick={() => selectState('paused')}>paused</button>
+						<button class="btn btn-sm" onclick={() => (selected = new Set())}>none</button>
 					</div>
 				{/if}
-				{#if notice}<p class="alert small">{notice}</p>{/if}
-				<div class="card table-wrap">
-					<table>
+				{#if notice}<p class="alert alert-soft alert-warning small">{notice}</p>{/if}
+					{#if selected.size}<p class="small m-0" in:fadeIn><strong>{selected.size}</strong> selected · commands apply to them</p>{/if}
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+					<table class="table">
 						<thead><tr><th></th><th>Student</th><th>Status</th><th>Progress</th><th>Time left</th><th>Flags</th><th></th></tr></thead>
 						<tbody>
 							{#each rows as r (r.attempt_id)}
-								<tr class:sel={selected.has(r.attempt_id)}>
-									<td><input type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>
+									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
+									<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>
 									<td>{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></td>
-									<td><span class="badge {STATE_BADGE[r.state] ?? ''}">{STATE_LABEL[r.state]}</span>{#if !r.connected && (r.state === 'in_progress' || r.state === 'waiting')}<br /><span class="small muted">offline</span>{/if}</td>
-									<td class="small">{r.answered}/{r.total} answered{#if r.state === 'in_progress'}<br />on Q{r.index + 1}{/if}</td>
-									<td class="small">{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">+{Math.round(r.extension_sec / 60)} min</span>{/if}</td>
-									<td class="small">{#if r.violations}<span class="badge danger">{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
-									<td>{#if r.state === 'invalidated' && !ended}<button class="small" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{/if}</td>
+									<td><span class="badge badge-soft {STATE_BADGE[r.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[r.state] ?? ''}</span> {STATE_LABEL[r.state]}</span>{#if !r.connected && (r.state === 'in_progress' || r.state === 'waiting')}<br /><span class="small muted">offline</span>{/if}</td>
+									<td class="small min-w-32">
+										<div class="flex items-center gap-2"><progress class="progress progress-primary w-20" value={r.answered} max={r.total || 1} aria-hidden="true"></progress><span class="tabular">{r.answered}/{r.total}</span></div>
+										{#if r.state === 'in_progress'}<span class="muted">on Q{r.index + 1}</span>{/if}
+									</td>
+									<td class="small tabular" class:text-error={(left(r) ?? Infinity) < 60_000 && r.state === 'in_progress'}>{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">+{Math.round(r.extension_sec / 60)} min</span>{/if}</td>
+									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1"><Icon name="flag" size={12} />{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
+									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="7" class="muted">Waiting for students to scan the QR code…</td></tr>{/each}
+							{:else}<tr><td colspan="7"><div class="muted py-6 text-center"><span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…</div></td></tr>{/each}
 						</tbody>
 					</table>
 				</div>
 			</section>
 		</div>
 	{:else}
-		<p>Connecting…</p>
+		<Skeleton lines={5} />
 	{/if}
 </div>
 
 <style>
-	.layout { display: grid; gap: 1rem; grid-template-columns: 280px 1fr; align-items: start; }
-	@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
-	tr.sel { background: var(--bg); }
+	.layout { display: grid; gap: 1rem; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
+	@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .layout > section { order: -1; } }
+	tr.sel { background: color-mix(in oklab, var(--color-primary) 8%, transparent); }
+	.stats-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+	.command-bar { position: sticky; top: 4.25rem; z-index: 4; }
+	.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; animation: live 1.6s ease-in-out infinite; }
+	@keyframes live { 50% { opacity: 0.3; } }
 </style>

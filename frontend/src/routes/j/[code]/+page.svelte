@@ -55,21 +55,21 @@
 </script>
 
 <div class="narrow">
-	<div class="card stack">
+	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 		{#if error}
 			<h1>Can't join</h1>
-			<p class="alert danger">{error}</p>
+			<p class="alert alert-soft alert-error">{error}</p>
 			<a href="/join">Enter a different code</a>
 		{:else if preview?.student_id_required}
 			<h1>{preview.title}</h1>
-			<form class="stack" onsubmit={join}>
+			<form class="vstack" onsubmit={join}>
 				<div>
 					<label for="sid">Your student ID for this class</label>
-					<input id="sid" bind:value={studentNumber} required autocomplete="off" />
+					<input class="input w-full" id="sid" bind:value={studentNumber} required autocomplete="off" />
 					{#if fieldError}<p class="field-error">{fieldError}</p>{/if}
 					<p class="small muted">Your teacher attaches this ID to your answers. You only enter it once per class.</p>
 				</div>
-				<button class="primary" disabled={busy}>Join the quiz</button>
+				<button class="btn btn-primary" disabled={busy}>Join the quiz</button>
 			</form>
 		{:else}
 			<p>Joining…</p>

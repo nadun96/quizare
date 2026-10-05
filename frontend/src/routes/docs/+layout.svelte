@@ -31,10 +31,10 @@
 <svelte:head><title>Developer docs · Classroom Quiz</title></svelte:head>
 
 <div class="docs">
-	<button class="menu small" onclick={() => (menuOpen = !menuOpen)} aria-expanded={menuOpen} aria-controls="docs-nav">☰ Contents</button>
+	<button class="docs-menu btn btn-sm" onclick={() => (menuOpen = !menuOpen)} aria-expanded={menuOpen} aria-controls="docs-nav">☰ Contents</button>
 	<aside id="docs-nav" class:open={menuOpen}>
 		<a class="home" href="/docs/overview">Developer docs</a>
-		<input type="search" placeholder="Search the docs" bind:value={query} aria-label="Search the docs" />
+		<input class="input input-sm w-full" type="search" placeholder="Search the docs" bind:value={query} aria-label="Search the docs" />
 		{#if results.length}
 			<ul class="results">
 				{#each results as r (r.p.slug)}
@@ -62,7 +62,7 @@
 
 <style>
 	.docs { display: grid; grid-template-columns: 260px minmax(0, 1fr); max-width: 1400px; margin: 0 auto; }
-	aside { position: sticky; top: 0; align-self: start; height: 100dvh; overflow-y: auto; padding: 1rem; border-right: 1px solid var(--border); background: var(--surface); }
+	aside { position: sticky; top: 4rem; align-self: start; height: calc(100dvh - 4rem); overflow-y: auto; padding: 1rem; border-right: 1px solid var(--color-base-300); background: var(--surface); }
 	.home { display: block; font-weight: 700; text-decoration: none; color: var(--primary); margin-bottom: 0.75rem; }
 	.section { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 1rem 0 0.25rem; font-weight: 700; }
 	ul { list-style: none; padding: 0; margin: 0; }
@@ -70,13 +70,13 @@
 	nav a:hover { background: var(--bg); }
 	nav a.active { background: var(--bg); color: var(--primary); font-weight: 600; box-shadow: inset 3px 0 0 var(--primary); }
 	.results { margin-top: 0.5rem; display: grid; gap: 0.25rem; }
-	.results a { display: grid; padding: 0.4rem; border-radius: 6px; text-decoration: none; color: var(--text); border: 1px solid var(--border); }
+	.results a { display: grid; padding: 0.4rem; border-radius: 6px; text-decoration: none; color: var(--text); border: 1px solid var(--color-base-300); }
 	.main { min-width: 0; }
-	.menu { display: none; }
+	.docs-menu { display: none; }
 	@media (max-width: 860px) {
 		.docs { grid-template-columns: minmax(0, 1fr); }
-		.menu { display: inline-flex; margin: 0.75rem 1rem 0; }
-		aside { display: none; position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+		.docs-menu { display: inline-flex; margin: 0.75rem 1rem 0; }
+		aside { display: none; position: static; height: auto; border-right: none; border-bottom: 1px solid var(--color-base-300); }
 		aside.open { display: block; }
 	}
 </style>

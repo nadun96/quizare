@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,6 +33,26 @@ func Open(ctx context.Context, url string, maxConns int32) (*pgxpool.Pool, error
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 	return pool, nil
+}
+
+// OpenWait is Open, retrying until the database answers or wait runs out.
+// Containers can start in any order, so the server waits for PostgreSQL
+// instead of exiting on its first connection attempt.
+func OpenWait(ctx context.Context, url string, maxConns int32, wait time.Duration) (*pgxpool.Pool, error) {
+	deadline := time.Now().Add(wait)
+	delay := 500 * time.Millisecond
+	for {
+		pool, err := Open(ctx, url, maxConns)
+		if err == nil || time.Now().Add(delay).After(deadline) {
+			return pool, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, 5*time.Second)
+	}
 }
 
 // Migrate applies every *.sql file in fsys (lexical order) that has not been

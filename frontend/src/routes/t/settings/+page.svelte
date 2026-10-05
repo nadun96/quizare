@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
 	import SettingsEditor from '$lib/SettingsEditor.svelte';
@@ -53,7 +55,7 @@
 		load();
 	}
 	async function del(k: Key) {
-		if (confirm('Delete this API key?')) {
+if (await confirmDialog({ title: 'Delete this API key?', body: 'Quizzes that use it fall back to your default key, or to manual marking.', confirm: 'Delete key', danger: true })) {
 			await api.del('/api/teacher/llm-keys/' + k.id);
 			load();
 		}
@@ -61,40 +63,40 @@
 	const placeholder: Record<string, string> = { anthropic: 'claude-opus-5-5 (default)', openai: 'e.g. the model name from your OpenAI account', google: 'e.g. a Gemini model name' };
 </script>
 
-<div class="container stack" style="max-width:900px">
+<div class="page-container vstack" style="max-width:900px">
 	<h1>Settings</h1>
 	<h2>My defaults</h2>
 	<p class="small muted">These apply to all your classrooms and quizzes unless a lower level overrides them.</p>
-	<div class="card"><SettingsEditor level="teacher" value={overrides} {effective} onsave={save} {errors} /></div>
+	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="teacher" value={overrides} {effective} onsave={save} {errors} /></div>
 
 	<h2>LLM API keys</h2>
 	<p class="small">Keys are encrypted and can never be shown again after saving: only the last 4 characters appear here. They are used only for marking and feedback on your own quizzes.</p>
-	<div class="card table-wrap">
-		<table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Status</th><th></th></tr></thead><tbody>
+	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+		<table class="table"><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Status</th><th></th></tr></thead><tbody>
 			{#each keys as k (k.id)}
 				<tr>
-					<td>{k.provider}{k.label ? ` · ${k.label}` : ''} {#if k.is_default}<span class="badge ok">default</span>{/if}</td>
+					<td>{k.provider}{k.label ? ` · ${k.label}` : ''} {#if k.is_default}<span class="badge badge-soft badge-success">default</span>{/if}</td>
 					<td class="small">{k.model}</td>
 					<td><code>••••{k.last4}</code></td>
-					<td class="small">{#if k.last_test_ok === true}<span class="badge ok">works</span>{:else if k.last_test_ok === false}<span class="badge danger" title={k.last_test_error}>failed</span> {k.last_test_error}{:else}untested{/if}</td>
-					<td class="row"><button class="small" onclick={() => test(k)}>Test</button>{#if !k.is_default}<button class="small" onclick={() => makeDefault(k)}>Make default</button>{/if}<button class="small danger" onclick={() => del(k)}>Delete</button></td>
+					<td class="small">{#if k.last_test_ok === true}<span class="badge badge-soft badge-success">works</span>{:else if k.last_test_ok === false}<span class="badge badge-soft badge-error" title={k.last_test_error}>failed</span> {k.last_test_error}{:else}untested{/if}</td>
+					<td class="row"><button class="btn btn-sm" onclick={() => test(k)}>Test</button>{#if !k.is_default}<button class="btn btn-sm" onclick={() => makeDefault(k)}>Make default</button>{/if}<button class="btn btn-sm btn-error btn-outline" onclick={() => del(k)}>Delete</button></td>
 				</tr>
 			{:else}<tr><td colspan="5" class="muted">No keys. Without a key, essay answers are marked by you (manual marking).</td></tr>{/each}
 		</tbody></table>
 	</div>
-	<form class="card stack" onsubmit={addKey}>
+	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={addKey}>
 		<strong>Add a key</strong>
-		<div class="grid">
-			<div><label for="prov">Provider</label><select id="prov" bind:value={form.provider}><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="google">Google Gemini</option></select></div>
-			<div><label for="model">Model</label><input id="model" bind:value={form.model} placeholder={placeholder[form.provider]} required={form.provider !== 'anthropic'} /></div>
-			<div><label for="label">Label (optional)</label><input id="label" bind:value={form.label} /></div>
+		<div class="auto-grid">
+			<div><label for="prov">Provider</label><select class="select w-full" id="prov" bind:value={form.provider}><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="google">Google Gemini</option></select></div>
+			<div><label for="model">Model</label><input class="input w-full" id="model" bind:value={form.model} placeholder={placeholder[form.provider]} required={form.provider !== 'anthropic'} /></div>
+			<div><label for="label">Label (optional)</label><input class="input w-full" id="label" bind:value={form.label} /></div>
 		</div>
-		<div><label for="key">API key</label><input id="key" type="password" autocomplete="off" bind:value={form.api_key} required /></div>
+		<div><label for="key">API key</label><input class="input w-full" id="key" type="password" autocomplete="off" bind:value={form.api_key} required /></div>
 		<label class="row" style="font-weight:400;align-items:flex-start">
-			<input type="checkbox" bind:checked={consent} style="margin-top:0.3rem" />
+			<input class="checkbox" type="checkbox" bind:checked={consent} style="margin-top:0.3rem" />
 			<span class="small">I understand that when AI marking or feedback is on, students' answers (without names, emails or student IDs) are sent to {form.provider === 'openai' ? 'OpenAI' : form.provider === 'google' ? 'Google' : 'Anthropic'} under my account, and that the provider's own retention terms apply. Students are told when a quiz uses AI marking.</span>
 		</label>
-		{#if keyError}<p class="alert danger">{keyError}</p>{/if}
-		<button class="primary" disabled={!consent}>Save key</button>
+		{#if keyError}<p class="alert alert-soft alert-error">{keyError}</p>{/if}
+		<button class="btn btn-primary" disabled={!consent}>Save key</button>
 	</form>
 </div>

@@ -4,10 +4,10 @@ Timed, proctored in-class quizzes that students join by scanning a QR code, with
 answer-key and LLM-assisted marking, predefined and AI feedback, and configurable
 results publishing and analytics.
 
-- Requirements: `docs/QR Classroom Quiz Platform — Business Analysis Document.pdf`
-- Architecture & ADRs: `docs/QR Classroom Quiz Platform — Architecture Document.pdf`
-- Stack: `docs/tech_stack_recommendations.xlsx`
 - Choices that fill gaps in the BA document: `DECISIONS.md`
+- Requirements, architecture (ADRs) and stack documents are private and are **not in the repository**.
+  Keep them in a local `docs/` folder (git-ignored): the Business Analysis document, the Architecture
+  document and `tech_stack_recommendations.xlsx`.
 
 ## Layout
 
@@ -101,6 +101,22 @@ Without `QP_SMTP_ADDR`, emails (verification, password reset) are written to the
 | `QP_SMTP_ADDR`, `QP_SMTP_FROM`, `QP_SMTP_USER`, `QP_SMTP_PASSWORD_FILE` | | Optional SMTP relay |
 | `QP_STATIC_DIR` | | Serve the SPA build from Go (dev / single binary) |
 | `QP_API_DOCS` | on | `0` stops serving `/api/docs` |
+| `QP_KEK_GENERATE` | off | `1` creates the KEK file (0400) on first start if it is missing; never overwrites (containers) |
+| `QP_DB_WAIT_SECONDS` | 60 | How long startup keeps retrying an unreachable database |
+
+## Containers (Docker or Podman)
+
+`Dockerfile` builds one image (SvelteKit build + static Go binary on distroless, non-root, about 45 MB). `compose.yaml` runs it with PostgreSQL 16, and an optional Caddy for HTTPS. The same files work with `docker compose` and `podman compose` (image names are fully qualified, and the bind mount carries the SELinux `Z` label).
+
+```bash
+cp .env.example .env                 # set POSTGRES_PASSWORD
+docker compose up -d --build         # or: podman compose up -d --build
+echo 'a-strong-password' | docker compose exec -T app /app/server create-admin admin@example.edu "Admin"
+# http://localhost:8080
+```
+
+- On first start the app writes a random master key into the `appdata` volume (`QP_KEK_GENERATE=1`). Back that volume up together with `pgdata`.
+- For phones on the LAN or a domain, use HTTPS: set `QP_DOMAIN` and `QP_BASE_URL=https://…` in `.env`, then run `docker compose --profile tls up -d`. Rootless Podman can't bind ports below 1024 by default, so set `CADDY_HTTP_PORT=8081` and `CADDY_HTTPS_PORT=8443` there.
 
 ## Deployment (Ubuntu, single 4 GB host)
 
@@ -110,3 +126,7 @@ Without `QP_SMTP_ADDR`, emails (verification, password reset) are written to the
 4. Install `deploy/quiz.service` (it sets `GOMEMLIMIT=700MiB` and `MemoryMax=900M`) and `deploy/Caddyfile` (with your domain).
 5. Enable backups: `deploy/backup.sh` with `quiz-backup.timer` (age-encrypted, 14 daily and 8 weekly copies). Test a restore every month.
 6. Before real classes, run `loadtest/classroom.js` with k6 against a staging copy.
+
+## License
+
+[MIT](LICENSE) © 2026 Nadun Udaraka

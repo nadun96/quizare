@@ -29,6 +29,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
+	"github.com/nadun96/quizplatform/internal/poll"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 	"github.com/nadun96/quizplatform/migrations"
@@ -51,6 +52,7 @@ type App struct {
 	LLM       *llm.Service
 	Analytics *analytics.Service
 	Admin     *admin.Service
+	Poll      *poll.Service
 }
 
 // Options let tests swap infrastructure.
@@ -67,7 +69,7 @@ type Options struct {
 
 // New opens the database, applies migrations and builds the app.
 func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error) {
-	pool, err := db.Open(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
+	pool, err := db.OpenWait(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBWait)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +80,16 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	if err := jobs.Migrate(ctx, pool); err != nil {
 		pool.Close()
 		return nil, err
+	}
+	if cfg.KEKGenerate {
+		created, err := llm.EnsureKEK(cfg.KEKFile)
+		if err != nil {
+			pool.Close()
+			return nil, err
+		}
+		if created {
+			log.Warn("generated a new master key; back it up, losing it means teachers must re-enter their API keys", "path", cfg.KEKFile)
+		}
 	}
 	kek, err := llm.LoadKEK(cfg.KEKFile)
 	if err != nil {
@@ -153,6 +165,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Analytics = analytics.NewService(pool, a.Live, a.Eval, a.Auth, rc)
 	analyticsWorker.Service = a.Analytics
 	a.Admin = admin.NewService(pool, a.Auth)
+	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -171,6 +184,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		api.Use(httpx.SameOrigin(cfg.BaseURL), a.Auth.Middleware)
 		api.Route("/auth", a.Auth.Routes)
 		api.Route("/public", a.Analytics.PublicRoutes)
+		// Polls: anyone with the code; the poll decides whether login is needed (D-40).
+		api.Route("/polls", a.Poll.PublicRoutes)
 		if cfg.APIDocs {
 			api.Route("/docs", apidocs.Routes)
 		}
@@ -189,6 +204,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Eval.TeacherRoutes(t)
 			a.LLM.TeacherRoutes(t)
 			a.Analytics.TeacherRoutes(t)
+			a.Poll.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
@@ -205,6 +221,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	r.Route("/ws", func(ws chi.Router) {
 		ws.Use(a.Auth.Middleware)
 		a.Live.WSRoutes(ws)
+		a.Poll.WSRoutes(ws)
 	})
 	r.Route("/beacon", func(b chi.Router) {
 		b.Use(a.Auth.Middleware)
@@ -237,6 +254,7 @@ func (a *App) Handler() http.Handler { return a.router }
 // Start runs background workers and the live-session ticker.
 func (a *App) Start(ctx context.Context) error {
 	go a.Live.Run(ctx)
+	go a.Poll.Run(ctx)
 	return a.river.Start(ctx)
 }
 
