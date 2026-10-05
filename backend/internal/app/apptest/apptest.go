@@ -77,6 +77,8 @@ type Client struct {
 	e    *Env
 	http *http.Client
 	User auth.User
+	// Headers are added to every request (e.g. a poll's anonymous token).
+	Headers map[string]string
 }
 
 func (e *Env) Client() *Client {
@@ -112,6 +114,9 @@ func (c *Client) Do(method, path string, body any) (int, []byte) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	for k, v := range c.Headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		c.e.T.Fatal(err)
@@ -131,6 +136,9 @@ func (c *Client) Raw(method, path, contentType string, body []byte) (int, []byte
 	req.Header.Set("Origin", c.e.Server.URL)
 	req.Header.Set("X-Requested-With", "fetch")
 	req.Header.Set("Content-Type", contentType)
+	for k, v := range c.Headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		c.e.T.Fatal(err)

@@ -19,20 +19,20 @@
 	});
 
 	// The live quiz and the projector are full-screen experiences without the nav.
-	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.startsWith('/r/'));
+	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/'));
 	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
 
 	type Link = { href: string; label: string };
 	const links = $derived<Link[]>(
 		auth.user?.role === 'teacher'
-			? [{ href: '/t', label: 'Classrooms' }, { href: '/t/settings', label: 'Settings' }]
+			? [{ href: '/t', label: 'Classrooms' }, { href: '/t/polls', label: 'Polls' }, { href: '/t/settings', label: 'Settings' }]
 			: auth.user?.role === 'student'
 				? [{ href: '/my', label: 'My quizzes' }, { href: '/join', label: 'Join' }]
 				: auth.user?.role === 'admin'
 					? [{ href: '/admin', label: 'Admin' }]
 					: []
 	);
-	const current = (href: string) => page.url.pathname === href || (href !== '/t' && page.url.pathname.startsWith(href + '/')) || (href === '/t' && page.url.pathname.startsWith('/t/') && !page.url.pathname.startsWith('/t/settings'));
+	const current = (href: string) => page.url.pathname === href || (href !== '/t' && page.url.pathname.startsWith(href + '/')) || (href === '/t' && page.url.pathname.startsWith('/t/') && !page.url.pathname.startsWith('/t/settings') && !page.url.pathname.startsWith('/t/polls'));
 
 	// <details> menus are CSS-only; close them after a choice or navigation.
 	let menus: HTMLDetailsElement[] = $state([]);

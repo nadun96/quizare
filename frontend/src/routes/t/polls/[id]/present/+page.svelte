@@ -1,0 +1,175 @@
+<script lang="ts">
+	// Presenter screen for a poll (D-40): big, live results for the room.
+	// Keys: ← → question, R reveal (presenter-led), Q code, F full screen.
+	import { onDestroy } from 'svelte';
+	import { Tween } from 'svelte/motion';
+	import { page } from '$app/state';
+	import { api, ApiError } from '$lib/api';
+	import { requireRole } from '$lib/guard.svelte';
+	import QrCode from '$lib/QrCode.svelte';
+	import { TYPE_META } from '$lib/poll/meta';
+	import PollResults from '$lib/poll/PollResults.svelte';
+	import type { Poll, TeacherResults } from '$lib/poll/types';
+	import RichText from '$lib/richtext/RichText.svelte';
+	import { LiveSocket } from '$lib/socket';
+	import Icon from '$lib/ui/Icon.svelte';
+	import Skeleton from '$lib/ui/Skeleton.svelte';
+	import { flyIn, reduced } from '$lib/ui/motion';
+	import { toast } from '$lib/ui/toast.svelte';
+
+	const ready = requireRole('teacher');
+	const id = $derived(page.params.id ?? '');
+	let data = $state<TeacherResults | null>(null);
+	let index = $state(0); // self-paced: what this screen shows
+	let showCode = $state(true);
+	let connected = $state(false);
+	let socket: LiveSocket | null = null;
+
+	$effect(() => {
+		if (!ready() || !id) return;
+		socket = new LiveSocket('/ws/teacher/polls/' + id);
+		socket.onStatus = (c) => (connected = c);
+		socket.onMessage = (m) => {
+			if (m.type !== 'results') return;
+			const first = !data;
+			data = m as unknown as TeacherResults;
+			if (first) {
+				index = data.poll.pacing === 'presenter' ? data.poll.current_index : 0;
+				showCode = data.participants === 0;
+			}
+		};
+		socket.open();
+		return () => socket?.close();
+	});
+	onDestroy(() => socket?.close());
+
+	const poll = $derived(data?.poll ?? null);
+	const questions = $derived(poll?.questions ?? []);
+	const presenter = $derived(poll?.pacing === 'presenter');
+	const cur = $derived(presenter ? (poll?.current_index ?? 0) : index);
+	const q = $derived(questions[cur]);
+	const joined = new Tween(0, { duration: 500 });
+	$effect(() => {
+		joined.set(data?.participants ?? 0, reduced() ? { duration: 0 } : undefined);
+	});
+
+	async function go(i: number, revealed = false) {
+		if (!poll || i < 0 || i >= questions.length) return;
+		if (!presenter) {
+			index = i;
+			return;
+		}
+		try {
+			const p = await api.post<Poll>('/api/teacher/polls/' + id + '/present', { index: i, revealed });
+			if (data) data.poll = { ...data.poll, current_index: p.current_index, revealed: p.revealed };
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Could not move on', 'error');
+		}
+	}
+	const reveal = () => poll && go(cur, !poll.revealed);
+	async function openPoll() {
+		try {
+			await api.post('/api/teacher/polls/' + id + '/status', { status: 'open' });
+			toast('Poll is open');
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Could not open', 'error');
+		}
+	}
+	function key(e: KeyboardEvent) {
+		if ((e.target as HTMLElement)?.closest('input, textarea, select')) return;
+		if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') (e.preventDefault(), go(cur + 1));
+		else if (e.key === 'ArrowLeft' || e.key === 'PageUp') (e.preventDefault(), go(cur - 1));
+		else if (e.key.toLowerCase() === 'r' && presenter) reveal();
+		else if (e.key.toLowerCase() === 'q') showCode = !showCode;
+		else if (e.key.toLowerCase() === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {});
+	}
+	const host = $derived(poll ? poll.join_url.replace(/^https?:\/\//, '').replace(/\/p\/.*$/, '') : '');
+</script>
+
+<svelte:window onkeydown={key} />
+<svelte:head><title>{poll ? poll.title + ' · Presenting' : 'Presenting'}</title></svelte:head>
+
+<div class="stage">
+	{#if !poll}
+		<div class="p-8"><Skeleton lines={5} /></div>
+	{:else}
+		<header class="bar">
+			<strong class="truncate text-lg">{poll.title}</strong>
+			<span class="spacer"></span>
+			<span class="join-hint">Join at <strong>{host}/join</strong> with <strong class="tabular code-inline">{poll.join_code}</strong></span>
+			<span class="badge badge-soft badge-lg gap-1 tabular" aria-live="polite"><Icon name="users" size={16} />{Math.round(joined.current)}</span>
+			{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={14} />Reconnecting</span>{/if}
+			<button class="btn btn-ghost btn-sm" onclick={() => (showCode = !showCode)} title="Show the join code (Q)"><Icon name="qr" size={18} /></button>
+		</header>
+
+		{#if poll.status !== 'open'}
+			<div class="alert alert-soft alert-warning mx-auto mt-4 max-w-3xl">
+				<Icon name="info" /><span>The poll is {poll.status}. Participants can't answer until it's open.</span>
+				<button class="btn btn-sm btn-primary" onclick={openPoll}>Open now</button>
+			</div>
+		{/if}
+
+		<main class="main">
+			{#if showCode}
+				<section class="lobby" in:flyIn>
+					<div class="qr-box"><QrCode text={poll.join_url} size={320} /></div>
+					<div>
+						<p class="muted m-0 text-xl">Go to <strong>{host}/join</strong> and enter</p>
+						<p class="big-code tabular m-0">{poll.join_code}</p>
+						<p class="muted m-0 text-xl">{poll.identity === 'identified' ? 'Log in to take part.' : poll.identity === 'optional' ? 'Log in if you want your name on your answers.' : 'No login needed — answers are anonymous.'}</p>
+						<button class="btn btn-primary btn-lg mt-6" onclick={() => (showCode = false)}>Show the question<Icon name="arrow-right" size={18} /></button>
+					</div>
+				</section>
+			{:else if q}
+				{#key q.id}
+					<section class="question" in:flyIn={{ x: 30, y: 0, duration: 260 }}>
+						<p class="muted m-0 text-lg">Question {cur + 1} of {questions.length} · {TYPE_META[q.type].label}</p>
+						<RichText text={q.text} format={q.body.format} blanks="line" class="q-title" />
+						{#if presenter && poll.show_results === 'presenter' && !poll.revealed}
+							<p class="hidden-note muted"><Icon name="eye-off" size={18} /> Results are hidden from participants. Press <kbd class="kbd kbd-sm">R</kbd> to reveal them.</p>
+						{/if}
+						<PollResults question={q} result={data?.results[q.id]} teacher big pollId={id} />
+					</section>
+				{/key}
+			{:else}
+				<p class="muted p-8 text-center text-xl">Add questions to this poll first.</p>
+			{/if}
+		</main>
+
+		<footer class="controls">
+			<button class="btn" disabled={cur === 0} onclick={() => go(cur - 1)}><Icon name="arrow-left" size={18} />Previous</button>
+			<div class="dots" aria-label="Questions">
+				{#each questions as qq, i (qq.id)}
+					<button class="dot" class:on={i === cur} aria-label="Question {i + 1}" aria-current={i === cur ? 'step' : undefined} onclick={() => go(i)}></button>
+				{/each}
+			</div>
+			{#if presenter && poll.show_results === 'presenter'}
+				<button class="btn" class:btn-primary={!poll.revealed} onclick={reveal}><Icon name={poll.revealed ? 'eye-off' : 'eye'} size={18} />{poll.revealed ? 'Hide results' : 'Reveal results'}</button>
+			{/if}
+			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>Next<Icon name="arrow-right" size={18} /></button>
+		</footer>
+		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
+	{/if}
+</div>
+
+<style>
+	.stage { min-height: 100dvh; display: flex; flex-direction: column; background: var(--color-base-200); }
+	.bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; background: var(--color-base-100); border-bottom: 1px solid var(--color-base-300); }
+	.join-hint { font-size: 1.05rem; }
+	@media (max-width: 720px) { .join-hint { display: none; } }
+	.code-inline { letter-spacing: 0.08em; }
+	.main { flex: 1; width: 100%; max-width: 78rem; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
+	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.5rem; }
+	.hidden-note { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }
+	.lobby { display: grid; gap: 3rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 60vh; }
+	@media (max-width: 860px) { .lobby { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
+	.qr-box { background: #fff; padding: 1rem; border-radius: 1.25rem; box-shadow: 0 12px 40px -20px rgb(0 0 0 / 40%); }
+	.big-code { font-size: clamp(3.5rem, 2rem + 6vw, 7rem); font-weight: 800; letter-spacing: 0.12em; line-height: 1.1; color: var(--color-primary); }
+	.controls { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; flex-wrap: wrap; justify-content: center; }
+	.dots { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; flex: 1; }
+	/* 24 px hit area (WCAG 2.5.8) around a small visible dot. */
+	.dot { width: 1.5rem; height: 1.5rem; border-radius: 999px; border: 0; background: transparent; cursor: pointer; padding: 0; display: grid; place-items: center; }
+	.dot::before { content: ''; width: 0.7rem; height: 0.7rem; border-radius: 999px; background: var(--color-field); transition: transform var(--motion-fast), background-color var(--motion-fast); }
+	.dot.on::before { background: var(--color-primary); transform: scale(1.4); }
+	.keys { text-align: center; margin: 0 0 0.75rem; }
+</style>

@@ -27,7 +27,7 @@
 	<span class="stat-icon" aria-hidden="true"><Icon name={icon} size={18} /></span>
 	<div>
 		<div class="stat-num tabular" aria-hidden="true">{Math.round(shown.current)}</div>
-		<div class="stat-label">{label}{#if sub}<span class="muted"> · {sub}</span>{/if}</div>
+		<div class="stat-label">{label}{#if sub} <span class="muted ml-1">· {sub}</span>{/if}</div>
 		<span class="sr-only">{label}: {value}</span>
 	</div>
 </div>
