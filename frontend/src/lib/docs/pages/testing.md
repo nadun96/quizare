@@ -9,8 +9,10 @@ Every feature ships with tests. Backend integration tests run against a **real P
 | Pure unit tests | `*_test.go` beside the code | `live/timing_test.go` (deadlines, pause, AC-08 extension, policy, shuffles), `eval/marker_test.go`, `quiz/question_test.go` (the BA CSV examples), `settings/settings_test.go`, `imageurl` (Drive links, SSRF), `llm/llm_unit_test.go` (vault, prompt, adapters against fake HTTP servers) |
 | API / integration | `<module>/*_api_test.go` | Full HTTP stack plus DB through `apptest`: auth flows, teacher isolation, CSV import AC-09, live sessions AC-01…08 with real WebSockets, marking AC-10, key privacy AC-11, public links AC-12 |
 | Contract | `app/openapi_test.go` | Spec ↔ router in both directions, `$ref` resolution, operationIds |
-| Frontend unit | `frontend/src/**/*.test.ts` | API client, server clock, offline answer queue, proctoring signals, socket backoff, docs registry and links |
-| End-to-end smoke | ad hoc | The real binary with the built SPA and a teacher + student flow over HTTP |
+| Frontend unit | `frontend/src/**/*.test.ts` | API client, server clock, offline answer queue, proctoring signals, socket backoff, docs registry and links, rich-text rendering and XSS payloads, word-cloud layout, display preferences, toasts and dialogs |
+| Frontend components | `richtext/questionview.test.ts`, `poll/poll.test.ts`, `ui/ui.test.ts` | Svelte components mounted in jsdom: blanks inside formatted text, every poll input and the editor preview for all 20 types, results views, the confirm dialog. `src/test-setup.ts` stubs `matchMedia` and `Element.animate`, which jsdom lacks. |
+| Design system | `ui/theme.test.ts` | WCAG AA contrast for every colour pair in both themes, read from `app.css` |
+| End-to-end | ad hoc, headless Chrome | The real binary with the built SPA on a throwaway database: quiz flow, rich text editor, UI crawl (light/dark, phone/desktop, 320 px overflow), polls (every input type, live results, presenter, identity modes). Not part of CI yet. |
 | Load | `loadtest/classroom.js` | k6, 300 sockets, the architecture §2.3 thresholds |
 
 ## The database harness
@@ -68,4 +70,5 @@ CI (`.github/workflows/ci.yml`) runs gofmt, vet, `go test -race` against Postgre
 - Pure logic: table-driven unit tests, including the BA acceptance criterion it implements (name the AC in the test).
 - Routes: an `_api_test.go` covering success, validation (422), authorisation (another teacher gets 404, the wrong role gets 403) and state conflicts.
 - Spec: an `openapi.yaml` entry (the contract test enforces it).
-- UI logic in `lib/`: a Vitest test.
+- UI logic in `lib/`: a Vitest test; components that place or move DOM (like blank inputs or charts): a component test.
+- New colours: add them to `app.css` themes so `theme.test.ts` checks their contrast; chart palettes are validated for colour-blind separation (see [Live polls](polls.md)).

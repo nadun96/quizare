@@ -9,6 +9,12 @@
 | **Question** | One item of one of seven types (`SINGLE`, `MULTI`, `MATCH`, `BLANK_OPT`, `BLANK_TEXT`, `DRAG`, `ESSAY`). Identified inside its quiz by a teacher-chosen **code** such as `Q001`. |
 | **Body** | The student-visible structure of a question: options, left/right items, zones, blanks, word limit. |
 | **Key** | The answer key: correct options, pairs, accepted blank answers, order, model answer, rubric. Never sent to students before release. |
+| **Poll** | An ungraded set of questions (20 input types) that anyone with its code can answer, with live results. Status `draft`, `open` or `closed`. See [Live polls](polls.md). |
+| **Participant** | Someone who joined a poll: identified (a user account) or anonymous (a device token). |
+| **Device token** | The random secret an anonymous poll participant's browser keeps (`X-Poll-Token`); only its hash is stored. |
+| **Presenter-led pacing** | A poll mode where the presenter screen decides which single question everyone sees, and when results are revealed. |
+| **Moderation** | Hiding a poll answer or a word-cloud word from shared results; the teacher still sees it, dimmed. |
+| **Format** | `body.format`: `markdown` for text from the rich text editor, empty for plain text (D-38). |
 | **Resource** | An image referenced by public URL and attached to a question stem (`Q`), an option (`O`) or feedback (`F`). Files are never stored (BR-15). |
 | **Session** | One live run of a quiz for a class. Has a 6-character **join code** and a join URL `/j/{code}` that the QR encodes. Status `open` → `live` → `ended`. |
 | **Snapshot** | A frozen copy of the quiz's questions, keys and settings layers taken when a session is created, so later quiz edits never change a running session (ADR-14). |

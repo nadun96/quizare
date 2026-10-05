@@ -9,7 +9,7 @@ flowchart LR
   B[Browsers] -- HTTPS / WSS --> C[Caddy]
   subgraph Go["Go binary"]
     R["Chi router<br/>Recover · SecurityHeaders<br/>SameOrigin · Auth"]
-    M["Modules<br/>auth · settings · content · quiz<br/>live (hub + ticker) · eval · llm<br/>analytics · admin · apidocs"]
+    M["Modules<br/>auth · settings · content · quiz<br/>live (hub + ticker) · eval · llm<br/>analytics · poll (hub) · admin · apidocs"]
     W["River workers<br/>default · email · llm_marking · analytics"]
     R --> M
     M -- insert jobs in tx --> W
@@ -52,6 +52,8 @@ flowchart LR
   eval -- results hook<br/>inserts analytics_recompute --> analytics
   quiz -- SessionGuard: archive, don't delete --> live
   content -- DeleteGuard --> live
+  poll -- Classrooms: ownership, enrolment --> content
+  poll -- Users: names for the teacher --> auth
 ```
 
 Reads across schemas are limited to reporting code in `admin` (usage counts, own-data export) and to joins on stable identifiers. When a module needs another's data, add a method to that module and an interface on your side, rather than querying its tables.
