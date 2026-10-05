@@ -4,11 +4,11 @@
 	import { flyIn } from '$lib/ui/motion';
 
 	let code = $state('');
-	let kind = $state<'session' | 'classroom'>('session');
+	let kind = $state<'session' | 'classroom' | 'poll'>('session');
 	function submit(e: SubmitEvent) {
 		e.preventDefault();
 		const c = code.trim().toUpperCase();
-		if (c) goto((kind === 'session' ? '/j/' : '/c/') + encodeURIComponent(c));
+		if (c) goto((kind === 'session' ? '/j/' : kind === 'poll' ? '/p/' : '/c/') + encodeURIComponent(c));
 	}
 </script>
 
@@ -18,6 +18,7 @@
 		<h1 class="center">Join</h1>
 		<div class="join w-full" role="radiogroup" aria-label="What are you joining?">
 			<button type="button" role="radio" aria-checked={kind === 'session'} class="btn join-item flex-1" class:btn-primary={kind === 'session'} onclick={() => (kind = 'session')}>A quiz</button>
+			<button type="button" role="radio" aria-checked={kind === 'poll'} class="btn join-item flex-1" class:btn-primary={kind === 'poll'} onclick={() => (kind = 'poll')}>A poll</button>
 			<button type="button" role="radio" aria-checked={kind === 'classroom'} class="btn join-item flex-1" class:btn-primary={kind === 'classroom'} onclick={() => (kind = 'classroom')}>A classroom</button>
 		</div>
 		<div>

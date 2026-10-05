@@ -13,6 +13,8 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `/t`, `/t/classrooms/[id]`, `/t/topics/[id]`, `/t/quizzes/[id]` | teacher | Content, CSV import, question editor, preview, settings |
 | `/t/sessions/[id]`, `/t/sessions/[id]/projector` | teacher | Live dashboard; full-screen QR |
 | `/t/sessions/[id]/results`, `/t/quizzes/[id]/analytics` | teacher | Marking review, analytics, public links, integrity log |
+| `/t/polls`, `/t/polls/[id]`, `/t/polls/[id]/present` | teacher | Polls: questions, settings, live results, share; full-screen presenter |
+| `/p/[code]` | anyone | Taking part in a poll (login only if the poll asks) |
 | `/t/settings` | teacher | Teacher defaults, LLM keys |
 | `/admin` | admin | Users, usage, platform settings, audit |
 | `/r/[token]` | public | Shared results |
@@ -39,6 +41,7 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `answerText.ts` | Human-readable responses and keys. |
 | `types.ts` | TypeScript shapes of the API JSON. |
 | `docs/` | This documentation: page registry, Markdown renderer, lazy Mermaid. |
+| `poll/` | Polls: `PollInput` (all 20 inputs; `inputs/` holds rating, slider, Likert, matrix, word cloud, code, file and recorder), `PollResults` (charts and tables), `WordCloud` + `wordcloud.ts` (layout), `PollQuestionEditor`, `PollSettingsForm`, `client.ts` (participant API with the anonymous token). See [Live polls](polls.md). |
 | `ui/` | Shared UI: `Icon` (inline SVG), `Toaster` + `toast.svelte.ts`, `DialogHost` + `confirmDialog()`, `DisplayMenu` + `prefs.svelte.ts` (theme, text size, motion, quiz timer), `StatCounter`, `Skeleton`, `EmptyState`, and `motion.ts` (transitions that switch off for reduced motion). See [Design system](#design-system). |
 
 ## Design system

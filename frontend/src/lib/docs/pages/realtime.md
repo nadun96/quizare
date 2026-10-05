@@ -58,6 +58,10 @@ When an attempt's **last** socket closes during `in_progress`, the server record
 
 Each dashboard row has the student's name and number, state, current index, answered count, warnings, violations, extra seconds, quiz deadline (or remaining ms while paused) and `connected`.
 
+## Polls: `GET /ws/polls/{code}` and `GET /ws/teacher/polls/{id}`
+
+The participant socket needs no login and is read-only: on connect and after changes (at most every 500 ms) it receives `update`, the poll's public state with shared results, and `deleted` if the poll goes away. The presenter socket (poll owner only) receives `results` with full detail. Both answer `ping` with `pong`. Answers and uploads go over REST. See [Live polls](polls.md).
+
 ## Backpressure
 
 Each socket has a 32-message outbound queue. If it fills, for example on a stalled phone, the server closes that socket instead of blocking the hub, and the client reconnects and receives a fresh full state.
