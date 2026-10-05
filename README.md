@@ -2,7 +2,8 @@
 
 Timed, proctored in-class quizzes that students join by scanning a QR code, with
 answer-key and LLM-assisted marking, predefined and AI feedback, and configurable
-results publishing and analytics.
+results publishing and analytics. Live polls (anonymous or identified, 20 input types,
+live word clouds and charts) run alongside quizzes.
 
 - Choices that fill gaps in the BA document: `DECISIONS.md`
 - Requirements, architecture (ADRs) and stack documents are private and are **not in the repository**.
@@ -30,6 +31,7 @@ Backend modules (`backend/internal/`), each owning one PostgreSQL schema:
 | `eval` | Answer-key marking, predefined feedback, overrides, release, student results (FR-EV) |
 | `llm` | Per-teacher key vault (AES-256-GCM envelope), Anthropic/OpenAI/Gemini adapters, marking jobs (FR-EV-02/03/05, ADR-09) |
 | `analytics` | Precomputed session/quiz analytics, public share links, CSV export (FR-RS, BA §11) |
+| `poll` | Live polls: identity modes, presenter pacing, 20 question types, file/audio/video answers, live results hub, moderation, CSV export (D-40) |
 | `admin` | Usage, audit log, own-data export |
 
 ## Developer documentation
