@@ -78,13 +78,30 @@ npm run check && npm test
 npm run dev            # http://localhost:5173, proxies /api, /ws and /beacon to :8080
 ```
 
-Run the server. The master key is read from a 32-byte file, never from an environment variable (ADR-09):
+Run the server locally. Everything below runs from `backend/`, the Go module. The master key is read from a 32-byte file, never from an environment variable (ADR-09); `QP_KEK_GENERATE=1` creates it on first start and never overwrites it.
 
 ```sh
-openssl rand 32 > kek.key && chmod 0400 kek.key
-export QP_DATABASE_URL=postgres://... QP_KEK_FILE=kek.key QP_BASE_URL=http://localhost:5173
+# Terminal 1: a local PostgreSQL on port 54329 with a qp_dev database (or use your own PostgreSQL)
+cd backend
+go run ./cmd/testdb
+
+# Terminal 2: the server
+cd backend
+export QP_DATABASE_URL='postgres://postgres:postgres@localhost:54329/qp_dev?sslmode=disable'
+export QP_KEK_FILE=.data/kek QP_KEK_GENERATE=1   # git-ignored; keep this file
+export QP_BASE_URL=http://localhost:5173          # the Vite dev server; use :8080 with QP_STATIC_DIR
 go run ./cmd/server
+
+# Terminal 3: the first admin (same exports as terminal 2; password on stdin)
+cd backend
+export QP_DATABASE_URL='postgres://postgres:postgres@localhost:54329/qp_dev?sslmode=disable' QP_KEK_FILE=.data/kek
 echo 'a-strong-password' | go run ./cmd/server create-admin admin@school.edu "Admin"
+```
+
+For a server, create the key once and never overwrite it (losing it makes saved LLM API keys unreadable):
+
+```sh
+[ -f kek.key ] || { openssl rand 32 > kek.key && chmod 0400 kek.key; }
 ```
 
 To serve the built SPA from the Go binary without Caddy, set `QP_STATIC_DIR=../frontend/build`.
