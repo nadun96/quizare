@@ -143,55 +143,55 @@
 <div class="rte" class:compact class:empty-required={required && !value.trim()}>
 	<div class="bar" role="toolbar" tabindex="-1" aria-label={label + ' formatting'} onmousedown={keepFocus}>
 		{#if !source}
-			<select aria-label="Text style" value={block} onchange={(e) => setBlock(e.currentTarget.value)} disabled={!editor}>
+			<select class="select select-sm w-auto min-w-36" aria-label="Text style" value={block} onchange={(e) => setBlock(e.currentTarget.value)} disabled={!editor}>
 				<option value="p">Paragraph</option>
 				<option value="h2">Heading</option>
 				<option value="h3">Subheading</option>
 				<option value="h4">Small heading</option>
 			</select>
 			<span class="sep"></span>
-			<button type="button" title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={is('bold')} onclick={() => run((c) => c.toggleBold())}><b>B</b></button>
-			<button type="button" title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={is('italic')} onclick={() => run((c) => c.toggleItalic())}><i>I</i></button>
-			<button type="button" title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={is('underline')} onclick={() => run((c) => c.toggleUnderline())}><u>U</u></button>
-			<button type="button" title="Strikethrough (Ctrl+Shift+S)" aria-label="Strikethrough" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())}><s>S</s></button>
-			<button type="button" title="Inline code (Ctrl+E)" aria-label="Inline code" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())}><code>&lt;/&gt;</code></button>
-			<button type="button" title="Link (Ctrl+K)" aria-label="Link" aria-pressed={is('link')} onclick={openLink}>🔗</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={is('bold')} onclick={() => run((c) => c.toggleBold())}><b>B</b></button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={is('italic')} onclick={() => run((c) => c.toggleItalic())}><i>I</i></button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={is('underline')} onclick={() => run((c) => c.toggleUnderline())}><u>U</u></button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Strikethrough (Ctrl+Shift+S)" aria-label="Strikethrough" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())}><s>S</s></button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Inline code (Ctrl+E)" aria-label="Inline code" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())}><code>&lt;/&gt;</code></button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Link (Ctrl+K)" aria-label="Link" aria-pressed={is('link')} onclick={openLink}>🔗</button>
 			<span class="sep"></span>
-			<button type="button" title="Bulleted list" aria-label="Bulleted list" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())}>•≡</button>
-			<button type="button" title="Numbered list" aria-label="Numbered list" aria-pressed={is('orderedList')} onclick={() => run((c) => c.toggleOrderedList())}>1≡</button>
-			<button type="button" title="Quote" aria-label="Quote" aria-pressed={is('blockquote')} onclick={() => run((c) => c.toggleBlockquote())}>❝</button>
-			<button type="button" title="Code block" aria-label="Code block" aria-pressed={is('codeBlock')} onclick={() => run((c) => c.toggleCodeBlock())}>{'{ }'}</button>
-			<button type="button" title="Divider" aria-label="Divider" onclick={() => run((c) => c.setHorizontalRule())}>―</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Bulleted list" aria-label="Bulleted list" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())}>•≡</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Numbered list" aria-label="Numbered list" aria-pressed={is('orderedList')} onclick={() => run((c) => c.toggleOrderedList())}>1≡</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Quote" aria-label="Quote" aria-pressed={is('blockquote')} onclick={() => run((c) => c.toggleBlockquote())}>❝</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Code block" aria-label="Code block" aria-pressed={is('codeBlock')} onclick={() => run((c) => c.toggleCodeBlock())}>{'{ }'}</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Divider" aria-label="Divider" onclick={() => run((c) => c.setHorizontalRule())}>―</button>
 			{#if !compact}
 				<span class="sep"></span>
-				<button type="button" title="Insert table" aria-label="Insert table" onclick={() => run((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))}>▦</button>
-				<button type="button" title="Math, inline (type $$x^2$$ as a shortcut)" aria-label="Inline math" onclick={() => openMath('', false)}>∑</button>
-				<button type="button" title="Math, on its own line" aria-label="Display math" onclick={() => openMath('', true)}>∑▭</button>
+				<button type="button" class="btn btn-ghost btn-sm" title="Insert table" aria-label="Insert table" onclick={() => run((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))}>▦</button>
+				<button type="button" class="btn btn-ghost btn-sm" title="Math, inline (type $$x^2$$ as a shortcut)" aria-label="Inline math" onclick={() => openMath('', false)}>∑</button>
+				<button type="button" class="btn btn-ghost btn-sm" title="Math, on its own line" aria-label="Display math" onclick={() => openMath('', true)}>∑▭</button>
 			{/if}
 			{#if blanks}
 				<span class="sep"></span>
-				<button type="button" class="blank-btn" title="Insert a blank (or type [[1]])" onclick={() => run((c) => c.insertContent({ type: 'blank', attrs: { n: nextBlank() } }))}>+ Blank</button>
+				<button type="button" class="btn btn-ghost btn-sm blank-btn" title="Insert a blank (or type [[1]])" onclick={() => run((c) => c.insertContent({ type: 'blank', attrs: { n: nextBlank() } }))}>+ Blank</button>
 			{/if}
 			<span class="grow"></span>
-			<button type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!can((e) => e.can().undo())} onclick={() => run((c) => c.undo())}>↶</button>
-			<button type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!can((e) => e.can().redo())} onclick={() => run((c) => c.redo())}>↷</button>
-			<button type="button" title="Clear formatting" aria-label="Clear formatting" onclick={() => run((c) => c.unsetAllMarks().clearNodes())}>⌫</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!can((e) => e.can().undo())} onclick={() => run((c) => c.undo())}>↶</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!can((e) => e.can().redo())} onclick={() => run((c) => c.redo())}>↷</button>
+			<button type="button" class="btn btn-ghost btn-sm" title="Clear formatting" aria-label="Clear formatting" onclick={() => run((c) => c.unsetAllMarks().clearNodes())}>⌫</button>
 		{:else}
 			<span class="small muted">{failed ? 'Editor unavailable: editing Markdown directly.' : 'Markdown'}</span>
 			<span class="grow"></span>
 		{/if}
-		{#if !failed}<button type="button" class="src" aria-pressed={source} title="Show the Markdown source" onclick={toggleSource}>MD</button>{/if}
+		{#if !failed}<button type="button" class="btn btn-ghost btn-sm src" aria-pressed={source} title="Show the Markdown source" onclick={toggleSource}>MD</button>{/if}
 	</div>
 
 	{#if is('table') && !source}
 		<div class="bar sub" role="toolbar" tabindex="-1" aria-label="Table" onmousedown={keepFocus}>
 			<span class="small muted">Table:</span>
-			<button type="button" onclick={() => run((c) => c.addRowAfter())}>+ Row</button>
-			<button type="button" onclick={() => run((c) => c.addColumnAfter())}>+ Column</button>
-			<button type="button" onclick={() => run((c) => c.deleteRow())}>− Row</button>
-			<button type="button" onclick={() => run((c) => c.deleteColumn())}>− Column</button>
-			<button type="button" onclick={() => run((c) => c.toggleHeaderRow())}>Header row</button>
-			<button type="button" onclick={() => run((c) => c.deleteTable())}>Delete table</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.addRowAfter())}>+ Row</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.addColumnAfter())}>+ Column</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteRow())}>− Row</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteColumn())}>− Column</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.toggleHeaderRow())}>Header row</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteTable())}>Delete table</button>
 		</div>
 	{/if}
 
@@ -199,41 +199,41 @@
 		<form class="bar sub" onsubmit={applyPanel}>
 			{#if panel.kind === 'link'}
 				<label class="small" for={id + '-panel'}>Link</label>
-				<input id={id + '-panel'} bind:this={panelInput} bind:value={panel.href} onkeydown={panelKey} placeholder="https://…" />
+				<input class="input input-sm" id={id + '-panel'} bind:this={panelInput} bind:value={panel.href} onkeydown={panelKey} placeholder="https://…" />
 				{#if !linkOk}<span class="small danger">Use an https://, http:// or mailto: address</span>{/if}
 			{:else}
 				<label class="small" for={id + '-panel'}>LaTeX</label>
-				<input id={id + '-panel'} class="mono" bind:this={panelInput} bind:value={panel.latex} onkeydown={panelKey} placeholder={'\\frac{a}{b}, x^2, \\sqrt{2}'} />
-				<label class="small row" style="font-weight:400"><input type="checkbox" bind:checked={panel.display} disabled={panel.pos !== null} /> Own line</label>
+				<input id={id + '-panel'} class="input input-sm mono" bind:this={panelInput} bind:value={panel.latex} onkeydown={panelKey} placeholder={'\\frac{a}{b}, x^2, \\sqrt{2}'} />
+				<label class="small row" style="font-weight:400"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={panel.display} disabled={panel.pos !== null} /> Own line</label>
 			{/if}
-			<button type="submit" class="primary small">{panel.kind === 'math' && panel.pos !== null && !panel.latex.trim() ? 'Remove' : 'Apply'}</button>
-			<button type="button" class="small" onclick={() => (panel = null)}>Cancel</button>
+			<button type="submit" class="btn btn-primary btn-sm">{panel.kind === 'math' && panel.pos !== null && !panel.latex.trim() ? 'Remove' : 'Apply'}</button>
+			<button type="button" class="btn btn-sm" onclick={() => (panel = null)}>Cancel</button>
 		</form>
 	{/if}
 
 	<div class="surface" class:hidden={source} bind:this={host} onkeydown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openLink(); } }} role="presentation"></div>
 	{#if source}
-		<textarea id={failed ? id : id + '-md'} class="mono" aria-label={label + ' (Markdown)'} bind:value rows={compact ? 3 : 6} {required} {placeholder}></textarea>
+		<textarea id={failed ? id : id + '-md'} class="textarea mono" aria-label={label + ' (Markdown)'} bind:value rows={compact ? 3 : 6} {required} {placeholder}></textarea>
 	{/if}
 </div>
 
 <style>
-	.rte { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+	.rte { border: 1px solid var(--color-field); border-radius: 8px; background: var(--surface); }
 	.rte:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
-	.bar { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: center; padding: 0.3rem; border-bottom: 1px solid var(--border); background: var(--bg); border-radius: 8px 8px 0 0; }
+	.bar { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: center; padding: 0.3rem; border-bottom: 1px solid var(--color-base-300); background: var(--bg); border-radius: 8px 8px 0 0; }
 	.bar.sub { border-radius: 0; gap: 0.4rem; }
 	.bar.sub input:not([type='checkbox']) { flex: 1; min-width: 10rem; width: auto; padding: 0.3rem 0.5rem; }
-	.bar button { min-width: 2rem; min-height: 2rem; padding: 0.2rem 0.45rem; font-size: 0.9rem; line-height: 1; border-radius: 6px; }
-	.bar button[aria-pressed='true'] { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+	.bar :global(.btn) { min-width: 2rem; min-height: 2rem; padding: 0 0.45rem; font-size: 0.9rem; font-weight: 600; }
+	.bar :global(.btn[aria-pressed='true']) { background: color-mix(in oklab, var(--color-primary) 16%, transparent); color: var(--color-primary); }
 	.bar select { width: auto; padding: 0.25rem 0.4rem; font-size: 0.9rem; }
-	.sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 0.2rem; }
+	.sep { width: 1px; align-self: stretch; background: var(--color-base-300); margin: 0 0.2rem; }
 	.grow { flex: 1; }
 	.blank-btn { font-weight: 600; }
 	.src { font-family: ui-monospace, Consolas, monospace; font-size: 0.75rem !important; }
 	.danger { color: var(--danger); }
 	.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 	.hidden { display: none; }
-	textarea { border: 0; border-radius: 0 0 8px 8px; width: 100%; }
+	textarea { border: 0; border-radius: 0 0 8px 8px; width: 100%; min-height: 7rem; }
 	.surface :global(.tiptap) { min-height: 6rem; padding: 0.6rem 0.75rem; outline: none; overflow-wrap: anywhere; }
 	.compact .surface :global(.tiptap) { min-height: 2.6rem; }
 	.surface :global(.tiptap p) { margin: 0 0 0.5em; }
@@ -242,16 +242,16 @@
 	.surface :global(.tiptap h3) { font-size: 1.12em; margin: 0.5em 0 0.3em; }
 	.surface :global(.tiptap h4) { font-size: 1em; margin: 0.5em 0 0.3em; }
 	.surface :global(.tiptap ul), .surface :global(.tiptap ol) { padding-left: 1.4em; margin: 0 0 0.5em; }
-	.surface :global(.tiptap blockquote) { margin: 0 0 0.5em; padding: 0.2em 0.9em; border-left: 3px solid var(--border); color: var(--muted); }
-	.surface :global(.tiptap code) { font-family: ui-monospace, Consolas, monospace; font-size: 0.92em; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.05em 0.3em; }
-	.surface :global(.tiptap pre) { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.6em; overflow-x: auto; }
+	.surface :global(.tiptap blockquote) { margin: 0 0 0.5em; padding: 0.2em 0.9em; border-left: 3px solid var(--color-base-300); color: var(--muted); }
+	.surface :global(.tiptap code) { font-family: ui-monospace, Consolas, monospace; font-size: 0.92em; background: var(--bg); border: 1px solid var(--color-base-300); border-radius: 4px; padding: 0.05em 0.3em; }
+	.surface :global(.tiptap pre) { background: var(--bg); border: 1px solid var(--color-base-300); border-radius: 8px; padding: 0.6em; overflow-x: auto; }
 	.surface :global(.tiptap pre code) { border: 0; padding: 0; background: none; }
 	.surface :global(.tiptap table) { border-collapse: collapse; margin: 0 0 0.5em; }
-	.surface :global(.tiptap th), .surface :global(.tiptap td) { border: 1px solid var(--border); padding: 0.3em 0.5em; min-width: 3em; vertical-align: top; position: relative; }
+	.surface :global(.tiptap th), .surface :global(.tiptap td) { border: 1px solid var(--color-base-300); padding: 0.3em 0.5em; min-width: 3em; vertical-align: top; position: relative; }
 	.surface :global(.tiptap th) { background: var(--bg); }
 	.surface :global(.tiptap .selectedCell) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 	.surface :global(.tiptap .tableWrapper) { overflow-x: auto; }
-	.surface :global(.tiptap hr) { border: 0; border-top: 1px solid var(--border); }
+	.surface :global(.tiptap hr) { border: 0; border-top: 1px solid var(--color-base-300); }
 	.surface :global(.tiptap a) { color: var(--accent); }
 	.surface :global(.blank-chip) { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; padding: 0.05em 0.35em; border-radius: 4px; background: var(--warn-bg); color: var(--warn); border: 1px solid currentColor; cursor: default; }
 	.surface :global(.ProseMirror-selectednode) { outline: 2px solid var(--accent); }

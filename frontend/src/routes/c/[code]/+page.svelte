@@ -36,23 +36,23 @@
 </script>
 
 <div class="narrow">
-	<div class="card stack">
+	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 		{#if p}
 			<h1>{p.name}</h1>
 			{#if done}
-				<p class="alert ok">{done}</p>
+				<p class="alert alert-soft alert-success">{done}</p>
 				<a href="/my">Go to my quizzes</a>
 			{:else if p.enrolment && p.enrolment.status !== 'removed'}
-				<p class="alert ok">You are {p.enrolment.status === 'pending' ? 'waiting for approval in' : 'enrolled in'} this classroom.</p>
+				<p class="alert alert-soft alert-success">You are {p.enrolment.status === 'pending' ? 'waiting for approval in' : 'enrolled in'} this classroom.</p>
 			{:else}
-				<form class="stack" onsubmit={enrol}>
+				<form class="vstack" onsubmit={enrol}>
 					{#if p.student_id_required}
-						<div><label for="sid">Your student ID for this class</label><input id="sid" bind:value={studentNumber} required /></div>
+						<div><label for="sid">Your student ID for this class</label><input class="input w-full" id="sid" bind:value={studentNumber} required /></div>
 					{/if}
-					<button class="primary">Enrol</button>
+					<button class="btn btn-primary">Enrol</button>
 				</form>
 			{/if}
 		{/if}
-		{#if error}<p class="alert danger">{error}</p>{/if}
+		{#if error}<p class="alert alert-soft alert-error">{error}</p>{/if}
 	</div>
 </div>

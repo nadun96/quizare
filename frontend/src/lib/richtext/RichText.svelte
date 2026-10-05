@@ -68,17 +68,17 @@
 	.rich :global(h3) { font-size: 1.12em; }
 	.rich :global(h4) { font-size: 1em; }
 	.rich :global(ul), .rich :global(ol) { margin: 0 0 0.6em; padding-left: 1.4em; }
-	.rich :global(blockquote) { margin: 0 0 0.6em; padding: 0.2em 0.9em; border-left: 3px solid var(--border); color: var(--muted); }
-	.rich :global(code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.92em; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.05em 0.3em; }
-	.rich :global(pre) { margin: 0 0 0.6em; padding: 0.75em; overflow-x: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+	.rich :global(blockquote) { margin: 0 0 0.6em; padding: 0.2em 0.9em; border-left: 3px solid var(--color-base-300); color: var(--muted); }
+	.rich :global(code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.92em; background: var(--bg); border: 1px solid var(--color-base-300); border-radius: 4px; padding: 0.05em 0.3em; }
+	.rich :global(pre) { margin: 0 0 0.6em; padding: 0.75em; overflow-x: auto; background: var(--bg); border: 1px solid var(--color-base-300); border-radius: 8px; }
 	.rich :global(pre code) { border: 0; padding: 0; background: none; }
 	.rich :global(.table-wrap) { overflow-x: auto; margin: 0 0 0.6em; }
 	.rich :global(table) { border-collapse: collapse; font-size: 0.95em; }
-	.rich :global(th), .rich :global(td) { border: 1px solid var(--border); padding: 0.35em 0.6em; text-align: left; vertical-align: top; }
+	.rich :global(th), .rich :global(td) { border: 1px solid var(--color-base-300); padding: 0.35em 0.6em; text-align: left; vertical-align: top; }
 	.rich :global(th) { background: var(--bg); }
 	.rich :global(.align-center) { text-align: center; }
 	.rich :global(.align-right) { text-align: right; }
-	.rich :global(hr) { border: 0; border-top: 1px solid var(--border); margin: 0.8em 0; }
+	.rich :global(hr) { border: 0; border-top: 1px solid var(--color-base-300); margin: 0.8em 0; }
 	.rich :global(a) { color: var(--accent); }
 	.rich :global(.math[data-display]) { overflow-x: auto; margin: 0 0 0.6em; text-align: center; }
 	.rich :global(.blank-chip) { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; padding: 0 0.3em; border-radius: 4px; background: var(--warn-bg); color: var(--warn); }

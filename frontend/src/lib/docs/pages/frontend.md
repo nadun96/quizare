@@ -39,6 +39,20 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `answerText.ts` | Human-readable responses and keys. |
 | `types.ts` | TypeScript shapes of the API JSON. |
 | `docs/` | This documentation: page registry, Markdown renderer, lazy Mermaid. |
+| `ui/` | Shared UI: `Icon` (inline SVG), `Toaster` + `toast.svelte.ts`, `DialogHost` + `confirmDialog()`, `DisplayMenu` + `prefs.svelte.ts` (theme, text size, motion, quiz timer), `StatCounter`, `Skeleton`, `EmptyState`, and `motion.ts` (transitions that switch off for reduced motion). See [Design system](#design-system). |
+
+## Design system
+
+The interface follows the [UX research and design rules](ux-research.md) (D-39).
+
+- **UI kit:** [daisyUI 5](https://daisyui.com) on Tailwind CSS 4. It is CSS only, so it adds no JavaScript to the student page. Tailwind scans only `.svelte`, `.ts` and `.html` files (not the docs Markdown), so only the classes in use are shipped.
+- **Themes:** `quiz` (light) and `quiz-dark` are defined in `app.css` with `@plugin 'daisyui/theme'`. Dark follows the OS unless the user picks one under *Display settings*. `theme.test.ts` checks every text and colour pair for WCAG AA contrast, and form-field borders for 3:1.
+- **Components:** buttons `btn`, fields `input`/`select`/`textarea`, `card card-border`, `alert alert-soft`, `badge badge-soft`, `tabs tabs-border` with `tab`, `table`, `progress`, `modal`, `toast`, `loading`, `skeleton`. State modifiers set from expressions (`ok`, `warn`, `danger` on a badge or alert) map onto daisyUI's colour variables in `app.css`.
+- **Overrides:** daisyUI's own rules sit in nested cascade layers, so the app's overrides (touch heights, field border colour) live in `@layer utilities`. Don't redefine daisyUI's variables (`--border`, `--radius-*`, `--size-*`) for other purposes: `--border` is its border *width*.
+- **Layout helpers:** `page-container`, `narrow`, `vstack`, `row`, `spacer`, `auto-grid`, `readable`, `muted`, `small`, `tabular`. These names avoid daisyUI's `stack`, `hero` and similar components and Tailwind's `container`.
+- **Status:** state is shown with an icon, text and colour together (`STATE_ICON` in `types.ts`).
+- **Motion:** use `flyIn`, `fadeIn`, `scaleIn` and `slideIn` from `lib/ui/motion.ts` instead of `svelte/transition` directly, so the OS setting and the in-app *Reduce motion* switch both apply. `app.css` also stops CSS animations in both cases.
+- **Feedback:** `toast()` confirms actions, `await confirmDialog({...})` replaces `window.confirm` (destructive dialogs focus *Cancel* first), and `Skeleton` and `EmptyState` replace "Loading…" and blank lists.
 
 ## Rich text
 
@@ -72,7 +86,7 @@ Safety: teacher text is shown to students and on public result pages, so `render
 
 - `npm run build` runs `vite build`, then `scripts/precompress.mjs` writes `.br` and `.gz` siblings for Caddy's `precompressed br gzip`.
 - Hashed assets in `_app/immutable/` are cached for a year; `index.html` is `no-cache`.
-- The student quiz page loads about 54 KB of gzipped JS. Mermaid loads only on `/docs`. The Markdown renderer (marked and DOMPurify, about 20 KB) loads only when a question uses formatting, and KaTeX only when it has math. Tiptap loads only in the editor.
+- The student quiz page loads about 62 KB of gzipped JS and 23 KB of gzipped CSS. Mermaid loads only on `/docs`. The Markdown renderer (marked and DOMPurify, about 20 KB) loads only when a question uses formatting, and KaTeX only when it has math. Tiptap loads only in the editor.
 - `svelte.config.js` enables Kit's **hash-based CSP**: the one inline boot script gets a `sha256-…` in a `<meta>` CSP, so no other inline script can run even though Caddy's header allows `'unsafe-inline'` (both policies must pass).
 
 ## Development
