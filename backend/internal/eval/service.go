@@ -289,6 +289,7 @@ type MarkView struct {
 	Code        string          `json:"code"`
 	Type        quiz.Type       `json:"type"`
 	Text        string          `json:"text"`
+	Format      string          `json:"format,omitempty"` // text format of the question and feedback
 	Response    *quiz.Response  `json:"response"`
 	Key         *quiz.Key       `json:"key,omitempty"`
 	Method      string          `json:"method"`
@@ -355,7 +356,7 @@ func (s *Service) result(ctx context.Context, d *live.MarkingData) (AttemptResul
 		if !ok {
 			m = MarkView{QuestionID: it.Question.ID, Status: StatusPending, MaxScore: it.Question.Marks}
 		}
-		m.Code, m.Type, m.Text, m.Response = it.Question.Code, it.Question.Type, it.Question.Text, it.Response
+		m.Code, m.Type, m.Text, m.Format, m.Response = it.Question.Code, it.Question.Type, it.Question.Text, it.Question.Body.Format, it.Response
 		key := it.Question.Key
 		m.Key = &key
 		m.Resources = it.Question.Resources

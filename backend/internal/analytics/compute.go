@@ -45,6 +45,7 @@ type QuestionRow struct {
 	QuestionID     string            `json:"question_id"`
 	Code           string            `json:"code"`
 	Text           string            `json:"text"`
+	Format         string            `json:"format,omitempty"` // text format, as quiz.Body.Format
 	Type           quiz.Type         `json:"type"`
 	MaxScore       float64           `json:"max_score"`
 	Answered       int               `json:"answered"`
@@ -190,7 +191,7 @@ func questionStats(questions []quiz.Question, results []eval.AttemptResult) []Qu
 
 	out := make([]QuestionRow, 0, len(questions))
 	for _, q := range questions {
-		row := QuestionRow{QuestionID: q.ID, Code: q.Code, Text: q.Text, Type: q.Type, MaxScore: q.Marks}
+		row := QuestionRow{QuestionID: q.ID, Code: q.Code, Text: q.Text, Format: q.Body.Format, Type: q.Type, MaxScore: q.Marks}
 		correct, scored := 0, 0
 		var sum float64
 		wrong := map[string]int{}

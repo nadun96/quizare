@@ -31,13 +31,31 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `answerQueue.ts` | Offline answer queue (UC-03 8a): latest save per question, increasing `seq`, persisted in `localStorage`, flushed on reconnect and every 3 s. 5xx and network errors retry; 4xx drops the save. |
 | `proctor.ts` | Browser integrity signals and copy/paste blocking (see [Proctoring](proctoring.md)). |
 | `QuestionView.svelte` | Renders all seven types and emits a `Response` on every change. Drag and drop uses SortableJS; essays are debounced. |
-| `QuestionEditor.svelte` | Authoring form for all seven types. Keyed by question so switching questions starts a fresh form. |
+| `QuestionEditor.svelte` | Authoring form for all seven types. Keyed by question so switching questions starts a fresh form. Question text and feedback use the rich text editor. |
+| `richtext/` | Rich text: `RichTextEditor.svelte` (Tiptap, loaded on first use), `RichText.svelte` (display, with blank inputs placed into the text), `syntax.ts` (the shared Markdown dialect), `render.ts` (Markdown → sanitised HTML) and `plain.ts` (plain text, KaTeX loader). See [Rich text](#rich-text). |
 | `SettingsEditor.svelte` + `settingsMeta.ts` | Generic overrides editor showing inherited values. |
 | `AnalyticsView.svelte` | Class, question and student analytics tables and the score histogram. |
 | `QrCode.svelte` | QR rendered in the browser with `qrcode` (no server CPU). |
 | `answerText.ts` | Human-readable responses and keys. |
 | `types.ts` | TypeScript shapes of the API JSON. |
 | `docs/` | This documentation: page registry, Markdown renderer, lazy Mermaid. |
+
+## Rich text
+
+Teachers format question text and predefined feedback in a WYSIWYG editor: headings, bold, italic, underline, strikethrough, inline code, links, bulleted and numbered lists, quotes, code blocks, dividers, tables, inline and display math (KaTeX), blanks for fill-in-the-blank questions, undo and redo. An **MD** button shows the Markdown source. Pictures stay question resources (BR-15), so there is no inline image button.
+
+The text is stored as Markdown in the existing `text` field, with `body.format = "markdown"` (D-38). Plain text (CSV import, older questions) has no format and renders exactly as before. Opening such a question in the editor converts it with every character kept literal, so `5*3*2` stays `5*3*2`.
+
+The dialect (`richtext/syntax.ts`) is GFM plus:
+
+| Syntax | Meaning |
+|--------|---------|
+| `[[1]]` | A blank, as in the CSV format. In the editor it is a single chip (**+ Blank**, or type `[[1]]`). |
+| `++text++` | Underline |
+| `$x^2$` | Inline math. Pandoc rule: no space just inside the dollars and no digit after the closing one, so `$5 or $10` stays text. |
+| `$$ … $$` | Display math |
+
+Safety: teacher text is shown to students and on public result pages, so `render.ts` escapes raw HTML, drops images, allows only `http(s):` and `mailto:` links (opened with `rel="noopener noreferrer nofollow"`), and passes the result through DOMPurify with a short allowlist. The CSP still forbids inline script on top of that. Tests in `richtext/*.test.ts` cover XSS payloads, round trips through the editor, and blank inputs placed inside formatted text.
 
 ## The attempt page
 
@@ -54,7 +72,7 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 
 - `npm run build` runs `vite build`, then `scripts/precompress.mjs` writes `.br` and `.gz` siblings for Caddy's `precompressed br gzip`.
 - Hashed assets in `_app/immutable/` are cached for a year; `index.html` is `no-cache`.
-- The student quiz page loads about 54 KB of gzipped JS. Mermaid and Marked are loaded only by `/docs`.
+- The student quiz page loads about 54 KB of gzipped JS. Mermaid loads only on `/docs`. The Markdown renderer (marked and DOMPurify, about 20 KB) loads only when a question uses formatting, and KaTeX only when it has math. Tiptap loads only in the editor.
 - `svelte.config.js` enables Kit's **hash-based CSP**: the one inline boot script gets a `sha256-…` in a `<meta>` CSP, so no other inline script can run even though Caddy's header allows `'unsafe-inline'` (both policies must pass).
 
 ## Development

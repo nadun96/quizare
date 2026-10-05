@@ -30,7 +30,7 @@ erDiagram
 ```
 
 - Classrooms, modules, topics and questions carry a `settings jsonb` column with sparse overrides; quizzes do too.
-- `quiz.questions` stores `body`, `answer_key` and `feedback` as JSONB, plus `marks`, `negative_marks`, `partial_credit` and `settings`. `UNIQUE (quiz_id, code)`.
+- `quiz.questions` stores `body`, `answer_key` and `feedback` as JSONB, plus `marks`, `negative_marks`, `partial_credit` and `settings`. `UNIQUE (quiz_id, code)`. `body.format` is `markdown` for text written in the rich text editor and absent for plain text (CSV import, older questions); it applies to the question text and the predefined feedback.
 - `quiz.resources` is `UNIQUE (question_id, role, n)`, with `status` one of `unchecked`, `ok`, `broken`.
 - `content.enrolments` is `UNIQUE (classroom_id, user_id)`, with a partial unique index on `(classroom_id, lower(student_number))` for current members (FR-CLS-06).
 - `quiz.quizzes.topic_id` is `ON DELETE RESTRICT`: a topic with quizzes cannot be deleted (the API returns 409).

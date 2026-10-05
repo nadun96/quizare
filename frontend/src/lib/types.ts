@@ -13,7 +13,9 @@ export const QTYPE_LABEL: Record<QType, string> = {
 };
 
 export type Choice = { id: string; text: string };
-export type Body = { options?: Choice[]; left?: Choice[]; right?: Choice[]; zones?: Choice[]; blanks?: string[]; word_limit?: number };
+/** '' is plain text (CSV import, older questions); 'markdown' comes from the rich text editor (D-38). */
+export type TextFormat = '' | 'markdown';
+export type Body = { options?: Choice[]; left?: Choice[]; right?: Choice[]; zones?: Choice[]; blanks?: string[]; word_limit?: number; format?: TextFormat };
 export type Key = {
 	correct?: string[];
 	pairs?: Record<string, string>;

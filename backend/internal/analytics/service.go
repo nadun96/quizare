@@ -456,6 +456,7 @@ type PublicPassRate struct {
 type PublicQuestion struct {
 	Code       string  `json:"code"`
 	Text       string  `json:"text"`
+	Format     string  `json:"format,omitempty"`
 	PctCorrect float64 `json:"pct_correct"`
 	Answered   int     `json:"answered"`
 }
@@ -510,7 +511,7 @@ func (s *Service) Public(ctx context.Context, token string) (PublicView, error) 
 			v.PassRate = &PublicPassRate{PassRate: class.PassRate, PassMarkPct: class.PassMarkPct, Finished: class.Marked, Mean: class.Mean}
 		case "question_pct":
 			for _, q := range questions {
-				v.Questions = append(v.Questions, PublicQuestion{Code: q.Code, Text: q.Text, PctCorrect: q.PctCorrect, Answered: q.Answered})
+				v.Questions = append(v.Questions, PublicQuestion{Code: q.Code, Text: q.Text, Format: q.Format, PctCorrect: q.PctCorrect, Answered: q.Answered})
 			}
 		case "individual":
 			n := 0

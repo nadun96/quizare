@@ -7,6 +7,7 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import QuestionEditor from '$lib/QuestionEditor.svelte';
 	import QuestionView from '$lib/QuestionView.svelte';
+	import RichText from '$lib/richtext/RichText.svelte';
 	import SettingsEditor from '$lib/SettingsEditor.svelte';
 	import { QTYPE_LABEL, type Overrides, type Question, type Quiz, type Session, type StudentQuestion } from '$lib/types';
 
@@ -185,7 +186,7 @@
 							<button class="small" onclick={() => dup(q)}>Duplicate</button>
 							<button class="small danger" onclick={() => delQ(q)}>Delete</button>
 						</div>
-						<p style="margin:0;white-space:pre-wrap">{q.text}</p>
+						<RichText text={q.text} format={q.body.format} blanks="chip" />
 						<p class="small muted" style="margin:0">Answer: {describeKey(q.type, q.body, q.key) || '(marked by LLM or manually)'}</p>
 						<details>
 							<summary class="small">Resources ({q.resources.length})</summary>

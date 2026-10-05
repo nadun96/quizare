@@ -15,5 +15,7 @@ export default defineConfig({
 			'/ws': { target: backend, ws: true, changeOrigin: false }
 		}
 	},
+	// Component tests mount Svelte in jsdom, so they need its browser build.
+	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
 	test: { include: ['src/**/*.test.ts'], environment: 'jsdom' }
 });
