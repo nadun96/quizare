@@ -1061,6 +1061,7 @@ components:
         zones: { type: array, items: { $ref: '#/components/schemas/Choice' }, description: 'DRAG into boxes; empty means DRAG ordering' }
         blanks: { type: array, items: { type: string }, readOnly: true, description: 'Derived from [[n]] markers in the text' }
         word_limit: { type: integer, description: 'ESSAY' }
+        format: { type: string, enum: ['', markdown], description: 'Text format of the question text and predefined feedback. Empty means plain text (CSV import); markdown is written by the rich text editor (bold, italic, underline as ++text++, lists, tables, code, links, $math$).' }
     Key:
       description: Answer key. Never sent to students before results are released (BR-12).
       type: object
@@ -1299,6 +1300,7 @@ components:
         code: { type: string }
         type: { $ref: '#/components/schemas/QuestionType' }
         text: { type: string }
+        format: { type: string, enum: ['', markdown], description: 'Text format of the question text and feedback (Body.format)' }
         response: { oneOf: [{ $ref: '#/components/schemas/Response' }, { type: 'null' }] }
         key: { $ref: '#/components/schemas/Key' }
         method: { type: string, enum: [key, llm, manual] }
@@ -1413,6 +1415,7 @@ components:
         question_id: { type: string, format: uuid }
         code: { type: string }
         text: { type: string }
+        format: { type: string, enum: ['', markdown], description: 'Text format of the question text and feedback (Body.format)' }
         type: { $ref: '#/components/schemas/QuestionType' }
         max_score: { type: number }
         answered: { type: integer }
@@ -1494,7 +1497,7 @@ components:
         quiz_title: { type: string }
         views: { type: array, items: { type: string } }
         pass_rate: { type: object, properties: { pass_rate: { type: number }, pass_mark_pct: { type: integer }, finished: { type: integer }, mean_pct: { type: number } } }
-        questions: { type: array, items: { type: object, properties: { code: { type: string }, text: { type: string }, pct_correct: { type: number }, answered: { type: integer } } } }
+        questions: { type: array, items: { type: object, properties: { code: { type: string }, text: { type: string }, format: { type: string, enum: ['', markdown] }, pct_correct: { type: number }, answered: { type: integer } } } }
         students:
           type: array
           items:

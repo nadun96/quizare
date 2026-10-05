@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import Sortable from 'sortablejs';
 	import type { Response, StudentQuestion } from './types';
+	import RichText from './richtext/RichText.svelte';
 
 	let {
 		question,
@@ -34,13 +35,6 @@
 	const stemImages = $derived(question.resources.filter((x) => x.role === 'Q'));
 	const optionImage = (i: number) => question.resources.find((x) => x.role === 'O' && x.n === i + 1);
 
-	// Split "Water boils at [[1]] degrees" into text and blank parts.
-	const parts = $derived(
-		question.text.split(/(\[\[\d{1,2}\]\])/).map((p) => {
-			const m = p.match(/^\[\[(\d{1,2})\]\]$/);
-			return m ? { blank: m[1] } : { text: p };
-		})
-	);
 	const isBlank = $derived(question.type === 'BLANK_OPT' || question.type === 'BLANK_TEXT');
 
 	function toggle(id: string) {
@@ -122,7 +116,7 @@
 
 <div class="question stack">
 	{#if !isBlank}
-		<p class="qtext">{question.text}</p>
+		<RichText class="qtext" text={question.text} format={question.body.format} />
 	{/if}
 	{#each stemImages as img (img.id)}
 		<img class="res" src={img.url} alt={img.alt_text} loading="eager" referrerpolicy="no-referrer" />
@@ -157,22 +151,20 @@
 			</div>
 		{/each}
 	{:else if isBlank}
-		<p class="qtext blanks">
-			{#each parts as p, i (i)}
-				{#if p.blank}
-					{#if question.type === 'BLANK_OPT'}
-						<select aria-label={'Blank ' + p.blank} value={r.blanks?.[p.blank] ?? ''} {disabled} onchange={(e) => setBlank(p.blank!, e.currentTarget.value)}>
-							<option value="">…</option>
-							{#each opts as o (o.id)}<option value={o.id}>{o.text}</option>{/each}
-						</select>
-					{:else}
-						<input class="blank" aria-label={'Blank ' + p.blank} value={r.blanks?.[p.blank] ?? ''} {disabled}
-							autocomplete="off" autocapitalize="off" spellcheck="false"
-							oninput={(e) => setBlank(p.blank!, e.currentTarget.value)} />
-					{/if}
-				{:else}{p.text}{/if}
-			{/each}
-		</p>
+		<RichText class="qtext blanks" text={question.text} format={question.body.format}>
+			{#snippet blank(b)}
+				{#if question.type === 'BLANK_OPT'}
+					<select aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled} onchange={(e) => setBlank(b, e.currentTarget.value)}>
+						<option value="">…</option>
+						{#each opts as o (o.id)}<option value={o.id}>{o.text}</option>{/each}
+					</select>
+				{:else}
+					<input class="blank" aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled}
+						autocomplete="off" autocapitalize="off" spellcheck="false"
+						oninput={(e) => setBlank(b, e.currentTarget.value)} />
+				{/if}
+			{/snippet}
+		</RichText>
 	{:else if question.type === 'DRAG'}
 		{#if !question.body.zones?.length}
 			<p class="muted small">Drag the items into the right order.</p>
@@ -204,9 +196,9 @@
 </div>
 
 <style>
-	.qtext { font-size: 1.1rem; white-space: pre-wrap; }
-	.blanks { line-height: 2.6; }
-	.blanks select, .blank { width: auto; min-width: 7rem; display: inline-block; margin: 0 0.25rem; }
+	.question :global(.qtext) { font-size: 1.1rem; }
+	.question :global(.blanks) { line-height: 2.6; }
+	.question :global(.blanks select), .question :global(.blank) { width: auto; min-width: 7rem; max-width: 100%; display: inline-block; margin: 0 0.25rem; line-height: 1.3; padding: 0.35rem 0.6rem; min-height: 2.4rem; vertical-align: middle; }
 	.res { max-width: 100%; max-height: 50vh; border-radius: 8px; }
 	.small-res { max-height: 80px; }
 	.choices { display: grid; gap: 0.5rem; }

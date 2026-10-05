@@ -54,7 +54,13 @@ type Body struct {
 	Zones     []Choice `json:"zones,omitempty"`   // DRAG into zones; empty means DRAG ordering
 	Blanks    []string `json:"blanks,omitempty"`  // BLANK_*: blank ids derived from [[n]] markers
 	WordLimit int      `json:"word_limit,omitempty"`
+	Format    string   `json:"format,omitempty"` // "" = plain text (CSV import, older questions); "markdown" = rich text editor (D-38)
 }
+
+// FormatMarkdown marks question text and predefined feedback as Markdown
+// written by the rich text editor. Plain text stays plain, so existing and
+// CSV-imported questions render exactly as before.
+const FormatMarkdown = "markdown"
 
 // Key is the answer key. It never reaches a student's device before results
 // are released (BR-12, NFR-07).
@@ -155,6 +161,7 @@ func (q *Question) Normalise() {
 	q.Code = strings.TrimSpace(q.Code)
 	q.Text = strings.TrimSpace(q.Text)
 	q.Type = Type(strings.ToUpper(strings.TrimSpace(string(q.Type))))
+	q.Body.Format = strings.ToLower(strings.TrimSpace(q.Body.Format))
 	assign := func(cs []Choice, prefix string) {
 		used := map[string]bool{}
 		for _, c := range cs {
@@ -204,8 +211,16 @@ func (q Question) Validate() map[string]string {
 		f["type"] = "type must be one of SINGLE, MULTI, MATCH, BLANK_OPT, BLANK_TEXT, DRAG, ESSAY"
 		return f
 	}
-	if n := len([]rune(q.Text)); n < 1 || n > 5000 {
-		f["text"] = "question text must be 1-5000 characters"
+	maxText := 5000
+	switch q.Body.Format {
+	case "":
+	case FormatMarkdown:
+		maxText = 10000 // formatting syntax (tables especially) takes room
+	default:
+		f["body.format"] = "format must be empty (plain text) or markdown"
+	}
+	if n := len([]rune(q.Text)); n < 1 || n > maxText {
+		f["text"] = fmt.Sprintf("question text must be 1-%d characters", maxText)
 	}
 	if q.Marks <= 0 || q.Marks > 1000 {
 		f["marks"] = "marks must be greater than 0 and at most 1000"

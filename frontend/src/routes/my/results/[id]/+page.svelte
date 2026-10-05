@@ -3,6 +3,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { describeKey, describeResponse } from '$lib/answerText';
 	import type { Key, Resource, Response, StudentQuestion } from '$lib/types';
+	import RichText from '$lib/richtext/RichText.svelte';
 
 	type Q = { question: StudentQuestion; response?: Response; correct_answer?: Key; score: number | null; max_score: number; status: string; correct: boolean | null; feedback?: string; ai_feedback?: string; ai_marked: boolean; feedback_resources?: Resource[] };
 	type Result = { session_title: string; score: number; max_score: number; pct: number; pass_mark_pct: number; passed: boolean; complete: boolean; state: string; questions: Q[] };
@@ -38,10 +39,10 @@
 						<span class="badge {q.correct ? 'ok' : q.score > 0 ? 'warn' : 'danger'}">{q.score} / {q.max_score}</span>
 					{:else}<span class="badge warn">Being marked</span>{/if}
 				</div>
-				<p style="white-space:pre-wrap">{q.question.text}</p>
+				<RichText text={q.question.text} format={q.question.body.format} />
 				{#if q.response !== undefined}<p><span class="muted small">Your answer</span><br />{describeResponse(q.question.type, q.question.body, q.response)}</p>{/if}
 				{#if q.correct_answer}<p><span class="muted small">{q.question.type === 'ESSAY' ? 'Model answer' : 'Correct answer'}</span><br />{describeKey(q.question.type, q.question.body, q.correct_answer)}</p>{/if}
-				{#if q.feedback}<p class="alert ok" style="white-space:pre-wrap">{q.feedback}</p>{/if}
+				{#if q.feedback}<div class="alert ok"><RichText text={q.feedback} format={q.question.body.format} /></div>{/if}
 				{#if q.ai_feedback}<p class="alert ok" style="white-space:pre-wrap"><strong>Feedback:</strong> {q.ai_feedback}</p>{/if}
 				{#each q.feedback_resources ?? [] as r (r.id)}<img src={r.url} alt={r.alt_text} style="max-width:100%" referrerpolicy="no-referrer" />{/each}
 			</div>

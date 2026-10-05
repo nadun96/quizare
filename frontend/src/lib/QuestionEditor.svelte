@@ -2,6 +2,7 @@
 	// One-by-one question authoring for all seven types (FR-QZ-02/03/04/07/09).
 	import { api, ApiError } from './api';
 	import { QTYPES, QTYPE_LABEL, type QType, type Question } from './types';
+	import RichTextEditor from './richtext/RichTextEditor.svelte';
 
 	let { quizId, question = null, onsaved, oncancel }: { quizId: string; question?: Question | null; onsaved: (q: Question) => void; oncancel: () => void } = $props();
 
@@ -25,6 +26,8 @@
 	let caseSensitive = $state(q?.key?.case_sensitive ?? false);
 	let tolerance = $state(q?.key?.tolerance ?? 0);
 	let dragMode = $state<'order' | 'zones'>(q?.body?.zones?.length ? 'zones' : 'order');
+	// Plain-text questions (CSV import) open converted; saving stores Markdown.
+	const format = q?.body?.format ?? '';
 
 	// Options (SINGLE/MULTI/BLANK_OPT), items (DRAG) — in authored order.
 	let rows = $state<Row[]>(
@@ -54,7 +57,7 @@
 
 	function payload() {
 		const opt = rows.map((r, i) => ({ id: 'o' + (i + 1), text: r.text }));
-		const body: Record<string, unknown> = {};
+		const body: Record<string, unknown> = { format: 'markdown' };
 		const key: Record<string, unknown> = {};
 		switch (type) {
 			case 'SINGLE':
@@ -104,6 +107,10 @@
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
+		if (!text.trim()) {
+			errors = { text: 'question text is required' };
+			return;
+		}
 		saving = true;
 		errors = {};
 		try {
@@ -130,8 +137,8 @@
 	</div>
 	<div>
 		<label for="text">Question text</label>
-		<textarea id="text" bind:value={text} rows="3" required></textarea>
-		{#if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}<p class="small muted">Mark blanks as [[1]], [[2]] … in the text.</p>{/if}
+		<RichTextEditor id="text" label="Question text" bind:value={text} {format} required blanks={type === 'BLANK_OPT' || type === 'BLANK_TEXT'} placeholder="Write the question…" />
+		{#if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}<p class="small muted">Add blanks with <strong>+ Blank</strong> or by typing [[1]], [[2]] …</p>{/if}
 	</div>
 
 	{#if usesOptions}
@@ -229,8 +236,8 @@
 				</select></div>
 		</div>
 		<div class="grid" style="margin-top:0.75rem">
-			<div><label for="fc">Feedback when correct</label><input id="fc" bind:value={fbCorrect} /></div>
-			<div><label for="fi">Feedback when incorrect</label><input id="fi" bind:value={fbIncorrect} /></div>
+			<div><label for="fc">Feedback when correct</label><RichTextEditor id="fc" label="Feedback when correct" bind:value={fbCorrect} {format} compact /></div>
+			<div><label for="fi">Feedback when incorrect</label><RichTextEditor id="fi" label="Feedback when incorrect" bind:value={fbIncorrect} {format} compact /></div>
 		</div>
 	</details>
 

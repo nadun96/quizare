@@ -2,12 +2,14 @@
 	// Public, read-only results page (FR-RS-01/02, BR-13). Rendered from JSON.
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
+	import { toPlain } from '$lib/richtext/render';
+	import type { TextFormat } from '$lib/types';
 
 	type View = {
 		title: string;
 		quiz_title: string;
 		pass_rate?: { pass_rate: number; pass_mark_pct: number; finished: number; mean_pct: number };
-		questions?: { code: string; text: string; pct_correct: number; answered: number }[];
+		questions?: { code: string; text: string; format?: TextFormat; pct_correct: number; answered: number }[];
 		students?: { label: string; score: number; max_score: number; pct: number; passed: boolean }[];
 	};
 	let v = $state<View | null>(null);
@@ -35,7 +37,7 @@
 		{#if v.questions}
 			<div class="card"><h2 style="margin-top:0">Question-wise correct</h2>
 				{#each v.questions as q (q.code)}
-					<div class="qrow"><span><strong>{q.code}</strong> {q.text.slice(0, 80)}</span><div class="pbar"><div style="width:{q.pct_correct}%"></div></div><strong>{q.pct_correct}%</strong></div>
+					<div class="qrow"><span><strong>{q.code}</strong> {toPlain(q.text, q.format).slice(0, 80)}</span><div class="pbar"><div style="width:{q.pct_correct}%"></div></div><strong>{q.pct_correct}%</strong></div>
 				{/each}
 			</div>
 		{/if}
