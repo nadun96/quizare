@@ -210,6 +210,7 @@ func (s *Service) categoriesOf(ctx context.Context, classroomID string) (map[str
 type CategoryMember struct {
 	CategoryID   string
 	CategoryName string
+	Color        int
 	UserID       string
 }
 
@@ -218,7 +219,7 @@ func (s *Service) CategoryMembers(ctx context.Context, teacherID, classroomID st
 	if _, err := s.GetClassroom(ctx, teacherID, classroomID); err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT c.id, c.name, e.user_id FROM content.categories c
+	rows, err := s.pool.Query(ctx, `SELECT c.id, c.name, c.color, e.user_id FROM content.categories c
 		JOIN content.enrolment_categories ec ON ec.category_id=c.id
 		JOIN content.enrolments e ON e.id=ec.enrolment_id AND e.status='active'
 		WHERE c.classroom_id=$1 ORDER BY c.position, lower(c.name), e.created_at`, classroomID)
@@ -227,7 +228,7 @@ func (s *Service) CategoryMembers(ctx context.Context, teacherID, classroomID st
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (CategoryMember, error) {
 		var m CategoryMember
-		err := r.Scan(&m.CategoryID, &m.CategoryName, &m.UserID)
+		err := r.Scan(&m.CategoryID, &m.CategoryName, &m.Color, &m.UserID)
 		return m, err
 	})
 }

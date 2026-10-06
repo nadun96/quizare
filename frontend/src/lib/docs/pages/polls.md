@@ -1,6 +1,6 @@
 # Live polls
 
-Code: `backend/internal/poll` (schema `poll`, migrations `0009_poll.sql` and `0011_poll_scoring.sql`) and `frontend/src/lib/poll`. Decisions: D-40, D-42 (scoring).
+Code: `backend/internal/poll` (schema `poll`, migrations `0009_poll.sql`, `0011_poll_scoring.sql` and `0012_poll_groups.sql`) and `frontend/src/lib/poll`. Decisions: D-40, D-42 (scoring), D-43 (groups).
 
 Polls are quick, ungraded questions for any audience: a word cloud to open a lesson, a rating to close it, a Likert scale for feedback. They sit beside quizzes rather than inside them, because they have no answer keys, no marks and no proctoring, and they must work without a login.
 
@@ -97,6 +97,29 @@ Once a participant can see a key, their answer to that question is locked (`409 
 Leaderboard rows carry an opaque `key` (a hash of poll and participant), so a browser can find itself (`me_key`) without participant ids being published. Teachers also get the participant id, nickname and real name, and can rename a participant through the moderation endpoint.
 
 The presenter screen adds a countdown, **Show answer** (`A`; with `show_answers=presenter` it reveals to everyone, otherwise to this screen only) and a full-screen **Leaderboard** (`L`).
+
+## Groups
+
+Polls can run as a group competition (V2-06, V2-07, D-43). `groups` decides how groups form:
+
+| Value | Formation |
+|-------|-----------|
+| `off` | No groups. |
+| `manual` | The teacher creates groups and moves participants on the **Groups** tab. |
+| `random` | Each new participant joins the smallest group (random among equals). **Make random groups** creates N groups and spreads everyone without a group, or everyone with **Also move people who have a group**. |
+| `categories` | One group per category of the poll's classroom (name and colour copied). Logged-in students join the group of their first category; others stay ungrouped. Needs a classroom and a non-anonymous poll. |
+| `self` | Participants pick a group on the join screen; it is required once groups exist. They can switch until they answer. |
+
+`group_acceptance` decides which answers count for the group:
+
+- `all`: every member answers; `group_calc` combines their points per question: `sum`, `average`, `max` or `min`. Average and lowest count members who didn't answer as 0, so a group can't raise its mark by letting only its strongest member answer.
+- `first`: the group's first answer counts. Once a member has answered, teammates get `409 group_answered`; a row lock on the group stops two simultaneous answers. The answerer can still change or clear it.
+- `captain`: only the captain answers (`409 captain_only` for others). The earliest member becomes captain; the teacher can hand it over.
+- `best`: every member answers and the group gets its best mark.
+
+In first-answer and captain groups, members see the group's answer (and who gave it) in their personal view, `group_answers`. Participants without a group answer for themselves and appear only on the individual leaderboard.
+
+The group leaderboard (`group_leaderboard`) sums each group's question marks; equal scores share a rank. It goes to the teacher, the presenter screen (beside the individual one) and, with `leaderboard=everyone`, to participants, who see their group highlighted. Groups expose only their id, name, colour and size to participants, never members.
 
 ## Moderation and export
 

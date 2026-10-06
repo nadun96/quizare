@@ -25,6 +25,8 @@ import (
 type Classrooms interface {
 	GetClassroom(ctx context.Context, teacherID, id string) (content.Classroom, error)
 	GetEnrolment(ctx context.Context, classroomID, userID string) (content.Enrolment, bool, error)
+	ListCategories(ctx context.Context, teacherID, classroomID string) ([]content.Category, error)
+	CategoryMembers(ctx context.Context, teacherID, classroomID string) ([]content.CategoryMember, error)
 }
 
 // Users resolves names of identified participants for the teacher.
@@ -86,6 +88,10 @@ type Settings struct {
 	Leaderboard string `json:"leaderboard"`  // off | presenter | everyone
 	ShowAnswers string `json:"show_answers"` // never | after_answer | presenter | after_close
 	Names       string `json:"names"`        // nickname | name (identified participants only)
+	// Groups (V2-06, V2-07, D-43).
+	Groups          string `json:"groups"`           // off | manual | random | categories | self
+	GroupAcceptance string `json:"group_acceptance"` // all | first | captain | best
+	GroupCalc       string `json:"group_calc"`       // sum | average | max | min (acceptance all)
 }
 
 type Poll struct {
@@ -117,13 +123,15 @@ type PollInput struct {
 const pollCols = `p.id, p.teacher_id, p.classroom_id, p.title, p.join_code, p.identity, p.audience, p.pacing, p.show_results,
 	p.allow_edit, p.status, p.current_index, p.revealed, p.created_at, p.opened_at, p.closed_at,
 	(SELECT count(*) FROM poll.participants x WHERE x.poll_id = p.id),
-	p.scoring, p.speed_bonus, p.leaderboard, p.show_answers, p.names, p.answers_revealed, p.question_started_at`
+	p.scoring, p.speed_bonus, p.leaderboard, p.show_answers, p.names, p.answers_revealed, p.question_started_at,
+	p.groups, p.group_acceptance, p.group_calc`
 
 func (s *Service) scanPoll(row pgx.Row) (*Poll, error) {
 	var p Poll
 	err := row.Scan(&p.ID, &p.TeacherID, &p.ClassroomID, &p.Title, &p.JoinCode, &p.Identity, &p.Audience, &p.Pacing,
 		&p.ShowResults, &p.AllowEdit, &p.Status, &p.CurrentIndex, &p.Revealed, &p.CreatedAt, &p.OpenedAt, &p.ClosedAt, &p.Participants,
-		&p.Scoring, &p.SpeedBonus, &p.Leaderboard, &p.ShowAnswers, &p.Names, &p.AnswersRevealed, &p.QuestionStartedAt)
+		&p.Scoring, &p.SpeedBonus, &p.Leaderboard, &p.ShowAnswers, &p.Names, &p.AnswersRevealed, &p.QuestionStartedAt,
+		&p.Groups, &p.GroupAcceptance, &p.GroupCalc)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.ErrNotFound
 	}
@@ -147,6 +155,15 @@ func fillDefaults(st *Settings) {
 	}
 	if st.Names == "" {
 		st.Names = "nickname"
+	}
+	if st.Groups == "" {
+		st.Groups = "off"
+	}
+	if st.GroupAcceptance == "" {
+		st.GroupAcceptance = "all"
+	}
+	if st.GroupCalc == "" {
+		st.GroupCalc = "sum"
 	}
 }
 
@@ -190,19 +207,34 @@ func validSettings(st Settings) map[string]string {
 	if st.Names == "name" && st.Identity == "anonymous" {
 		f["settings.names"] = "an anonymous poll can't show real names"
 	}
+	if !in(st.Groups, "off", "manual", "random", "categories", "self") {
+		f["settings.groups"] = "groups must be off, manual, random, categories or self"
+	}
+	if st.Groups == "categories" && st.Identity == "anonymous" {
+		f["settings.groups"] = "groups from categories need participants who log in"
+	}
+	if !in(st.GroupAcceptance, "all", "first", "captain", "best") {
+		f["settings.group_acceptance"] = "group_acceptance must be all, first, captain or best"
+	}
+	if !in(st.GroupCalc, "sum", "average", "max", "min") {
+		f["settings.group_calc"] = "group_calc must be sum, average, max or min"
+	}
 	return f
 }
 
 // DefaultSettings: anonymous, open to anyone with the code, self-paced.
 func DefaultSettings() Settings {
 	return Settings{Identity: "anonymous", Audience: "anyone", Pacing: "self", ShowResults: "after_answer", AllowEdit: true,
-		Leaderboard: "presenter", ShowAnswers: "after_close", Names: "nickname"}
+		Leaderboard: "presenter", ShowAnswers: "after_close", Names: "nickname", Groups: "off", GroupAcceptance: "all", GroupCalc: "sum"}
 }
 
 func (s *Service) checkClassroom(ctx context.Context, teacherID string, id *string, st Settings) error {
 	if id == nil || *id == "" {
 		if st.Audience == "classroom" {
 			return httpx.Invalid(map[string]string{"classroom_id": "choose the classroom whose students may answer"})
+		}
+		if st.Groups == "categories" {
+			return httpx.Invalid(map[string]string{"classroom_id": "choose the classroom whose categories form the groups"})
 		}
 		return nil
 	}
@@ -236,10 +268,10 @@ func (s *Service) CreatePoll(ctx context.Context, teacherID string, in PollInput
 	for attempt := 0; ; attempt++ {
 		var id string
 		err := s.pool.QueryRow(ctx, `INSERT INTO poll.polls (teacher_id, classroom_id, title, join_code, identity, audience, pacing, show_results, allow_edit,
-			scoring, speed_bonus, leaderboard, show_answers, names)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+			scoring, speed_bonus, leaderboard, show_answers, names, groups, group_acceptance, group_calc)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
 			teacherID, in.ClassroomID, title, "P"+newCode(5), st.Identity, st.Audience, st.Pacing, st.ShowResults, st.AllowEdit,
-			st.Scoring, st.SpeedBonus, st.Leaderboard, st.ShowAnswers, st.Names).Scan(&id)
+			st.Scoring, st.SpeedBonus, st.Leaderboard, st.ShowAnswers, st.Names, st.Groups, st.GroupAcceptance, st.GroupCalc).Scan(&id)
 		if err != nil && strings.Contains(err.Error(), "join_code") && attempt < 5 {
 			continue // code collision
 		}
@@ -321,9 +353,10 @@ func (s *Service) UpdatePoll(ctx context.Context, teacherID, id string, in PollI
 		return nil, err
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE poll.polls SET title=$2, classroom_id=$3, identity=$4, audience=$5, pacing=$6, show_results=$7,
-		allow_edit=$8, scoring=$9, speed_bonus=$10, leaderboard=$11, show_answers=$12, names=$13, updated_at=now() WHERE id=$1`,
+		allow_edit=$8, scoring=$9, speed_bonus=$10, leaderboard=$11, show_answers=$12, names=$13,
+		groups=$14, group_acceptance=$15, group_calc=$16, updated_at=now() WHERE id=$1`,
 		id, title, classroom, st.Identity, st.Audience, st.Pacing, st.ShowResults, st.AllowEdit,
-		st.Scoring, st.SpeedBonus, st.Leaderboard, st.ShowAnswers, st.Names)
+		st.Scoring, st.SpeedBonus, st.Leaderboard, st.ShowAnswers, st.Names, st.Groups, st.GroupAcceptance, st.GroupCalc)
 	if err != nil {
 		return nil, err
 	}
@@ -680,6 +713,8 @@ type JoinInput struct {
 	Identify bool `json:"identify"`
 	// Shown on the leaderboard instead of "Participant N" (D-42).
 	Nickname string `json:"nickname"`
+	// Self-selected groups: the group to join (D-43).
+	GroupID string `json:"group_id"`
 }
 
 type JoinResult struct {
@@ -708,9 +743,22 @@ func (s *Service) Join(ctx context.Context, code string, c Caller, ip string, in
 	if id, identified, err := s.findParticipant(ctx, p, c); err != nil || id != "" {
 		if err == nil && nick != "" {
 			_, err = s.pool.Exec(ctx, `UPDATE poll.participants SET nickname=$2 WHERE id=$1`, id, nick)
-			s.hub.markAll(p.ID)
 		}
+		if err == nil && in.GroupID != "" {
+			err = s.placeOnJoin(ctx, p, id, nil, in.GroupID, true)
+		}
+		s.hub.markAll(p.ID)
 		return JoinResult{ParticipantID: id, Identified: identified}, err
+	}
+	if p.Groups == "self" {
+		// With groups to choose from, a valid choice is needed before joining.
+		var all, chosen int
+		if err := s.pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE id::text=$2) FROM poll.groups WHERE poll_id=$1`, p.ID, in.GroupID).Scan(&all, &chosen); err != nil {
+			return JoinResult{}, err
+		}
+		if all > 0 && chosen == 0 {
+			return JoinResult{}, errChooseGroup
+		}
 	}
 	if !s.joins.Allow("ip:" + ip) {
 		return JoinResult{}, httpx.NewError(http.StatusTooManyRequests, "rate_limited", "too many joins from this network; try again shortly")
@@ -737,12 +785,18 @@ func (s *Service) Join(ctx context.Context, code string, c Caller, ip string, in
 		var id string
 		err := s.pool.QueryRow(ctx, `INSERT INTO poll.participants (poll_id, user_id, nickname) VALUES ($1,$2,$3)
 			ON CONFLICT (poll_id, user_id) DO UPDATE SET user_id=EXCLUDED.user_id RETURNING id`, p.ID, c.User.ID, nickArg).Scan(&id)
+		if err == nil {
+			err = s.placeOnJoin(ctx, p, id, &c.User.ID, in.GroupID, false)
+		}
 		s.hub.markAll(p.ID)
 		return JoinResult{ParticipantID: id, Identified: true}, err
 	}
 	tok := newToken()
 	var id string
 	err = s.pool.QueryRow(ctx, `INSERT INTO poll.participants (poll_id, token_hash, nickname) VALUES ($1,$2,$3) RETURNING id`, p.ID, hashToken(tok), nickArg).Scan(&id)
+	if err == nil {
+		err = s.placeOnJoin(ctx, p, id, nil, in.GroupID, false)
+	}
 	s.hub.markAll(p.ID)
 	return JoinResult{ParticipantID: id, Token: tok}, err
 }
@@ -781,6 +835,31 @@ type PublicPoll struct {
 	Me                *Rank            `json:"me,omitempty"`                  // own rank (personal view)
 	MeKey             string           `json:"me_key,omitempty"`              // finds yourself in a shared top 10
 	Nickname          string           `json:"nickname,omitempty"`
+	// Groups (D-43).
+	GroupMode        string                 `json:"group_mode"`
+	GroupAcceptance  string                 `json:"group_acceptance,omitempty"`
+	Groups           []GroupInfo            `json:"groups,omitempty"`
+	GroupLeaderboard []GroupRank            `json:"group_leaderboard,omitempty"` // when the leaderboard is shown to everyone
+	MyGroup          string                 `json:"my_group,omitempty"`
+	Captain          bool                   `json:"captain,omitempty"`
+	GroupAnswers     map[string]GroupAnswer `json:"group_answers,omitempty"` // teammates' answers (first-answer, captain)
+}
+
+// groupView adds what everyone may see of the groups.
+func (s *Service) groupView(ctx context.Context, p *Poll, v *PublicPoll) error {
+	v.GroupMode = p.Groups
+	if p.Groups == "off" {
+		return nil
+	}
+	v.GroupAcceptance = p.GroupAcceptance
+	var err error
+	if v.Groups, err = s.groupInfos(ctx, p.ID); err != nil {
+		return err
+	}
+	if p.Scoring && p.Leaderboard == "everyone" {
+		v.GroupLeaderboard, err = s.groupLeaderboard(ctx, p)
+	}
+	return err
 }
 
 // Score is a participant's result on one question.
@@ -896,7 +975,17 @@ func (s *Service) View(ctx context.Context, code string, c Caller) (PublicPoll, 
 			answered[k] = true
 		}
 		v.MeKey = rankKey(p.ID, pid)
-		_ = s.pool.QueryRow(ctx, `SELECT coalesce(nickname, '') FROM poll.participants WHERE id=$1`, pid).Scan(&v.Nickname)
+		var group *string
+		_ = s.pool.QueryRow(ctx, `SELECT coalesce(nickname, ''), group_id, captain FROM poll.participants WHERE id=$1`, pid).Scan(&v.Nickname, &group, &v.Captain)
+		if group != nil && p.Groups != "off" {
+			v.MyGroup = *group
+			if v.GroupAnswers, err = s.groupAnswers(ctx, p, pid); err != nil {
+				return v, err
+			}
+		}
+	}
+	if err := s.groupView(ctx, p, &v); err != nil {
+		return v, err
 	}
 	for _, q := range p.visibleQuestions(all) {
 		if p.answersVisible(q, answered[q.ID], false) {
@@ -957,6 +1046,9 @@ func (s *Service) publicUpdate(ctx context.Context, p *Poll) (PublicPoll, error)
 		Pacing: p.Pacing, ShowResults: p.ShowResults, AllowEdit: p.AllowEdit, Status: p.Status, Index: p.CurrentIndex, Revealed: p.Revealed,
 		Total: len(p.Questions), Questions: publicQuestions(p.visibleQuestions(p.Questions))}
 	p.competition(&v)
+	if err := s.groupView(ctx, p, &v); err != nil {
+		return v, err
+	}
 	if p.Status == "draft" {
 		v.Questions = []Question{}
 		return v, nil
@@ -1140,13 +1232,25 @@ func (s *Service) answer(ctx context.Context, code, questionID string, c Caller,
 			}
 		}
 	}
+	db, finish, err := s.groupGate(ctx, p, pid, q.ID, empty)
+	if err != nil {
+		return res, err
+	}
+	if err := finish(s.writeAnswer(ctx, db, p, q, pid, a, empty, &res)); err != nil {
+		return res, err
+	}
+	s.hub.markDirty(p.ID, q.ID)
+	return res, nil
+}
+
+func (s *Service) writeAnswer(ctx context.Context, db execer, p *Poll, q Question, pid string, a Answer, empty bool, res *AnswerResult) error {
 	if empty {
-		if _, err := s.pool.Exec(ctx, `DELETE FROM poll.responses WHERE participant_id=$1 AND question_id=$2`, pid, q.ID); err != nil {
-			return res, err
+		if _, err := db.Exec(ctx, `DELETE FROM poll.responses WHERE participant_id=$1 AND question_id=$2`, pid, q.ID); err != nil {
+			return err
 		}
 		if q.Type.IsMedia() {
-			if _, err := s.pool.Exec(ctx, `DELETE FROM poll.files WHERE participant_id=$1 AND question_id=$2`, pid, q.ID); err != nil {
-				return res, err
+			if _, err := db.Exec(ctx, `DELETE FROM poll.files WHERE participant_id=$1 AND question_id=$2`, pid, q.ID); err != nil {
+				return err
 			}
 		}
 	} else {
@@ -1158,12 +1262,12 @@ func (s *Service) answer(ctx context.Context, code, questionID string, c Caller,
 		if elapsed >= 0 {
 			el = elapsed
 		}
-		if _, err := s.pool.Exec(ctx, `INSERT INTO poll.responses (participant_id, question_id, poll_id, value, updated_at, score, correct, elapsed_ms)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		if _, err := db.Exec(ctx, `INSERT INTO poll.responses (participant_id, question_id, poll_id, value, updated_at, score, correct, elapsed_ms, created_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$5)
 			ON CONFLICT (participant_id, question_id) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at,
 				score=EXCLUDED.score, correct=EXCLUDED.correct, elapsed_ms=EXCLUDED.elapsed_ms`,
 			pid, q.ID, p.ID, raw, now, pts, ok, el); err != nil {
-			return res, err
+			return err
 		}
 		if p.ShowAnswers == "after_answer" && q.Key != nil {
 			k := *q.Key
@@ -1173,8 +1277,7 @@ func (s *Service) answer(ctx context.Context, code, questionID string, c Caller,
 			}
 		}
 	}
-	s.hub.markDirty(p.ID, q.ID)
-	return res, nil
+	return nil
 }
 
 // rescore recomputes stored scores for q after its key, points or the poll's
@@ -1233,6 +1336,8 @@ type TeacherResults struct {
 	Participants int               `json:"participants"`
 	Results      map[string]Result `json:"results"`
 	Leaderboard  []Rank            `json:"leaderboard,omitempty"` // scored polls: everyone, with names and nicknames
+	// Scored polls with groups (D-43).
+	GroupLeaderboard []GroupRank `json:"group_leaderboard,omitempty"`
 }
 
 func (s *Service) teacherResults(ctx context.Context, p *Poll) (TeacherResults, error) {
@@ -1243,6 +1348,9 @@ func (s *Service) teacherResults(ctx context.Context, p *Poll) (TeacherResults, 
 			return out, err
 		}
 		out.Leaderboard = ranks
+		if out.GroupLeaderboard, err = s.groupLeaderboard(ctx, p); err != nil {
+			return out, err
+		}
 	}
 	for _, q := range p.Questions {
 		r, err := s.hub.result(ctx, p.ID, q, true)

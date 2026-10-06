@@ -109,3 +109,29 @@ func split(s string) []string {
 	}
 	return out
 }
+
+func TestCombineGroupScores(t *testing.T) {
+	cases := []struct {
+		acc, calc string
+		scores    []float64
+		members   int
+		want      float64
+	}{
+		{"all", "sum", []float64{100, 50}, 3, 150},
+		{"all", "average", []float64{100, 50}, 3, 50}, // the silent member counts as 0
+		{"all", "average", []float64{100, 50}, 2, 75},
+		{"all", "max", []float64{20, 80}, 3, 80},
+		{"all", "min", []float64{20, 80}, 3, 0}, // not everyone answered
+		{"all", "min", []float64{20, 80}, 2, 20},
+		{"best", "sum", []float64{20, 80}, 2, 80},
+		{"first", "sum", []float64{20, 80}, 2, 20},
+		{"captain", "average", []float64{70}, 4, 70},
+		{"all", "sum", nil, 4, 0},
+		{"all", "average", []float64{100, 0, 0}, 3, 33.33},
+	}
+	for _, c := range cases {
+		if got := combine(c.acc, c.calc, c.scores, c.members); got != c.want {
+			t.Errorf("%s/%s %v of %d: got %g, want %g", c.acc, c.calc, c.scores, c.members, got, c.want)
+		}
+	}
+}

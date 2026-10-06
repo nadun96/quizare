@@ -33,11 +33,11 @@
 				<li class="row" class:me={r.key === meKey} animate:flip={{ duration: flipMs() }} in:flyIn>
 					<span class="pos tabular {medal(r.rank)}" aria-label={ordinal(r.rank)}>{r.rank}</span>
 					<span class="who min-w-0">
-						<span class="name truncate">{r.name}{#if r.key === meKey}<span class="badge badge-primary badge-xs ml-2">you</span>{/if}</span>
+						<span class="name truncate">{#if r.color}<span class="gdot" style:background="var(--cat-{r.color})" aria-hidden="true"></span>{/if}{r.name}{#if r.key === meKey}<span class="badge badge-primary badge-xs ml-2">you</span>{/if}</span>
 						{#if teacher && r.real_name && r.real_name !== r.name}<span class="small muted truncate block">{r.real_name}</span>{/if}
 						<span class="track" aria-hidden="true"><span class="fill" style:width="{(r.score / top) * 100}%"></span></span>
 					</span>
-					<span class="pts tabular"><strong>{fmtPoints(r.score)}</strong><span class="small muted block">{r.correct} right</span></span>
+					<span class="pts tabular"><strong>{fmtPoints(r.score)}</strong><span class="small muted block">{r.members !== undefined ? `${r.members} ${r.members === 1 ? 'member' : 'members'}` : `${r.correct} right`}</span></span>
 					{#if teacher && onrename}
 						<button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Rename {r.name}" title="Rename" onclick={() => onrename(r)}><Icon name="pencil" size={14} /></button>
 					{/if}
@@ -62,6 +62,7 @@
 	.pos.m2 { background: #c9d1db; color: #1f2833; }
 	.pos.m3 { background: #d99a6c; color: #331a07; }
 	.name { display: block; font-weight: 600; }
+	.gdot { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 999px; margin-right: 0.45rem; vertical-align: 0.05em; box-shadow: 0 0 0 1.5px var(--color-base-100), 0 0 0 2.5px color-mix(in oklab, var(--color-base-content) 25%, transparent); }
 	.track { display: block; height: 0.3rem; margin-top: 0.3rem; border-radius: 999px; background: var(--color-base-200); overflow: hidden; }
 	.fill { display: block; height: 100%; border-radius: inherit; background: var(--color-primary); transition: width 600ms var(--ease-out); }
 	.pts { text-align: right; line-height: 1.15; }

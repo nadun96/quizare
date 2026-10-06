@@ -11,7 +11,7 @@
 	import { TYPE_META } from '$lib/poll/meta';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
 	import PollResults from '$lib/poll/PollResults.svelte';
-	import { secondsLeft } from '$lib/poll/scoring';
+	import { groupRanks, secondsLeft } from '$lib/poll/scoring';
 	import type { Poll, TeacherResults } from '$lib/poll/types';
 	import RichText from '$lib/richtext/RichText.svelte';
 	import { LiveSocket } from '$lib/socket';
@@ -149,7 +149,14 @@
 			{:else if board && poll.scoring}
 				<section class="question" in:flyIn>
 					<h1 class="q-title m-0 mb-6 flex items-center gap-3"><Icon name="trophy" size={36} />Leaderboard</h1>
-					<Leaderboard ranks={data?.leaderboard ?? []} big />
+					{#if data?.group_leaderboard?.length}
+						<div class="boards">
+							<div><h2 class="m-0 mb-3 text-2xl">Groups</h2><Leaderboard ranks={groupRanks(data.group_leaderboard)} big /></div>
+							<div><h2 class="m-0 mb-3 text-2xl">Individuals</h2><Leaderboard ranks={data.leaderboard ?? []} /></div>
+						</div>
+					{:else}
+						<Leaderboard ranks={data?.leaderboard ?? []} big />
+					{/if}
 				</section>
 			{:else if q}
 				{#key q.id}
@@ -198,6 +205,8 @@
 	.code-inline { letter-spacing: 0.08em; }
 	.main { flex: 1; width: 100%; max-width: 78rem; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
 	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.5rem; }
+	.boards { display: grid; gap: 2rem; }
+	@media (min-width: 1000px) { .boards { grid-template-columns: 1.4fr 1fr; } }
 	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: var(--color-base-100); border: 2px solid var(--color-base-300); }
 	.timer.low { color: var(--color-error); border-color: var(--color-error); }
 	.hidden-note { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }

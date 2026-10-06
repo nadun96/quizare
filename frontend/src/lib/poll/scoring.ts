@@ -1,10 +1,10 @@
 // Scored polls and leaderboards (V2-01, V2-02, D-42). The server marks
 // answers; these helpers only shape keys in the editor and show results.
-import type { Choice, Poll, PollBody, PollKey, PollQuestion, PollSettings, PollType } from './types';
+import type { Choice, GroupRank, Poll, PollBody, PollKey, PollQuestion, PollSettings, PollType, Rank } from './types';
 
 export const SCORABLE: ReadonlySet<PollType> = new Set(['SINGLE', 'MULTI', 'MATCH', 'BLANK_OPT', 'BLANK_TEXT', 'DRAG', 'SHORT_TEXT', 'NUMBER', 'SLIDER', 'DATE', 'TIME']);
 
-export const COMPETITION_DEFAULTS = { scoring: false, speed_bonus: false, leaderboard: 'presenter', show_answers: 'after_close', names: 'nickname' } as const;
+export const COMPETITION_DEFAULTS = { scoring: false, speed_bonus: false, leaderboard: 'presenter', show_answers: 'after_close', names: 'nickname', groups: 'off', group_acceptance: 'all', group_calc: 'sum' } as const;
 
 export const DEFAULT_SETTINGS: PollSettings = { identity: 'anonymous', audience: 'anyone', pacing: 'self', show_results: 'after_answer', allow_edit: true, ...COMPETITION_DEFAULTS };
 
@@ -13,9 +13,14 @@ export function settingsOf(p: Poll): PollSettings {
 	return {
 		identity: p.identity, audience: p.audience, pacing: p.pacing, show_results: p.show_results, allow_edit: p.allow_edit,
 		scoring: p.scoring ?? false, speed_bonus: p.speed_bonus ?? false, leaderboard: p.leaderboard ?? 'presenter',
-		show_answers: p.show_answers ?? 'after_close', names: p.names ?? 'nickname'
+		show_answers: p.show_answers ?? 'after_close', names: p.names ?? 'nickname',
+		groups: p.groups ?? 'off', group_acceptance: p.group_acceptance ?? 'all', group_calc: p.group_calc ?? 'sum'
 	};
 }
+
+/** Group leaderboard rows in the shape the Leaderboard component draws. */
+export const groupRanks = (gs: GroupRank[] | undefined): Rank[] =>
+	(gs ?? []).map((g) => ({ rank: g.rank, key: g.id, name: g.name, score: g.score, correct: 0, answered: g.answered, color: g.color, members: g.members }));
 
 /** Drops parts of a key that no longer match the question (deleted options, blanks). */
 export function cleanKey(type: PollType, body: PollBody, k: PollKey | null | undefined): PollKey | null {

@@ -42,7 +42,7 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `answerText.ts` | Human-readable responses and keys. |
 | `types.ts` | TypeScript shapes of the API JSON. |
 | `docs/` | This documentation: page registry, Markdown renderer, lazy Mermaid. |
-| `poll/` | Polls: `PollInput` (all 20 inputs; `inputs/` holds rating, slider, Likert, matrix, word cloud, code, file and recorder), `PollResults` (charts and tables), `WordCloud` + `wordcloud.ts` (layout), `PollQuestionEditor`, `PollSettingsForm`, `client.ts` (participant API with the anonymous token); scored polls: `KeyEditor` (correct answer by type), `Leaderboard` (animated ranking, own row pinned) and `scoring.ts` (key clean-up, countdown, answer in words). See [Live polls](polls.md). |
+| `poll/` | Polls: `PollInput` (all 20 inputs; `inputs/` holds rating, slider, Likert, matrix, word cloud, code, file and recorder), `PollResults` (charts and tables), `WordCloud` + `wordcloud.ts` (layout), `PollQuestionEditor`, `PollSettingsForm`, `client.ts` (participant API with the anonymous token); scored polls: `KeyEditor` (correct answer by type), `Leaderboard` (animated ranking, own row pinned; also draws groups), `GroupsPanel` (teacher: form groups, move people, captains) and `scoring.ts` (key clean-up, countdown, answer in words). See [Live polls](polls.md). |
 | `ui/` | Shared UI: `Icon` (inline SVG), `Toaster` + `toast.svelte.ts`, `DialogHost` + `confirmDialog()`, `DisplayMenu` + `prefs.svelte.ts` (theme, text size, motion, quiz timer), `StatCounter`, `Skeleton`, `EmptyState`, and `motion.ts` (transitions that switch off for reduced motion). See [Design system](#design-system). |
 
 ## Design system

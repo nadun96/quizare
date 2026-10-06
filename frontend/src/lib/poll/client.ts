@@ -46,8 +46,8 @@ async function call<T>(code: string, method: string, path: string, body?: BodyIn
 
 export const pollClient = {
 	view: (code: string) => call<PublicPoll>(code, 'GET', ''),
-	async join(code: string, identify: boolean, nickname = '') {
-		const r = await call<{ participant_id: string; identified: boolean; token?: string }>(code, 'POST', '/join', JSON.stringify({ identify, nickname }), { 'Content-Type': 'application/json' });
+	async join(code: string, identify: boolean, nickname = '', groupId = '') {
+		const r = await call<{ participant_id: string; identified: boolean; token?: string }>(code, 'POST', '/join', JSON.stringify({ identify, nickname, group_id: groupId }), { 'Content-Type': 'application/json' });
 		if (r.token) setToken(code, r.token);
 		return r;
 	},

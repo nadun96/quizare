@@ -95,7 +95,7 @@ The LLM gateway (FR-EV-02/03/05, ADR-09, ADR-16).
 
 ## poll (schema `poll`)
 
-Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `score.go` holds answer keys and marking (partial credit, speed bonus) and `leaderboard.go` the ranking (D-42); `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
+Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `score.go` holds answer keys and marking (partial credit, speed bonus) and `leaderboard.go` the ranking (D-42); `groups.go` forms groups, enforces first-answer and captain rules and combines group scores (D-43); `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
 
 ## admin (no schema)
 

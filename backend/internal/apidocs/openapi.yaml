@@ -966,6 +966,49 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { question_id: { type: string, format: uuid }, participant_id: { type: string, format: uuid }, word: { type: string }, hidden: { type: boolean }, nickname: { type: string, maxLength: 30 } } } } } }
       responses: { '204': { description: 'Done' } }
+  /api/teacher/polls/{id}/groups:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherPollsGroups
+      tags: [polls]
+      summary: Groups with their members, and participants without a group
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PollGroupsView' } } } } }
+    post:
+      operationId: postTeacherPollsGroups
+      tags: [polls]
+      summary: Add a group (default name "Group N"; at most 50)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/PollGroupInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/PollGroup' } } } }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}/groups/generate:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherPollsGroupsGenerate
+      tags: [polls]
+      summary: Form groups at random (balanced) or from the classroom's categories
+      description: Without `reassign`, only participants who have no group are placed. Groups without a captain get their earliest member as captain.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [from], properties: { from: { type: string, enum: [random, categories] }, count: { type: integer, minimum: 2, maximum: 50, description: 'random only' }, reassign: { type: boolean } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PollGroupsView' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}/groups/members:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherPollsGroupsMembers
+      tags: [polls]
+      summary: Move participants to a group (empty group_id removes them), or make one the captain
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [participant_ids], properties: { participant_ids: { type: array, items: { type: string, format: uuid } }, group_id: { type: [string, 'null'] }, captain: { type: boolean } } } } } }
+      responses: { '204': { description: 'Done' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/poll-groups/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    patch:
+      operationId: patchTeacherPollGroupsById
+      tags: [polls]
+      summary: Rename or recolour a group
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollGroupInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PollGroup' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteTeacherPollGroupsById
+      tags: [polls]
+      summary: Delete a group; its members become ungrouped
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/polls/{id}/files/{file}:
     get:
       operationId: getTeacherPollsFile
@@ -990,7 +1033,7 @@ paths:
       description: 'Joining again returns the same participant. Errors: `login_required` (401), `not_enrolled` (403, classroom-only polls), `poll_closed` (409), `rate_limited` (429).'
       security: []
       parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/pollToken' }]
-      requestBody: { content: { application/json: { schema: { type: object, properties: { identify: { type: boolean, description: 'Optional-identity polls: answer under the logged-in account' }, nickname: { type: string, maxLength: 30, description: 'Shown on the leaderboard; joining again with a new one renames' } } } } } }
+      requestBody: { content: { application/json: { schema: { type: object, properties: { identify: { type: boolean, description: 'Optional-identity polls: answer under the logged-in account' }, nickname: { type: string, maxLength: 30, description: 'Shown on the leaderboard; joining again with a new one renames' }, group_id: { type: string, description: 'groups=self: the group to join (required when there are groups); joining again moves you if you have not answered yet' } } } } } }
       responses: { '200': { description: 'Joined', content: { application/json: { schema: { $ref: '#/components/schemas/PollJoinResult' } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/Forbidden' } }
   /api/polls/{code}/answers/{question}:
     put:
@@ -1001,7 +1044,7 @@ paths:
       security: []
       parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/question' }, { $ref: '#/components/parameters/pollToken' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' } } } } } }
-      responses: { '200': { description: 'Saved (normalised)', content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' }, key: { $ref: '#/components/schemas/PollKey' }, score: { $ref: '#/components/schemas/PollScore' } } } } } }, '409': { description: '`poll_closed`, `question_not_active`, `time_up` or editing is off' }, '422': { $ref: '#/components/responses/Invalid' } }
+      responses: { '200': { description: 'Saved (normalised)', content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' }, key: { $ref: '#/components/schemas/PollKey' }, score: { $ref: '#/components/schemas/PollScore' } } } } } }, '409': { description: '`poll_closed`, `question_not_active`, `time_up`, `answer_revealed`, `group_answered`, `captain_only` or editing is off' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/polls/{code}/files/{question}:
     post:
       operationId: postPollsFile
@@ -1746,6 +1789,9 @@ components:
         leaderboard: { type: string, enum: ['off', presenter, everyone], default: presenter }
         show_answers: { type: string, enum: [never, after_answer, presenter, after_close], description: 'When participants see the correct answer. presenter needs presenter pacing.' }
         names: { type: string, enum: [nickname, name], description: 'Leaderboard names; name (real names) is not allowed in anonymous polls' }
+        groups: { type: string, enum: ['off', manual, random, categories, self], description: 'How groups form (D-43). categories needs a classroom and participants who log in.' }
+        group_acceptance: { type: string, enum: [all, first, captain, best], description: "Which answers count for the group: every member's, the group's first, the captain's, or the best" }
+        group_calc: { type: string, enum: [sum, average, max, min], description: 'acceptance=all: how members'' scores combine. Average and lowest count silent members as 0.' }
     PollInput:
       type: object
       properties:
@@ -1795,6 +1841,48 @@ components:
     PollScore:
       type: object
       properties: { points: { type: number }, correct: { type: boolean } }
+    PollGroupInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 40 }
+        color: { type: integer, minimum: 1, maximum: 8, description: Categorical palette slot }
+    PollGroup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        poll_id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: integer }
+        position: { type: integer }
+        category_id: { type: string, format: uuid, description: 'Formed from this classroom category' }
+        members: { type: array, items: { $ref: '#/components/schemas/PollGroupMember' } }
+    PollGroupMember:
+      type: object
+      properties:
+        participant_id: { type: string, format: uuid }
+        name: { type: string }
+        nickname: { type: string }
+        real_name: { type: string }
+        captain: { type: boolean }
+        group_id: { type: string }
+    PollGroupsView:
+      type: object
+      properties:
+        groups: { type: array, items: { $ref: '#/components/schemas/PollGroup' } }
+        ungrouped: { type: array, items: { $ref: '#/components/schemas/PollGroupMember' } }
+    PollGroupInfo:
+      type: object
+      properties: { id: { type: string }, name: { type: string }, color: { type: integer }, members: { type: integer } }
+    PollGroupRank:
+      type: object
+      properties:
+        rank: { type: integer }
+        id: { type: string }
+        name: { type: string }
+        color: { type: integer }
+        members: { type: integer }
+        score: { type: number }
+        answered: { type: integer, description: Questions with a counted answer }
     PollRank:
       type: object
       properties:
@@ -1915,6 +2003,13 @@ components:
         me: { $ref: '#/components/schemas/PollRank' }
         me_key: { type: string }
         nickname: { type: string }
+        group_mode: { type: string }
+        group_acceptance: { type: string }
+        groups: { type: array, items: { $ref: '#/components/schemas/PollGroupInfo' } }
+        group_leaderboard: { type: array, items: { $ref: '#/components/schemas/PollGroupRank' }, description: 'When the leaderboard is shown to everyone' }
+        my_group: { type: string }
+        captain: { type: boolean }
+        group_answers: { type: object, description: "Teammates' answers (first-answer and captain groups)", additionalProperties: { type: object, properties: { by: { type: string }, value: { $ref: '#/components/schemas/PollAnswer' } } } }
     PollTeacherResults:
       type: object
       properties:
@@ -1923,3 +2018,4 @@ components:
         participants: { type: integer }
         results: { type: object, additionalProperties: { $ref: '#/components/schemas/PollResult' } }
         leaderboard: { type: array, items: { $ref: '#/components/schemas/PollRank' }, description: 'Scored polls: every participant' }
+        group_leaderboard: { type: array, items: { $ref: '#/components/schemas/PollGroupRank' } }
