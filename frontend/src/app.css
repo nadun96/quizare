@@ -264,3 +264,21 @@ html[data-motion='reduce'] *::after {
 @layer components {
 	.live-card { background: color-mix(in oklab, var(--color-primary) 6%, var(--color-base-100)); border-color: color-mix(in oklab, var(--color-primary) 35%, var(--color-base-300)); }
 }
+
+/* Categorical palette for student categories and groups (dataviz reference
+   palette, validated for colour-blind separation; fixed order, never cycled
+   past 8). Used for dots and swatches only; text stays in ink colours. */
+:root, [data-theme='quiz'] {
+	--cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
+	--cat-5: #e87ba4; --cat-6: #008300; --cat-7: #4a3aa7; --cat-8: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='quiz']) {
+		--cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+		--cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
+	}
+}
+[data-theme='quiz-dark'] {
+	--cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+	--cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
+}
