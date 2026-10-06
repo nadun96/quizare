@@ -21,6 +21,14 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		httpx.JSON(w, 200, map[string]any{"results": list})
 		return nil
 	}))
+	r.Method("GET", "/sessions/{id}/teams/standings", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		list, err := s.TeamStandings(r.Context(), uid(r), chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, map[string]any{"teams": list})
+		return nil
+	}))
 	r.Method("PUT", "/marks/{attempt}/{question}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in OverrideInput
 		if err := httpx.Decode(w, r, &in); err != nil {

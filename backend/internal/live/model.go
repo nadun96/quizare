@@ -99,4 +99,6 @@ type Attempt struct {
 	InvalidatedAt  *time.Time `json:"invalidated_at,omitempty"`
 	InvalidReason  string     `json:"invalid_reason,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
+	TeamID         *string    `json:"team_id,omitempty"` // D-44
+	Captain        bool       `json:"captain,omitempty"`
 }

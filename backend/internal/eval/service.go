@@ -16,6 +16,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
 	"github.com/nadun96/quizplatform/internal/quiz"
+	"github.com/nadun96/quizplatform/internal/settings"
 )
 
 // Mark statuses.
@@ -32,6 +33,10 @@ type Attempts interface {
 	SessionMarkingData(ctx context.Context, teacherID, sessionID string) ([]*live.MarkingData, error)
 	OwnMarkingData(ctx context.Context, userID, attemptID string) (*live.MarkingData, error)
 	AttemptIDs(ctx context.Context, sessionID string, states ...string) ([]string, error)
+	TeamRules(ctx context.Context, teacherID, sessionID string) (settings.Effective, error)
+	SessionTeamRules(ctx context.Context, sessionID string) (settings.Effective, error)
+	TeamInfos(ctx context.Context, sessionID string) ([]live.TeamInfo, error)
+	SessionMaxScore(ctx context.Context, sessionID string) (float64, error)
 }
 
 // LLMQueue schedules LLM marking or feedback in the caller's transaction.
@@ -471,6 +476,7 @@ type StudentResult struct {
 	Passed        bool              `json:"passed"`
 	Complete      bool              `json:"complete"` // false: "marking in progress" badge (ADR-15)
 	Questions     []StudentQuestion `json:"questions"`
+	Team          *StudentTeam      `json:"team,omitempty"` // D-44
 }
 
 type StudentQuestion struct {
@@ -526,6 +532,9 @@ func (s *Service) StudentResult(ctx context.Context, userID, attemptID string) (
 			}
 		}
 		out.Questions = append(out.Questions, sq)
+	}
+	if out.Team, err = s.studentTeam(ctx, d.SessionID, d.AttemptID); err != nil {
+		return out, err
 	}
 	return out, nil
 }

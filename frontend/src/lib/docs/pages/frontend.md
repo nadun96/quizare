@@ -35,6 +35,7 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `QuestionView.svelte` | Renders all seven types and emits a `Response` on every change. Drag and drop uses SortableJS; essays are debounced. |
 | `QuestionEditor.svelte` | Authoring form for all seven types. Keyed by question so switching questions starts a fresh form. Question text and feedback use the rich text editor. |
 | `richtext/` | Rich text: `RichTextEditor.svelte` (Tiptap, loaded on first use), `RichText.svelte` (display, with blank inputs placed into the text), `syntax.ts` (the shared Markdown dialect), `render.ts` (Markdown → sanitised HTML) and `plain.ts` (plain text, KaTeX loader). See [Rich text](#rich-text). |
+| `SessionTeams.svelte` | Teams on the live dashboard: standings, random or category teams, moving students, captains (D-44). |
 | `StudentsPanel.svelte` | A classroom's students with categories: filter chips, search, multi-select, add to or remove from a category (D-41). |
 | `SettingsEditor.svelte` + `settingsMeta.ts` | Generic overrides editor showing inherited values. |
 | `AnalyticsView.svelte` | Class, question and student analytics tables and the score histogram. |
