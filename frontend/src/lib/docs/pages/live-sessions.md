@@ -121,6 +121,7 @@ Sessions can be a team competition (V2-06, V2-07, D-44). The rules are ordinary 
 - **Everyone still sits their own attempt.** Unlike polls, nobody is blocked from answering: timers, proctoring and one attempt per student (BR-01) stay exactly as they are. Acceptance only decides which marks count: every member's (`all`, combined by `team_calc`), the team's earliest answer to each question (`first`, by `saved_at`), the captain's (`captain`), or the best (`best`). Average and lowest count members without a mark as 0.
 - **Standings** (`GET /api/teacher/sessions/{id}/teams/standings`) are computed from `eval.marks` when asked, so changing the rules applies at once. They fill in as members finish; `complete` is false while a counted mark is pending (LLM or manual). Invalidated attempts never count (D-27). Teams are ranked by percentage of their maximum (a total scales with team size), and equal percentages share a rank.
 - Students see their team on the attempt screen and, once results are released, their team's place on the result page.
+- A public live link from the dashboard shows students (by student ID or "Student N") and teams updating as students finish; see [Analytics](analytics.md#live-leaderboard-links).
 
 ## Ending, release, reinstating
 

@@ -65,7 +65,7 @@ export type PollKey = {
 	case_sensitive?: boolean;
 };
 export type PollScore = { points: number; correct: boolean };
-export type Rank = { rank: number; key: string; name: string; score: number; correct: number; answered: number; participant_id?: string; real_name?: string; nickname?: string; color?: number; members?: number };
+export type Rank = { rank: number; key: string; name: string; score: number; correct: number; answered: number; participant_id?: string; real_name?: string; nickname?: string; color?: number; members?: number; detail?: string };
 
 // Groups (D-43).
 export type GroupMode = 'off' | 'manual' | 'random' | 'categories' | 'self';

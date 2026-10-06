@@ -36,6 +36,8 @@ type Sessions interface {
 
 type Results interface {
 	SessionResults(ctx context.Context, teacherID, sessionID string) ([]eval.AttemptResult, error)
+	PublicTeamStandings(ctx context.Context, sessionID string) ([]eval.TeamStanding, error)
+	PublicRanking(ctx context.Context, sessionID string, studentIDs bool, limit int) ([]eval.RankedStudent, int, int, error)
 }
 
 type Users interface {
@@ -49,6 +51,8 @@ type Service struct {
 	users    Users
 	jobs     jobs.Inserter
 	now      func() time.Time
+	polls    Polls
+	live     liveCacheT
 }
 
 func NewService(pool *pgxpool.Pool, s Sessions, r Results, u Users, inserter jobs.Inserter) *Service {
@@ -354,6 +358,14 @@ func (s *Service) checkTarget(ctx context.Context, teacherID, scope, id string) 
 	case "session":
 		_, err := s.sessions.SessionInfo(ctx, teacherID, id)
 		return err
+	case "live_session":
+		_, err := s.sessions.SessionInfo(ctx, teacherID, id)
+		return err
+	case "live_poll":
+		if s.polls == nil {
+			return httpx.ErrNotFound
+		}
+		return s.polls.OwnsPoll(ctx, teacherID, id)
 	case "quiz":
 		ids, err := s.sessions.SessionIDsForQuiz(ctx, teacherID, id)
 		if err == nil && len(ids) == 0 {
@@ -361,7 +373,7 @@ func (s *Service) checkTarget(ctx context.Context, teacherID, scope, id string) 
 		}
 		return err
 	}
-	return httpx.Invalid(map[string]string{"scope": "scope must be session or quiz"})
+	return httpx.Invalid(map[string]string{"scope": "scope must be session, quiz, live_session or live_poll"})
 }
 
 // CreateLink makes a public read-only link. Views default to the session's
@@ -370,24 +382,39 @@ func (s *Service) CreateLink(ctx context.Context, teacherID string, in ShareInpu
 	if err := s.checkTarget(ctx, teacherID, in.Scope, in.TargetID); err != nil {
 		return ShareLink{}, err
 	}
+	live := isLive(in.Scope)
 	if len(in.Views) == 0 && in.Scope == "session" {
 		info, _ := s.sessions.SessionInfo(ctx, teacherID, in.TargetID)
 		in.Views = []string{info.Effective.ResultsView}
+	}
+	if len(in.Views) == 0 && live {
+		in.Views = []string{"leaderboard", "teams"}
 	}
 	f := map[string]string{}
 	if len(in.Views) == 0 {
 		f["views"] = "choose at least one view"
 	}
 	for _, v := range in.Views {
-		if !validViews[v] {
+		if live && !liveViews[v] {
+			f["views"] = "live views are leaderboard and teams"
+		} else if !live && !validViews[v] {
 			f["views"] = "views are individual, question_pct and pass_rate"
 		}
 	}
+	// Who can be told apart: student IDs for sessions, nicknames for polls.
+	// Real names never appear on a public link (BR-13).
 	if in.Identify == "" {
 		in.Identify = "anonymous"
+		if in.Scope == "live_poll" {
+			in.Identify = "nickname"
+		}
 	}
-	if in.Identify != "anonymous" && in.Identify != "student_id" {
-		f["identify"] = "identify must be anonymous or student_id"
+	allowed := map[string]bool{"anonymous": true, "student_id": in.Scope != "live_poll", "nickname": in.Scope == "live_poll"}
+	if !allowed[in.Identify] {
+		f["identify"] = "identify must be anonymous, or student_id for sessions and nickname for polls"
+	}
+	if live {
+		in.ShowAnswers = false
 	}
 	if in.ExpiresAt != nil && in.ExpiresAt.Before(s.now()) {
 		f["expires_at"] = "expiry must be in the future"
@@ -483,6 +510,9 @@ func (s *Service) Public(ctx context.Context, token string) (PublicView, error) 
 	}
 	if err != nil {
 		return PublicView{}, err
+	}
+	if isLive(l.Scope) {
+		return PublicView{}, httpx.ErrNotFound // live links have their own page
 	}
 	if l.RevokedAt != nil || (l.ExpiresAt != nil && s.now().After(*l.ExpiresAt)) {
 		return PublicView{}, errLinkGone

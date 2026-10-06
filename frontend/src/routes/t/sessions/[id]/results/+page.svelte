@@ -10,7 +10,7 @@
 
 	type Mark = { question_id: string; code: string; type: QType; text: string; response: Response | null; key: Key; method: string; status: string; score: number | null; max_score: number; correct: boolean | null; feedback: string; ai_feedback: string; ai_rationale?: string; ai_marked: boolean; flagged: boolean; flag_reason?: string };
 	type Result = { attempt_id: string; user_id: string; student_number: string | null; state: string; score: number; max_score: number; pct: number; passed: boolean; complete: boolean; invalidated: boolean; marks: Mark[] };
-	type Link = { id: string; token?: string; views: string[]; identify: string; show_answers: boolean; label: string; expires_at: string | null; revoked_at: string | null; created_at: string };
+	type Link = { id: string; scope?: string; token?: string; views: string[]; identify: string; show_answers: boolean; label: string; expires_at: string | null; revoked_at: string | null; created_at: string };
 	type Ev = { id: number; kind: string; attempt_id: string | null; details: Record<string, unknown>; created_at: string };
 
 	const ready = requireRole('teacher');
@@ -44,7 +44,7 @@
 	async function openTab(t: typeof tab) {
 		tab = t;
 		if (t === 'analytics') stats = await api.get('/api/teacher/sessions/' + id + '/analytics');
-		if (t === 'share') links = (await api.get<{ links: Link[] }>('/api/teacher/share-links?target_id=' + id)).links ?? [];
+		if (t === 'share') links = ((await api.get<{ links: Link[] }>('/api/teacher/share-links?target_id=' + id)).links ?? []).filter((l) => !l.scope?.startsWith('live_'));
 		if (t === 'log') events = (await api.get<{ events: Ev[] }>('/api/teacher/sessions/' + id + '/events')).events ?? [];
 	}
 	const needsReview = (m: Mark) => m.status === 'needs_manual' || m.status === 'pending' || m.flagged || m.ai_marked;

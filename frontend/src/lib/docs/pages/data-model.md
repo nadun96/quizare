@@ -14,6 +14,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0008_analytics.sql` | `analytics.session_stats`, `analytics.share_links` |
 | `0009_poll.sql` | `poll.polls`, `poll.questions`, `poll.participants`, `poll.responses`, `poll.hidden_words`, `poll.files` |
 | `0010_categories.sql` | `content.categories`, `content.enrolment_categories` |
+| `0014_live_links.sql` | Share links gain the `live_session` and `live_poll` scopes and `nickname` identification |
 | `0013_session_teams.sql` | Session teams: `live.teams`, `team_id`/`captain` on `live.attempts` |
 | `0012_poll_groups.sql` | Poll groups: `poll.groups`, `group_id`/`captain` on participants, group settings on `poll.polls`, `created_at` on responses |
 | `0011_poll_scoring.sql` | Scored polls: competition settings on `poll.polls`, `key`/`points`/`time_limit_sec` on questions, `nickname` on participants, `score`/`correct`/`elapsed_ms` on responses |
