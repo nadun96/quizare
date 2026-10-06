@@ -1,6 +1,6 @@
 # Live polls
 
-Code: `backend/internal/poll` (schema `poll`, migration `0009_poll.sql`) and `frontend/src/lib/poll`. Decision: D-40.
+Code: `backend/internal/poll` (schema `poll`, migrations `0009_poll.sql` and `0011_poll_scoring.sql`) and `frontend/src/lib/poll`. Decisions: D-40, D-42 (scoring).
 
 Polls are quick, ungraded questions for any audience: a word cloud to open a lesson, a rating to close it, a Likert scale for feedback. They sit beside quizzes rather than inside them, because they have no answer keys, no marks and no proctoring, and they must work without a login.
 
@@ -60,6 +60,43 @@ Word-cloud entries are normalised: lower case, and punctuation turned into space
 - one shared `update` to all participants (`/ws/polls/{code}`): no answers and no identities.
 
 The participant socket is read-only and carries no identity; answers go over REST. Because every participant gets the same update, "after answering" is applied by each browser to its own view, so it is a display rule, not secrecy. `never` is enforced on the server. This keeps 200 participants at one computation per change instead of 200.
+
+## Scoring and leaderboard
+
+Turning on **Score answers** (`scoring`) makes a poll a competition (V2-01, V2-02, D-42). Questions with an answer key earn points; opinion types (word cloud, rating, Likert, matrix, essay, code, media) are never scored.
+
+| Setting | Values | Meaning |
+|---------|--------|---------|
+| `speed_bonus` | on, off | Presenter-led questions with a time limit: a right answer earns 50–100% of its points, linearly over the time limit. |
+| `leaderboard` | `off`, `presenter` (default), `everyone` | Who sees the ranking. `everyone` sends the top 10 in the shared update; each participant's own place comes from their personal view. |
+| `show_answers` | `never`, `after_answer`, `presenter`, `after_close` | When participants see the correct answer. `presenter` needs presenter pacing and follows the **Show answer** button. |
+| `names` | `nickname` (default), `name` | Leaderboard names. `name` shows the account name of logged-in participants and is not allowed in anonymous polls. Without a nickname a participant is "Participant N". |
+
+Per question: `key` (shape by type, below), `points` (0–10,000, default 100) and, for presenter pacing, `time_limit_sec` (5–3,600). Answers after the limit (plus 2 s grace) get `409 time_up`.
+
+| Types | Key | Partial credit |
+|-------|-----|----------------|
+| `SINGLE`, `MULTI` | `correct`: option ids | MULTI: (right − wrong) / correct, floored at 0, as in quizzes (D-24) |
+| `MATCH`, `DRAG` into boxes | `pairs` | Share of pairs right |
+| `DRAG` ranking | `order` | Share of items in place |
+| `BLANK_OPT`, `BLANK_TEXT` | `blanks`: blank → accepted option ids or words | Share of blanks right |
+| `SHORT_TEXT` | `accepted`, `case_sensitive` | None |
+| `NUMBER`, `SLIDER` | `value`, `tolerance` | None |
+| `DATE`, `TIME` | `accepted` | None |
+
+Ranking: points, then right answers, then who gave their last scored answer first, then join order. Equal points and right answers share a rank (1, 2, 2, 4). Hidden (moderated) answers don't count.
+
+**Keeping keys secret.** The key is stripped from every participant-facing question. Revealed keys travel in `keys`:
+
+- `after_answer`: only in the participant's own answer response and personal view, never in the shared update;
+- `presenter`: in the shared update while the presenter shows the answer of the current question;
+- `after_close`: once the poll is closed.
+
+Once a participant can see a key, their answer to that question is locked (`409 answer_revealed`), so seeing the answer can't improve a score.
+
+Leaderboard rows carry an opaque `key` (a hash of poll and participant), so a browser can find itself (`me_key`) without participant ids being published. Teachers also get the participant id, nickname and real name, and can rename a participant through the moderation endpoint.
+
+The presenter screen adds a countdown, **Show answer** (`A`; with `show_answers=presenter` it reveals to everyone, otherwise to this screen only) and a full-screen **Leaderboard** (`L`).
 
 ## Moderation and export
 

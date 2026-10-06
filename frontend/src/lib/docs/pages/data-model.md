@@ -14,6 +14,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0008_analytics.sql` | `analytics.session_stats`, `analytics.share_links` |
 | `0009_poll.sql` | `poll.polls`, `poll.questions`, `poll.participants`, `poll.responses`, `poll.hidden_words`, `poll.files` |
 | `0010_categories.sql` | `content.categories`, `content.enrolment_categories` |
+| `0011_poll_scoring.sql` | Scored polls: competition settings on `poll.polls`, `key`/`points`/`time_limit_sec` on questions, `nickname` on participants, `score`/`correct`/`elapsed_ms` on responses |
 
 River's own tables (`river_job`, ...) are created by `jobs.Migrate`.
 
@@ -99,6 +100,8 @@ Primary key `(attempt_id, question_id)`. `question_id` refers to the **snapshot*
 ## Polls
 
 `poll.polls` holds the settings (`identity`, `audience`, `pacing`, `show_results`, `allow_edit`), the status and, for presenter pacing, `current_index` and `revealed`. A check constraint makes classroom-only polls identified. `poll.participants` has **either** a `user_id` (identified) **or** a `token_hash` (anonymous), never both, unique per poll. `poll.responses` has one JSON value per participant and question, with `hidden` for moderation; `poll.hidden_words` hides words from word clouds. `poll.files` stores uploads as `bytea` (12 MB cap per row). Everything cascades from the poll. See [Live polls](polls.md).
+
+Scored polls (D-42) add `scoring`, `speed_bonus`, `leaderboard`, `show_answers`, `names`, `answers_revealed` and `question_started_at` to `poll.polls`; an answer `key` (JSON, never sent to participants before it is revealed), `points` and `time_limit_sec` to `poll.questions`; `nickname` to `poll.participants`; and to `poll.responses` the stored `score`, `correct` and `elapsed_ms` (time from the question appearing, for the speed bonus). Scores are stored when an answer is saved and recomputed when a key, points or the scoring settings change.
 
 ## Deletion and anonymisation
 

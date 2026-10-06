@@ -6,11 +6,21 @@
 	import Icon from '../ui/Icon.svelte';
 	import { toast } from '../ui/toast.svelte';
 	import ChoiceList from './ChoiceList.svelte';
+	import KeyEditor from './KeyEditor.svelte';
 	import { TYPE_META, TYPES_BY_GROUP, withIds } from './meta';
 	import PollInput from './PollInput.svelte';
-	import type { PollAnswer, PollBody, PollQuestion, PollType } from './types';
+	import { cleanKey, SCORABLE } from './scoring';
+	import type { PollAnswer, PollBody, PollKey, PollQuestion, PollType } from './types';
 
-	let { pollId, question = null, onsaved, oncancel }: { pollId: string; question?: PollQuestion | null; onsaved: (q: PollQuestion) => void; oncancel: () => void } = $props();
+	let { pollId, question = null, scoring = false, pacing = 'self', onsaved, oncancel }: {
+		pollId: string;
+		question?: PollQuestion | null;
+		/** The poll scores answers: offer a key and points (D-42). */
+		scoring?: boolean;
+		pacing?: 'self' | 'presenter';
+		onsaved: (q: PollQuestion) => void;
+		oncancel: () => void;
+	} = $props();
 
 	// svelte-ignore state_referenced_locally
 	const initial = question;
@@ -22,9 +32,13 @@
 	let errors = $state<Record<string, string>>({});
 	let saving = $state(false);
 	let previewValue = $state<PollAnswer>({});
+	let key = $state<PollKey>(structuredClone($state.snapshot(initial?.key) ?? {}));
+	let points = $state(initial?.points ?? 100);
+	let timeLimit = $state<number | null>(initial?.time_limit_sec ?? null);
 
 	function choose(t: PollType) {
 		type = t;
+		key = {};
 		body = TYPE_META[t].body();
 		if (!text.trim()) text = TYPE_META[t].text;
 		previewValue = {};
@@ -46,7 +60,13 @@
 		if (!type) return;
 		saving = true;
 		errors = {};
-		const payload = { type, text, required, body: { ...$state.snapshot(body), format: 'markdown' } };
+		const b = { ...$state.snapshot(body), format: 'markdown' } as PollBody;
+		const payload = {
+			type, text, required, body: b,
+			key: cleanKey(type, { ...withIds(b), blanks }, $state.snapshot(key) as PollKey),
+			points: Number(points) || 0,
+			time_limit_sec: pacing === 'presenter' && timeLimit ? Number(timeLimit) : null
+		};
 		try {
 			const q = initial
 				? await api.put<PollQuestion>('/api/teacher/poll-questions/' + initial.id, payload)
@@ -194,6 +214,25 @@
 				<p class="small muted m-0">Recording needs HTTPS (or localhost) and the participant's permission.</p>
 			{/if}
 
+			{#if scoring || pacing === 'presenter'}
+				<section class="scoring vstack" aria-label="Scoring">
+					{#if scoring && SCORABLE.has(type)}
+						<KeyEditor {type} body={withIds($state.snapshot(body) as PollBody)} {blanks} bind:key />
+					{:else if scoring}
+						<p class="small muted m-0 flex items-center gap-1"><Icon name="info" size={14} />{TYPE_META[type].label} answers are opinions, so they aren't scored.</p>
+					{/if}
+					<div class="flex flex-wrap gap-3">
+						{#if scoring && SCORABLE.has(type)}
+							<div class="w-32"><label for="pq-points">Points</label><input id="pq-points" class="input input-sm w-full" type="number" min="0" max="10000" step="10" bind:value={points} /></div>
+						{/if}
+						{#if pacing === 'presenter'}
+							<div class="w-40"><label for="pq-limit">Time limit (seconds)</label><input id="pq-limit" class="input input-sm w-full" type="number" min="5" max="3600" placeholder="none" value={timeLimit ?? ''} oninput={(e) => (timeLimit = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))} /></div>
+						{/if}
+					</div>
+					{#if pacing === 'presenter'}<p class="small muted m-0">With a time limit, answers close when the countdown ends{scoring ? ', and the speed bonus (if on) rewards quick right answers' : ''}.</p>{/if}
+				</section>
+			{/if}
+
 			{#if errorList.length}
 				<div class="alert alert-soft alert-error small" role="alert"><Icon name="alert" /><ul class="m-0 pl-4">{#each errorList as [k, v] (k)}<li>{k === '_' ? '' : k.replace('body.', '') + ': '}{v}</li>{/each}</ul></div>
 			{/if}
@@ -220,5 +259,6 @@
 	.type-icon { width: 2.25rem; height: 2.25rem; flex: none; display: grid; place-items: center; border-radius: 0.6rem; background: color-mix(in oklab, var(--color-primary) 12%, transparent); color: var(--color-primary); }
 	.editor { display: grid; gap: 1.25rem; }
 	@media (min-width: 1024px) { .editor { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; } .preview { position: sticky; top: 5rem; } }
+	.scoring { padding: 0.9rem 1rem; border-radius: var(--radius-box); border: 1px solid color-mix(in oklab, var(--color-success) 35%, var(--color-base-300)); background: color-mix(in oklab, var(--color-success) 5%, var(--color-base-100)); }
 	.preview { padding: 1rem; border-radius: var(--radius-box); background: var(--color-base-200); border: 1px dashed var(--color-field); }
 </style>

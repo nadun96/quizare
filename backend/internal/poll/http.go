@@ -137,13 +137,14 @@ func (s *Service) hStatus(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Service) hPresent(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
-		Index    int  `json:"index"`
-		Revealed bool `json:"revealed"`
+		Index           int  `json:"index"`
+		Revealed        bool `json:"revealed"`
+		AnswersRevealed bool `json:"answers_revealed"`
 	}
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	p, err := s.Present(r.Context(), teacherID(r), chi.URLParam(r, "id"), in.Index, in.Revealed)
+	p, err := s.Present(r.Context(), teacherID(r), chi.URLParam(r, "id"), in.Index, in.Revealed, in.AnswersRevealed)
 	if err != nil {
 		return err
 	}
@@ -480,11 +481,11 @@ func (s *Service) hAnswer(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	a, err := s.Answer(r.Context(), chi.URLParam(r, "code"), chi.URLParam(r, "question"), caller(r), in.Value)
+	res, err := s.Answer(r.Context(), chi.URLParam(r, "code"), chi.URLParam(r, "question"), caller(r), in.Value)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"value": a})
+	httpx.JSON(w, 200, res)
 	return nil
 }
 
