@@ -609,6 +609,56 @@ paths:
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Attempt' } } } }, '409': { $ref: '#/components/responses/Conflict' }, '410': { $ref: '#/components/responses/Gone' } }
 
   # ---------------- marking ----------------
+  /api/teacher/sessions/{id}/teams:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherSessionsTeams
+      tags: [sessions]
+      summary: Teams with their members, and students without a team (D-44)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TeamsView' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postTeacherSessionsTeams
+      tags: [sessions]
+      summary: Add a team (default name "Team N"; at most 50)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TeamInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/TeamInfo' } } } }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/sessions/{id}/teams/generate:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherSessionsTeamsGenerate
+      tags: [sessions]
+      summary: Form teams at random (balanced) or from the classroom's categories
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [from], properties: { from: { type: string, enum: [random, categories] }, count: { type: integer, minimum: 2, maximum: 50 }, reassign: { type: boolean, description: 'Also move students who already have a team' } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TeamsView' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/sessions/{id}/teams/members:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherSessionsTeamsMembers
+      tags: [sessions]
+      summary: Move attempts to a team (empty team_id removes them), or make one the captain
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [attempt_ids], properties: { attempt_ids: { type: array, items: { type: string, format: uuid } }, team_id: { type: [string, 'null'] }, captain: { type: boolean } } } } } }
+      responses: { '204': { description: 'Done' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/sessions/{id}/teams/standings:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherSessionsTeamsStandings
+      tags: [marking]
+      summary: Teams ranked by their combined marks (team_acceptance, team_calc)
+      description: Marks arrive as members finish. Teams are ranked by percentage of their maximum, so totals stay fair between teams of different sizes. Invalidated attempts never count.
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { teams: { type: array, items: { $ref: '#/components/schemas/TeamStanding' } } } } } } } }
+  /api/teacher/session-teams/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    patch:
+      operationId: patchTeacherSessionTeamsById
+      tags: [sessions]
+      summary: Rename or recolour a team
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TeamInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TeamInfo' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteTeacherSessionTeamsById
+      tags: [sessions]
+      summary: Delete a team; its members carry on without one
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/sessions/{id}/results:
     get:
       operationId: getTeacherSessionsResults
@@ -764,7 +814,7 @@ paths:
       tags: [student]
       summary: Join the session's waiting room (FR-SS-03, BR-01, BR-02)
       description: Auto-enrols when the classroom allows it. Under auto-admit the student is admitted at once.
-      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { student_number: { type: string } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { student_number: { type: string }, team_id: { type: string, description: 'team_mode=self: required once teams exist' } } } } } }
       responses:
         '200': { description: 'Current state', content: { application/json: { schema: { $ref: '#/components/schemas/StudentState' } } } }
         '403': { description: '`not_enrolled`, `enrolment_pending` or `enrolment_rejected`', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1226,6 +1276,9 @@ components:
         student_id_required: { type: boolean, description: 'classroom' }
         enrolment_approval: { type: boolean, description: 'classroom' }
         auto_enrol_on_join: { type: boolean, description: 'classroom' }
+        team_mode: { type: string, enum: ['off', manual, random, categories, self], description: 'quiz, session (D-44)' }
+        team_acceptance: { type: string, enum: [all, first, captain, best], description: 'quiz, session' }
+        team_calc: { type: string, enum: [sum, average, max, min], description: 'quiz, session; team_acceptance=all' }
     Effective:
       description: Fully resolved settings; every key from `Overrides` has a value.
       type: object
@@ -1508,6 +1561,58 @@ components:
         allowed_warnings: { type: integer }
         blur_grace_ms: { type: integer }
         invalid_reason: { type: string }
+        team: { $ref: '#/components/schemas/TeamInfo' }
+        captain: { type: boolean }
+    TeamInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 40 }
+        color: { type: integer, minimum: 1, maximum: 8 }
+    TeamInfo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: integer, description: Categorical palette slot }
+        position: { type: integer }
+        category_id: { type: string, format: uuid }
+        members: { type: integer }
+    TeamsView:
+      type: object
+      properties:
+        mode: { type: string }
+        acceptance: { type: string }
+        calc: { type: string }
+        teams:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/TeamInfo'
+              - type: object
+                properties: { member_list: { type: array, items: { $ref: '#/components/schemas/TeamMember' } } }
+        unassigned: { type: array, items: { $ref: '#/components/schemas/TeamMember' } }
+    TeamMember:
+      type: object
+      properties:
+        attempt_id: { type: string, format: uuid }
+        name: { type: string }
+        student_number: { type: [string, 'null'] }
+        state: { $ref: '#/components/schemas/AttemptState' }
+        captain: { type: boolean }
+        team_id: { type: string }
+    TeamStanding:
+      type: object
+      properties:
+        rank: { type: integer }
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: integer }
+        members: { type: integer, description: Not counting invalidated attempts }
+        finished: { type: integer, description: Members whose attempt is marked }
+        score: { type: number }
+        max_score: { type: number }
+        pct: { type: number }
+        complete: { type: boolean, description: False while a counted mark is pending }
     JoinPreview:
       type: object
       properties:
@@ -1517,6 +1622,8 @@ components:
         status: { type: string }
         student_id_required: { type: boolean }
         attempt: { oneOf: [{ $ref: '#/components/schemas/Attempt' }, { type: 'null' }] }
+        team_mode: { type: string }
+        teams: { type: array, items: { $ref: '#/components/schemas/TeamInfo' } }
     ViolationInput:
       type: object
       required: [kind]
@@ -1550,6 +1657,9 @@ components:
               remaining_ms: { type: [integer, 'null'] }
               connected: { type: boolean }
               invalid_reason: { type: string }
+              team_id: { type: string }
+              captain: { type: boolean }
+        teams: { type: array, items: { $ref: '#/components/schemas/TeamInfo' } }
     SessionEvent:
       type: object
       properties:
@@ -1621,6 +1731,12 @@ components:
         pass_mark_pct: { type: integer }
         passed: { type: boolean }
         complete: { type: boolean }
+        team:
+          description: The student's team and its place (D-44)
+          allOf:
+            - $ref: '#/components/schemas/TeamStanding'
+            - type: object
+              properties: { of: { type: integer, description: Number of teams } }
         questions:
           type: array
           items:

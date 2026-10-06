@@ -61,7 +61,7 @@ Depends on `imageurl` for Drive link normalisation and SSRF-safe checks.
 
 ## live (schema `live`)
 
-Sessions, attempts, answers, violations and the real-time hub (FR-SS, FR-PR). This is the most intricate module; see [Live sessions & timing](live-sessions.md) and [Proctoring](proctoring.md).
+Sessions, attempts, answers, violations and the real-time hub (FR-SS, FR-PR); `teams.go` forms teams (D-44). This is the most intricate module; see [Live sessions & timing](live-sessions.md) and [Proctoring](proctoring.md).
 
 - `model.go`: states, `Session`, `Attempt`, `Snapshot`, and `Session.Effective(question, studentOverrides)`.
 - `timing.go`: pure functions (`admit`, `start`, `advance`, `pause`, `resume`, `extend`, `decide`, `newOrders`), unit-tested without a database.
@@ -73,7 +73,7 @@ Sessions, attempts, answers, violations and the real-time hub (FR-SS, FR-PR). Th
 
 ## eval (schema `eval`)
 
-Marking and feedback (FR-EV).
+Marking and feedback (FR-EV). `teams.go` ranks session teams from members' marks; the rules for combining marks are shared with polls in `platform/groupscore`.
 
 - `marker.go`: `MarkByKey` (partial credit, negative marks, Levenshtein spelling tolerance) and `PredefinedFeedback`.
 - `service.go`: `EvaluateAttempt` (River worker), `recompute` (attempt totals), `Override`, `SessionResults`, `StudentResult`, and the hooks `ApplyLLM`/`LLMFailed`/`MarkPendingTx` used by `llm`.

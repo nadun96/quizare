@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nadun96/quizplatform/internal/platform/groupscore"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 )
 
@@ -754,43 +755,11 @@ func (s *Service) groupInfos(ctx context.Context, pollID string) ([]GroupInfo, e
 	})
 }
 
-// combine turns the scores a group's members earned on one question into
-// the group's score. Average and lowest count members who didn't answer as
-// 0, so a group can't lift its average by letting only its best answer.
 func combine(acceptance, calc string, scores []float64, members int) float64 {
-	if len(scores) == 0 {
-		return 0
-	}
-	switch acceptance {
-	case "first", "captain":
-		return scores[0]
-	case "best":
-		calc = "max"
-	}
-	sum, hi, lo := 0.0, scores[0], scores[0]
-	for _, x := range scores {
-		sum += x
-		hi = max(hi, x)
-		lo = min(lo, x)
-	}
-	switch calc {
-	case "average":
-		if members < len(scores) {
-			members = len(scores)
-		}
-		return roundPts(sum / float64(members))
-	case "max":
-		return hi
-	case "min":
-		if len(scores) < members {
-			return 0
-		}
-		return lo
-	}
-	return roundPts(sum)
+	return groupscore.Combine(acceptance, calc, scores, members)
 }
 
-func roundPts(x float64) float64 { return float64(int64(x*100+0.5)) / 100 }
+func roundPts(x float64) float64 { return groupscore.Round(x) }
 
 // groupLeaderboard ranks groups by their combined score.
 func (s *Service) groupLeaderboard(ctx context.Context, p *Poll) ([]GroupRank, error) {

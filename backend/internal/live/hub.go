@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nadun96/quizplatform/internal/quiz"
+	"github.com/nadun96/quizplatform/internal/settings"
 )
 
 // Hub is the in-process connection registry and broadcaster (ADR-05). It
@@ -211,6 +212,8 @@ type StudentState struct {
 	AllowedWarnings     int                   `json:"allowed_warnings"`
 	BlurGraceMs         int                   `json:"blur_grace_ms"`
 	InvalidReason       string                `json:"invalid_reason,omitempty"`
+	Team                *TeamInfo             `json:"team,omitempty"` // D-44
+	Captain             bool                  `json:"captain,omitempty"`
 }
 
 func (s *Service) studentState(ctx context.Context, sess *Session, a *Attempt) (StudentState, error) {
@@ -224,7 +227,15 @@ func (s *Service) studentState(ctx context.Context, sess *Session, a *Attempt) (
 		QuestionDeadline: ms(EffectiveQuestionDeadline(a)), QuizRemainingMs: a.QuizRemainingMs,
 		QuestionRemainingMs: a.QuestionRemainingMs, Index: a.Current, Total: len(a.Order), OneWay: eff.OneWayNavigation,
 		Policy: eff.ViolationPolicy, Warnings: a.Warnings, AllowedWarnings: eff.AllowedWarnings,
-		BlurGraceMs: eff.BlurGraceMs, InvalidReason: a.InvalidReason,
+		BlurGraceMs: eff.BlurGraceMs, InvalidReason: a.InvalidReason, Captain: a.Captain,
+	}
+	if a.TeamID != nil {
+		var t TeamInfo
+		err := s.pool.QueryRow(ctx, `SELECT t.id, t.name, t.color, t.position, (SELECT count(*) FROM live.attempts x WHERE x.team_id=t.id)
+			FROM live.teams t WHERE t.id=$1`, *a.TeamID).Scan(&t.ID, &t.Name, &t.Color, &t.Position, &t.Members)
+		if err == nil {
+			st.Team = &t
+		}
 	}
 	// Questions are only visible while running: hidden when paused (UC-03 7b)
 	// and never before the start (BR-05).
@@ -293,6 +304,8 @@ type DashboardRow struct {
 	RemainingMs   *int64  `json:"remaining_ms"` // while paused
 	Connected     bool    `json:"connected"`
 	InvalidReason string  `json:"invalid_reason,omitempty"`
+	TeamID        *string `json:"team_id,omitempty"`
+	Captain       bool    `json:"captain,omitempty"`
 }
 
 type Dashboard struct {
@@ -301,6 +314,8 @@ type Dashboard struct {
 	Session    Session        `json:"session"`
 	Counts     map[string]int `json:"counts"`
 	Rows       []DashboardRow `json:"rows"`
+	TeamMode   string         `json:"team_mode"` // D-44
+	Teams      []TeamInfo     `json:"teams,omitempty"`
 }
 
 func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, error) {
@@ -326,7 +341,7 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 		err := r.Scan(&a.ID, &a.SessionID, &a.UserID, &a.StudentNumber, &a.State, &ov, &a.ExtensionSec,
 			&a.CountdownDeadline, &a.StartedAt, &a.QuizDeadline, &a.QuizRemainingMs, &a.Current, &a.QuestionDeadline,
 			&a.QuestionRemainingMs, &a.PausedAt, &order, &oo, &a.Warnings, &a.Violations, &a.DisconnectedAt,
-			&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt, &p.answered)
+			&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt, &a.TeamID, &a.Captain, &p.answered)
 		a.Order = make([]int, len(order))
 		p.a = &a
 		return p, err
@@ -350,8 +365,13 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 			AttemptID: a.ID, UserID: a.UserID, Name: users[a.UserID].Name, StudentNumber: a.StudentNumber, State: a.State,
 			Index: a.Current, Total: len(a.Order), Answered: p.answered, Warnings: a.Warnings, Violations: a.Violations,
 			ExtensionSec: a.ExtensionSec, QuizDeadline: ms(a.QuizDeadline), RemainingMs: a.QuizRemainingMs,
-			Connected: s.hub.isConnected(a.ID), InvalidReason: a.InvalidReason,
+			Connected: s.hub.isConnected(a.ID), InvalidReason: a.InvalidReason, TeamID: a.TeamID, Captain: a.Captain,
 		})
+	}
+	if d.TeamMode = v.Effective(nil, settings.Overrides{}).TeamMode; d.TeamMode != "off" {
+		if d.Teams, err = s.teamInfos(ctx, sessionID); err != nil {
+			return d, err
+		}
 	}
 	return d, nil
 }

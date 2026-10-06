@@ -58,6 +58,9 @@ When a session is created, defaults, platform, teacher and the classroom-to-quiz
 | `student_id_required` | classroom | false | FR-CLS-05 |
 | `enrolment_approval` | classroom | false | FR-CLS-04 |
 | `auto_enrol_on_join` | classroom | true | BR-02, D-08 |
+| `team_mode` | quiz, session | `off` | `off`, `manual`, `random`, `categories`, `self` (D-44) |
+| `team_acceptance` | quiz, session | `all` | `all`, `first`, `captain`, `best` |
+| `team_calc` | quiz, session | `sum` | `sum`, `average`, `max`, `min` (with `team_acceptance=all`) |
 
 **Not settings.** Time extensions and pauses *accumulate* rather than override, so they live on the session (`extension_sec`) and the attempt (`extension_sec`, remaining ms), not in `Overrides` (D-10).
 

@@ -113,6 +113,15 @@ Because all of this is derived from Postgres, a restarted process picks up exact
 
 At join time `newOrders` creates the attempt's question order (`question_order = shuffled`) and per-question option orders. MATCH right-hand items and DRAG items are **always** shuffled, because their authored order would reveal the answer; an ordering question is never shown already solved (D-23). `applyOrder` applies the stored order when building the student view.
 
+## Teams
+
+Sessions can be a team competition (V2-06, V2-07, D-44). The rules are ordinary settings, so they can be set on the quiz and overridden per session: `team_mode` decides formation, `team_acceptance` which marks count, and `team_calc` how members' marks combine.
+
+- **Formation.** `manual` (the teacher moves students on the dashboard), `random` (each joiner goes to the smallest team; **Random teams** creates N and spreads everyone), `categories` (one team per classroom category; students join their first category's team) and `self` (students choose on the join page; required once teams exist). Teams live in `live.teams`; an attempt has `team_id` and `captain` (one per team, the earliest member unless the teacher picks another).
+- **Everyone still sits their own attempt.** Unlike polls, nobody is blocked from answering: timers, proctoring and one attempt per student (BR-01) stay exactly as they are. Acceptance only decides which marks count: every member's (`all`, combined by `team_calc`), the team's earliest answer to each question (`first`, by `saved_at`), the captain's (`captain`), or the best (`best`). Average and lowest count members without a mark as 0.
+- **Standings** (`GET /api/teacher/sessions/{id}/teams/standings`) are computed from `eval.marks` when asked, so changing the rules applies at once. They fill in as members finish; `complete` is false while a counted mark is pending (LLM or manual). Invalidated attempts never count (D-27). Teams are ranked by percentage of their maximum (a total scales with team size), and equal percentages share a rank.
+- Students see their team on the attempt screen and, once results are released, their team's place on the result page.
+
 ## Ending, release, reinstating
 
 - `End` (or auto-end) submits running and paused attempts, marks waiting and admitted ones `not_started`, writes `session_ended`, and calls the `SessionEnded` hook (evaluate invalidated attempts, recompute analytics).

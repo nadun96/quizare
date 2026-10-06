@@ -6,7 +6,8 @@
 	import RichText from '$lib/richtext/RichText.svelte';
 
 	type Q = { question: StudentQuestion; response?: Response; correct_answer?: Key; score: number | null; max_score: number; status: string; correct: boolean | null; feedback?: string; ai_feedback?: string; ai_marked: boolean; feedback_resources?: Resource[] };
-	type Result = { session_title: string; score: number; max_score: number; pct: number; pass_mark_pct: number; passed: boolean; complete: boolean; state: string; questions: Q[] };
+	type Team = { name: string; color: number; rank: number; of: number; pct: number; members: number; finished: number; complete: boolean };
+	type Result = { session_title: string; score: number; max_score: number; pct: number; pass_mark_pct: number; passed: boolean; complete: boolean; state: string; questions: Q[]; team?: Team };
 	let res = $state<Result | null>(null);
 	let error = $state('');
 
@@ -29,6 +30,14 @@
 			{:else if !res.complete}<span class="badge badge-soft badge-warning">Marking in progress</span>
 			{:else}<span class="badge badge-soft {res.passed ? 'ok' : 'danger'}">{res.passed ? 'Passed' : 'Not passed'} (pass mark {res.pass_mark_pct}%)</span>{/if}
 		</div>
+		{#if res.team}
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" aria-label="Your team">
+				<span class="team-dot" style:background="var(--cat-{res.team.color})" aria-hidden="true"></span>
+				<div><div class="muted small">Your team</div><strong style="font-size:1.25rem">{res.team.name}</strong></div>
+				<span class="spacer"></span>
+				<div class="text-right"><div class="muted small">Team place</div><strong style="font-size:1.25rem">{res.team.rank} of {res.team.of}</strong><div class="small muted">{res.team.pct}%{res.team.finished < res.team.members || !res.team.complete ? ' so far' : ''}</div></div>
+			</div>
+		{/if}
 		{#each res.questions as q, i (q.question.id)}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 				<div class="row">
@@ -49,3 +58,7 @@
 		{/each}
 	{/if}
 </div>
+
+<style>
+	.team-dot { width: 1.1rem; height: 1.1rem; border-radius: 999px; flex: none; }
+</style>

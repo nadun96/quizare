@@ -60,6 +60,10 @@ type Overrides struct {
 	StudentIDRequired    *bool   `json:"student_id_required,omitempty" levels:"classroom"`
 	EnrolmentApproval    *bool   `json:"enrolment_approval,omitempty" levels:"classroom"`
 	AutoEnrolOnJoin      *bool   `json:"auto_enrol_on_join,omitempty" levels:"classroom"`
+	// Teams in live sessions (V2-06, V2-07, D-44).
+	TeamMode       *string `json:"team_mode,omitempty" levels:"quiz,session" enum:"off,manual,random,categories,self"`
+	TeamAcceptance *string `json:"team_acceptance,omitempty" levels:"quiz,session" enum:"all,first,captain,best"`
+	TeamCalc       *string `json:"team_calc,omitempty" levels:"quiz,session" enum:"sum,average,max,min"`
 }
 
 // Effective is the fully resolved configuration; every field has a value.
@@ -90,6 +94,9 @@ type Effective struct {
 	StudentIDRequired    bool   `json:"student_id_required"`
 	EnrolmentApproval    bool   `json:"enrolment_approval"`
 	AutoEnrolOnJoin      bool   `json:"auto_enrol_on_join"`
+	TeamMode             string `json:"team_mode"`
+	TeamAcceptance       string `json:"team_acceptance"`
+	TeamCalc             string `json:"team_calc"`
 }
 
 // Defaults are the BA §7 defaults; the admin can override them at platform level.
@@ -115,6 +122,9 @@ func Defaults() Effective {
 		ResultsShowFeedback: true,
 		PassMarkPct:         50,
 		AutoEnrolOnJoin:     true, // BR-02, Q-06; see DECISIONS.md
+		TeamMode:            "off",
+		TeamAcceptance:      "all",
+		TeamCalc:            "sum",
 	}
 }
 
