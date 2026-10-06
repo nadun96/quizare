@@ -7,7 +7,8 @@
 	import Icon from '../ui/Icon.svelte';
 	import { fadeIn, flipMs } from '../ui/motion';
 	import { fmtSize } from './meta';
-	import type { Choice, PollQuestion, PollResult, TextItem, WordCount } from './types';
+	import { describeKey } from './scoring';
+	import type { Choice, PollKey, PollQuestion, PollResult, TextItem, WordCount } from './types';
 	import WordCloud from './WordCloud.svelte';
 
 	let {
@@ -16,6 +17,7 @@
 		teacher = false,
 		big = false,
 		pollId = '',
+		answerKey = null,
 		onmoderate
 	}: {
 		question: PollQuestion;
@@ -23,6 +25,8 @@
 		teacher?: boolean;
 		big?: boolean;
 		pollId?: string;
+		/** Mark the correct answer (scored polls, once it may be shown). */
+		answerKey?: PollKey | null;
 		onmoderate?: (m: { question_id: string; participant_id?: string; word?: string; hidden: boolean }) => void;
 	} = $props();
 
@@ -93,6 +97,9 @@
 </script>
 
 <div class="results" class:big>
+	{#if answerKey && question.type !== 'SINGLE' && question.type !== 'MULTI'}
+		<p class="key-line small m-0"><Icon name="check-circle" size={14} /><span><strong>Correct answer:</strong> {describeKey(question, answerKey)}</span></p>
+	{/if}
 	<div class="res-head">
 		<span class="small muted"><strong class="tabular text-base-content">{r.responses}</strong> {r.responses === 1 ? 'response' : 'responses'}</span>
 		<span class="spacer"></span>
@@ -110,10 +117,11 @@
 		{:else}
 			<ul class="bars">
 				{#each optionBars as o, i (o.id)}
+					{@const right = !!answerKey?.correct?.includes(o.id)}
 					<!-- Chart marks take focus so keyboard users get the same tooltip as mouse users. -->
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-					<li class="bar-row" tabindex="0" aria-label="{o.label}: {o.n} ({pct(o.n, r.responses)}%)">
-						<span class="bar-label"><span class="letter-chip" aria-hidden="true">{String.fromCharCode(65 + i)}</span>{o.label}</span>
+					<li class="bar-row" class:correct={right} tabindex="0" aria-label="{o.label}{right ? ' (correct)' : ''}: {o.n} ({pct(o.n, r.responses)}%)">
+						<span class="bar-label"><span class="letter-chip" aria-hidden="true">{#if right}<Icon name="check" size={13} />{:else}{String.fromCharCode(65 + i)}{/if}</span>{o.label}</span>
 						<span class="bar-track"><span class="bar" style:width="{(o.n / maxBar) * 100}%"></span></span>
 						<span class="bar-value tabular">{pct(o.n, r.responses)}% <span class="muted">({o.n})</span></span>
 						<span class="tip" role="tooltip">{o.label}: {o.n} {o.n === 1 ? 'person' : 'people'}, {pct(o.n, r.responses)}%</span>
@@ -318,6 +326,12 @@
 	.bar-track { height: 1.25rem; display: block; border-radius: 0 4px 4px 0; background: color-mix(in oklab, var(--color-base-content) 6%, transparent); }
 	.big .bar-track { height: 1.5rem; }
 	.bar-track.mini { height: 0.6rem; width: 6rem; }
+	/* The correct option: check mark, label weight and colour together. */
+	.bar-row.correct .letter-chip { border-color: var(--color-success); background: var(--color-success); color: var(--color-success-content); }
+	.bar-row.correct .bar-label { font-weight: 650; }
+	.bar-row.correct .bar { background: var(--color-success); }
+	.key-line { display: flex; gap: 0.4rem; align-items: flex-start; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; border-radius: var(--radius-box); background: color-mix(in oklab, var(--color-success) 12%, var(--color-base-100)); }
+	.key-line :global(svg) { color: var(--color-success); flex: none; margin-top: 0.15rem; }
 	.bar { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--color-primary); transition: width 500ms var(--ease-out); min-width: 2px; }
 	.bar-value { font-weight: 700; white-space: nowrap; }
 
