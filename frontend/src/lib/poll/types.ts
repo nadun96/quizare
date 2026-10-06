@@ -65,7 +65,18 @@ export type PollKey = {
 	case_sensitive?: boolean;
 };
 export type PollScore = { points: number; correct: boolean };
-export type Rank = { rank: number; key: string; name: string; score: number; correct: number; answered: number; participant_id?: string; real_name?: string; nickname?: string };
+export type Rank = { rank: number; key: string; name: string; score: number; correct: number; answered: number; participant_id?: string; real_name?: string; nickname?: string; color?: number; members?: number };
+
+// Groups (D-43).
+export type GroupMode = 'off' | 'manual' | 'random' | 'categories' | 'self';
+export type GroupAcceptance = 'all' | 'first' | 'captain' | 'best';
+export type GroupCalc = 'sum' | 'average' | 'max' | 'min';
+export type GroupInfo = { id: string; name: string; color: number; members: number };
+export type GroupRank = { rank: number; id: string; name: string; color: number; members: number; score: number; answered: number };
+export type GroupMember = { participant_id: string; name: string; nickname?: string; real_name?: string; captain: boolean; group_id?: string };
+export type PollGroup = { id: string; poll_id: string; name: string; color: number; position: number; category_id?: string; members?: GroupMember[] };
+export type GroupsView = { groups: PollGroup[]; ungrouped: GroupMember[] };
+export type GroupAnswer = { by: string; value: PollAnswer };
 
 export type FileRef = { id: string; name: string; size: number; content_type: string };
 
@@ -100,6 +111,9 @@ export type PollSettings = {
 	leaderboard: LeaderboardMode;
 	show_answers: ShowAnswers;
 	names: 'nickname' | 'name';
+	groups: GroupMode;
+	group_acceptance: GroupAcceptance;
+	group_calc: GroupCalc;
 };
 
 export type Poll = PollSettings & {
@@ -163,6 +177,13 @@ export type PublicPoll = Omit<PollSettings, 'leaderboard'> & {
 	me?: Rank;
 	me_key?: string;
 	nickname?: string;
+	group_mode: GroupMode;
+	group_acceptance?: GroupAcceptance;
+	groups?: GroupInfo[];
+	group_leaderboard?: GroupRank[];
+	my_group?: string;
+	captain?: boolean;
+	group_answers?: Record<string, GroupAnswer>;
 };
 
-export type TeacherResults = { type: 'results'; server_time: number; poll: Poll; participants: number; results: Record<string, PollResult>; leaderboard?: Rank[] };
+export type TeacherResults = { type: 'results'; server_time: number; poll: Poll; participants: number; results: Record<string, PollResult>; leaderboard?: Rank[]; group_leaderboard?: GroupRank[] };

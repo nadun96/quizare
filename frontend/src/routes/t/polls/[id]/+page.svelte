@@ -9,8 +9,9 @@
 	import PollQuestionEditor from '$lib/poll/PollQuestionEditor.svelte';
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import PollSettingsForm from '$lib/poll/PollSettingsForm.svelte';
+	import GroupsPanel from '$lib/poll/GroupsPanel.svelte';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
-	import { fmtPoints, SCORABLE, settingsOf } from '$lib/poll/scoring';
+	import { fmtPoints, groupRanks, SCORABLE, settingsOf } from '$lib/poll/scoring';
 	import type { Poll, PollQuestion, PollSettings, Rank, TeacherResults } from '$lib/poll/types';
 	import RichText from '$lib/richtext/RichText.svelte';
 	import { LiveSocket } from '$lib/socket';
@@ -28,7 +29,7 @@
 	let poll = $state<Poll | null>(null);
 	let results = $state<TeacherResults | null>(null);
 	let classrooms = $state<Classroom[]>([]);
-	let tab = $state<'questions' | 'results' | 'settings' | 'share'>('questions');
+	let tab = $state<'questions' | 'results' | 'groups' | 'settings' | 'share'>('questions');
 	let editing = $state<PollQuestion | 'new' | null>(null);
 	let settings = $state<PollSettings | null>(null);
 	let classroomId = $state<string | null>(null);
@@ -159,7 +160,7 @@
 		</div>
 
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
+			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ...(poll.groups !== 'off' ? [['groups', 'Groups']] : []), ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -204,8 +205,18 @@
 			</div>
 			{#if poll.scoring}
 				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6">
-					<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="trophy" size={18} />Leaderboard</h2>
-					<Leaderboard ranks={results?.leaderboard ?? []} teacher limit={50} onrename={renameParticipant} />
+					<div class="lb-grid" class:two={!!results?.group_leaderboard?.length}>
+						{#if results?.group_leaderboard?.length}
+							<div>
+								<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="users" size={18} />Groups</h2>
+								<Leaderboard ranks={groupRanks(results.group_leaderboard)} limit={50} />
+							</div>
+						{/if}
+						<div>
+							<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="trophy" size={18} />{results?.group_leaderboard?.length ? 'Individuals' : 'Leaderboard'}</h2>
+							<Leaderboard ranks={results?.leaderboard ?? []} teacher limit={50} onrename={renameParticipant} />
+						</div>
+					</div>
 				</section>
 			{/if}
 			{#each questions as q, i (q.id)}
@@ -217,6 +228,8 @@
 			{:else}
 				<div class="card card-border bg-base-100"><EmptyState icon="chart" title="Nothing to show yet">Add questions and open the poll.</EmptyState></div>
 			{/each}
+		{:else if tab === 'groups'}
+			<GroupsPanel pollId={id} settings={settingsOf(poll)} hasClassroom={!!poll.classroom_id} participants={poll.participants} />
 		{:else if tab === 'settings'}
 			<div class="card card-border vstack bg-base-100 p-4 shadow-sm sm:p-6">
 				<PollSettingsForm bind:settings bind:classroomId {classrooms} locked={poll.participants > 0} />
@@ -250,6 +263,8 @@
 </div>
 
 <style>
+	.lb-grid { display: grid; gap: 1.5rem; }
+	@media (min-width: 900px) { .lb-grid.two { grid-template-columns: 1fr 1fr; } }
 	.stats-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
 	.q-num { width: 1.75rem; height: 1.75rem; border-radius: 999px; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; background: var(--color-base-200); }
 	.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; animation: live 1.6s ease-in-out infinite; }
