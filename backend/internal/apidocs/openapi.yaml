@@ -282,6 +282,40 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [active, rejected, removed] }, student_number: { type: string } } } } } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Enrolment' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/categories:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomsCategories
+      tags: [classrooms]
+      summary: Student categories of a classroom, with member counts (V2-03)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { categories: { type: array, items: { $ref: '#/components/schemas/Category' } } } } } } } }
+    post:
+      operationId: postTeacherClassroomsCategories
+      tags: [classrooms]
+      summary: Create a category; without a color, the next palette slot is used
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } } }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/categories/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    patch:
+      operationId: patchTeacherCategoriesById
+      tags: [classrooms]
+      summary: Rename or recolour a category
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+    delete:
+      operationId: deleteTeacherCategoriesById
+      tags: [classrooms]
+      summary: Delete a category (students stay enrolled)
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/categories/{id}/members:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherCategoriesMembers
+      tags: [classrooms]
+      summary: Add students to, or remove them from, a category (enrolments of the same classroom only)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [enrolment_ids, assigned], properties: { enrolment_ids: { type: array, items: { type: string, format: uuid } }, assigned: { type: boolean } } } } } }
+      responses: { '200': { description: 'Rows changed', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } } }
   /api/teacher/classrooms/{id}/modules:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -1191,6 +1225,21 @@ components:
         created_at: { type: string, format: date-time }
         student_name: { type: string }
         student_email: { type: string }
+        categories: { type: array, items: { type: string, format: uuid }, description: 'Category ids (teacher view)' }
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        classroom_id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: integer, minimum: 1, maximum: 8, description: 'Slot of the categorical palette' }
+        position: { type: integer }
+        members: { type: integer, description: 'Active students in the category' }
+    CategoryInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 60 }
+        color: { type: integer, minimum: 1, maximum: 8 }
     ClassroomPreview:
       type: object
       properties:

@@ -21,6 +21,11 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("POST", "/classrooms/{id}/join-code", httpx.Handler(s.hRegenerateCode))
 	r.Method("GET", "/classrooms/{id}/enrolments", httpx.Handler(s.hListEnrolments))
 	r.Method("PATCH", "/enrolments/{id}", httpx.Handler(s.hUpdateEnrolment))
+	r.Method("GET", "/classrooms/{id}/categories", httpx.Handler(s.hListCategories))
+	r.Method("POST", "/classrooms/{id}/categories", httpx.Handler(s.hCreateCategory))
+	r.Method("PATCH", "/categories/{id}", httpx.Handler(s.hUpdateCategory))
+	r.Method("DELETE", "/categories/{id}", httpx.Handler(s.hDeleteCategory))
+	r.Method("POST", "/categories/{id}/members", httpx.Handler(s.hAssignCategory))
 
 	r.Method("GET", "/classrooms/{id}/modules", httpx.Handler(s.hListModules))
 	r.Method("POST", "/classrooms/{id}/modules", httpx.Handler(s.hCreateModule))
@@ -263,5 +268,61 @@ func (s *Service) hMyClassrooms(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.JSON(w, 200, map[string]any{"classrooms": list})
+	return nil
+}
+
+func (s *Service) hListCategories(w http.ResponseWriter, r *http.Request) error {
+	l, err := s.ListCategories(r.Context(), auth.MustUser(r.Context()).ID, chi.URLParam(r, "id"))
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, map[string]any{"categories": l})
+	return nil
+}
+
+func (s *Service) hCreateCategory(w http.ResponseWriter, r *http.Request) error {
+	var in CategoryInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	c, err := s.CreateCategory(r.Context(), auth.MustUser(r.Context()).ID, chi.URLParam(r, "id"), in)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 201, c)
+	return nil
+}
+
+func (s *Service) hUpdateCategory(w http.ResponseWriter, r *http.Request) error {
+	var in CategoryInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	c, err := s.UpdateCategory(r.Context(), auth.MustUser(r.Context()).ID, chi.URLParam(r, "id"), in)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, c)
+	return nil
+}
+
+func (s *Service) hDeleteCategory(w http.ResponseWriter, r *http.Request) error {
+	if err := s.DeleteCategory(r.Context(), auth.MustUser(r.Context()).ID, chi.URLParam(r, "id")); err != nil {
+		return err
+	}
+	w.WriteHeader(204)
+	return nil
+}
+
+func (s *Service) hAssignCategory(w http.ResponseWriter, r *http.Request) error {
+	var in AssignInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	n, err := s.AssignCategory(r.Context(), auth.MustUser(r.Context()).ID, chi.URLParam(r, "id"), in)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, map[string]int{"affected": n})
 	return nil
 }

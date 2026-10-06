@@ -13,6 +13,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0007_llm.sql` | `llm.keys` |
 | `0008_analytics.sql` | `analytics.session_stats`, `analytics.share_links` |
 | `0009_poll.sql` | `poll.polls`, `poll.questions`, `poll.participants`, `poll.responses`, `poll.hidden_words`, `poll.files` |
+| `0010_categories.sql` | `content.categories`, `content.enrolment_categories` |
 
 River's own tables (`river_job`, ...) are created by `jobs.Migrate`.
 
@@ -90,6 +91,10 @@ Primary key `(attempt_id, question_id)`. `question_id` refers to the **snapshot*
 - `analytics.share_links`: `token_hash` (SHA-256 of a 128-bit token), `scope` (`session` or `quiz`), `views text[]`, `identify`, `show_answers`, `expires_at`, `revoked_at`.
 - `audit.events`: actor, action, target and details JSON. Written inside the transaction of the action (mark overrides, reinstatements, status changes, key changes, releases, share links).
 - `live.events`: the per-session integrity timeline shown to teachers (`joined`, `admitted`, `started`, `paused`, `resumed`, `extended`, `violation`, `reinstated`, `question_timed_out`, `submitted`, `session_ended`, `results_released`, ...).
+
+## Student categories
+
+`content.categories` holds a classroom's labels (name unique per classroom, case-insensitive; `color` is a slot 1–8 of the categorical palette). `content.enrolment_categories` links enrolments to categories, so a student can be in several and removing a student from the classroom keeps the history. Both cascade from the classroom. See D-41.
 
 ## Polls
 

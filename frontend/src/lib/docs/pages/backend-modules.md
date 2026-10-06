@@ -42,6 +42,8 @@ Classrooms, modules, topics and enrolments (FR-CLS).
 - `EnrolByCode` and `EnsureEnrolled` enforce BR-02/BR-03: the student number is required when configured, unique per classroom (case-insensitive), and changed only by the teacher once set.
 - `TopicContext` gives downstream modules the owner and the classroom/module/topic setting layers.
 
+
+`categories.go` holds student categories (V2-03, D-41): CRUD, bulk assignment limited to the classroom's own enrolments, and `CategoryMembers` for forming groups.
 ## quiz (schema `quiz`)
 
 Quizzes, questions, resources and CSV formats (FR-QZ, BA §10).

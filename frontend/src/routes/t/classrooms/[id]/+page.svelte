@@ -9,7 +9,7 @@
 	import SettingsEditor from '$lib/SettingsEditor.svelte';
 	import type { Classroom, Module, Overrides, Topic } from '$lib/types';
 
-	type Enrolment = { id: string; student_name: string; student_email: string; student_number: string | null; status: string; created_at: string };
+	import StudentsPanel, { type Enrolment } from '$lib/StudentsPanel.svelte';
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
 	let c = $state<Classroom | null>(null);
@@ -139,25 +139,7 @@ if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules,
 				<button class="btn btn-primary">Add module</button>
 			</form>
 		{:else if tab === 'students'}
-			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
-				<table class="table">
-					<thead><tr><th>Name</th><th>Student ID</th><th>Status</th><th></th></tr></thead>
-					<tbody>
-						{#each enrolments as en (en.id)}
-							<tr>
-								<td>{en.student_name}<br /><span class="small muted">{en.student_email}</span></td>
-								<td>{en.student_number ?? '—'} <button class="btn btn-sm" onclick={() => editNumber(en)}>Edit</button></td>
-								<td><span class="badge badge-soft {en.status === 'active' ? 'ok' : en.status === 'pending' ? 'warn' : ''}">{en.status}</span></td>
-								<td class="row">
-									{#if en.status !== 'active'}<button class="btn btn-sm" onclick={() => setEnrolment(en, 'active')}>Approve</button>{/if}
-									{#if en.status === 'pending'}<button class="btn btn-sm" onclick={() => setEnrolment(en, 'rejected')}>Reject</button>{/if}
-									{#if en.status === 'active'}<button class="btn btn-sm btn-error btn-outline" onclick={() => setEnrolment(en, 'removed')}>Remove</button>{/if}
-								</td>
-							</tr>
-						{:else}<tr><td colspan="4" class="muted">No students yet. Share the join code.</td></tr>{/each}
-					</tbody>
-				</table>
-			</div>
+			<StudentsPanel classroomId={id} {enrolments} onchange={load} oneditnumber={editNumber} onstatus={setEnrolment} />
 		{:else if tab === 'settings'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">
