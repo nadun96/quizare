@@ -45,6 +45,8 @@ export type Question = StudentQuestion & {
 
 export type StudentState = {
 	type: 'state';
+	team?: TeamInfo;
+	captain?: boolean;
 	server_time: number;
 	attempt_id: string;
 	session_id: string;
@@ -102,8 +104,16 @@ export type DashboardRow = {
 	remaining_ms: number | null;
 	connected: boolean;
 	invalid_reason?: string;
+	team_id?: string;
+	captain?: boolean;
 };
-export type Dashboard = { type: 'dashboard'; server_time: number; session: Session; counts: Record<string, number>; rows: DashboardRow[] };
+export type Dashboard = { type: 'dashboard'; server_time: number; session: Session; counts: Record<string, number>; rows: DashboardRow[]; team_mode?: string; teams?: TeamInfo[] };
+
+// Teams in live sessions (D-44).
+export type TeamInfo = { id: string; name: string; color: number; position: number; category_id?: string; members: number };
+export type TeamMember = { attempt_id: string; name: string; student_number: string | null; state: string; captain: boolean; team_id?: string };
+export type TeamsView = { mode: string; acceptance: 'all' | 'first' | 'captain' | 'best'; calc: 'sum' | 'average' | 'max' | 'min'; teams: (TeamInfo & { member_list: TeamMember[] })[]; unassigned: TeamMember[] };
+export type TeamStanding = { rank: number; id: string; name: string; color: number; members: number; finished: number; score: number; max_score: number; pct: number; complete: boolean };
 
 /** Words shown for attempt states (FR-SS-10). */
 export const STATE_LABEL: Record<string, string> = {

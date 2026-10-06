@@ -203,6 +203,9 @@
 		<div class="quiz-bar-inner">
 			<strong class="title">{st?.quiz_title ?? 'Quiz'}</strong>
 			<span class="spacer"></span>
+			{#if st?.team}
+				<span class="badge badge-soft gap-1 max-w-40" title="Your team"><span class="tdot" style:background="var(--cat-{st.team.color})" aria-hidden="true"></span><span class="truncate">{st.team.name}</span>{#if st.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>
+			{/if}
 			{#if !online}
 				<span class="badge badge-soft badge-warning gap-1" role="status"><Icon name="wifi-off" size={14} />Offline · answers will sync</span>
 			{:else if pendingSaves > 0}
@@ -377,4 +380,5 @@
 
 	.quiz :global(*) { -webkit-user-select: none; user-select: none; }
 	.quiz :global(textarea), .quiz :global(input) { -webkit-user-select: text; user-select: text; }
+	.tdot { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: inline-block; flex: none; }
 </style>

@@ -2,7 +2,7 @@
 // device token per poll; it can only answer as that participant in that
 // poll, so it is kept in localStorage (login sessions stay HttpOnly cookies).
 import { ApiError } from '../api';
-import type { FileRef, PollAnswer, PublicPoll } from './types';
+import type { FileRef, PollAnswer, PollKey, PollScore, PublicPoll } from './types';
 
 const KEY = (code: string) => 'qp:poll:' + code.toUpperCase();
 
@@ -46,13 +46,13 @@ async function call<T>(code: string, method: string, path: string, body?: BodyIn
 
 export const pollClient = {
 	view: (code: string) => call<PublicPoll>(code, 'GET', ''),
-	async join(code: string, identify: boolean) {
-		const r = await call<{ participant_id: string; identified: boolean; token?: string }>(code, 'POST', '/join', JSON.stringify({ identify }), { 'Content-Type': 'application/json' });
+	async join(code: string, identify: boolean, nickname = '', groupId = '') {
+		const r = await call<{ participant_id: string; identified: boolean; token?: string }>(code, 'POST', '/join', JSON.stringify({ identify, nickname, group_id: groupId }), { 'Content-Type': 'application/json' });
 		if (r.token) setToken(code, r.token);
 		return r;
 	},
 	answer: (code: string, questionId: string, value: PollAnswer) =>
-		call<{ value: PollAnswer }>(code, 'PUT', '/answers/' + questionId, JSON.stringify({ value }), { 'Content-Type': 'application/json' }),
+		call<{ value: PollAnswer; key?: PollKey; score?: PollScore }>(code, 'PUT', '/answers/' + questionId, JSON.stringify({ value }), { 'Content-Type': 'application/json' }),
 	/** Uploads a file answer; onProgress gets 0..1 where the browser reports it. */
 	upload(code: string, questionId: string, file: Blob, name: string, onProgress?: (p: number) => void): Promise<{ value: { file: FileRef } }> {
 		return new Promise((resolve, reject) => {

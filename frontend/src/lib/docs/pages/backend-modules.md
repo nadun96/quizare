@@ -42,6 +42,8 @@ Classrooms, modules, topics and enrolments (FR-CLS).
 - `EnrolByCode` and `EnsureEnrolled` enforce BR-02/BR-03: the student number is required when configured, unique per classroom (case-insensitive), and changed only by the teacher once set.
 - `TopicContext` gives downstream modules the owner and the classroom/module/topic setting layers.
 
+
+`categories.go` holds student categories (V2-03, D-41): CRUD, bulk assignment limited to the classroom's own enrolments, and `CategoryMembers` for forming groups.
 ## quiz (schema `quiz`)
 
 Quizzes, questions, resources and CSV formats (FR-QZ, BA §10).
@@ -59,7 +61,7 @@ Depends on `imageurl` for Drive link normalisation and SSRF-safe checks.
 
 ## live (schema `live`)
 
-Sessions, attempts, answers, violations and the real-time hub (FR-SS, FR-PR). This is the most intricate module; see [Live sessions & timing](live-sessions.md) and [Proctoring](proctoring.md).
+Sessions, attempts, answers, violations and the real-time hub (FR-SS, FR-PR); `teams.go` forms teams (D-44). This is the most intricate module; see [Live sessions & timing](live-sessions.md) and [Proctoring](proctoring.md).
 
 - `model.go`: states, `Session`, `Attempt`, `Snapshot`, and `Session.Effective(question, studentOverrides)`.
 - `timing.go`: pure functions (`admit`, `start`, `advance`, `pause`, `resume`, `extend`, `decide`, `newOrders`), unit-tested without a database.
@@ -71,7 +73,7 @@ Sessions, attempts, answers, violations and the real-time hub (FR-SS, FR-PR). Th
 
 ## eval (schema `eval`)
 
-Marking and feedback (FR-EV).
+Marking and feedback (FR-EV). `teams.go` ranks session teams from members' marks; the rules for combining marks are shared with polls in `platform/groupscore`.
 
 - `marker.go`: `MarkByKey` (partial credit, negative marks, Levenshtein spelling tolerance) and `PredefinedFeedback`.
 - `service.go`: `EvaluateAttempt` (River worker), `recompute` (attempt totals), `Override`, `SessionResults`, `StudentResult`, and the hooks `ApplyLLM`/`LLMFailed`/`MarkPendingTx` used by `llm`.
@@ -93,7 +95,7 @@ The LLM gateway (FR-EV-02/03/05, ADR-09, ADR-16).
 
 ## poll (schema `poll`)
 
-Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
+Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `score.go` holds answer keys and marking (partial credit, speed bonus) and `leaderboard.go` the ranking (D-42); `groups.go` forms groups, enforces first-answer and captain rules and combines group scores (D-43); `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
 
 ## admin (no schema)
 

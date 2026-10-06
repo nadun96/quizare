@@ -5,6 +5,8 @@
 	import { formatDuration } from '$lib/clock';
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
+	import SessionTeams from '$lib/SessionTeams.svelte';
+	import LiveLinks from '$lib/LiveLinks.svelte';
 	import { LiveSocket } from '$lib/socket';
 	import { STATE_BADGE, STATE_ICON, STATE_LABEL, type Dashboard } from '$lib/types';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -26,6 +28,10 @@
 	let extendMin = $state(5);
 	let countdown = $state<number | ''>('');
 	let admission = $state('');
+	let teamMode = $state('');
+	let teamAcceptance = $state('');
+	let teamCalc = $state('');
+	let version = $state(0);
 	let socket: LiveSocket;
 	let timer: ReturnType<typeof setInterval>;
 
@@ -33,7 +39,10 @@
 		socket = new LiveSocket('/ws/sessions/' + id);
 		socket.onStatus = (c) => (connected = c);
 		socket.onMessage = (m) => {
-			if (m.type === 'dashboard') d = m as unknown as Dashboard;
+			if (m.type === 'dashboard') {
+				d = m as unknown as Dashboard;
+				version++;
+			}
 			else if (m.type === 'alert') {
 				const a = { ...(m as unknown as Alert), at: Date.now() };
 				alerts = [a, ...alerts].slice(0, 50);
@@ -50,6 +59,9 @@
 		if (d && countdown === '') {
 			countdown = (d.session.settings.countdown_seconds as number) ?? '';
 			admission = (d.session.settings.admission_mode as string) ?? '';
+			teamMode = (d.session.settings.team_mode as string) ?? '';
+			teamAcceptance = (d.session.settings.team_acceptance as string) ?? '';
+			teamCalc = (d.session.settings.team_calc as string) ?? '';
 		}
 	});
 	onDestroy(() => {
@@ -101,9 +113,14 @@
 		else o.countdown_seconds = Number(countdown);
 		if (admission) o.admission_mode = admission;
 		else delete o.admission_mode;
+		for (const [k, v] of [['team_mode', teamMode], ['team_acceptance', teamAcceptance], ['team_calc', teamCalc]]) {
+			if (v) o[k] = v;
+			else delete o[k];
+		}
 		await api.put('/api/teacher/sessions/' + id + '/settings', o);
 		toast('Session settings saved');
 	}
+	const teamsOn = $derived(!!d?.team_mode && d.team_mode !== 'off');
 	const total = $derived(rows.length);
 	const flagged = $derived(rows.filter((r) => r.violations > 0 || r.state === 'invalidated').length);
 	const finished = $derived((d?.counts.submitted ?? 0) + (d?.counts.invalidated ?? 0));
@@ -147,6 +164,13 @@
 						<strong>Session settings</strong>
 						<div><label for="cd">Countdown (seconds)</label><input class="input w-full" id="cd" type="number" min="0" bind:value={countdown} placeholder="inherit" /></div>
 						<div><label for="adm">Admission</label><select class="select w-full" id="adm" bind:value={admission}><option value="">Inherit</option><option value="manual">I admit students</option><option value="auto">Admit automatically</option></select></div>
+						<div><label for="tm">Teams</label><select class="select w-full" id="tm" bind:value={teamMode}><option value="">Inherit</option><option value="off">No teams</option><option value="manual">I put students in teams</option><option value="random">At random as they join</option><option value="categories">From classroom categories</option><option value="self">Students choose</option></select></div>
+						{#if (teamMode || teamsOn) && teamMode !== 'off'}
+							<div><label for="ta">Team marks count</label><select class="select w-full" id="ta" bind:value={teamAcceptance}><option value="">Inherit</option><option value="all">Every member's marks</option><option value="first">First answer per question</option><option value="captain">Captain's marks</option><option value="best">Best mark per question</option></select></div>
+							{#if (teamAcceptance || 'all') === 'all'}
+								<div><label for="tc">Combine members by</label><select class="select w-full" id="tc" bind:value={teamCalc}><option value="">Inherit</option><option value="sum">Total</option><option value="average">Average (skips count as 0)</option><option value="max">Highest</option><option value="min">Lowest</option></select></div>
+							{/if}
+						{/if}
 						<button class="btn btn-sm" onclick={saveSessionSettings}>Save</button>
 					</div>
 				{/if}
@@ -182,12 +206,16 @@
 					{#if selected.size}<p class="small m-0" in:fadeIn><strong>{selected.size}</strong> selected · commands apply to them</p>{/if}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
-						<thead><tr><th></th><th>Student</th><th>Status</th><th>Progress</th><th>Time left</th><th>Flags</th><th></th></tr></thead>
+						<thead><tr><th></th><th>Student</th>{#if teamsOn}<th>Team</th>{/if}<th>Status</th><th>Progress</th><th>Time left</th><th>Flags</th><th></th></tr></thead>
 						<tbody>
 							{#each rows as r (r.attempt_id)}
 									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
 									<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>
 									<td>{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></td>
+									{#if teamsOn}
+										{@const team = d.teams?.find((t) => t.id === r.team_id)}
+										<td class="small">{#if team}<span class="inline-flex items-center gap-1"><span class="tdot" style:background="var(--cat-{team.color})" aria-hidden="true"></span>{team.name}{#if r.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>{:else}<span class="muted">—</span>{/if}</td>
+									{/if}
 									<td><span class="badge badge-soft {STATE_BADGE[r.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[r.state] ?? ''}</span> {STATE_LABEL[r.state]}</span>{#if !r.connected && (r.state === 'in_progress' || r.state === 'waiting')}<br /><span class="small muted">offline</span>{/if}</td>
 									<td class="small min-w-32">
 										<div class="flex items-center gap-2"><progress class="progress progress-primary w-20" value={r.answered} max={r.total || 1} aria-hidden="true"></progress><span class="tabular">{r.answered}/{r.total}</span></div>
@@ -197,10 +225,12 @@
 									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1"><Icon name="flag" size={12} />{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
 									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="7"><div class="muted py-6 text-center"><span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…</div></td></tr>{/each}
+							{:else}<tr><td colspan="8"><div class="muted py-6 text-center"><span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…</div></td></tr>{/each}
 						</tbody>
 					</table>
 				</div>
+				{#if teamsOn}<SessionTeams sessionId={id} {version} {ended} />{/if}
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><LiveLinks scope="live_session" targetId={id} teams={teamsOn} /></div>
 			</section>
 		</div>
 	{:else}
@@ -211,6 +241,7 @@
 <style>
 	.layout { display: grid; gap: 1rem; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
 	@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .layout > section { order: -1; } }
+	.tdot { width: 0.65rem; height: 0.65rem; border-radius: 999px; display: inline-block; flex: none; }
 	tr.sel { background: color-mix(in oklab, var(--color-primary) 8%, transparent); }
 	.stats-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
 	.command-bar { position: sticky; top: 4.25rem; z-index: 4; }

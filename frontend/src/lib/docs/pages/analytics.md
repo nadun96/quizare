@@ -59,6 +59,17 @@ Average time per *question* isn't reported because the timing model doesn't reco
 - Links can be revoked (410 afterwards), regenerated (the old token gives 404), or expire. `GET /api/public/results/{token}` sends `X-Robots-Tag: noindex` and `Cache-Control: no-store`.
 - The public page is the SPA route `/r/{token}`.
 
+## Live leaderboard links
+
+A share link with scope `live_session` or `live_poll` opens `/live/{token}`: the individual and team (or group) leaderboards, updating without login (V2-08, D-45). Views are `leaderboard` and `teams` (both by default).
+
+- **Who is shown.** Sessions: classroom student IDs, or "Student N" in join order. Polls: nicknames (the default), or "Participant N". Real names and emails never appear, even in polls whose own leaderboard shows real names.
+- **What is shown.** Sessions rank marked, valid attempts by percentage, with each student's team; teams come from the team standings (D-44). Polls rank by points, with groups when the poll has them. Polls that aren't scored show no board.
+- **Updating.** `GET /api/public/live/{token}` is polled by the page every `refresh_ms` (3 s while running, 30 s once finished, 15 s while the tab is hidden). The server caches each link's view for 2 s, so a room full of viewers costs one computation per link. Responses carry `X-Robots-Tag: noindex` and `Cache-Control: no-store`.
+- **Ending a link.** Turning a link off, an expiry, or deleting the poll or session makes it return `410`; a new link replaces the token. A live token opens only the live page, and a results token only `/r/`.
+
+Teachers create live links on the poll's **Share** tab and on the session dashboard.
+
 ## CSV export
 
 `GET /api/teacher/sessions/{id}/export.csv` writes one row per student with a column per question score. Cells starting with `=`, `+`, `-`, `@`, tab or CR are prefixed with `'` to prevent formula injection when opened in a spreadsheet (ADR-16).

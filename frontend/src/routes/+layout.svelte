@@ -19,7 +19,7 @@
 	});
 
 	// The live quiz and the projector are full-screen experiences without the nav.
-	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/'));
+	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/') || page.url.pathname.startsWith('/live/'));
 	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
 
 	type Link = { href: string; label: string };

@@ -175,9 +175,14 @@ func (s *Service) ListEnrolments(ctx context.Context, teacherID, classroomID, st
 	if err != nil {
 		return nil, err
 	}
+	cats, err := s.categoriesOf(ctx, classroomID)
+	if err != nil {
+		return nil, err
+	}
 	for i := range list {
 		u := users[list[i].UserID]
 		list[i].StudentName, list[i].StudentEmail = u.Name, u.Email
+		list[i].Categories = cats[list[i].ID]
 	}
 	return list, nil
 }

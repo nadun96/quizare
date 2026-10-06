@@ -111,6 +111,10 @@ type Question struct {
 	Text     string `json:"text"`
 	Body     Body   `json:"body"`
 	Required bool   `json:"required"`
+	// Competition (D-42): teacher-only key, points and an optional time limit.
+	Key          *Key `json:"key,omitempty"`
+	Points       int  `json:"points"`
+	TimeLimitSec *int `json:"time_limit_sec"`
 }
 
 // DefaultLikert is the five-point agreement scale.

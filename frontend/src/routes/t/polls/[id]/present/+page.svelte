@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Presenter screen for a poll (D-40): big, live results for the room.
-	// Keys: ← → question, R reveal (presenter-led), Q code, F full screen.
+	// Keys: ← → question, R reveal (presenter-led), A answer and L leaderboard
+	// (scored polls, D-42), Q code, F full screen.
 	import { onDestroy } from 'svelte';
 	import { Tween } from 'svelte/motion';
 	import { page } from '$app/state';
@@ -8,7 +9,9 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
 	import { TYPE_META } from '$lib/poll/meta';
+	import Leaderboard from '$lib/poll/Leaderboard.svelte';
 	import PollResults from '$lib/poll/PollResults.svelte';
+	import { groupRanks, secondsLeft } from '$lib/poll/scoring';
 	import type { Poll, TeacherResults } from '$lib/poll/types';
 	import RichText from '$lib/richtext/RichText.svelte';
 	import { LiveSocket } from '$lib/socket';
@@ -22,6 +25,10 @@
 	let data = $state<TeacherResults | null>(null);
 	let index = $state(0); // self-paced: what this screen shows
 	let showCode = $state(true);
+	let board = $state(false); // leaderboard instead of the question
+	let showKey = $state(false); // self-paced or other modes: this screen only
+	let clockOffset = 0;
+	let now = $state(Date.now());
 	let connected = $state(false);
 	let socket: LiveSocket | null = null;
 
@@ -33,6 +40,7 @@
 			if (m.type !== 'results') return;
 			const first = !data;
 			data = m as unknown as TeacherResults;
+			clockOffset = data.server_time - Date.now();
 			if (first) {
 				index = data.poll.pacing === 'presenter' ? data.poll.current_index : 0;
 				showCode = data.participants === 0;
@@ -53,20 +61,36 @@
 		joined.set(data?.participants ?? 0, reduced() ? { duration: 0 } : undefined);
 	});
 
-	async function go(i: number, revealed = false) {
+	async function go(i: number, revealed = false, answersRevealed = false) {
 		if (!poll || i < 0 || i >= questions.length) return;
+		if (i !== cur) showKey = false;
 		if (!presenter) {
 			index = i;
 			return;
 		}
 		try {
-			const p = await api.post<Poll>('/api/teacher/polls/' + id + '/present', { index: i, revealed });
-			if (data) data.poll = { ...data.poll, current_index: p.current_index, revealed: p.revealed };
+			const p = await api.post<Poll>('/api/teacher/polls/' + id + '/present', { index: i, revealed, answers_revealed: answersRevealed });
+			if (data) data.poll = { ...data.poll, current_index: p.current_index, revealed: p.revealed, answers_revealed: p.answers_revealed, question_started_at: p.question_started_at };
 		} catch (e) {
 			toast(e instanceof ApiError ? e.message : 'Could not move on', 'error');
 		}
 	}
-	const reveal = () => poll && go(cur, !poll.revealed);
+	const reveal = () => poll && go(cur, !poll.revealed, poll.answers_revealed);
+	// "When I reveal" tells participants too; otherwise only this screen shows it.
+	const sharedReveal = $derived(presenter && poll?.show_answers === 'presenter');
+	const answerShown = $derived(!!poll && (sharedReveal ? poll.answers_revealed : showKey));
+	function toggleAnswer() {
+		if (!poll || !q?.key) return;
+		if (sharedReveal) go(cur, poll.revealed, !poll.answers_revealed);
+		else showKey = !showKey;
+	}
+	const startedAt = $derived(poll?.question_started_at ? Date.parse(poll.question_started_at) : undefined);
+	const secs = $derived(presenter && q ? secondsLeft(startedAt, q.time_limit_sec, now + clockOffset) : null);
+	$effect(() => {
+		if (!presenter || !q?.time_limit_sec) return;
+		const t = setInterval(() => (now = Date.now()), 250);
+		return () => clearInterval(t);
+	});
 	async function openPoll() {
 		try {
 			await api.post('/api/teacher/polls/' + id + '/status', { status: 'open' });
@@ -80,6 +104,8 @@
 		if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') (e.preventDefault(), go(cur + 1));
 		else if (e.key === 'ArrowLeft' || e.key === 'PageUp') (e.preventDefault(), go(cur - 1));
 		else if (e.key.toLowerCase() === 'r' && presenter) reveal();
+		else if (e.key.toLowerCase() === 'a' && poll?.scoring) toggleAnswer();
+		else if (e.key.toLowerCase() === 'l' && poll?.scoring) board = !board;
 		else if (e.key.toLowerCase() === 'q') showCode = !showCode;
 		else if (e.key.toLowerCase() === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {});
 	}
@@ -120,15 +146,30 @@
 						<button class="btn btn-primary btn-lg mt-6" onclick={() => (showCode = false)}>Show the question<Icon name="arrow-right" size={18} /></button>
 					</div>
 				</section>
+			{:else if board && poll.scoring}
+				<section class="question" in:flyIn>
+					<h1 class="q-title m-0 mb-6 flex items-center gap-3"><Icon name="trophy" size={36} />Leaderboard</h1>
+					{#if data?.group_leaderboard?.length}
+						<div class="boards">
+							<div><h2 class="m-0 mb-3 text-2xl">Groups</h2><Leaderboard ranks={groupRanks(data.group_leaderboard)} big /></div>
+							<div><h2 class="m-0 mb-3 text-2xl">Individuals</h2><Leaderboard ranks={data.leaderboard ?? []} /></div>
+						</div>
+					{:else}
+						<Leaderboard ranks={data?.leaderboard ?? []} big />
+					{/if}
+				</section>
 			{:else if q}
 				{#key q.id}
 					<section class="question" in:flyIn={{ x: 30, y: 0, duration: 260 }}>
-						<p class="muted m-0 text-lg">Question {cur + 1} of {questions.length} · {TYPE_META[q.type].label}</p>
+						<div class="flex flex-wrap items-center gap-3">
+							<p class="muted m-0 text-lg">Question {cur + 1} of {questions.length} · {TYPE_META[q.type].label}{poll.scoring && q.key ? ` · ${q.points ?? 100} points` : ''}</p>
+							{#if secs !== null && !answerShown}<span class="timer tabular" class:low={secs <= 5} role="timer"><Icon name="clock" size={22} />{secs === 0 ? "Time's up" : secs}</span>{/if}
+						</div>
 						<RichText text={q.text} format={q.body.format} blanks="line" class="q-title" />
 						{#if presenter && poll.show_results === 'presenter' && !poll.revealed}
 							<p class="hidden-note muted"><Icon name="eye-off" size={18} /> Results are hidden from participants. Press <kbd class="kbd kbd-sm">R</kbd> to reveal them.</p>
 						{/if}
-						<PollResults question={q} result={data?.results[q.id]} teacher big pollId={id} />
+						<PollResults question={q} result={data?.results[q.id]} teacher big pollId={id} answerKey={answerShown || poll.status === 'closed' ? q.key : null} />
 					</section>
 				{/key}
 			{:else}
@@ -146,9 +187,13 @@
 			{#if presenter && poll.show_results === 'presenter'}
 				<button class="btn" class:btn-primary={!poll.revealed} onclick={reveal}><Icon name={poll.revealed ? 'eye-off' : 'eye'} size={18} />{poll.revealed ? 'Hide results' : 'Reveal results'}</button>
 			{/if}
+			{#if poll.scoring}
+				{#if q?.key && !board}<button class="btn" aria-pressed={answerShown} onclick={toggleAnswer} title="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button>{/if}
+				<button class="btn" aria-pressed={board} onclick={() => (board = !board)} title="Leaderboard (L)"><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button>
+			{/if}
 			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>Next<Icon name="arrow-right" size={18} /></button>
 		</footer>
-		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
+		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
 	{/if}
 </div>
 
@@ -160,6 +205,10 @@
 	.code-inline { letter-spacing: 0.08em; }
 	.main { flex: 1; width: 100%; max-width: 78rem; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
 	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.5rem; }
+	.boards { display: grid; gap: 2rem; }
+	@media (min-width: 1000px) { .boards { grid-template-columns: 1.4fr 1fr; } }
+	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: var(--color-base-100); border: 2px solid var(--color-base-300); }
+	.timer.low { color: var(--color-error); border-color: var(--color-error); }
 	.hidden-note { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }
 	.lobby { display: grid; gap: 3rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 60vh; }
 	@media (max-width: 860px) { .lobby { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
