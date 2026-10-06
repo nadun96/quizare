@@ -18,6 +18,7 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `/t/settings` | teacher | Teacher defaults, LLM keys |
 | `/admin` | admin | Users, usage, platform settings, audit |
 | `/r/[token]` | public | Shared results |
+| `/live/[token]` | public | Live leaderboards (polls and sessions), full screen (D-45) |
 | `/docs/[slug]` | developers | This documentation |
 
 `src/routes/+layout.ts` sets `ssr = false`. Pages guard themselves with `requireRole('teacher')` (`lib/guard.svelte.ts`), which redirects to `/login?next=…`; the server enforces roles regardless. After login or registration, `safeNext` returns the student to the QR page (FR-ACC-06) and only accepts same-site relative paths.
@@ -35,13 +36,16 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `QuestionView.svelte` | Renders all seven types and emits a `Response` on every change. Drag and drop uses SortableJS; essays are debounced. |
 | `QuestionEditor.svelte` | Authoring form for all seven types. Keyed by question so switching questions starts a fresh form. Question text and feedback use the rich text editor. |
 | `richtext/` | Rich text: `RichTextEditor.svelte` (Tiptap, loaded on first use), `RichText.svelte` (display, with blank inputs placed into the text), `syntax.ts` (the shared Markdown dialect), `render.ts` (Markdown → sanitised HTML) and `plain.ts` (plain text, KaTeX loader). See [Rich text](#rich-text). |
+| `LiveLinks.svelte` | Create, copy (with QR), turn off and renew public live leaderboard links (D-45). |
+| `SessionTeams.svelte` | Teams on the live dashboard: standings, random or category teams, moving students, captains (D-44). |
+| `StudentsPanel.svelte` | A classroom's students with categories: filter chips, search, multi-select, add to or remove from a category (D-41). |
 | `SettingsEditor.svelte` + `settingsMeta.ts` | Generic overrides editor showing inherited values. |
 | `AnalyticsView.svelte` | Class, question and student analytics tables and the score histogram. |
 | `QrCode.svelte` | QR rendered in the browser with `qrcode` (no server CPU). |
 | `answerText.ts` | Human-readable responses and keys. |
 | `types.ts` | TypeScript shapes of the API JSON. |
 | `docs/` | This documentation: page registry, Markdown renderer, lazy Mermaid. |
-| `poll/` | Polls: `PollInput` (all 20 inputs; `inputs/` holds rating, slider, Likert, matrix, word cloud, code, file and recorder), `PollResults` (charts and tables), `WordCloud` + `wordcloud.ts` (layout), `PollQuestionEditor`, `PollSettingsForm`, `client.ts` (participant API with the anonymous token). See [Live polls](polls.md). |
+| `poll/` | Polls: `PollInput` (all 20 inputs; `inputs/` holds rating, slider, Likert, matrix, word cloud, code, file and recorder), `PollResults` (charts and tables), `WordCloud` + `wordcloud.ts` (layout), `PollQuestionEditor`, `PollSettingsForm`, `client.ts` (participant API with the anonymous token); scored polls: `KeyEditor` (correct answer by type), `Leaderboard` (animated ranking, own row pinned; also draws groups), `GroupsPanel` (teacher: form groups, move people, captains) and `scoring.ts` (key clean-up, countdown, answer in words). See [Live polls](polls.md). |
 | `ui/` | Shared UI: `Icon` (inline SVG), `Toaster` + `toast.svelte.ts`, `DialogHost` + `confirmDialog()`, `DisplayMenu` + `prefs.svelte.ts` (theme, text size, motion, quiz timer), `StatCounter`, `Skeleton`, `EmptyState`, and `motion.ts` (transitions that switch off for reduced motion). See [Design system](#design-system). |
 
 ## Design system

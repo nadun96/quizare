@@ -122,6 +122,68 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		w.WriteHeader(204)
 		return nil
 	}))
+	r.Method("GET", "/sessions/{id}/teams", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		v, err := s.Teams(r.Context(), uid(r), pid(r))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, v)
+		return nil
+	}))
+	r.Method("POST", "/sessions/{id}/teams", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in TeamInput
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		t, err := s.CreateTeam(r.Context(), uid(r), pid(r), in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 201, t)
+		return nil
+	}))
+	r.Method("POST", "/sessions/{id}/teams/generate", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in TeamGenerate
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		v, err := s.GenerateTeams(r.Context(), uid(r), pid(r), in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, v)
+		return nil
+	}))
+	r.Method("POST", "/sessions/{id}/teams/members", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in TeamAssign
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		if err := s.AssignTeam(r.Context(), uid(r), pid(r), in); err != nil {
+			return err
+		}
+		w.WriteHeader(204)
+		return nil
+	}))
+	r.Method("PATCH", "/session-teams/{id}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in TeamInput
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		t, err := s.UpdateTeam(r.Context(), uid(r), pid(r), in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, t)
+		return nil
+	}))
+	r.Method("DELETE", "/session-teams/{id}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		if err := s.DeleteTeam(r.Context(), uid(r), pid(r)); err != nil {
+			return err
+		}
+		w.WriteHeader(204)
+		return nil
+	}))
 	r.Method("POST", "/attempts/{id}/reinstate", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in struct {
 			Reason string `json:"reason"`
@@ -151,11 +213,12 @@ func (s *Service) StudentRoutes(r chi.Router) {
 	r.Method("POST", "/join/sessions/{code}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in struct {
 			StudentNumber string `json:"student_number"`
+			TeamID        string `json:"team_id"` // team_mode=self (D-44)
 		}
 		if err := httpx.Decode(w, r, &in); err != nil {
 			return err
 		}
-		a, err := s.Join(r.Context(), uid(r), chi.URLParam(r, "code"), in.StudentNumber)
+		a, err := s.Join(r.Context(), uid(r), chi.URLParam(r, "code"), in.StudentNumber, in.TeamID)
 		if err != nil {
 			return err
 		}

@@ -2,6 +2,7 @@ package content_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/nadun96/quizplatform/internal/app/apptest"
@@ -203,4 +204,95 @@ func TestTeacherAndPlatformSettingsCascade(t *testing.T) {
 		t.Fatalf("cascade platform→teacher→classroom wrong: %+v", got.Effective)
 	}
 	teacher.Call("GET", "/api/admin/settings", nil, 403, nil)
+}
+
+func TestCategories(t *testing.T) {
+	e := apptest.New(t)
+	teacher := e.NewUser(auth.RoleTeacher)
+	var c content.Classroom
+	teacher.Call("POST", "/api/teacher/classrooms", map[string]any{"name": "C"}, 201, &c)
+	var a, b content.Enrolment
+	s1, s2 := e.NewUser(auth.RoleStudent), e.NewUser(auth.RoleStudent)
+	for i, s := range []*apptest.Client{s1, s2} {
+		en, err := e.App.Content.EnsureEnrolled(context.Background(), c.ID, s.User.ID, fmt.Sprintf("S%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			a = en
+		} else {
+			b = en
+		}
+	}
+
+	var red, blue content.Category
+	teacher.Call("POST", "/api/teacher/classrooms/"+c.ID+"/categories", map[string]any{"name": "Group A"}, 201, &red)
+	teacher.Call("POST", "/api/teacher/classrooms/"+c.ID+"/categories", map[string]any{"name": "Needs support", "color": 6}, 201, &blue)
+	if red.Color != 1 || blue.Color != 6 {
+		t.Fatalf("colors: %d %d", red.Color, blue.Color)
+	}
+	if code, _ := teacher.Do("POST", "/api/teacher/classrooms/"+c.ID+"/categories", map[string]any{"name": "group a"}); code != 409 {
+		t.Fatalf("duplicate name (case-insensitive): %d", code)
+	}
+	if code, _ := teacher.Do("POST", "/api/teacher/classrooms/"+c.ID+"/categories", map[string]any{"name": "x", "color": 9}); code != 422 {
+		t.Fatalf("bad color: %d", code)
+	}
+
+	teacher.Call("POST", "/api/teacher/categories/"+red.ID+"/members", map[string]any{"enrolment_ids": []string{a.ID, b.ID}, "assigned": true}, 200, nil)
+	teacher.Call("POST", "/api/teacher/categories/"+blue.ID+"/members", map[string]any{"enrolment_ids": []string{a.ID}, "assigned": true}, 200, nil)
+	var list struct{ Enrolments []content.Enrolment }
+	teacher.Call("GET", "/api/teacher/classrooms/"+c.ID+"/enrolments", nil, 200, &list)
+	got := map[string]int{}
+	for _, en := range list.Enrolments {
+		got[en.ID] = len(en.Categories)
+	}
+	if got[a.ID] != 2 || got[b.ID] != 1 {
+		t.Fatalf("categories per student: %v", got)
+	}
+	var cats struct{ Categories []content.Category }
+	teacher.Call("GET", "/api/teacher/classrooms/"+c.ID+"/categories", nil, 200, &cats)
+	if len(cats.Categories) != 2 || cats.Categories[0].Members != 2 {
+		t.Fatalf("category list: %+v", cats.Categories)
+	}
+	members, err := e.App.Content.CategoryMembers(context.Background(), teacher.User.ID, c.ID)
+	if err != nil || len(members) != 3 {
+		t.Fatalf("members for grouping: %v %v", members, err)
+	}
+
+	// Removing, renaming, deleting.
+	var rm struct{ Affected int }
+	teacher.Call("POST", "/api/teacher/categories/"+red.ID+"/members", map[string]any{"enrolment_ids": []string{b.ID}, "assigned": false}, 200, &rm)
+	if rm.Affected != 1 {
+		t.Fatalf("removed %d", rm.Affected)
+	}
+	teacher.Call("PATCH", "/api/teacher/categories/"+red.ID, map[string]any{"name": "Team Red"}, 200, nil)
+	teacher.Call("DELETE", "/api/teacher/categories/"+blue.ID, nil, 204, nil)
+	list.Enrolments = nil // decode fresh: an empty category list is omitted from the JSON
+	teacher.Call("GET", "/api/teacher/classrooms/"+c.ID+"/enrolments", nil, 200, &list)
+	for _, en := range list.Enrolments {
+		if en.ID == a.ID && (len(en.Categories) != 1 || en.Categories[0] != red.ID) {
+			t.Fatalf("after delete: %v", en.Categories)
+		}
+		if en.ID == b.ID && len(en.Categories) != 0 {
+			t.Fatalf("after removal: %v", en.Categories)
+		}
+	}
+
+	// Another teacher can't see or change them, nor add their own students.
+	other := e.NewUser(auth.RoleTeacher)
+	if code, _ := other.Do("GET", "/api/teacher/classrooms/"+c.ID+"/categories", nil); code != 404 {
+		t.Fatalf("foreign list: %d", code)
+	}
+	if code, _ := other.Do("POST", "/api/teacher/categories/"+red.ID+"/members", map[string]any{"enrolment_ids": []string{a.ID}, "assigned": true}); code != 404 {
+		t.Fatalf("foreign assign: %d", code)
+	}
+	var oc content.Classroom
+	other.Call("POST", "/api/teacher/classrooms", map[string]any{"name": "O"}, 201, &oc)
+	var ocat content.Category
+	other.Call("POST", "/api/teacher/classrooms/"+oc.ID+"/categories", map[string]any{"name": "X"}, 201, &ocat)
+	var res struct{ Affected int }
+	other.Call("POST", "/api/teacher/categories/"+ocat.ID+"/members", map[string]any{"enrolment_ids": []string{a.ID}, "assigned": true}, 200, &res)
+	if res.Affected != 0 {
+		t.Fatal("a student of another classroom was added to a category")
+	}
 }

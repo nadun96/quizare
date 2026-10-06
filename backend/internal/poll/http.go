@@ -41,6 +41,80 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("GET", "/polls/{id}/export.csv", httpx.Handler(s.hExport))
 	r.Method("POST", "/polls/{id}/moderation", httpx.Handler(s.hModerate))
 	r.Method("GET", "/polls/{id}/files/{file}", httpx.Handler(s.hFile))
+	r.Method("GET", "/polls/{id}/groups", httpx.Handler(s.hGroups))
+	r.Method("POST", "/polls/{id}/groups", httpx.Handler(s.hCreateGroup))
+	r.Method("POST", "/polls/{id}/groups/generate", httpx.Handler(s.hGenerateGroups))
+	r.Method("POST", "/polls/{id}/groups/members", httpx.Handler(s.hAssignMembers))
+	r.Method("PATCH", "/poll-groups/{id}", httpx.Handler(s.hUpdateGroup))
+	r.Method("DELETE", "/poll-groups/{id}", httpx.Handler(s.hDeleteGroup))
+}
+
+func (s *Service) hGroups(w http.ResponseWriter, r *http.Request) error {
+	v, err := s.Groups(r.Context(), teacherID(r), chi.URLParam(r, "id"))
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, v)
+	return nil
+}
+
+func (s *Service) hCreateGroup(w http.ResponseWriter, r *http.Request) error {
+	var in GroupInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	g, err := s.CreateGroup(r.Context(), teacherID(r), chi.URLParam(r, "id"), in)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 201, g)
+	return nil
+}
+
+func (s *Service) hGenerateGroups(w http.ResponseWriter, r *http.Request) error {
+	var in GenerateInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	v, err := s.GenerateGroups(r.Context(), teacherID(r), chi.URLParam(r, "id"), in)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, v)
+	return nil
+}
+
+func (s *Service) hAssignMembers(w http.ResponseWriter, r *http.Request) error {
+	var in AssignInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	if err := s.AssignMembers(r.Context(), teacherID(r), chi.URLParam(r, "id"), in); err != nil {
+		return err
+	}
+	w.WriteHeader(204)
+	return nil
+}
+
+func (s *Service) hUpdateGroup(w http.ResponseWriter, r *http.Request) error {
+	var in GroupInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	g, err := s.UpdateGroup(r.Context(), teacherID(r), chi.URLParam(r, "id"), in)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, g)
+	return nil
+}
+
+func (s *Service) hDeleteGroup(w http.ResponseWriter, r *http.Request) error {
+	if err := s.DeleteGroup(r.Context(), teacherID(r), chi.URLParam(r, "id")); err != nil {
+		return err
+	}
+	w.WriteHeader(204)
+	return nil
 }
 
 // PublicRoutes mounts participation under /api/polls; no login is needed
@@ -137,13 +211,14 @@ func (s *Service) hStatus(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Service) hPresent(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
-		Index    int  `json:"index"`
-		Revealed bool `json:"revealed"`
+		Index           int  `json:"index"`
+		Revealed        bool `json:"revealed"`
+		AnswersRevealed bool `json:"answers_revealed"`
 	}
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	p, err := s.Present(r.Context(), teacherID(r), chi.URLParam(r, "id"), in.Index, in.Revealed)
+	p, err := s.Present(r.Context(), teacherID(r), chi.URLParam(r, "id"), in.Index, in.Revealed, in.AnswersRevealed)
 	if err != nil {
 		return err
 	}
@@ -480,11 +555,11 @@ func (s *Service) hAnswer(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	a, err := s.Answer(r.Context(), chi.URLParam(r, "code"), chi.URLParam(r, "question"), caller(r), in.Value)
+	res, err := s.Answer(r.Context(), chi.URLParam(r, "code"), chi.URLParam(r, "question"), caller(r), in.Value)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"value": a})
+	httpx.JSON(w, 200, res)
 	return nil
 }
 

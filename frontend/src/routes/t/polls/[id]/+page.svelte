@@ -9,7 +9,11 @@
 	import PollQuestionEditor from '$lib/poll/PollQuestionEditor.svelte';
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import PollSettingsForm from '$lib/poll/PollSettingsForm.svelte';
-	import type { Poll, PollQuestion, PollSettings, TeacherResults } from '$lib/poll/types';
+	import GroupsPanel from '$lib/poll/GroupsPanel.svelte';
+	import LiveLinks from '$lib/LiveLinks.svelte';
+	import Leaderboard from '$lib/poll/Leaderboard.svelte';
+	import { fmtPoints, groupRanks, SCORABLE, settingsOf } from '$lib/poll/scoring';
+	import type { Poll, PollQuestion, PollSettings, Rank, TeacherResults } from '$lib/poll/types';
 	import RichText from '$lib/richtext/RichText.svelte';
 	import { LiveSocket } from '$lib/socket';
 	import type { Classroom } from '$lib/types';
@@ -26,7 +30,7 @@
 	let poll = $state<Poll | null>(null);
 	let results = $state<TeacherResults | null>(null);
 	let classrooms = $state<Classroom[]>([]);
-	let tab = $state<'questions' | 'results' | 'settings' | 'share'>('questions');
+	let tab = $state<'questions' | 'results' | 'groups' | 'settings' | 'share'>('questions');
 	let editing = $state<PollQuestion | 'new' | null>(null);
 	let settings = $state<PollSettings | null>(null);
 	let classroomId = $state<string | null>(null);
@@ -35,7 +39,7 @@
 
 	async function load() {
 		poll = await api.get<Poll>('/api/teacher/polls/' + id);
-		settings = { identity: poll.identity, audience: poll.audience, pacing: poll.pacing, show_results: poll.show_results, allow_edit: poll.allow_edit };
+		settings = settingsOf(poll);
 		classroomId = poll.classroom_id;
 		if (!poll.questions?.length) editing = 'new';
 	}
@@ -113,6 +117,12 @@
 		await api.post('/api/teacher/polls/' + id + '/moderation', m);
 		toast(m.hidden ? 'Hidden from participants' : 'Shown again', 'info');
 	}
+	async function renameParticipant(r: Rank) {
+		const n = prompt('Name on the leaderboard (empty for "Participant N")', r.nickname ?? '');
+		if (n === null || !r.participant_id) return;
+		await api.post('/api/teacher/polls/' + id + '/moderation', { participant_id: r.participant_id, nickname: n });
+		toast('Renamed', 'info');
+	}
 	async function copy(text: string) {
 		try {
 			await navigator.clipboard.writeText(text);
@@ -142,7 +152,7 @@
 			{/if}
 			<a class="btn" href={'/t/polls/' + id + '/present'} target="_blank" rel="noopener"><Icon name="monitor" size={16} />Present</a>
 		</div>
-		<p class="small muted m-0">{IDENTITY_LABEL[poll.identity]} · {poll.pacing === 'presenter' ? 'Presenter-led' : 'Self-paced'} · Results: {RESULTS_LABEL[poll.show_results].toLowerCase()} · Code <strong class="tabular">{poll.join_code}</strong></p>
+		<p class="small muted m-0">{IDENTITY_LABEL[poll.identity]} · {poll.pacing === 'presenter' ? 'Presenter-led' : 'Self-paced'} · Results: {RESULTS_LABEL[poll.show_results].toLowerCase()}{poll.scoring ? ' · Scored' : ''} · Code <strong class="tabular">{poll.join_code}</strong></p>
 
 		<div class="stats-grid" role="list" aria-label="Poll counts">
 			<StatCounter label="Participants" value={poll.participants} icon="users" tone="primary" />
@@ -151,7 +161,7 @@
 		</div>
 
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
+			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ...(poll.groups !== 'off' ? [['groups', 'Groups']] : []), ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -160,7 +170,7 @@
 			{#if editing}
 				<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-6" in:flyIn>
 					{#key editing}
-						<PollQuestionEditor pollId={id} question={editing === 'new' ? null : editing} onsaved={async () => { editing = null; await load(); }} oncancel={() => (editing = null)} />
+						<PollQuestionEditor pollId={id} question={editing === 'new' ? null : editing} scoring={poll.scoring} pacing={poll.pacing} onsaved={async () => { editing = null; await load(); }} oncancel={() => (editing = null)} />
 					{/key}
 				</div>
 			{:else}
@@ -172,6 +182,9 @@
 						<span class="q-num">{i + 1}</span>
 						<span class="badge badge-soft badge-primary gap-1"><Icon name={TYPE_META[q.type].icon} size={12} />{TYPE_META[q.type].label}</span>
 						{#if q.required}<span class="badge badge-soft badge-sm">required</span>{/if}
+						{#if poll.scoring && q.key}<span class="badge badge-soft badge-success badge-sm gap-1"><Icon name="check" size={11} />{fmtPoints(q.points ?? 100)} pts</span>
+						{:else if poll.scoring && SCORABLE.has(q.type)}<span class="badge badge-soft badge-warning badge-sm" title="Edit the question to set its correct answer">no answer key</span>{/if}
+						{#if q.time_limit_sec && poll.pacing === 'presenter'}<span class="badge badge-soft badge-sm tabular">{q.time_limit_sec}s</span>{/if}
 						<span class="small muted tabular">{results?.results[q.id]?.responses ?? 0} answers</span>
 						<span class="spacer"></span>
 						<button class="btn btn-ghost btn-sm btn-square" aria-label="Move question {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
@@ -191,6 +204,22 @@
 				<a class="btn btn-sm" href={'/api/teacher/polls/' + id + '/export.csv'} download><Icon name="arrow-right" size={14} />Export CSV</a>
 				<button class="btn btn-sm btn-ghost text-error" onclick={reset}>Clear responses</button>
 			</div>
+			{#if poll.scoring}
+				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6">
+					<div class="lb-grid" class:two={!!results?.group_leaderboard?.length}>
+						{#if results?.group_leaderboard?.length}
+							<div>
+								<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="users" size={18} />Groups</h2>
+								<Leaderboard ranks={groupRanks(results.group_leaderboard)} limit={50} />
+							</div>
+						{/if}
+						<div>
+							<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="trophy" size={18} />{results?.group_leaderboard?.length ? 'Individuals' : 'Leaderboard'}</h2>
+							<Leaderboard ranks={results?.leaderboard ?? []} teacher limit={50} onrename={renameParticipant} />
+						</div>
+					</div>
+				</section>
+			{/if}
 			{#each questions as q, i (q.id)}
 				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6">
 					<p class="small muted m-0">Question {i + 1} · {TYPE_META[q.type].label}</p>
@@ -200,6 +229,8 @@
 			{:else}
 				<div class="card card-border bg-base-100"><EmptyState icon="chart" title="Nothing to show yet">Add questions and open the poll.</EmptyState></div>
 			{/each}
+		{:else if tab === 'groups'}
+			<GroupsPanel pollId={id} settings={settingsOf(poll)} hasClassroom={!!poll.classroom_id} participants={poll.participants} />
 		{:else if tab === 'settings'}
 			<div class="card card-border vstack bg-base-100 p-4 shadow-sm sm:p-6">
 				<PollSettingsForm bind:settings bind:classroomId {classrooms} locked={poll.participants > 0} />
@@ -228,11 +259,18 @@
 					</div>
 				</div>
 			</div>
+			{#if poll.scoring}
+				<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-6"><LiveLinks scope="live_poll" targetId={id} teams={poll.groups !== 'off'} /></div>
+			{:else}
+				<p class="small muted m-0">Turn on <strong>Score answers</strong> in Settings to share a live leaderboard.</p>
+			{/if}
 		{/if}
 	{/if}
 </div>
 
 <style>
+	.lb-grid { display: grid; gap: 1.5rem; }
+	@media (min-width: 900px) { .lb-grid.two { grid-template-columns: 1fr 1fr; } }
 	.stats-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
 	.q-num { width: 1.75rem; height: 1.75rem; border-radius: 999px; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; background: var(--color-base-200); }
 	.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; animation: live 1.6s ease-in-out infinite; }

@@ -4,6 +4,7 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import { IDENTITY_LABEL } from '$lib/poll/meta';
 	import PollSettingsForm from '$lib/poll/PollSettingsForm.svelte';
+	import { DEFAULT_SETTINGS } from '$lib/poll/scoring';
 	import type { Poll, PollSettings } from '$lib/poll/types';
 	import type { Classroom } from '$lib/types';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
@@ -16,7 +17,7 @@
 	let classrooms = $state<Classroom[]>([]);
 	let creating = $state(false);
 	let title = $state('');
-	let settings = $state<PollSettings>({ identity: 'anonymous', audience: 'anyone', pacing: 'self', show_results: 'after_answer', allow_edit: true });
+	let settings = $state<PollSettings>({ ...DEFAULT_SETTINGS });
 	let classroomId = $state<string | null>(null);
 	let error = $state('');
 	let busy = $state(false);

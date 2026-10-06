@@ -56,6 +56,7 @@ type Enrolment struct {
 	CreatedAt     time.Time `json:"created_at"`
 	StudentName   string    `json:"student_name,omitempty"`
 	StudentEmail  string    `json:"student_email,omitempty"`
+	Categories    []string  `json:"categories,omitempty"` // category ids (teacher view, V2-03)
 }
 
 // Users is the slice of the auth module that content needs.

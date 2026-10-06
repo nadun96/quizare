@@ -35,6 +35,8 @@ type Quizzes interface {
 type Classrooms interface {
 	TopicContext(ctx context.Context, teacherID, topicID string) (content.TopicContext, error)
 	EnsureEnrolled(ctx context.Context, classroomID, userID, studentNumber string) (content.Enrolment, error)
+	ListCategories(ctx context.Context, teacherID, classroomID string) ([]content.Category, error)
+	CategoryMembers(ctx context.Context, teacherID, classroomID string) ([]content.CategoryMember, error)
 }
 
 type Users interface {
@@ -339,7 +341,7 @@ func (s *Service) event(ctx context.Context, tx pgx.Tx, sessionID, attemptID, ac
 const attemptCols = `a.id, a.session_id, a.user_id, a.student_number, a.state, a.overrides, a.extension_sec,
 	a.countdown_deadline, a.started_at, a.quiz_deadline, a.quiz_remaining_ms, a.current_index, a.question_deadline,
 	a.question_remaining_ms, a.paused_at, a.question_order, a.option_orders, a.warnings, a.violations, a.disconnected_at,
-	a.submitted_at, a.invalidated_at, a.invalid_reason, a.created_at`
+	a.submitted_at, a.invalidated_at, a.invalid_reason, a.created_at, a.team_id, a.captain`
 
 func scanAttempt(r pgx.Row) (*Attempt, error) {
 	var a Attempt
@@ -348,7 +350,7 @@ func scanAttempt(r pgx.Row) (*Attempt, error) {
 	err := r.Scan(&a.ID, &a.SessionID, &a.UserID, &a.StudentNumber, &a.State, &ov, &a.ExtensionSec,
 		&a.CountdownDeadline, &a.StartedAt, &a.QuizDeadline, &a.QuizRemainingMs, &a.Current, &a.QuestionDeadline,
 		&a.QuestionRemainingMs, &a.PausedAt, &order, &oo, &a.Warnings, &a.Violations, &a.DisconnectedAt,
-		&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt)
+		&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt, &a.TeamID, &a.Captain)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.ErrNotFound
 	}
@@ -460,6 +462,9 @@ type JoinPreview struct {
 	Status            string   `json:"status"`
 	StudentIDRequired bool     `json:"student_id_required"`
 	Attempt           *Attempt `json:"attempt"`
+	// Teams (D-44): the list to choose from when team_mode is self.
+	TeamMode string     `json:"team_mode"`
+	Teams    []TeamInfo `json:"teams,omitempty"`
 }
 
 func (s *Service) sessionByCode(ctx context.Context, code string) (*Session, error) {
@@ -483,8 +488,14 @@ func (s *Service) Preview(ctx context.Context, userID, code string) (JoinPreview
 	if v.Status == SessionEnded {
 		return JoinPreview{}, errSessionEnded
 	}
+	eff := v.Effective(nil, settings.Overrides{})
 	p := JoinPreview{SessionID: v.ID, Title: v.Title, QuizTitle: v.Snapshot.QuizTitle, Status: v.Status,
-		StudentIDRequired: v.Effective(nil, settings.Overrides{}).StudentIDRequired}
+		StudentIDRequired: eff.StudentIDRequired, TeamMode: eff.TeamMode}
+	if eff.TeamMode != "off" {
+		if p.Teams, err = s.teamInfos(ctx, v.ID); err != nil {
+			return p, err
+		}
+	}
 	a, err := scanAttempt(s.pool.QueryRow(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1 AND a.user_id=$2`, v.ID, userID))
 	if err == nil {
 		p.Attempt = a
@@ -496,7 +507,7 @@ func (s *Service) Preview(ctx context.Context, userID, code string) (JoinPreview
 
 // Join enrols the student if allowed and places them in the waiting room,
 // or admits them straight away under auto-admit (FR-SS-04).
-func (s *Service) Join(ctx context.Context, userID, code, studentNumber string) (*Attempt, error) {
+func (s *Service) Join(ctx context.Context, userID, code, studentNumber, teamID string) (*Attempt, error) {
 	sess, err := s.sessionByCode(ctx, code)
 	if err != nil {
 		return nil, err
@@ -513,6 +524,9 @@ func (s *Service) Join(ctx context.Context, userID, code, studentNumber string) 
 		return nil, httpx.NewError(http.StatusForbidden, "enrolment_pending", "your teacher has not approved your enrolment yet")
 	}
 	eff := v.Effective(nil, settings.Overrides{})
+	if err := s.checkTeamChoice(ctx, v.ID, eff, teamID); err != nil {
+		return nil, err
+	}
 	rng := mrand.New(mrand.NewPCG(mrand.Uint64(), mrand.Uint64()))
 	order, opts := newOrders(v.Snapshot.Questions, eff.QuestionOrder == "shuffled", func(q quiz.Question) bool {
 		return v.Effective(&q, settings.Overrides{}).OptionOrder == "shuffled"
@@ -539,6 +553,12 @@ func (s *Service) Join(ctx context.Context, userID, code, studentNumber string) 
 			return err
 		}
 		if err := s.event(ctx, tx, v.ID, a.ID, userID, "joined", nil); err != nil {
+			return err
+		}
+		if err := s.placeTeam(ctx, tx, sess, eff, a.ID, userID, teamID); err != nil {
+			return err
+		}
+		if a, err = scanAttempt(tx.QueryRow(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.id=$1`, a.ID)); err != nil {
 			return err
 		}
 		if eff.AdmissionMode == "auto" {
