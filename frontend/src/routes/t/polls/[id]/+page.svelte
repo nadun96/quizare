@@ -10,6 +10,7 @@
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import PollSettingsForm from '$lib/poll/PollSettingsForm.svelte';
 	import GroupsPanel from '$lib/poll/GroupsPanel.svelte';
+	import LiveLinks from '$lib/LiveLinks.svelte';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
 	import { fmtPoints, groupRanks, SCORABLE, settingsOf } from '$lib/poll/scoring';
 	import type { Poll, PollQuestion, PollSettings, Rank, TeacherResults } from '$lib/poll/types';
@@ -258,6 +259,11 @@
 					</div>
 				</div>
 			</div>
+			{#if poll.scoring}
+				<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-6"><LiveLinks scope="live_poll" targetId={id} teams={poll.groups !== 'off'} /></div>
+			{:else}
+				<p class="small muted m-0">Turn on <strong>Score answers</strong> in Settings to share a live leaderboard.</p>
+			{/if}
 		{/if}
 	{/if}
 </div>

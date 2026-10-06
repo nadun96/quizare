@@ -6,6 +6,7 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
 	import SessionTeams from '$lib/SessionTeams.svelte';
+	import LiveLinks from '$lib/LiveLinks.svelte';
 	import { LiveSocket } from '$lib/socket';
 	import { STATE_BADGE, STATE_ICON, STATE_LABEL, type Dashboard } from '$lib/types';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -229,6 +230,7 @@
 					</table>
 				</div>
 				{#if teamsOn}<SessionTeams sessionId={id} {version} {ended} />{/if}
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><LiveLinks scope="live_session" targetId={id} teams={teamsOn} /></div>
 			</section>
 		</div>
 	{:else}

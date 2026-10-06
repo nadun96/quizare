@@ -27,6 +27,7 @@ type Rank struct {
 	ParticipantID string  `json:"participant_id,omitempty"` // teacher view only
 	RealName      string  `json:"real_name,omitempty"`      // teacher view only
 	Nickname      string  `json:"nickname,omitempty"`       // teacher view only
+	joined        int     // join order, for "Participant N"
 }
 
 // rankKey is a short opaque id for a participant, stable within a poll.
@@ -117,7 +118,7 @@ func (s *Service) leaderboard(ctx context.Context, p *Poll, teacher bool) ([]Ran
 	})
 	out := make([]Rank, len(list))
 	for i, x := range list {
-		r := Rank{Key: rankKey(p.ID, x.id), Score: x.score, Correct: x.correct, Answered: x.answered}
+		r := Rank{Key: rankKey(p.ID, x.id), Score: x.score, Correct: x.correct, Answered: x.answered, joined: x.n}
 		if i > 0 && x.score == list[i-1].score && x.correct == list[i-1].correct {
 			r.Rank = out[i-1].Rank
 		} else {
@@ -141,4 +142,54 @@ func (s *Service) leaderboard(ctx context.Context, p *Poll, teacher bool) ([]Ran
 		out[i] = r
 	}
 	return out, nil
+}
+
+// Boards is a poll's leaderboards for a public live link (V2-08, D-45).
+type Boards struct {
+	Title    string      `json:"title"`
+	Status   string      `json:"status"`
+	Scoring  bool        `json:"scoring"`
+	People   []Rank      `json:"people"`
+	Groups   []GroupRank `json:"groups"`
+	Total    int         `json:"total"` // participants
+	Question int         `json:"question"`
+}
+
+// OwnsPoll checks that the teacher owns the poll.
+func (s *Service) OwnsPoll(ctx context.Context, teacherID, pollID string) error {
+	_, err := s.ownedPoll(ctx, teacherID, pollID)
+	return err
+}
+
+// PublicBoards ranks a poll for anyone with a live link. Real names are never
+// used: participants appear by nickname or, with nicknames off, as
+// "Participant N".
+func (s *Service) PublicBoards(ctx context.Context, pollID string, nicknames bool, limit int) (Boards, error) {
+	p, err := s.pollByID(ctx, pollID)
+	if err != nil {
+		return Boards{}, err
+	}
+	b := Boards{Title: p.Title, Status: p.Status, Scoring: p.Scoring, Total: p.Participants, People: []Rank{}, Groups: []GroupRank{}}
+	if !p.Scoring {
+		return b, nil
+	}
+	anon := *p
+	anon.Names = "nickname"
+	ranks, err := s.leaderboard(ctx, &anon, false)
+	if err != nil {
+		return b, err
+	}
+	if !nicknames {
+		for i := range ranks {
+			ranks[i].Name = fmt.Sprintf("Participant %d", ranks[i].joined)
+		}
+	}
+	b.People = top(ranks, limit)
+	if b.Groups, err = s.groupLeaderboard(ctx, p); err != nil {
+		return b, err
+	}
+	if b.Groups == nil {
+		b.Groups = []GroupRank{}
+	}
+	return b, nil
 }

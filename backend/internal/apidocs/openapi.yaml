@@ -763,6 +763,18 @@ paths:
       summary: Replace the token; the old URL stops working
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ShareLink' } } } } }
+  /api/public/live/{token}:
+    get:
+      operationId: getPublicLiveById
+      tags: [public]
+      summary: Live leaderboards for a live_session or live_poll link (V2-08, D-45)
+      description: Poll `refresh_ms` later for fresh data; views are cached for 2 s per link. Students appear by student ID or as "Student N", poll participants by nickname or as "Participant N"; names and emails never appear.
+      security: []
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: 'OK (sent with `X-Robots-Tag: noindex`)', content: { application/json: { schema: { $ref: '#/components/schemas/LiveView' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { description: 'Expired, revoked, or the poll or session is gone', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/public/results/{token}:
     get:
       operationId: getPublicResultsById
@@ -1852,13 +1864,30 @@ components:
       type: object
       required: [scope, target_id]
       properties:
-        scope: { type: string, enum: [session, quiz] }
+        scope: { type: string, enum: [session, quiz, live_session, live_poll], description: 'live_*: a live leaderboard page (target is a session or a poll)' }
         target_id: { type: string, format: uuid }
-        views: { type: array, items: { type: string, enum: [individual, question_pct, pass_rate] }, description: 'Defaults to the session''s results_view' }
-        identify: { type: string, enum: [anonymous, student_id], default: anonymous }
+        views: { type: array, items: { type: string, enum: [individual, question_pct, pass_rate, leaderboard, teams] }, description: 'Defaults to the session''s results_view; live links use leaderboard and teams (both by default)' }
+        identify: { type: string, enum: [anonymous, student_id, nickname], default: anonymous, description: 'student_id for sessions; nickname (the default) for polls' }
         show_answers: { type: boolean, default: false }
         label: { type: string }
         expires_at: { type: [string, 'null'], format: date-time }
+    LiveView:
+      type: object
+      properties:
+        type: { type: string, const: live }
+        kind: { type: string, enum: [poll, session] }
+        title: { type: string }
+        subtitle: { type: string }
+        status: { type: string }
+        unit: { type: string, enum: [points, percent] }
+        views: { type: array, items: { type: string } }
+        people: { type: array, items: { type: object, properties: { rank: { type: integer }, label: { type: string }, score: { type: number }, detail: { type: string }, team: { type: string }, color: { type: integer } } } }
+        teams: { type: array, items: { type: object, properties: { rank: { type: integer }, name: { type: string }, color: { type: integer }, score: { type: number }, detail: { type: string } } } }
+        joined: { type: integer }
+        finished: { type: integer, description: Sessions only }
+        scoring: { type: boolean }
+        refresh_ms: { type: integer }
+        updated_at: { type: integer, format: int64 }
     ShareLink:
       type: object
       properties:

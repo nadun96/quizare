@@ -119,6 +119,8 @@ Polls can run as a group competition (V2-06, V2-07, D-43). `groups` decides how 
 
 In first-answer and captain groups, members see the group's answer (and who gave it) in their personal view, `group_answers`. Participants without a group answer for themselves and appear only on the individual leaderboard.
 
+A public live link (Share tab) shows the leaderboards to anyone, by nickname or as "Participant N"; see [Analytics](analytics.md#live-leaderboard-links).
+
 The group leaderboard (`group_leaderboard`) sums each group's question marks; equal scores share a rank. It goes to the teacher, the presenter screen (beside the individual one) and, with `leaderboard=everyone`, to participants, who see their group highlighted. Groups expose only their id, name, colour and size to participants, never members.
 
 ## Moderation and export

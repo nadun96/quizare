@@ -2,8 +2,11 @@ package eval
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 
+	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/platform/groupscore"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -163,4 +166,89 @@ func (s *Service) studentTeam(ctx context.Context, sessionID, attemptID string) 
 		}
 	}
 	return nil, nil
+}
+
+// PublicTeamStandings is TeamStandings for a public live link (no owner check).
+func (s *Service) PublicTeamStandings(ctx context.Context, sessionID string) ([]TeamStanding, error) {
+	eff, err := s.attempts.SessionTeamRules(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return s.teamStandings(ctx, sessionID, eff)
+}
+
+// RankedStudent is one finished student on a public live leaderboard. Names
+// and emails never appear: students show as "Student N" (join order) or by
+// classroom student ID (BR-13, D-33).
+type RankedStudent struct {
+	Rank      int     `json:"rank"`
+	Label     string  `json:"label"`
+	Score     float64 `json:"score"`
+	MaxScore  float64 `json:"max_score"`
+	Pct       float64 `json:"pct"`
+	Complete  bool    `json:"complete"`
+	TeamName  string  `json:"team,omitempty"`
+	TeamColor int     `json:"team_color,omitempty"`
+}
+
+// PublicRanking ranks a session's marked, valid attempts by percentage.
+// It returns the top limit, how many joined and how many are ranked.
+func (s *Service) PublicRanking(ctx context.Context, sessionID string, studentIDs bool, limit int) ([]RankedStudent, int, int, error) {
+	teams, err := s.attempts.TeamInfos(ctx, sessionID)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	byID := map[string]live.TeamInfo{}
+	for _, t := range teams {
+		byID[t.ID] = t
+	}
+	rows, err := s.pool.Query(ctx, `SELECT a.student_number, a.team_id, row_number() OVER (ORDER BY a.created_at, a.id),
+		r.score::float8, r.max_score::float8, r.pct::float8, r.complete, r.invalidated
+		FROM live.attempts a LEFT JOIN eval.results r ON r.attempt_id=a.id
+		WHERE a.session_id=$1 ORDER BY a.created_at, a.id`, sessionID)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer rows.Close()
+	out := []RankedStudent{}
+	joined := 0
+	for rows.Next() {
+		var number, team *string
+		var n int
+		var score, max, pct *float64
+		var complete, invalid *bool
+		if err := rows.Scan(&number, &team, &n, &score, &max, &pct, &complete, &invalid); err != nil {
+			return nil, 0, 0, err
+		}
+		joined++
+		if score == nil || (invalid != nil && *invalid) {
+			continue // not finished, or invalidated (D-27)
+		}
+		x := RankedStudent{Label: fmt.Sprintf("Student %d", n), Score: *score, MaxScore: *max, Pct: *pct, Complete: complete != nil && *complete}
+		if studentIDs && number != nil && strings.TrimSpace(*number) != "" {
+			x.Label = *number
+		}
+		if team != nil {
+			if t, ok := byID[*team]; ok {
+				x.TeamName, x.TeamColor = t.Name, t.Color
+			}
+		}
+		out = append(out, x)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, 0, err
+	}
+	sort.SliceStable(out, func(a, b int) bool { return out[a].Pct > out[b].Pct })
+	pcts := make([]float64, len(out))
+	for i := range out {
+		pcts[i] = out[i].Pct
+	}
+	for i, r := range groupscore.Ranks(pcts) {
+		out[i].Rank = r
+	}
+	ranked := len(out)
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, joined, ranked, nil
 }

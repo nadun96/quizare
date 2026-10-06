@@ -89,4 +89,14 @@ func (s *Service) PublicRoutes(r chi.Router) {
 		httpx.JSON(w, 200, v)
 		return nil
 	}))
+	r.Method("GET", "/live/{token}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow") // ADR-16
+		w.Header().Set("Cache-Control", "no-store")
+		v, err := s.Live(r.Context(), chi.URLParam(r, "token"))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, v)
+		return nil
+	}))
 }

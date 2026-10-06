@@ -8,13 +8,15 @@
 	import { fmtPoints, ordinal } from './scoring';
 	import type { Rank } from './types';
 
-	let { ranks = [], me = null, meKey = '', teacher = false, big = false, limit = 10, onrename }: {
+	let { ranks = [], me = null, meKey = '', teacher = false, big = false, limit = 10, unit = 'points', onrename }: {
 		ranks?: Rank[];
 		me?: Rank | null;
 		meKey?: string;
 		teacher?: boolean;
 		big?: boolean;
 		limit?: number;
+		/** percent: scores are percentages (live session links). */
+		unit?: 'points' | 'percent';
 		onrename?: (r: Rank) => void;
 	} = $props();
 
@@ -37,7 +39,7 @@
 						{#if teacher && r.real_name && r.real_name !== r.name}<span class="small muted truncate block">{r.real_name}</span>{/if}
 						<span class="track" aria-hidden="true"><span class="fill" style:width="{(r.score / top) * 100}%"></span></span>
 					</span>
-					<span class="pts tabular"><strong>{fmtPoints(r.score)}</strong><span class="small muted block">{r.members !== undefined ? `${r.members} ${r.members === 1 ? 'member' : 'members'}` : `${r.correct} right`}</span></span>
+					<span class="pts tabular"><strong>{fmtPoints(r.score)}{unit === 'percent' ? '%' : ''}</strong><span class="small muted block">{r.detail ?? (r.members !== undefined ? `${r.members} ${r.members === 1 ? 'member' : 'members'}` : `${r.correct} right`)}</span></span>
 					{#if teacher && onrename}
 						<button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Rename {r.name}" title="Rename" onclick={() => onrename(r)}><Icon name="pencil" size={14} /></button>
 					{/if}
