@@ -148,6 +148,29 @@ func (c *Client) Raw(method, path, contentType string, body []byte) (int, []byte
 	return resp.StatusCode, out
 }
 
+// Get fetches path and returns the status, headers and body (for binary
+// responses such as images, where headers matter).
+func (c *Client) Get(path string, header map[string]string) (int, http.Header, []byte) {
+	c.e.T.Helper()
+	req, err := http.NewRequest("GET", c.e.Server.URL+path, nil)
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	for k, v := range c.Headers {
+		req.Header.Set(k, v)
+	}
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		c.e.T.Fatal(err)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, resp.Header, out
+}
+
 // Dial opens a WebSocket to path with this client's cookies and our Origin.
 func (c *Client) Dial(path string) *websocket.Conn {
 	c.e.T.Helper()

@@ -46,6 +46,9 @@ type User struct {
 	Role          Role   `json:"role"`
 	Status        string `json:"status"`
 	EmailVerified bool   `json:"email_verified"`
+	// Avatar is the profile picture's version ("" = none); the image is at
+	// /api/avatars/{id}?v={avatar} (D-49).
+	Avatar string `json:"avatar,omitempty"`
 }
 
 // Timeouts per role (ADR-13): students get long-lived sessions so most are
@@ -75,6 +78,7 @@ type Service struct {
 
 	ipLimiter    *Limiter
 	emailLimiter *Limiter
+	relations    Relations // who may see whose profile picture (D-49)
 
 	cacheMu sync.Mutex
 	cache   map[string]cachedSession // key: token hash
@@ -214,9 +218,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput, ip, userAgent string
 	var u User
 	var hash string
 	var verified *time.Time
-	err := s.pool.QueryRow(ctx, `SELECT id, email, name, role, status, password_hash, email_verified_at
+	err := s.pool.QueryRow(ctx, `SELECT id, email, name, role, status, password_hash, email_verified_at, coalesce(avatar_version, '')
 		FROM auth.users WHERE email=$1 AND status <> 'deleted'`, email).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified)
+		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified, &u.Avatar)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Spend the same work as a real check so timing does not reveal accounts.
 		_, _ = s.hasher.Verify(ctx, in.Password, s.dummyHash(ctx))
@@ -284,9 +288,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, bool, e
 	s.cacheMu.Unlock()
 	if !ok || now.Sub(c.fetched) > sessionCacheTTL {
 		var verified *time.Time
-		err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, s.expires_at, s.last_seen_at
+		err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, s.expires_at, s.last_seen_at, coalesce(u.avatar_version, '')
 			FROM auth.sessions s JOIN auth.users u ON u.id = s.user_id WHERE s.token_hash=$1`, []byte(key)).
-			Scan(&c.user.ID, &c.user.Email, &c.user.Name, &c.user.Role, &c.user.Status, &verified, &c.expiresAt, &c.lastSeen)
+			Scan(&c.user.ID, &c.user.Email, &c.user.Name, &c.user.Role, &c.user.Status, &verified, &c.expiresAt, &c.lastSeen, &c.user.Avatar)
 		if errors.Is(err, pgx.ErrNoRows) {
 			s.dropCache(key)
 			return User{}, false, nil
@@ -420,8 +424,8 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 func (s *Service) GetUser(ctx context.Context, id string) (User, error) {
 	var u User
 	var verified *time.Time
-	err := s.pool.QueryRow(ctx, `SELECT id, email, name, role, status, email_verified_at FROM auth.users WHERE id=$1`, id).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &verified)
+	err := s.pool.QueryRow(ctx, `SELECT id, email, name, role, status, email_verified_at, coalesce(avatar_version, '') FROM auth.users WHERE id=$1`, id).
+		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &verified, &u.Avatar)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, httpx.ErrNotFound
 	}
@@ -431,7 +435,7 @@ func (s *Service) GetUser(ctx context.Context, id string) (User, error) {
 
 // UsersByID returns users keyed by id; unknown ids are omitted.
 func (s *Service) UsersByID(ctx context.Context, ids []string) (map[string]User, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, email, name, role, status, email_verified_at IS NOT NULL
+	rows, err := s.pool.Query(ctx, `SELECT id, email, name, role, status, email_verified_at IS NOT NULL, coalesce(avatar_version, '')
 		FROM auth.users WHERE id = ANY($1::uuid[])`, ids)
 	if err != nil {
 		return nil, err
@@ -440,7 +444,7 @@ func (s *Service) UsersByID(ctx context.Context, ids []string) (map[string]User,
 	out := make(map[string]User, len(ids))
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified, &u.Avatar); err != nil {
 			return nil, err
 		}
 		out[u.ID] = u

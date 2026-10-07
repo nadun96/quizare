@@ -43,7 +43,7 @@
 				<div class="row">
 					<strong>Question {i + 1}</strong>
 					<span class="spacer"></span>
-					{#if q.ai_marked}<span class="badge badge-soft" title="Marked by AI; your teacher can review it">AI-marked</span>{/if}
+					{#if q.ai_marked}<span class="tooltip" data-tip="Marked by AI; your teacher can review it"><span class="badge badge-soft">AI-marked</span></span>{/if}
 					{#if q.score != null}
 						<span class="badge badge-soft {q.correct ? 'ok' : q.score > 0 ? 'warn' : 'danger'}">{q.score} / {q.max_score}</span>
 					{:else}<span class="badge badge-soft badge-warning">Being marked</span>{/if}

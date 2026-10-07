@@ -61,6 +61,19 @@ Word-cloud entries are normalised: lower case, and punctuation turned into space
 
 The participant socket is read-only and carries no identity; answers go over REST. Because every participant gets the same update, "after answering" is applied by each browser to its own view, so it is a display rule, not secrecy. `never` is enforced on the server. This keeps 200 participants at one computation per change instead of 200.
 
+## Adding questions while live
+
+A question can be added to an open poll at any time (V2-05, D-46). The presenter screen has **Add question** (`N`), which opens the full question editor with two choices: **Put it next** (`after_id`: insert after the question on screen; `after_current` does the same for the presented question) and **Show it now** (presenter pacing: everyone moves to it; self-paced: the presenter screen jumps to it). Participants receive it on the hub's next flush, within half a second, without reloading. Answers and positions of the other questions are untouched; a self-paced presenter screen keeps showing the same question when one is inserted before it.
+
+## Whiteboard
+
+Every poll has a whiteboard (V2-09, D-47), opened from the presenter screen (**Board**, `B`).
+
+- **Tools.** Pen, highlighter, line, arrow, rectangle, ellipse, text and an eraser; eight ink colours and three sizes; undo (`Ctrl+Z`); clear (teacher); **PNG** export at 1920×1080. Coordinates are on a fixed 1600×900 board, so marks look the same on every screen.
+- **Who sees and draws.** The board is hidden from participants until the teacher turns on **Show the board to participants**. Who may draw: only the teacher (default), everyone, or selected groups and participants. Participants can erase and undo only their own marks; the teacher can erase anything.
+- **Real time.** Strokes are saved over REST (`/board/strokes`, at most 20 per request, rate-limited per participant) and pushed at once to every open socket of the poll as `board` events (`add`, `remove`, `clear`, `access`), without waiting for the results flush. Pen lines are sent in pieces every 200 ms while being drawn, so viewers see them grow; pieces share a gesture id, so undo removes the whole line. Late joiners load every stroke with `GET /board`.
+- Stroke `by` is "t" for the teacher or the participant's opaque key, so a browser can recognise its own marks without ids being published.
+
 ## Scoring and leaderboard
 
 Turning on **Score answers** (`scoring`) makes a poll a competition (V2-01, V2-02, D-42). Questions with an answer key earn points; opinion types (word cloud, rating, Likert, matrix, essay, code, media) are never scored.

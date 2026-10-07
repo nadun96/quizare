@@ -9,7 +9,7 @@
 // Thresholds: p95 answer save < 150 ms, p99 < 400 ms; admit→countdown p95 < 500 ms;
 // login p95 < 3 s during the burst; no unexpected WebSocket closes.
 import http from 'k6/http';
-import ws from 'k6/websockets';
+import ws from 'k6/experimental/websockets'; // k6 ≤ 1.3; newer releases also offer k6/websockets
 import { check, sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 

@@ -83,7 +83,7 @@
 			</div>
 			<span class="spacer"></span>
 			<span class="badge badge-soft badge-lg gap-1" class:badge-success={isLive} role="status">
-				{#if isLive}<span class="live-dot" aria-hidden="true"></span>{/if}{STATUS[v.status] ?? v.status}
+				{#if isLive}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{STATUS[v.status] ?? v.status}
 			</span>
 			<span class="badge badge-soft badge-lg gap-1 tabular" title={v.kind === 'session' ? 'Finished / joined' : 'Taking part'}>
 				<Icon name="users" size={16} />{v.finished !== undefined ? `${v.finished}/${v.joined}` : v.joined}
@@ -131,8 +131,5 @@
 	.center-box { margin: auto; display: grid; justify-items: center; gap: 0.75rem; padding: 3rem 1.5rem; text-align: center; }
 	.icon-box { width: 3.5rem; height: 3.5rem; border-radius: 1rem; display: grid; place-items: center; background: var(--color-base-100); color: var(--color-muted); }
 	.foot { text-align: center; margin: 0 0 1rem; }
-	.live-dot { width: 0.55rem; height: 0.55rem; border-radius: 999px; background: currentColor; animation: live 1.6s ease-in-out infinite; }
-	@keyframes live { 50% { opacity: 0.3; } }
-	@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 	@media (max-width: 520px) { .main { padding: 1rem; } .bar { padding: 0.75rem 1rem; } }
 </style>

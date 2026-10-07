@@ -12,12 +12,14 @@
 	import { cleanKey, SCORABLE } from './scoring';
 	import type { PollAnswer, PollBody, PollKey, PollQuestion, PollType } from './types';
 
-	let { pollId, question = null, scoring = false, pacing = 'self', onsaved, oncancel }: {
+	let { pollId, question = null, scoring = false, pacing = 'self', extra = {}, onsaved, oncancel }: {
 		pollId: string;
 		question?: PollQuestion | null;
 		/** The poll scores answers: offer a key and points (D-42). */
 		scoring?: boolean;
 		pacing?: 'self' | 'presenter';
+		/** Sent with a new question, e.g. live placement (V2-05). */
+		extra?: Record<string, unknown>;
 		onsaved: (q: PollQuestion) => void;
 		oncancel: () => void;
 	} = $props();
@@ -70,7 +72,7 @@
 		try {
 			const q = initial
 				? await api.put<PollQuestion>('/api/teacher/poll-questions/' + initial.id, payload)
-				: await api.post<PollQuestion>('/api/teacher/polls/' + pollId + '/questions', payload);
+				: await api.post<PollQuestion>('/api/teacher/polls/' + pollId + '/questions', { ...payload, ...extra });
 			toast(initial ? 'Question saved' : 'Question added');
 			onsaved(q);
 		} catch (err) {

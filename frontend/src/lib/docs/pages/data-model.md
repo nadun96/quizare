@@ -14,6 +14,8 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0008_analytics.sql` | `analytics.session_stats`, `analytics.share_links` |
 | `0009_poll.sql` | `poll.polls`, `poll.questions`, `poll.participants`, `poll.responses`, `poll.hidden_words`, `poll.files` |
 | `0010_categories.sql` | `content.categories`, `content.enrolment_categories` |
+| `0016_account.sql` | Profile pictures: `auth.avatars`, `avatar_version` on `auth.users` |
+| `0015_poll_board.sql` | Whiteboard: `poll.board_strokes`, board access columns on `poll.polls` |
 | `0014_live_links.sql` | Share links gain the `live_session` and `live_poll` scopes and `nickname` identification |
 | `0013_session_teams.sql` | Session teams: `live.teams`, `team_id`/`captain` on `live.attempts` |
 | `0012_poll_groups.sql` | Poll groups: `poll.groups`, `group_id`/`captain` on participants, group settings on `poll.polls`, `created_at` on responses |
@@ -107,6 +109,8 @@ Primary key `(attempt_id, question_id)`. `question_id` refers to the **snapshot*
 Scored polls (D-42) add `scoring`, `speed_bonus`, `leaderboard`, `show_answers`, `names`, `answers_revealed` and `question_started_at` to `poll.polls`; an answer `key` (JSON, never sent to participants before it is revealed), `points` and `time_limit_sec` to `poll.questions`; `nickname` to `poll.participants`; and to `poll.responses` the stored `score`, `correct` and `elapsed_ms` (time from the question appearing, for the speed bonus). Scores are stored when an answer is saved and recomputed when a key, points or the scoring settings change.
 
 Groups (D-43): `poll.groups` (name unique per poll, case-insensitive; `color` 1–8; `category_id` when formed from a classroom category; at most 50 per poll). `poll.participants.group_id` (set to NULL when the group is deleted) and `captain`, with a partial unique index so a group has at most one captain. `poll.polls` gains `groups`, `group_acceptance` and `group_calc`; `poll.responses.created_at` records when an answer was first given, for "the group's first answer". Group scores aren't stored: they are combined from member scores when the leaderboard is computed, so changing the acceptance or calculation applies at once.
+
+The whiteboard (D-47) stores each mark in `poll.board_strokes`: tool, colour, size, `points` (x,y pairs on a 1600×900 board), optional text, a `gesture` id that joins the pieces of one pen line, and the participant who drew it (NULL for the teacher; cascades when the participant or poll goes). `poll.polls` gains `board_open`, `board_mode` and the `board_groups`/`board_participants` allowed to draw in `selected` mode. At most 20,000 strokes per board.
 
 ## Deletion and anonymisation
 

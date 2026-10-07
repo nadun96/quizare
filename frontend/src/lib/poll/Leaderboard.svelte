@@ -4,6 +4,7 @@
 	// the top 10, pinned underneath.
 	import { flip } from 'svelte/animate';
 	import Icon from '../ui/Icon.svelte';
+	import IconBtn from '../ui/IconBtn.svelte';
 	import { flipMs, flyIn } from '../ui/motion';
 	import { fmtPoints, ordinal } from './scoring';
 	import type { Rank } from './types';
@@ -41,7 +42,7 @@
 					</span>
 					<span class="pts tabular"><strong>{fmtPoints(r.score)}{unit === 'percent' ? '%' : ''}</strong><span class="small muted block">{r.detail ?? (r.members !== undefined ? `${r.members} ${r.members === 1 ? 'member' : 'members'}` : `${r.correct} right`)}</span></span>
 					{#if teacher && onrename}
-						<button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Rename {r.name}" title="Rename" onclick={() => onrename(r)}><Icon name="pencil" size={14} /></button>
+						<IconBtn icon="pencil" label="Rename" hint="Rename {r.name}" class="btn-ghost btn-xs" size={14} tip="left" onclick={() => onrename(r)} />
 					{/if}
 				</li>
 			{/each}

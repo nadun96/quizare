@@ -3,6 +3,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { auth } from '$lib/session.svelte';
 	import DisplayMenu from '$lib/ui/DisplayMenu.svelte';
+	import AccountSecurity from '$lib/account/AccountSecurity.svelte';
 	let password = $state('');
 	let error = $state('');
 	let confirming = $state(false);
@@ -26,6 +27,7 @@
 			<p>Email {auth.user.email_verified ? 'verified' : 'not verified yet — check your inbox'}.</p>
 			<a class="btn" href="/api/my/data" download>Download my data</a>
 		</div>
+		<AccountSecurity />
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 			<h2 class="mt-0">Display</h2>
 			<p class="small muted">Saved on this device. Larger text and reduced motion also apply during quizzes.</p>

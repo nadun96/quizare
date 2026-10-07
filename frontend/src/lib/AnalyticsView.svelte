@@ -43,7 +43,7 @@
 						<td><div class="pbar"><div style="width:{q.pct_correct}%"></div></div>{q.pct_correct}%</td>
 						<td>{q.avg_score} / {q.max_score}</td>
 						<td>{q.answered}</td>
-						<td title="Correct rate of the top 27% minus the bottom 27%">{q.discrimination ?? '—'}</td>
+						<td><span class="tooltip" data-tip="Correct rate of the top 27% minus the bottom 27%">{q.discrimination ?? '—'}</span></td>
 						<td class="small">
 							{#if q.option_counts}{Object.entries(q.option_counts).map(([k, n]) => `${q.option_labels?.[k]}: ${n}`).join(' · ')}<br />{/if}
 							{(q.common_wrong ?? []).map((w) => `"${w.answer}" ×${w.count}`).join(', ')}

@@ -47,6 +47,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("POST", "/polls/{id}/groups/members", httpx.Handler(s.hAssignMembers))
 	r.Method("PATCH", "/poll-groups/{id}", httpx.Handler(s.hUpdateGroup))
 	r.Method("DELETE", "/poll-groups/{id}", httpx.Handler(s.hDeleteGroup))
+	s.boardTeacherRoutes(r)
 }
 
 func (s *Service) hGroups(w http.ResponseWriter, r *http.Request) error {
@@ -124,6 +125,7 @@ func (s *Service) PublicRoutes(r chi.Router) {
 	r.Method("POST", "/{code}/join", httpx.Handler(s.hJoin))
 	r.Method("PUT", "/{code}/answers/{question}", httpx.Handler(s.hAnswer))
 	r.Method("POST", "/{code}/files/{question}", httpx.Handler(s.hUpload))
+	s.boardPublicRoutes(r)
 }
 
 // WSRoutes mounts the live sockets under /ws.
@@ -235,11 +237,14 @@ func (s *Service) hReset(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) hAddQuestion(w http.ResponseWriter, r *http.Request) error {
-	var in QuestionInput
+	var in struct {
+		QuestionInput
+		AddOptions
+	}
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	q, err := s.AddQuestion(r.Context(), teacherID(r), chi.URLParam(r, "id"), in)
+	q, _, err := s.AddQuestionAt(r.Context(), teacherID(r), chi.URLParam(r, "id"), in.QuestionInput, in.AddOptions)
 	if err != nil {
 		return err
 	}

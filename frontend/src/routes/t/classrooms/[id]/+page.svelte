@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -44,7 +44,7 @@
 		load();
 	}
 	async function rename(kind: 'modules' | 'topics', itemId: string, current: string) {
-		const name = prompt('New name', current);
+		const name = await promptDialog({ title: kind === 'modules' ? 'Rename module' : 'Rename topic', label: 'Name', value: current, maxlength: 200 });
 		if (name && name !== current) {
 			await api.patch('/api/teacher/' + kind + '/' + itemId, { name });
 			load();
@@ -64,7 +64,7 @@ if (!(await confirmDialog({ title: 'Delete this ' + kind.slice(0, -1) + '?', bod
 		load();
 	}
 	async function editNumber(en: Enrolment) {
-		const v = prompt('Student ID', en.student_number ?? '');
+		const v = await promptDialog({ title: 'Student ID', body: `For ${en.student_name}. It is attached to their answers.`, label: 'Student ID', value: en.student_number ?? '', allowEmpty: true, maxlength: 64 });
 		if (v === null) return;
 		try {
 			await api.patch('/api/teacher/enrolments/' + en.id, { student_number: v });

@@ -115,6 +115,48 @@ paths:
         '204': { description: 'Deleted' }
         '400': { description: 'Admin accounts cannot self-delete' }
         '401': { $ref: '#/components/responses/Error' }
+  /api/auth/me/password:
+    post:
+      operationId: postAuthMePassword
+      tags: [auth]
+      summary: Change my password (D-49)
+      description: Needs the current password. Other devices are signed out; this one stays. The owner gets an email. Attempts are rate-limited like logins.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [current_password, new_password], properties: { current_password: { type: string }, new_password: { type: string, minLength: 8, maxLength: 128 } } } } } }
+      responses:
+        '204': { description: 'Changed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/auth/me/avatar:
+    put:
+      operationId: putAuthMeAvatar
+      tags: [auth]
+      summary: Upload my profile picture (PNG, JPEG, WebP or GIF, at most 512 KB)
+      description: The picture is cropped to a square and re-encoded as a 256×256 JPEG; metadata such as EXIF location is not kept.
+      requestBody: { required: true, content: { image/*: { schema: { type: string, format: binary } } } }
+      responses:
+        '200': { description: 'Saved', content: { application/json: { schema: { type: object, properties: { avatar: { type: string, description: 'New version' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { description: 'Larger than 512 KB', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/Invalid' }
+    delete:
+      operationId: deleteAuthMeAvatar
+      tags: [auth]
+      summary: Remove my profile picture
+      responses: { '204': { description: 'Removed' }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/auth/users/{id}/avatar:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getAuthUsersAvatar
+      tags: [auth]
+      summary: A profile picture (JPEG)
+      description: Visible to the person, admins, and anyone who shares a classroom with them (teacher and student); otherwise 404. With ?v={avatar version} the response is cached for good; supports If-None-Match.
+      parameters: [{ name: v, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: 'The picture', content: { image/jpeg: { schema: { type: string, format: binary } } } }
+        '304': { description: 'Not modified' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/auth/verify-email:
     post:
       operationId: postAuthVerifyEmail
@@ -979,9 +1021,10 @@ paths:
     post:
       operationId: postTeacherPollsQuestions
       tags: [polls]
-      summary: Add a question (any of the 20 types)
+      summary: Add a question (any of the 20 types), also while the poll runs
+      description: Open polls show the new question to participants on the next live update (within half a second). `after_current` inserts it after the question being presented; `present` (presenter pacing) moves everyone to it.
       parameters: [{ $ref: '#/components/parameters/id' }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestionInput' } } } }
+      requestBody: { required: true, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/PollQuestionInput' }, { type: object, properties: { after_current: { type: boolean }, after_id: { type: string, description: 'Insert after this question' }, present: { type: boolean } } }] } } } }
       responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestion' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/polls/{id}/questions/order:
     put:
@@ -1028,6 +1071,45 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { question_id: { type: string, format: uuid }, participant_id: { type: string, format: uuid }, word: { type: string }, hidden: { type: boolean }, nickname: { type: string, maxLength: 30 } } } } } }
       responses: { '204': { description: 'Done' } }
+  /api/teacher/polls/{id}/board:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherPollsBoard
+      tags: [polls]
+      summary: The whiteboard with every stroke and who may draw (V2-09, D-47)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/BoardView' } } } } }
+  /api/teacher/polls/{id}/board/access:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherPollsBoardAccess
+      tags: [polls]
+      summary: Show or hide the board, and choose who may draw
+      description: Ids that aren't this poll's groups or participants are dropped.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BoardAccess' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/BoardAccess' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}/board/strokes:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherPollsBoardStrokes
+      tags: [polls]
+      summary: Draw (up to 20 strokes per request)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [strokes], properties: { strokes: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/BoardStroke' } } } } } } }
+      responses: { '201': { description: 'Saved and pushed to every open screen', content: { application/json: { schema: { type: object, properties: { strokes: { type: array, items: { $ref: '#/components/schemas/BoardStroke' } } } } } } }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}/board/erase:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherPollsBoardErase
+      tags: [polls]
+      summary: Erase any strokes, or undo the teacher's own gesture
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: integer } }, gesture: { type: string, description: 'Undo: remove a whole gesture' } } } } } }
+      responses: { '200': { description: 'Removed', content: { application/json: { schema: { type: object, properties: { removed: { type: array, items: { type: integer } } } } } } } }
+  /api/teacher/polls/{id}/board/clear:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherPollsBoardClear
+      tags: [polls]
+      summary: Clear the board for everyone
+      responses: { '204': { description: 'Cleared' } }
   /api/teacher/polls/{id}/groups:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -1107,6 +1189,32 @@ paths:
       parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/question' }, { $ref: '#/components/parameters/pollToken' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' } } } } } }
       responses: { '200': { description: 'Saved (normalised)', content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' }, key: { $ref: '#/components/schemas/PollKey' }, score: { $ref: '#/components/schemas/PollScore' } } } } } }, '409': { description: '`poll_closed`, `question_not_active`, `time_up`, `answer_revealed`, `group_answered`, `captain_only` or editing is off' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/polls/{code}/board:
+    get:
+      operationId: getPollsBoard
+      tags: [polls, public]
+      summary: The whiteboard as this participant sees it (empty while hidden)
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/pollToken' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/BoardView' } } } }, '409': { description: 'Draft poll' } }
+  /api/polls/{code}/board/strokes:
+    post:
+      operationId: postPollsBoardStrokes
+      tags: [polls, public]
+      summary: Draw, when the teacher allows it
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/pollToken' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [strokes], properties: { strokes: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/BoardStroke' } } } } } } }
+      responses: { '201': { description: 'Saved and pushed to every open screen', content: { application/json: { schema: { type: object, properties: { strokes: { type: array, items: { $ref: '#/components/schemas/BoardStroke' } } } } } } }, '403': { description: '`cannot_draw`' }, '422': { $ref: '#/components/responses/Invalid' }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/polls/{code}/board/erase:
+    post:
+      operationId: postPollsBoardErase
+      tags: [polls, public]
+      summary: Erase or undo your own strokes
+      security: []
+      parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/pollToken' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: integer } }, gesture: { type: string, description: 'Undo: remove a whole gesture' } } } } } }
+      responses: { '200': { description: 'Removed', content: { application/json: { schema: { type: object, properties: { removed: { type: array, items: { type: integer } } } } } } }, '403': { description: '`cannot_draw`' } }
   /api/polls/{code}/files/{question}:
     post:
       operationId: postPollsFile
@@ -1216,6 +1324,7 @@ components:
         role: { type: string, enum: [student, teacher, admin] }
         status: { type: string, enum: [active, pending_approval, suspended, deleted] }
         email_verified: { type: boolean }
+        avatar: { type: string, description: 'Profile picture version; absent when there is none (D-49)' }
     RegisterInput:
       type: object
       required: [email, name, password, role]
@@ -1336,6 +1445,7 @@ components:
         created_at: { type: string, format: date-time }
         student_name: { type: string }
         student_email: { type: string }
+        student_avatar: { type: string, description: Profile picture version }
         categories: { type: array, items: { type: string, format: uuid }, description: 'Category ids (teacher view)' }
     Category:
       type: object
@@ -1657,6 +1767,7 @@ components:
               attempt_id: { type: string, format: uuid }
               user_id: { type: string, format: uuid }
               name: { type: string }
+              avatar: { type: string, description: Profile picture version }
               student_number: { type: [string, 'null'] }
               state: { $ref: '#/components/schemas/AttemptState' }
               index: { type: integer }
@@ -1986,6 +2097,35 @@ components:
     PollScore:
       type: object
       properties: { points: { type: number }, correct: { type: boolean } }
+    BoardStroke:
+      type: object
+      required: [gesture, tool, color, size, points]
+      properties:
+        id: { type: integer, readOnly: true }
+        by: { type: string, readOnly: true, description: '"t" for the teacher, otherwise the participant''s opaque key (me_key)' }
+        gesture: { type: string, pattern: '^[A-Za-z0-9_-]{1,40}$', description: 'Joins the pieces of one gesture, for undo' }
+        tool: { type: string, enum: [pen, highlighter, line, rect, ellipse, arrow, text] }
+        color: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        size: { type: number, minimum: 1, maximum: 80 }
+        points: { type: array, items: { type: number }, description: 'x0,y0,x1,y1,… on a 1600×900 board; shapes give two corners, text one position' }
+        text: { type: string, maxLength: 200 }
+    BoardAccess:
+      type: object
+      properties:
+        open: { type: boolean, description: Participants see the board }
+        mode: { type: string, enum: [teacher, everyone, selected], default: teacher }
+        groups: { type: array, items: { type: string, format: uuid } }
+        participants: { type: array, items: { type: string, format: uuid } }
+    BoardView:
+      type: object
+      properties:
+        type: { type: string, const: board_state }
+        open: { type: boolean }
+        mode: { type: string }
+        can_draw: { type: boolean }
+        me: { type: string }
+        strokes: { type: array, items: { $ref: '#/components/schemas/BoardStroke' } }
+        access: { $ref: '#/components/schemas/BoardAccess' }
     PollGroupInput:
       type: object
       properties:
@@ -2155,6 +2295,7 @@ components:
         my_group: { type: string }
         captain: { type: boolean }
         group_answers: { type: object, description: "Teammates' answers (first-answer and captain groups)", additionalProperties: { type: object, properties: { by: { type: string }, value: { $ref: '#/components/schemas/PollAnswer' } } } }
+        board_open: { type: boolean, description: 'The whiteboard is shown (fetch /board; live changes arrive as `board` socket events)' }
     PollTeacherResults:
       type: object
       properties:

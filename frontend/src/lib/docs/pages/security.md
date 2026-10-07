@@ -19,6 +19,12 @@ ADR-09, ADR-10, ADR-13 and ADR-16, with NFR-01…07 and BR-10/12/13/14. This pag
 - **Rate limits** (token bucket): 300 burst per IP (a class shares one NAT address) and 10 per email, refilling one every 30 s.
 - **No tokens in `localStorage`.** Only the offline answer queue lives there.
 
+## Changing a password and profile pictures (D-49)
+
+- **Changing a password** (`POST /api/auth/me/password`) needs the current one, follows the same length rule as registration, and is rate-limited per account like logins, so the current password can't be guessed through it. Every other session of the account is deleted; the one making the change stays. The owner is emailed, with a link to reset the password if it wasn't them, and the change is audited.
+- **Profile pictures** (`PUT /api/auth/me/avatar`): at most 512 KB, PNG, JPEG, WebP or GIF, and under 8000 × 8000 pixels; the dimensions are read before decoding so oversized images are refused early. Every picture is decoded and re-encoded as a 256 × 256 JPEG, so nothing but pixels is kept: no EXIF (GPS position, camera), no comments, no file that is also something else. SVG is never accepted.
+- Pictures are served only to logged-in users who may see them: the person, admins, and anyone who shares a classroom with them (a teacher and their students); anyone else gets 404, so the endpoint can't tell whether a picture exists. Responses are `image/jpeg` with `nosniff`, `Content-Security-Policy: sandbox` and private caching; the URL carries the picture's version, so a changed picture is never served stale. Anonymous poll participants have no account, so no picture is ever linked to them.
+
 ## Authorisation
 
 Every query is scoped to the owner (`teacher_id`, or the attempt's `user_id`), and foreign ids return 404 (BR-14). Roles are enforced per route group with `RequireRole`. Admins can't read quiz content, answers or keys; the admin module only counts rows.

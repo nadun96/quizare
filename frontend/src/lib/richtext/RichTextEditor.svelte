@@ -7,6 +7,8 @@
 	import type { Editor } from '@tiptap/core';
 	import type { MathEdit } from './editor';
 	import type { TextFormat } from './syntax';
+	import Icon from '../ui/Icon.svelte';
+	import IconBtn from '../ui/IconBtn.svelte';
 
 	let {
 		value = $bindable(''),
@@ -150,37 +152,37 @@
 				<option value="h4">Small heading</option>
 			</select>
 			<span class="sep"></span>
-			<button type="button" class="btn btn-ghost btn-sm" title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={is('bold')} onclick={() => run((c) => c.toggleBold())}><b>B</b></button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={is('italic')} onclick={() => run((c) => c.toggleItalic())}><i>I</i></button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={is('underline')} onclick={() => run((c) => c.toggleUnderline())}><u>U</u></button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Strikethrough (Ctrl+Shift+S)" aria-label="Strikethrough" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())}><s>S</s></button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Inline code (Ctrl+E)" aria-label="Inline code" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())}><code>&lt;/&gt;</code></button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Link (Ctrl+K)" aria-label="Link" aria-pressed={is('link')} onclick={openLink}>🔗</button>
+			<IconBtn icon="bold" label="Bold" hint="Bold (Ctrl+B)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bold')} onclick={() => run((c) => c.toggleBold())} />
+			<IconBtn icon="italic" label="Italic" hint="Italic (Ctrl+I)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('italic')} onclick={() => run((c) => c.toggleItalic())} />
+			<IconBtn icon="underline" label="Underline" hint="Underline (Ctrl+U)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('underline')} onclick={() => run((c) => c.toggleUnderline())} />
+			<IconBtn icon="strike" label="Strikethrough" hint="Strikethrough (Ctrl+Shift+S)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())} />
+			<IconBtn icon="code" label="Inline code" hint="Inline code (Ctrl+E)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())} />
+			<IconBtn icon="link" label="Link" hint="Link (Ctrl+K)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('link')} onclick={openLink} />
 			<span class="sep"></span>
-			<button type="button" class="btn btn-ghost btn-sm" title="Bulleted list" aria-label="Bulleted list" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())}>•≡</button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Numbered list" aria-label="Numbered list" aria-pressed={is('orderedList')} onclick={() => run((c) => c.toggleOrderedList())}>1≡</button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Quote" aria-label="Quote" aria-pressed={is('blockquote')} onclick={() => run((c) => c.toggleBlockquote())}>❝</button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Code block" aria-label="Code block" aria-pressed={is('codeBlock')} onclick={() => run((c) => c.toggleCodeBlock())}>{'{ }'}</button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Divider" aria-label="Divider" onclick={() => run((c) => c.setHorizontalRule())}>―</button>
+			<IconBtn icon="list" label="Bulleted list" hint="Bulleted list" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())} />
+			<IconBtn icon="list-ordered" label="Numbered list" hint="Numbered list" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('orderedList')} onclick={() => run((c) => c.toggleOrderedList())} />
+			<IconBtn icon="quote" label="Quote" hint="Quote" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('blockquote')} onclick={() => run((c) => c.toggleBlockquote())} />
+			<IconBtn icon="braces" label="Code block" hint="Code block" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('codeBlock')} onclick={() => run((c) => c.toggleCodeBlock())} />
+			<IconBtn icon="minus" label="Divider" hint="Divider" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.setHorizontalRule())} />
 			{#if !compact}
 				<span class="sep"></span>
-				<button type="button" class="btn btn-ghost btn-sm" title="Insert table" aria-label="Insert table" onclick={() => run((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))}>▦</button>
-				<button type="button" class="btn btn-ghost btn-sm" title="Math, inline (type $$x^2$$ as a shortcut)" aria-label="Inline math" onclick={() => openMath('', false)}>∑</button>
-				<button type="button" class="btn btn-ghost btn-sm" title="Math, on its own line" aria-label="Display math" onclick={() => openMath('', true)}>∑▭</button>
+				<IconBtn icon="table" label="Insert table" hint="Insert table" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))} />
+				<IconBtn icon="sigma" label="Inline math" hint="Inline math: Math, inline (type $$x^2$$ as a shortcut)" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => openMath('', false)} />
+				<IconBtn icon="sigma-block" label="Display math" hint="Display math: Math, on its own line" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => openMath('', true)} />
 			{/if}
 			{#if blanks}
 				<span class="sep"></span>
-				<button type="button" class="btn btn-ghost btn-sm blank-btn" title="Insert a blank (or type [[1]])" onclick={() => run((c) => c.insertContent({ type: 'blank', attrs: { n: nextBlank() } }))}>+ Blank</button>
+				<span class="tooltip tooltip-bottom" data-tip="Insert a blank (or type [[1]])"><button type="button" class="btn btn-ghost btn-sm blank-btn" onclick={() => run((c) => c.insertContent({ type: 'blank', attrs: { n: nextBlank() } }))}><Icon name="plus" size={14} />Blank</button></span>
 			{/if}
 			<span class="grow"></span>
-			<button type="button" class="btn btn-ghost btn-sm" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!can((e) => e.can().undo())} onclick={() => run((c) => c.undo())}>↶</button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!can((e) => e.can().redo())} onclick={() => run((c) => c.redo())}>↷</button>
-			<button type="button" class="btn btn-ghost btn-sm" title="Clear formatting" aria-label="Clear formatting" onclick={() => run((c) => c.unsetAllMarks().clearNodes())}>⌫</button>
+			<IconBtn icon="undo" label="Undo" hint="Undo (Ctrl+Z)" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={!can((e) => e.can().undo())} onclick={() => run((c) => c.undo())} />
+			<IconBtn icon="redo" label="Redo" hint="Redo (Ctrl+Shift+Z)" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={!can((e) => e.can().redo())} onclick={() => run((c) => c.redo())} />
+			<IconBtn icon="remove-format" label="Clear formatting" hint="Clear formatting" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.unsetAllMarks().clearNodes())} />
 		{:else}
 			<span class="small muted">{failed ? 'Editor unavailable: editing Markdown directly.' : 'Markdown'}</span>
 			<span class="grow"></span>
 		{/if}
-		{#if !failed}<button type="button" class="btn btn-ghost btn-sm src" aria-pressed={source} title="Show the Markdown source" onclick={toggleSource}>MD</button>{/if}
+		{#if !failed}<IconBtn icon="markdown" label="Markdown" hint="Show the Markdown source" class="btn-ghost btn-sm" size={16} tip="left" aria-pressed={source} onclick={toggleSource} />{/if}
 	</div>
 
 	{#if is('table') && !source}
@@ -229,7 +231,6 @@
 	.sep { width: 1px; align-self: stretch; background: var(--color-base-300); margin: 0 0.2rem; }
 	.grow { flex: 1; }
 	.blank-btn { font-weight: 600; }
-	.src { font-family: ui-monospace, Consolas, monospace; font-size: 0.75rem !important; }
 	.danger { color: var(--danger); }
 	.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 	.hidden { display: none; }

@@ -184,6 +184,7 @@ export type PublicPoll = Omit<PollSettings, 'leaderboard'> & {
 	my_group?: string;
 	captain?: boolean;
 	group_answers?: Record<string, GroupAnswer>;
+	board_open?: boolean;
 };
 
 export type TeacherResults = { type: 'results'; server_time: number; poll: Poll; participants: number; results: Record<string, PollResult>; leaderboard?: Rank[]; group_leaderboard?: GroupRank[] };
