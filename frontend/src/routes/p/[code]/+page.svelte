@@ -9,6 +9,8 @@
 	import { hasAnswer } from '$lib/poll/meta';
 	import PollInput from '$lib/poll/PollInput.svelte';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
+	import Whiteboard from '$lib/board/Whiteboard.svelte';
+	import { BoardState, type BoardEvent } from '$lib/board/strokes.svelte';
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import { describeKey, fmtPoints, groupRanks, ordinal, secondsLeft } from '$lib/poll/scoring';
 	import type { PollAnswer, PollKey, PollQuestion, PollScore, PublicPoll } from '$lib/poll/types';
@@ -37,6 +39,25 @@
 	let clockOffset = 0; // server time minus local time
 	let now = $state(Date.now());
 	let socket: LiveSocket | null = null;
+	// Whiteboard (V2-09): shown above the questions while the teacher shows it.
+	const wb = new BoardState();
+	const wbClient = {
+		add: (s: Parameters<typeof pollClient.boardAdd>[1]) => pollClient.boardAdd(code, s),
+		erase: (ids: number[], gesture?: string) => pollClient.boardErase(code, ids, gesture)
+	};
+	let wbLoaded = $state(false);
+	async function loadBoard() {
+		try {
+			wb.load(await pollClient.board(code));
+			wbLoaded = true;
+		} catch {
+			/* shown again on the next update */
+		}
+	}
+	$effect(() => {
+		if (v?.board_open && v.joined && !wbLoaded) loadBoard();
+		if (!v?.board_open) wbLoaded = false;
+	});
 
 	function personal(view: PublicPoll) {
 		ownKeys = { ...(view.keys ?? {}) };
@@ -64,6 +85,10 @@
 			if (m.type === 'deleted') {
 				notFound = true;
 				v = null;
+				return;
+			}
+			if (m.type === 'board') {
+				if (wb.apply(m as unknown as BoardEvent)) loadBoard();
 				return;
 			}
 			if (m.type !== 'update') return;
@@ -263,6 +288,12 @@
 		<main class="content">
 			{#if v.status === 'closed'}
 				<div class="alert alert-soft alert-info" in:flyIn><Icon name="info" /><span>This poll has closed. Thanks for taking part!</span></div>
+			{/if}
+			{#if v.board_open && wbLoaded}
+				<section class="card card-border bg-base-100 p-3 shadow-sm sm:p-4" aria-labelledby="wb-h" in:flyIn>
+					<h2 id="wb-h" class="m-0 mb-2 flex items-center gap-2 text-base"><Icon name="brush" size={16} />Whiteboard{#if wb.canDraw}<span class="badge badge-soft badge-success badge-sm">you can draw</span>{/if}</h2>
+					<Whiteboard board={wb} client={wbClient} title={v.title + ' whiteboard'} />
+				</section>
 			{/if}
 			{#if v.pacing === 'presenter' && v.status === 'open'}
 				<p class="small muted center m-0">Question {v.current_index + 1} of {v.total} · the presenter moves everyone on</p>

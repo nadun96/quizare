@@ -2,6 +2,7 @@
 // device token per poll; it can only answer as that participant in that
 // poll, so it is kept in localStorage (login sessions stay HttpOnly cookies).
 import { ApiError } from '../api';
+import type { BoardView, NewStroke, Stroke } from '../board/strokes.svelte';
 import type { FileRef, PollAnswer, PollKey, PollScore, PublicPoll } from './types';
 
 const KEY = (code: string) => 'qp:poll:' + code.toUpperCase();
@@ -44,8 +45,14 @@ async function call<T>(code: string, method: string, path: string, body?: BodyIn
 	return data as T;
 }
 
+const json = { 'Content-Type': 'application/json' };
+
 export const pollClient = {
 	view: (code: string) => call<PublicPoll>(code, 'GET', ''),
+	// Whiteboard (D-47).
+	board: (code: string) => call<BoardView>(code, 'GET', '/board'),
+	boardAdd: async (code: string, strokes: NewStroke[]) => (await call<{ strokes: Stroke[] }>(code, 'POST', '/board/strokes', JSON.stringify({ strokes }), json)).strokes,
+	boardErase: async (code: string, ids: number[], gesture = '') => (await call<{ removed: number[] }>(code, 'POST', '/board/erase', JSON.stringify({ ids, gesture }), json)).removed ?? [],
 	async join(code: string, identify: boolean, nickname = '', groupId = '') {
 		const r = await call<{ participant_id: string; identified: boolean; token?: string }>(code, 'POST', '/join', JSON.stringify({ identify, nickname, group_id: groupId }), { 'Content-Type': 'application/json' });
 		if (r.token) setToken(code, r.token);
