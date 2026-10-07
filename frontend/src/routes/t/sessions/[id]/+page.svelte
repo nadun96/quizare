@@ -6,6 +6,7 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
 	import SessionTeams from '$lib/SessionTeams.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
 	import LiveLinks from '$lib/LiveLinks.svelte';
 	import { LiveSocket } from '$lib/socket';
 	import { STATE_BADGE, STATE_ICON, STATE_LABEL, type Dashboard } from '$lib/types';
@@ -211,7 +212,7 @@
 							{#each rows as r (r.attempt_id)}
 									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
 									<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>
-									<td>{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></td>
+									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
 									{#if teamsOn}
 										{@const team = d.teams?.find((t) => t.id === r.team_id)}
 										<td class="small">{#if team}<span class="inline-flex items-center gap-1"><span class="tdot" style:background="var(--cat-{team.color})" aria-hidden="true"></span>{team.name}{#if r.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>{:else}<span class="muted">—</span>{/if}</td>

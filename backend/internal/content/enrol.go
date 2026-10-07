@@ -181,7 +181,7 @@ func (s *Service) ListEnrolments(ctx context.Context, teacherID, classroomID, st
 	}
 	for i := range list {
 		u := users[list[i].UserID]
-		list[i].StudentName, list[i].StudentEmail = u.Name, u.Email
+		list[i].StudentName, list[i].StudentEmail, list[i].StudentAvatar = u.Name, u.Email, u.Avatar
 		list[i].Categories = cats[list[i].ID]
 	}
 	return list, nil

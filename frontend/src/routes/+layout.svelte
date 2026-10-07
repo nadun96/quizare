@@ -8,6 +8,7 @@
 	import { flyIn } from '$lib/ui/motion';
 	import Icon from '$lib/ui/Icon.svelte';
 	import DisplayMenu from '$lib/ui/DisplayMenu.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
 	import Toaster from '$lib/ui/Toaster.svelte';
 	import DialogHost from '$lib/ui/DialogHost.svelte';
 
@@ -93,7 +94,7 @@
 			{#if auth.user}
 				<details class="dropdown dropdown-end" bind:this={menus[2]} ontoggle={closeOthers}>
 					<summary class="btn btn-ghost gap-2 px-2" aria-label="Account menu">
-						<span class="avatar avatar-placeholder"><span class="grid size-8 place-items-center rounded-full bg-neutral text-sm leading-none text-neutral-content">{auth.user.name.slice(0, 1).toUpperCase()}</span></span>
+						<Avatar id={auth.user.id} name={auth.user.name} avatar={auth.user.avatar} size={32} />
 						<span class="hidden max-w-40 truncate md:inline">{auth.user.name}</span>
 					</summary>
 					<ul class="menu dropdown-content z-40 mt-2 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">

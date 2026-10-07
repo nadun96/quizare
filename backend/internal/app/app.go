@@ -144,6 +144,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Auth = auth.NewService(pool, auth.NewHasher(cfg.Argon2Workers), rc, cfg.BaseURL)
 	a.Settings = settings.NewStore(pool)
 	a.Content = content.NewService(pool, a.Settings, a.Auth)
+	a.Auth.SetRelations(a.Content)
 	a.Quiz = quiz.NewService(pool, a.Content, a.Settings, rc, checker)
 	quizWorker.Service = a.Quiz
 	a.Live = live.NewService(pool, a.Quiz, a.Content, a.Auth, cfg.BaseURL, log)

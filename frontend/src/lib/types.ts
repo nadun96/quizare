@@ -92,6 +92,8 @@ export type Session = { id: string; quiz_id: string; title: string; join_code: s
 export type DashboardRow = {
 	attempt_id: string;
 	name: string;
+	user_id: string;
+	avatar?: string;
 	student_number: string | null;
 	state: StudentState['state'];
 	index: number;

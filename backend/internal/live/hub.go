@@ -292,6 +292,7 @@ type DashboardRow struct {
 	AttemptID     string  `json:"attempt_id"`
 	UserID        string  `json:"user_id"`
 	Name          string  `json:"name"`
+	Avatar        string  `json:"avatar,omitempty"` // picture version (D-49)
 	StudentNumber *string `json:"student_number"`
 	State         string  `json:"state"`
 	Index         int     `json:"index"`
@@ -362,7 +363,7 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 		a := p.a
 		d.Counts[a.State]++
 		d.Rows = append(d.Rows, DashboardRow{
-			AttemptID: a.ID, UserID: a.UserID, Name: users[a.UserID].Name, StudentNumber: a.StudentNumber, State: a.State,
+			AttemptID: a.ID, UserID: a.UserID, Name: users[a.UserID].Name, Avatar: users[a.UserID].Avatar, StudentNumber: a.StudentNumber, State: a.State,
 			Index: a.Current, Total: len(a.Order), Answered: p.answered, Warnings: a.Warnings, Violations: a.Violations,
 			ExtensionSec: a.ExtensionSec, QuizDeadline: ms(a.QuizDeadline), RemainingMs: a.QuizRemainingMs,
 			Connected: s.hub.isConnected(a.ID), InvalidReason: a.InvalidReason, TeamID: a.TeamID, Captain: a.Captain,

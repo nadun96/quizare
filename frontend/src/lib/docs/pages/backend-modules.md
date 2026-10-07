@@ -15,7 +15,7 @@ Every module lives in `backend/internal/<name>`, owns one PostgreSQL schema, exp
 
 ## auth (schema `auth`)
 
-Accounts, passwords, sessions, verification, password reset, and admin account management (FR-ACC).
+Accounts, passwords, sessions, verification, password reset, and admin account management (FR-ACC). `account.go` lets people change their password and profile picture (D-49).
 
 - `password.go`: Argon2id (m=19456 KiB, t=2, p=1). `Hasher` runs at most N hashes at once with a queue of 200 and a 10 s acquire timeout; when full it returns `ErrBusy`, which becomes `503 Retry-After: 2`.
 - `service.go`: `Register`, `Login`, `CreateSession`, `Authenticate` (idle and absolute timeouts per role), `Logout`, `VerifyEmail`, `RequestPasswordReset`, `ResetPassword`, `UsersByID`, `CreateAdmin`.
