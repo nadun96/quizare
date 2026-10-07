@@ -109,7 +109,7 @@ func (s *Service) DeleteOwnAccount(ctx context.Context, u User, password string)
 func (s *Service) anonymise(ctx context.Context, actorID, userID string) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE auth.users
-			SET status='deleted', email=$2, name='Deleted user', password_hash='!', email_verified_at=NULL, updated_at=now()
+			SET status='deleted', email=$2, name='Deleted user', password_hash='!', email_verified_at=NULL, avatar_version=NULL, updated_at=now()
 			WHERE id=$1 AND status <> 'deleted'`, userID, fmt.Sprintf("deleted+%s@invalid", userID))
 		if err != nil {
 			return err
@@ -118,6 +118,10 @@ func (s *Service) anonymise(ctx context.Context, actorID, userID string) error {
 			return httpx.ErrNotFound
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM auth.sessions WHERE user_id=$1`, userID); err != nil {
+			return err
+		}
+		// The profile picture is personal data too (D-49).
+		if _, err := tx.Exec(ctx, `DELETE FROM auth.avatars WHERE user_id=$1`, userID); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM auth.tokens WHERE user_id=$1`, userID); err != nil {

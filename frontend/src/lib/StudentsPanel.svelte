@@ -4,13 +4,14 @@
 	import { flip } from 'svelte/animate';
 	import { api, ApiError } from './api';
 	import Icon from './ui/Icon.svelte';
+	import Avatar from './ui/Avatar.svelte';
 	import IconBtn from './ui/IconBtn.svelte';
 	import EmptyState from './ui/EmptyState.svelte';
 	import { confirmDialog } from './ui/dialog.svelte';
 	import { fadeIn, flipMs } from './ui/motion';
 	import { toast } from './ui/toast.svelte';
 
-	export type Enrolment = { id: string; student_name: string; student_email: string; student_number: string | null; status: string; created_at: string; categories?: string[] };
+	export type Enrolment = { id: string; user_id?: string; student_name: string; student_email: string; student_avatar?: string; student_number: string | null; status: string; created_at: string; categories?: string[] };
 	export type Category = { id: string; classroom_id: string; name: string; color: number; position: number; members: number };
 
 	let {
@@ -173,7 +174,7 @@
 					{#each shown as en (en.id)}
 						<tr class:sel={selected.has(en.id)}>
 							<td><input type="checkbox" class="checkbox checkbox-sm" checked={selected.has(en.id)} onchange={() => toggle(en.id)} aria-label="Select {en.student_name}" /></td>
-							<td>{en.student_name}<br /><span class="small muted">{en.student_email}</span></td>
+							<td><span class="flex items-center gap-2"><Avatar id={en.user_id ?? ''} name={en.student_name} avatar={en.student_avatar} size={30} /><span class="min-w-0">{en.student_name}<br /><span class="small muted">{en.student_email}</span></span></span></td>
 							<td class="whitespace-nowrap">{en.student_number ?? '—'} <button class="btn btn-ghost btn-xs" onclick={() => oneditnumber(en)}>Edit</button></td>
 							<td>
 								<div class="flex flex-wrap gap-1">

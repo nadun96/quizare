@@ -115,6 +115,48 @@ paths:
         '204': { description: 'Deleted' }
         '400': { description: 'Admin accounts cannot self-delete' }
         '401': { $ref: '#/components/responses/Error' }
+  /api/auth/me/password:
+    post:
+      operationId: postAuthMePassword
+      tags: [auth]
+      summary: Change my password (D-49)
+      description: Needs the current password. Other devices are signed out; this one stays. The owner gets an email. Attempts are rate-limited like logins.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [current_password, new_password], properties: { current_password: { type: string }, new_password: { type: string, minLength: 8, maxLength: 128 } } } } } }
+      responses:
+        '204': { description: 'Changed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/auth/me/avatar:
+    put:
+      operationId: putAuthMeAvatar
+      tags: [auth]
+      summary: Upload my profile picture (PNG, JPEG, WebP or GIF, at most 512 KB)
+      description: The picture is cropped to a square and re-encoded as a 256×256 JPEG; metadata such as EXIF location is not kept.
+      requestBody: { required: true, content: { image/*: { schema: { type: string, format: binary } } } }
+      responses:
+        '200': { description: 'Saved', content: { application/json: { schema: { type: object, properties: { avatar: { type: string, description: 'New version' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { description: 'Larger than 512 KB', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/Invalid' }
+    delete:
+      operationId: deleteAuthMeAvatar
+      tags: [auth]
+      summary: Remove my profile picture
+      responses: { '204': { description: 'Removed' }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/auth/users/{id}/avatar:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getAuthUsersAvatar
+      tags: [auth]
+      summary: A profile picture (JPEG)
+      description: Visible to the person, admins, and anyone who shares a classroom with them (teacher and student); otherwise 404. With ?v={avatar version} the response is cached for good; supports If-None-Match.
+      parameters: [{ name: v, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: 'The picture', content: { image/jpeg: { schema: { type: string, format: binary } } } }
+        '304': { description: 'Not modified' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/auth/verify-email:
     post:
       operationId: postAuthVerifyEmail
@@ -1282,6 +1324,7 @@ components:
         role: { type: string, enum: [student, teacher, admin] }
         status: { type: string, enum: [active, pending_approval, suspended, deleted] }
         email_verified: { type: boolean }
+        avatar: { type: string, description: 'Profile picture version; absent when there is none (D-49)' }
     RegisterInput:
       type: object
       required: [email, name, password, role]
@@ -1402,6 +1445,7 @@ components:
         created_at: { type: string, format: date-time }
         student_name: { type: string }
         student_email: { type: string }
+        student_avatar: { type: string, description: Profile picture version }
         categories: { type: array, items: { type: string, format: uuid }, description: 'Category ids (teacher view)' }
     Category:
       type: object
@@ -1723,6 +1767,7 @@ components:
               attempt_id: { type: string, format: uuid }
               user_id: { type: string, format: uuid }
               name: { type: string }
+              avatar: { type: string, description: Profile picture version }
               student_number: { type: [string, 'null'] }
               state: { $ref: '#/components/schemas/AttemptState' }
               index: { type: integer }

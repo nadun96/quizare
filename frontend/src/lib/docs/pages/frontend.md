@@ -37,6 +37,7 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `QuestionEditor.svelte` | Authoring form for all seven types. Keyed by question so switching questions starts a fresh form. Question text and feedback use the rich text editor. |
 | `richtext/` | Rich text: `RichTextEditor.svelte` (Tiptap, loaded on first use), `RichText.svelte` (display, with blank inputs placed into the text), `syntax.ts` (the shared Markdown dialect), `render.ts` (Markdown → sanitised HTML) and `plain.ts` (plain text, KaTeX loader). See [Rich text](#rich-text). |
 | `board/` | Whiteboard (D-47): `Whiteboard.svelte` (tools, pointer drawing in 200 ms pieces, eraser, undo, PNG), `strokes.svelte.ts` (`BoardState`, drawing, hit-testing, export), `teacher.ts` (teacher API). |
+| `ui/Avatar.svelte`, `account/AccountSecurity.svelte` | Profile picture (or initial) everywhere a person is named to someone allowed to see it; the account page's picture upload and password change (D-49). |
 | `ui/IconBtn.svelte` | Icon control with its label: a daisyUI tooltip on hover/focus, or shown text with "Always show button labels" (D-48). |
 | `ui/prefs.svelte.ts`, `ui/DisplayMenu.svelte` | Display preferences: our themes or any daisyUI theme (loaded from `/themes/<name>.css` only when chosen), main colour, button labels, text size, motion. |
 | `ui/colors.js`, `ui/themes.gen.ts` | Contrast maths shared with `scripts/gen-themes.mjs`; the generated theme list. Regenerate after upgrading daisyUI: `node scripts/gen-themes.mjs`. |

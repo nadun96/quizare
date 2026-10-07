@@ -134,6 +134,9 @@ func (s *Service) MyData(ctx context.Context, userID string) (map[string]any, er
 			LEFT JOIN eval.marks m ON m.attempt_id=ans.attempt_id AND m.question_id=ans.question_id WHERE a.user_id=$1) x`,
 		"violations": `SELECT json_agg(x) FROM (SELECT v.kind, v.action, v.server_ts FROM live.violations v
 			JOIN live.attempts a ON a.id=v.attempt_id WHERE a.user_id=$1) x`,
+		// The stored profile picture, as a data URL (D-49).
+		"avatar": `SELECT (SELECT to_json('data:image/jpeg;base64,' || translate(encode(image, 'base64'), E'
+', '')) FROM auth.avatars WHERE user_id=$1)`,
 	}
 	for key, q := range queries {
 		var raw []byte
