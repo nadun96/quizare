@@ -46,7 +46,7 @@ flowchart LR
    - Install `age` and `rclone`, configure an `offsite` remote, and put the age public key in `/etc/quiz/backup.pub`.
    - Enable `quiz-backup.timer`.
    - It keeps 14 daily and 8 weekly encrypted dumps. **Test a restore monthly.**
-9. **Load test** before real classes. Follow the header of `loadtest/classroom.js`: ramp to 300 sockets in 60 s, with thresholds p95 save < 150 ms, admit → countdown < 500 ms, and login p95 < 3 s.
+9. **Load test** before real classes. Follow the header of `loadtest/classroom.js`: ramp to 300 sockets in 60 s, with thresholds p95 save < 150 ms, admit → countdown < 500 ms, and login p95 < 3 s. If classes use the whiteboard, also run `loadtest/whiteboard.js` (`VIEWERS`, `DRAWERS`, `DURATION`; see its header) with the class size you expect.
 
 ## Containers
 

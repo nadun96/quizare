@@ -17,7 +17,7 @@ live word clouds and charts) run alongside quizzes.
 | `backend/` | Single Go binary (modular monolith, ADR-01): Chi, coder/websocket, River, pgx, PostgreSQL |
 | `frontend/` | SvelteKit static SPA (`adapter-static`, ADR-11): student, teacher, admin and public pages |
 | `deploy/` | Caddyfile, systemd units, PostgreSQL tuning, encrypted backup script |
-| `loadtest/` | k6 "class of 100 × 3" scenario (architecture §2.3) |
+| `loadtest/` | k6 scenarios: "class of 100 × 3" (architecture §2.3) and the whiteboard |
 
 Backend modules (`backend/internal/`), each owning one PostgreSQL schema:
 

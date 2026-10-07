@@ -14,6 +14,7 @@ Every feature ships with tests. Backend integration tests run against a **real P
 | Design system | `ui/theme.test.ts` | WCAG AA contrast for every colour pair in both themes, read from `app.css` |
 | End-to-end | ad hoc, headless Chrome | The real binary with the built SPA on a throwaway database: quiz flow, rich text editor, UI crawl (light/dark, phone/desktop, 320 px overflow), polls (every input type, live results, presenter, identity modes). Not part of CI yet. |
 | Load | `loadtest/classroom.js` | k6, 300 sockets, the architecture §2.3 thresholds |
+| Load | `loadtest/whiteboard.js` | k6, one poll board: viewers on live sockets, drawers sending pen pieces every 200 ms, the teacher clearing each minute. Thresholds: draw → viewer p95 < 1 s (V2-09), stroke save p95 < 150 ms, board load p95 < 1 s, no dropped sockets. |
 
 ## The database harness
 
