@@ -63,7 +63,8 @@ These rules follow from the findings. New UI should follow them.
 ### Colour
 
 - One calm **primary blue** for actions and focus, warm **neutrals** for surfaces, and semantic **success, warning and error** colours used only for state. Red is kept for errors, invalidations and the last moments of a timer, never for decoration.
-- Light and dark themes, both checked for AA contrast (text at least 4.5:1 on its background). Students and teachers can choose light, dark or system.
+- Light and dark themes, both checked for AA contrast (text at least 4.5:1 on its background). Students and teachers can choose light, dark or system, any daisyUI theme, and their own main colour (D-48). Every daisyUI theme is tuned to the same AA rules by `scripts/gen-themes.mjs`, and a custom colour is darkened or lightened just enough to stay readable on the chosen theme.
+- Icon-only controls carry their name in a tooltip on hover and keyboard focus (daisyUI `tooltip`) and as the accessible name; **Always show button labels** puts the words next to the icons for people who prefer them (D-48).
 - Status is always **icon + text + colour**, for example ✓ Finished, ⚠ Flagged or ⏸ Paused.
 
 ### Layout and responsiveness

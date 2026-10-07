@@ -3,7 +3,8 @@
 	// pick captains, and follow the standings as members finish.
 	import { api, ApiError } from './api';
 	import Icon from './ui/Icon.svelte';
-	import { confirmDialog } from './ui/dialog.svelte';
+	import IconBtn from './ui/IconBtn.svelte';
+	import { confirmDialog, promptDialog } from './ui/dialog.svelte';
 	import { flyIn } from './ui/motion';
 	import { toast } from './ui/toast.svelte';
 	import type { TeamMember, TeamStanding, TeamsView } from './types';
@@ -57,7 +58,7 @@
 	const move = (m: TeamMember, team: string) => run(() => api.post(base + '/members', { attempt_ids: [m.attempt_id], team_id: team }));
 	const captain = (m: TeamMember) => run(() => api.post(base + '/members', { attempt_ids: [m.attempt_id], captain: !m.captain }));
 	async function rename(id: string, name: string) {
-		const n = prompt('Team name', name);
+		const n = await promptDialog({ title: 'Rename team', label: 'Team name', value: name, maxlength: 40 });
 		if (n?.trim() && n !== name) await run(() => api.patch('/api/teacher/session-teams/' + id, { name: n }));
 	}
 	async function remove(id: string, name: string) {
@@ -75,7 +76,7 @@
 	<li class="member">
 		<span class="min-w-0 flex-1"><span class="block truncate">{m.name}</span>{#if m.student_number}<span class="small muted">{m.student_number}</span>{/if}</span>
 		{#if teamId}
-			<button type="button" class="btn btn-ghost btn-xs btn-square" class:text-warning={m.captain} aria-pressed={m.captain} aria-label={m.captain ? `${m.name} is captain` : `Make ${m.name} captain`} title={m.captain ? 'Captain' : 'Make captain'} disabled={busy || ended} onclick={() => captain(m)}><Icon name="star" size={14} /></button>
+			<IconBtn icon="star" label={m.captain ? 'Captain' : 'Make captain'} hint={m.captain ? `${m.name} is captain` : `Make ${m.name} captain`} class="btn-ghost btn-xs {m.captain ? 'text-warning' : ''}" size={14} aria-pressed={m.captain} disabled={busy || ended} onclick={() => captain(m)} />
 		{/if}
 		<select class="select select-xs w-28" aria-label="Move {m.name} to" value={teamId} disabled={busy || ended} onchange={(e) => move(m, e.currentTarget.value)}>
 			<option value="">No team</option>
@@ -128,8 +129,8 @@
 						<strong class="min-w-0 flex-1 truncate">{t.name}</strong>
 						<span class="badge badge-soft badge-sm tabular">{t.member_list.length}</span>
 						{#if !ended}
-							<button class="btn btn-ghost btn-xs btn-square" aria-label="Rename {t.name}" onclick={() => rename(t.id, t.name)}><Icon name="pencil" size={13} /></button>
-							<button class="btn btn-ghost btn-xs btn-square text-error" aria-label="Delete {t.name}" onclick={() => remove(t.id, t.name)}><Icon name="x" size={13} /></button>
+							<IconBtn icon="pencil" label="Rename" hint="Rename {t.name}" class="btn-ghost btn-xs" size={13} onclick={() => rename(t.id, t.name)} />
+							<IconBtn icon="x" label="Delete" hint="Delete {t.name}" class="btn-ghost btn-xs text-error" size={13} onclick={() => remove(t.id, t.name)} />
 						{/if}
 					</div>
 					<ul class="members">{#each t.member_list as m (m.attempt_id)}{@render member(m, t.id)}{:else}<li class="small muted py-1">Nobody yet</li>{/each}</ul>

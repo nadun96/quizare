@@ -22,6 +22,7 @@
 	import RichText from '$lib/richtext/RichText.svelte';
 	import { LiveSocket } from '$lib/socket';
 	import Icon from '$lib/ui/Icon.svelte';
+	import IconBtn from '$lib/ui/IconBtn.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { flyIn, reduced } from '$lib/ui/motion';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -213,7 +214,7 @@
 			<span class="join-hint">Join at <strong>{host}/join</strong> with <strong class="tabular code-inline">{poll.join_code}</strong></span>
 			<span class="badge badge-soft badge-lg gap-1 tabular" aria-live="polite"><Icon name="users" size={16} />{Math.round(joined.current)}</span>
 			{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={14} />Reconnecting</span>{/if}
-			<button class="btn btn-ghost btn-sm" onclick={() => (showCode = !showCode)} title="Show the join code (Q)"><Icon name="qr" size={18} /></button>
+			<IconBtn icon="qr" label="Join code" hint="Show the join code (Q)" size={18} tip="left" onclick={() => (showCode = !showCode)} />
 		</header>
 
 		{#if poll.status !== 'open'}
@@ -251,10 +252,10 @@
 							{#if !people}<span class="loading loading-dots loading-sm"></span>
 							{:else}
 								{#each people.groups as g (g.id)}
-									<label class="chip"><input type="checkbox" class="checkbox checkbox-xs" checked={access.groups.includes(g.id)} onchange={() => saveAccess({ groups: toggleIn(access.groups, g.id) })} /><span class="gdot" style:background="var(--cat-{g.color})" aria-hidden="true"></span>{g.name}</label>
+									<label class="badge badge-outline badge-lg m-0 cursor-pointer gap-1.5 font-normal"><input type="checkbox" class="checkbox checkbox-xs" checked={access.groups.includes(g.id)} onchange={() => saveAccess({ groups: toggleIn(access.groups, g.id) })} /><span class="gdot" style:background="var(--cat-{g.color})" aria-hidden="true"></span>{g.name}</label>
 								{/each}
 								{#each [...people.groups.flatMap((g) => g.members ?? []), ...people.ungrouped] as m (m.participant_id)}
-									<label class="chip"><input type="checkbox" class="checkbox checkbox-xs" checked={access.participants.includes(m.participant_id)} onchange={() => saveAccess({ participants: toggleIn(access.participants, m.participant_id) })} />{m.name}</label>
+									<label class="badge badge-outline badge-lg m-0 cursor-pointer gap-1.5 font-normal"><input type="checkbox" class="checkbox checkbox-xs" checked={access.participants.includes(m.participant_id)} onchange={() => saveAccess({ participants: toggleIn(access.participants, m.participant_id) })} />{m.name}</label>
 								{:else}<span class="muted">Nobody has joined yet.</span>{/each}
 								<button type="button" class="btn btn-ghost btn-xs" onclick={loadPeople}>Refresh</button>
 							{/if}
@@ -304,11 +305,11 @@
 				<button class="btn" class:btn-primary={!poll.revealed} onclick={reveal}><Icon name={poll.revealed ? 'eye-off' : 'eye'} size={18} />{poll.revealed ? 'Hide results' : 'Reveal results'}</button>
 			{/if}
 			{#if poll.scoring}
-				{#if q?.key && !board}<button class="btn" aria-pressed={answerShown} onclick={toggleAnswer} title="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button>{/if}
-				<button class="btn" aria-pressed={board} onclick={() => (board = !board)} title="Leaderboard (L)"><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button>
+				{#if q?.key && !board}<span class="tooltip" data-tip="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><button class="btn" aria-pressed={answerShown} onclick={toggleAnswer}><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button></span>{/if}
+				<span class="tooltip" data-tip="Leaderboard (L)"><button class="btn" aria-pressed={board} onclick={() => (board = !board)}><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button></span>
 			{/if}
-			<button class="btn" aria-pressed={showBoard} onclick={toggleBoard} title="Whiteboard (B)"><Icon name="brush" size={18} />{showBoard ? 'Questions' : 'Board'}</button>
-			<button class="btn" onclick={openAdd} title="Add a question now (N)"><Icon name="plus" size={18} />Add question</button>
+			<span class="tooltip" data-tip="Whiteboard (B)"><button class="btn" aria-pressed={showBoard} onclick={toggleBoard}><Icon name="brush" size={18} />{showBoard ? 'Questions' : 'Board'}</button></span>
+			<span class="tooltip" data-tip="Add a question now (N)"><button class="btn" onclick={openAdd}><Icon name="plus" size={18} />Add question</button></span>
 			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>Next<Icon name="arrow-right" size={18} /></button>
 		</footer>
 		<dialog bind:this={addDialog} class="modal" aria-labelledby="add-h" oncancel={(e) => { e.preventDefault(); closeAdd(); }}>
@@ -342,7 +343,6 @@
 	.board-view { display: grid; gap: 0.75rem; }
 	.board-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
 	.pick { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
-	.chip { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--color-base-300); background: var(--color-base-100); font-weight: 400; }
 	.gdot { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: inline-block; }
 	.add-box { width: min(72rem, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); }
 	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: var(--color-base-100); border: 2px solid var(--color-base-300); }

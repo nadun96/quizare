@@ -3,7 +3,8 @@
 	// from classroom categories, move people between them, pick captains.
 	import { api, ApiError } from '../api';
 	import Icon from '../ui/Icon.svelte';
-	import { confirmDialog } from '../ui/dialog.svelte';
+	import IconBtn from '../ui/IconBtn.svelte';
+	import { confirmDialog, promptDialog } from '../ui/dialog.svelte';
 	import { flyIn } from '../ui/motion';
 	import { toast } from '../ui/toast.svelte';
 	import type { GroupMember, GroupsView, PollSettings } from './types';
@@ -50,7 +51,7 @@
 	});
 	const makeCaptain = (m: GroupMember) => run(() => api.post('/api/teacher/polls/' + pollId + '/groups/members', { participant_ids: [m.participant_id], captain: !m.captain }));
 	async function rename(id: string, name: string) {
-		const n = prompt('Group name', name);
+		const n = await promptDialog({ title: 'Rename group', label: 'Group name', value: name, maxlength: 40 });
 		if (n?.trim() && n !== name) await run(() => api.patch('/api/teacher/poll-groups/' + id, { name: n }));
 	}
 	const recolour = (id: string, color: number) => run(() => api.patch('/api/teacher/poll-groups/' + id, { color }));
@@ -75,9 +76,7 @@
 			{#if m.real_name && m.real_name !== m.name}<span class="small muted block truncate">{m.real_name}</span>{/if}
 		</span>
 		{#if groupId}
-			<button type="button" class="btn btn-ghost btn-xs btn-square" class:text-warning={m.captain} aria-pressed={m.captain} aria-label={m.captain ? `${m.name} is captain` : `Make ${m.name} captain`} title={m.captain ? 'Captain' : 'Make captain'} disabled={busy} onclick={() => makeCaptain(m)}>
-				<Icon name="star" size={14} />
-			</button>
+			<IconBtn icon="star" label={m.captain ? 'Captain' : 'Make captain'} hint={m.captain ? `${m.name} is captain` : `Make ${m.name} captain`} class="btn-ghost btn-xs {m.captain ? 'text-warning' : ''}" size={14} aria-pressed={m.captain} disabled={busy} onclick={() => makeCaptain(m)} />
 		{/if}
 		<select class="select select-xs w-28" aria-label="Move {m.name} to" value={groupId} disabled={busy} onchange={(e) => move([m.participant_id], e.currentTarget.value)}>
 			<option value="">No group</option>
@@ -120,7 +119,7 @@
 						<h3 id="g-{g.id}" class="m-0 min-w-0 flex-1 truncate text-base">{g.name}</h3>
 						<span class="badge badge-soft badge-sm tabular">{g.members?.length ?? 0}</span>
 						<div class="dropdown dropdown-end">
-							<button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Options for {g.name}"><Icon name="pencil" size={14} /></button>
+							<IconBtn icon="pencil" label="Edit" hint="Edit {g.name}" class="btn-ghost btn-xs" size={14} />
 							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 							<div tabindex="0" class="dropdown-content z-10 w-52 rounded-box bg-base-100 p-2 shadow-lg">
 								<button class="btn btn-ghost btn-sm w-full justify-start" onclick={() => rename(g.id, g.name)}>Rename</button>

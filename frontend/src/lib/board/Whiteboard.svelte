@@ -5,6 +5,7 @@
 	// nothing flickers, and socket echoes are de-duplicated by stroke id.
 	import { onDestroy } from 'svelte';
 	import Icon, { type IconName } from '../ui/Icon.svelte';
+	import IconBtn from '../ui/IconBtn.svelte';
 	import { confirmDialog } from '../ui/dialog.svelte';
 	import { toast } from '../ui/toast.svelte';
 	import { BOARD_H, BOARD_W, type BoardState, drawStroke, hits, INKS, type NewStroke, newGesture, render, round, SIZES, type Stroke, thin, toPNG, type Tool } from './strokes.svelte';
@@ -235,26 +236,26 @@
 		{#if board.canDraw}
 			<div class="grp">
 				{#each TOOLS as [t, icon, name] (t)}
-					<button type="button" class="btn btn-sm btn-square" class:btn-primary={tool === t} aria-pressed={tool === t} aria-label={name} title={name} onclick={() => (tool = t)}><Icon name={icon} size={16} /></button>
+					<IconBtn {icon} label={name} class="btn-sm {tool === t ? 'btn-primary' : ''}" aria-pressed={tool === t} tip="bottom" onclick={() => (tool = t)} />
 				{/each}
 			</div>
 			<div class="grp" aria-label="Colour">
 				{#each INKS as [c, name] (c)}
-					<button type="button" class="swatch" class:on={color === c} style:background={c} aria-label={name} aria-pressed={color === c} title={name} onclick={() => (color = c)}></button>
+					<span class="tooltip tooltip-bottom" data-tip={name}><button type="button" class="swatch" class:on={color === c} style:background={c} aria-label={name} aria-pressed={color === c} onclick={() => (color = c)}></button></span>
 				{/each}
 			</div>
 			<div class="grp" aria-label="Size">
 				{#each SIZES as [n, name] (n)}
-					<button type="button" class="btn btn-sm btn-square" class:btn-primary={size === n} aria-pressed={size === n} aria-label={name} title={name} onclick={() => (size = n)}><span class="dot" style:width="{4 + n}px" style:height="{4 + n}px"></span></button>
+					<span class="tooltip tooltip-bottom" data-tip="{name} line"><button type="button" class="btn btn-sm btn-square" class:btn-primary={size === n} aria-pressed={size === n} aria-label="{name} line" onclick={() => (size = n)}><span class="dot" style:width="{4 + n}px" style:height="{4 + n}px"></span></button></span>
 				{/each}
 			</div>
-			<button type="button" class="btn btn-sm" onclick={undo} title="Undo (Ctrl+Z)"><Icon name="undo" size={16} />Undo</button>
+			<span class="tooltip tooltip-bottom" data-tip="Undo your last mark (Ctrl+Z)"><button type="button" class="btn btn-sm" onclick={undo}><Icon name="undo" size={16} />Undo</button></span>
 			{#if teacher && client.clear}<button type="button" class="btn btn-sm btn-ghost text-error" onclick={clearAll}><Icon name="x" size={16} />Clear</button>{/if}
 		{:else}
 			<span class="small muted flex items-center gap-1"><Icon name="eye" size={14} />View only</span>
 		{/if}
 		<span class="spacer"></span>
-		<button type="button" class="btn btn-sm btn-ghost" onclick={exportPNG} title="Download as PNG"><Icon name="download" size={16} />PNG</button>
+		<span class="tooltip tooltip-left" data-tip="Download the board as a PNG image"><button type="button" class="btn btn-sm btn-ghost" onclick={exportPNG}><Icon name="download" size={16} />PNG</button></span>
 	</div>
 	<div class="surface" bind:this={wrap} role="img" aria-label={label}>
 		<canvas bind:this={main} width={px.w} height={px.h} aria-hidden="true"></canvas>
