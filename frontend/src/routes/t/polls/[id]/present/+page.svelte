@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Presenter screen for a poll (D-40): big, live results for the room.
 	// Keys: ← → question, R reveal (presenter-led), A answer and L leaderboard
-	// (scored polls, D-42), N add a question while live (V2-05), Q code,
-	// F full screen.
+	// (scored polls, D-42), N add a question while live (V2-05), B whiteboard
+	// (V2-09), Q code, F full screen.
 	import { onDestroy } from 'svelte';
 	import { Tween } from 'svelte/motion';
 	import { page } from '$app/state';
@@ -12,6 +12,10 @@
 	import { TYPE_META } from '$lib/poll/meta';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
 	import PollQuestionEditor from '$lib/poll/PollQuestionEditor.svelte';
+	import Whiteboard from '$lib/board/Whiteboard.svelte';
+	import { BoardState, type BoardAccess, type BoardEvent } from '$lib/board/strokes.svelte';
+	import { teacherBoard } from '$lib/board/teacher';
+	import type { GroupsView } from '$lib/poll/types';
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import { groupRanks, secondsLeft } from '$lib/poll/scoring';
 	import type { Poll, TeacherResults } from '$lib/poll/types';
@@ -35,6 +39,38 @@
 	let addNext = $state(true);
 	let addShow = $state(true);
 	let jumpTo = $state('');
+	// Whiteboard (V2-09).
+	let showBoard = $state(false);
+	const wb = new BoardState();
+	const tb = $derived(teacherBoard(id));
+	let access = $state<BoardAccess>({ open: false, mode: 'teacher', groups: [], participants: [] });
+	let people = $state<GroupsView | null>(null);
+	async function loadBoard() {
+		const v = await tb.view();
+		wb.load(v);
+		if (v.access) access = v.access;
+	}
+	async function toggleBoard() {
+		showBoard = !showBoard;
+		if (showBoard) {
+			showCode = board = false;
+			await loadBoard().catch(() => toast('Could not load the board', 'error'));
+		}
+	}
+	async function saveAccess(patch: Partial<BoardAccess>) {
+		try {
+			access = await tb.access({ ...access, ...patch });
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Could not save', 'error');
+		}
+	}
+	async function loadPeople() {
+		people = await api.get<GroupsView>('/api/teacher/polls/' + id + '/groups').catch(() => null);
+	}
+	$effect(() => {
+		if (showBoard && access.mode === 'selected' && !people) loadPeople();
+	});
+	const toggleIn = (list: string[], x: string) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
 	let clockOffset = 0;
 	let now = $state(Date.now());
 	let connected = $state(false);
@@ -45,6 +81,10 @@
 		socket = new LiveSocket('/ws/teacher/polls/' + id);
 		socket.onStatus = (c) => (connected = c);
 		socket.onMessage = (m) => {
+			if (m.type === 'board') {
+				if (wb.apply(m as unknown as BoardEvent) && showBoard) loadBoard().catch(() => {});
+				return;
+			}
 			if (m.type !== 'results') return;
 			const first = !data;
 			data = m as unknown as TeacherResults;
@@ -154,6 +194,7 @@
 		else if (e.key.toLowerCase() === 'l' && poll?.scoring) board = !board;
 		else if (e.key.toLowerCase() === 'q') showCode = !showCode;
 		else if (e.key.toLowerCase() === 'n') (e.preventDefault(), openAdd());
+		else if (e.key.toLowerCase() === 'b') toggleBoard();
 		else if (e.key.toLowerCase() === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {});
 	}
 	const host = $derived(poll ? poll.join_url.replace(/^https?:\/\//, '').replace(/\/p\/.*$/, '') : '');
@@ -192,6 +233,34 @@
 						<p class="muted m-0 text-xl">{poll.identity === 'identified' ? 'Log in to take part.' : poll.identity === 'optional' ? 'Log in if you want your name on your answers.' : 'No login needed — answers are anonymous.'}</p>
 						<button class="btn btn-primary btn-lg mt-6" onclick={() => (showCode = false)}>Show the question<Icon name="arrow-right" size={18} /></button>
 					</div>
+				</section>
+			{:else if showBoard}
+				<section class="board-view" in:flyIn aria-label="Whiteboard">
+					<div class="board-controls">
+						<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={access.open} onchange={(e) => saveAccess({ open: e.currentTarget.checked })} />Show the board to participants</label>
+						<label class="m-0 flex items-center gap-2 font-normal" for="bd-mode">Who may draw</label>
+						<select id="bd-mode" class="select select-sm w-48" value={access.mode} onchange={(e) => saveAccess({ mode: e.currentTarget.value as BoardAccess['mode'] })}>
+							<option value="teacher">Only me</option>
+							<option value="everyone">Everyone</option>
+							<option value="selected">Selected people or groups</option>
+						</select>
+						{#if !access.open}<span class="small muted">Participants don't see the board yet.</span>{/if}
+					</div>
+					{#if access.mode === 'selected'}
+						<div class="pick small">
+							{#if !people}<span class="loading loading-dots loading-sm"></span>
+							{:else}
+								{#each people.groups as g (g.id)}
+									<label class="chip"><input type="checkbox" class="checkbox checkbox-xs" checked={access.groups.includes(g.id)} onchange={() => saveAccess({ groups: toggleIn(access.groups, g.id) })} /><span class="gdot" style:background="var(--cat-{g.color})" aria-hidden="true"></span>{g.name}</label>
+								{/each}
+								{#each [...people.groups.flatMap((g) => g.members ?? []), ...people.ungrouped] as m (m.participant_id)}
+									<label class="chip"><input type="checkbox" class="checkbox checkbox-xs" checked={access.participants.includes(m.participant_id)} onchange={() => saveAccess({ participants: toggleIn(access.participants, m.participant_id) })} />{m.name}</label>
+								{:else}<span class="muted">Nobody has joined yet.</span>{/each}
+								<button type="button" class="btn btn-ghost btn-xs" onclick={loadPeople}>Refresh</button>
+							{/if}
+						</div>
+					{/if}
+					<Whiteboard board={wb} client={tb} teacher title={poll.title + ' whiteboard'} />
 				</section>
 			{:else if board && poll.scoring}
 				<section class="question" in:flyIn>
@@ -238,6 +307,7 @@
 				{#if q?.key && !board}<button class="btn" aria-pressed={answerShown} onclick={toggleAnswer} title="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button>{/if}
 				<button class="btn" aria-pressed={board} onclick={() => (board = !board)} title="Leaderboard (L)"><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button>
 			{/if}
+			<button class="btn" aria-pressed={showBoard} onclick={toggleBoard} title="Whiteboard (B)"><Icon name="brush" size={18} />{showBoard ? 'Questions' : 'Board'}</button>
 			<button class="btn" onclick={openAdd} title="Add a question now (N)"><Icon name="plus" size={18} />Add question</button>
 			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>Next<Icon name="arrow-right" size={18} /></button>
 		</footer>
@@ -255,7 +325,7 @@
 				<div class="modal-backdrop"><button tabindex="-1" aria-label="Close" onclick={closeAdd}>close</button></div>
 			{/if}
 		</dialog>
-		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}N add · Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
+		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}N add · B board · Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
 	{/if}
 </div>
 
@@ -269,6 +339,11 @@
 	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.5rem; }
 	.boards { display: grid; gap: 2rem; }
 	@media (min-width: 1000px) { .boards { grid-template-columns: 1.4fr 1fr; } }
+	.board-view { display: grid; gap: 0.75rem; }
+	.board-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+	.pick { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+	.chip { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--color-base-300); background: var(--color-base-100); font-weight: 400; }
+	.gdot { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: inline-block; }
 	.add-box { width: min(72rem, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); }
 	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: var(--color-base-100); border: 2px solid var(--color-base-300); }
 	.timer.low { color: var(--color-error); border-color: var(--color-error); }
