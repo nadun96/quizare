@@ -227,7 +227,7 @@
 						<span class="rank-n">{i + 1}</span>
 						<span class="rank-label">{nameOf(b.options, x.id)}</span>
 						<span class="small muted tabular">avg {x.avg_rank}</span>
-						<span class="bar-track mini" title="Ranked first by {x.first}"><span class="bar" style:width="{(x.first / maxFirst) * 100}%"></span></span>
+						<span class="tooltip bar-track mini" data-tip="Ranked first by {x.first}"><span class="bar" style:width="{(x.first / maxFirst) * 100}%"></span></span>
 						<span class="small muted tabular w-16 text-right">{x.first} first</span>
 					</li>
 				{/each}

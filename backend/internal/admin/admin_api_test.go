@@ -1,6 +1,10 @@
 package admin_test
 
 import (
+	"bytes"
+	"context"
+	"image"
+	"image/png"
 	"strings"
 	"testing"
 
@@ -56,10 +60,28 @@ func TestMyDataExportAndSelfDelete(t *testing.T) {
 	if len(en) != 1 || en[0].(map[string]any)["student_number"] != "ST-9" {
 		t.Fatalf("enrolments = %v", en)
 	}
+	if v, isText := d["avatar"].(string); isText {
+		t.Fatalf("no picture yet: %.40v", v) // shown as an empty section, like the others
+	}
+	// The profile picture is part of the export, and goes with the account.
+	var pic bytes.Buffer
+	_ = png.Encode(&pic, image.NewRGBA(image.Rect(0, 0, 20, 20)))
+	if code, body := s.Raw("PUT", "/api/auth/me/avatar", "image/png", pic.Bytes()); code != 200 {
+		t.Fatalf("avatar: %d %s", code, body)
+	}
+	s.Call("GET", "/api/my/data", nil, 200, &d)
+	if url, _ := d["avatar"].(string); !strings.HasPrefix(url, "data:image/jpeg;base64,/9j/") {
+		t.Fatalf("avatar in export: %.60v", d["avatar"])
+	}
 	s.Call("DELETE", "/api/auth/me", map[string]string{"password": "wrong-password"}, 401, nil)
 	s.Call("DELETE", "/api/auth/me", map[string]string{"password": "password123"}, 204, nil)
 	s.Call("GET", "/api/auth/me", nil, 401, nil)
 	e.Client().Call("POST", "/api/auth/login", map[string]string{"email": s.User.Email, "password": "password123"}, 401, nil)
+	var pics int
+	_ = e.Pool.QueryRow(context.Background(), `SELECT count(*) FROM auth.avatars WHERE user_id=$1`, s.User.ID).Scan(&pics)
+	if pics != 0 {
+		t.Fatal("picture kept after the account was deleted")
+	}
 
 	ad := e.NewUser(auth.RoleAdmin)
 	ad.Call("DELETE", "/api/auth/me", map[string]string{"password": "password123"}, 400, nil)

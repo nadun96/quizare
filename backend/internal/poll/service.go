@@ -35,21 +35,23 @@ type Users interface {
 }
 
 type Service struct {
-	pool    *pgxpool.Pool
-	classes Classrooms
-	users   Users
-	baseURL string
-	log     *slog.Logger
-	now     func() time.Time
-	hub     *Hub
-	joins   *auth.Limiter // per IP
-	answers *auth.Limiter // per participant
-	uploads *auth.Limiter // per participant
+	pool      *pgxpool.Pool
+	classes   Classrooms
+	users     Users
+	baseURL   string
+	log       *slog.Logger
+	now       func() time.Time
+	hub       *Hub
+	joins     *auth.Limiter // per IP
+	answers   *auth.Limiter // per participant
+	boardRate *auth.Limiter // per participant: board writes
+	uploads   *auth.Limiter // per participant
 }
 
 func NewService(pool *pgxpool.Pool, classes Classrooms, users Users, baseURL string, log *slog.Logger) *Service {
 	s := &Service{pool: pool, classes: classes, users: users, baseURL: strings.TrimRight(baseURL, "/"), log: log, now: time.Now,
-		joins: auth.NewLimiter(30, 2*time.Second), answers: auth.NewLimiter(40, 100*time.Millisecond), uploads: auth.NewLimiter(5, 10*time.Second)}
+		joins: auth.NewLimiter(30, 2*time.Second), answers: auth.NewLimiter(40, 100*time.Millisecond), uploads: auth.NewLimiter(5, 10*time.Second),
+		boardRate: auth.NewLimiter(30, 100*time.Millisecond)}
 	s.hub = newHub(s)
 	return s
 }
@@ -107,6 +109,7 @@ type Poll struct {
 	Revealed          bool       `json:"revealed"`
 	AnswersRevealed   bool       `json:"answers_revealed"`
 	QuestionStartedAt *time.Time `json:"question_started_at"`
+	BoardOpen         bool       `json:"board_open"` // D-47
 	CreatedAt         time.Time  `json:"created_at"`
 	OpenedAt          *time.Time `json:"opened_at"`
 	ClosedAt          *time.Time `json:"closed_at"`
@@ -124,14 +127,14 @@ const pollCols = `p.id, p.teacher_id, p.classroom_id, p.title, p.join_code, p.id
 	p.allow_edit, p.status, p.current_index, p.revealed, p.created_at, p.opened_at, p.closed_at,
 	(SELECT count(*) FROM poll.participants x WHERE x.poll_id = p.id),
 	p.scoring, p.speed_bonus, p.leaderboard, p.show_answers, p.names, p.answers_revealed, p.question_started_at,
-	p.groups, p.group_acceptance, p.group_calc`
+	p.groups, p.group_acceptance, p.group_calc, p.board_open`
 
 func (s *Service) scanPoll(row pgx.Row) (*Poll, error) {
 	var p Poll
 	err := row.Scan(&p.ID, &p.TeacherID, &p.ClassroomID, &p.Title, &p.JoinCode, &p.Identity, &p.Audience, &p.Pacing,
 		&p.ShowResults, &p.AllowEdit, &p.Status, &p.CurrentIndex, &p.Revealed, &p.CreatedAt, &p.OpenedAt, &p.ClosedAt, &p.Participants,
 		&p.Scoring, &p.SpeedBonus, &p.Leaderboard, &p.ShowAnswers, &p.Names, &p.AnswersRevealed, &p.QuestionStartedAt,
-		&p.Groups, &p.GroupAcceptance, &p.GroupCalc)
+		&p.Groups, &p.GroupAcceptance, &p.GroupCalc, &p.BoardOpen)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.ErrNotFound
 	}
@@ -529,26 +532,77 @@ func (in QuestionInput) question() (Question, error) {
 	return q, nil
 }
 
+// AddOptions place a question added while the poll runs (V2-05, D-46).
+type AddOptions struct {
+	// Insert right after the question being presented instead of at the end.
+	AfterCurrent bool `json:"after_current"`
+	// Or right after this question (self-paced presenter screens show any one).
+	AfterID string `json:"after_id"`
+	// Presenter pacing: move everyone to the new question at once.
+	Present bool `json:"present"`
+}
+
 func (s *Service) AddQuestion(ctx context.Context, teacherID, pollID string, in QuestionInput) (Question, error) {
-	if _, err := s.ownedPoll(ctx, teacherID, pollID); err != nil {
-		return Question{}, err
+	q, _, err := s.AddQuestionAt(ctx, teacherID, pollID, in, AddOptions{})
+	return q, err
+}
+
+// AddQuestionAt adds a question and returns its index in the poll. Live
+// screens hear about it on the hub's next flush (within half a second).
+func (s *Service) AddQuestionAt(ctx context.Context, teacherID, pollID string, in QuestionInput, opt AddOptions) (Question, int, error) {
+	p, err := s.ownedPoll(ctx, teacherID, pollID)
+	if err != nil {
+		return Question{}, 0, err
 	}
 	q, err := in.question()
 	if err != nil {
-		return q, err
+		return q, 0, err
 	}
 	body, _ := json.Marshal(q.Body)
-	var n int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM poll.questions WHERE poll_id=$1`, pollID).Scan(&n); err != nil {
-		return q, err
+	full, err := s.GetPoll(ctx, teacherID, pollID)
+	if err != nil {
+		return q, 0, err
 	}
+	n := len(full.Questions)
 	if n >= MaxQuestions {
-		return q, httpx.Conflict("a poll can have at most 50 questions")
+		return q, 0, httpx.Conflict("a poll can have at most 50 questions")
 	}
-	q, err = scanQuestion(s.pool.QueryRow(ctx, `INSERT INTO poll.questions (poll_id, position, type, text, body, required, key, points, time_limit_sec)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+questionCols, pollID, n, q.Type, q.Text, body, q.Required, keyJSON(q.Key), q.Points, q.TimeLimitSec))
+	index, position := n, n
+	if n > 0 {
+		position = full.Questions[n-1].Position + 1
+	}
+	after := -1
+	if opt.AfterCurrent && p.CurrentIndex < n {
+		after = p.CurrentIndex
+	}
+	for i, x := range full.Questions {
+		if opt.AfterID != "" && x.ID == opt.AfterID {
+			after = i
+		}
+	}
+	if after >= 0 {
+		index = after + 1
+		position = full.Questions[after].Position + 1
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE poll.questions SET position=position+1 WHERE poll_id=$1 AND position >= $2`, pollID, position); err != nil {
+			return err
+		}
+		var err error
+		q, err = scanQuestion(tx.QueryRow(ctx, `INSERT INTO poll.questions (poll_id, position, type, text, body, required, key, points, time_limit_sec)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+questionCols, pollID, position, q.Type, q.Text, body, q.Required, keyJSON(q.Key), q.Points, q.TimeLimitSec))
+		return err
+	})
+	if err != nil {
+		return q, 0, err
+	}
+	if opt.Present && p.Pacing == "presenter" {
+		if _, err := s.Present(ctx, teacherID, pollID, index, false, false); err != nil {
+			return q, index, err
+		}
+	}
 	s.hub.stateChanged(pollID)
-	return q, err
+	return q, index, nil
 }
 
 func (s *Service) ownedQuestion(ctx context.Context, teacherID, questionID string) (Question, error) {
@@ -836,6 +890,7 @@ type PublicPoll struct {
 	MeKey             string           `json:"me_key,omitempty"`              // finds yourself in a shared top 10
 	Nickname          string           `json:"nickname,omitempty"`
 	// Groups (D-43).
+	BoardOpen        bool                   `json:"board_open"` // D-47
 	GroupMode        string                 `json:"group_mode"`
 	GroupAcceptance  string                 `json:"group_acceptance,omitempty"`
 	Groups           []GroupInfo            `json:"groups,omitempty"`
@@ -901,6 +956,7 @@ func (p *Poll) answersVisible(q Question, answered, sharedOnly bool) bool {
 
 func (p *Poll) competition(v *PublicPoll) {
 	v.Scoring, v.SpeedBonus, v.LeaderboardMode, v.ShowAnswers, v.AnswersRevealed = p.Scoring, p.SpeedBonus, p.Leaderboard, p.ShowAnswers, p.AnswersRevealed
+	v.BoardOpen = p.BoardOpen
 	if p.QuestionStartedAt != nil && p.Pacing == "presenter" {
 		ms := p.QuestionStartedAt.UnixMilli()
 		v.QuestionStartedAt = &ms

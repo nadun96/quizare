@@ -1,10 +1,11 @@
 <script lang="ts">
+	import Icon from '$lib/ui/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Sortable from 'sortablejs';
 	import { api, ApiError } from '$lib/api';
 	import { describeKey } from '$lib/answerText';
-	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { requireRole } from '$lib/guard.svelte';
 	import QuestionEditor from '$lib/QuestionEditor.svelte';
@@ -115,7 +116,7 @@ if (!(await confirmDialog({ title: 'Delete question ' + q.code + '?', confirm: '
 		}
 	}
 	async function rename() {
-		const t = prompt('Quiz title', quiz?.title);
+		const t = await promptDialog({ title: 'Rename quiz', label: 'Quiz title', value: quiz?.title ?? '', maxlength: 200 });
 		if (t) quiz = await api.patch<Quiz>('/api/teacher/quizzes/' + id, { title: t });
 	}
 	async function delQuiz() {
@@ -180,7 +181,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 				{#each questions as q (q.id)}
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" data-id={q.id}>
 						<div class="row">
-							<span class="handle" title="Drag to reorder" style="cursor:grab">☰</span>
+							<span class="tooltip handle" data-tip="Drag to reorder" style="cursor:grab"><Icon name="menu" size={16} /></span>
 							<strong>{q.code}</strong><span class="badge badge-soft">{QTYPE_LABEL[q.type]}</span><span class="small muted">{q.marks} marks</span>
 							{#if q.settings?.question_time_limit_sec}<span class="small muted">· {q.settings.question_time_limit_sec}s</span>{/if}
 							<span class="spacer"></span>

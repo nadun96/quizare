@@ -19,9 +19,10 @@
 	import type { Classroom } from '$lib/types';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
+	import IconBtn from '$lib/ui/IconBtn.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import StatCounter from '$lib/ui/StatCounter.svelte';
-	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
 	import { flyIn } from '$lib/ui/motion';
 	import { toast } from '$lib/ui/toast.svelte';
 
@@ -84,7 +85,7 @@
 		}
 	}
 	async function rename() {
-		const t = prompt('Poll title', poll?.title ?? '');
+		const t = await promptDialog({ title: 'Rename poll', label: 'Poll title', value: poll?.title ?? '', maxlength: 200 });
 		if (!t?.trim()) return;
 		poll = await api.put<Poll>('/api/teacher/polls/' + id, { title: t });
 	}
@@ -118,7 +119,7 @@
 		toast(m.hidden ? 'Hidden from participants' : 'Shown again', 'info');
 	}
 	async function renameParticipant(r: Rank) {
-		const n = prompt('Name on the leaderboard (empty for "Participant N")', r.nickname ?? '');
+		const n = await promptDialog({ title: 'Rename participant', body: 'Shown on the leaderboard. Leave it empty for "Participant N".', label: 'Nickname', value: r.nickname ?? '', allowEmpty: true, maxlength: 30 });
 		if (n === null || !r.participant_id) return;
 		await api.post('/api/teacher/polls/' + id + '/moderation', { participant_id: r.participant_id, nickname: n });
 		toast('Renamed', 'info');
@@ -142,7 +143,7 @@
 		<p class="small m-0"><a href="/t/polls">← Polls</a></p>
 		<div class="row">
 			<h1 class="m-0">{poll.title}</h1>
-			<span class="badge badge-soft gap-1 {STATUS[poll.status][1]}">{#if poll.status === 'open'}<span class="live-dot" aria-hidden="true"></span>{/if}{STATUS[poll.status][0]}</span>
+			<span class="badge badge-soft gap-1 {STATUS[poll.status][1]}">{#if poll.status === 'open'}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{STATUS[poll.status][0]}</span>
 			<button class="btn btn-ghost btn-xs" onclick={rename}>Rename</button>
 			<span class="spacer"></span>
 			{#if poll.status !== 'open'}
@@ -183,12 +184,12 @@
 						<span class="badge badge-soft badge-primary gap-1"><Icon name={TYPE_META[q.type].icon} size={12} />{TYPE_META[q.type].label}</span>
 						{#if q.required}<span class="badge badge-soft badge-sm">required</span>{/if}
 						{#if poll.scoring && q.key}<span class="badge badge-soft badge-success badge-sm gap-1"><Icon name="check" size={11} />{fmtPoints(q.points ?? 100)} pts</span>
-						{:else if poll.scoring && SCORABLE.has(q.type)}<span class="badge badge-soft badge-warning badge-sm" title="Edit the question to set its correct answer">no answer key</span>{/if}
+						{:else if poll.scoring && SCORABLE.has(q.type)}<span class="tooltip" data-tip="Edit the question to set its correct answer"><span class="badge badge-soft badge-warning badge-sm">no answer key</span></span>{/if}
 						{#if q.time_limit_sec && poll.pacing === 'presenter'}<span class="badge badge-soft badge-sm tabular">{q.time_limit_sec}s</span>{/if}
 						<span class="small muted tabular">{results?.results[q.id]?.responses ?? 0} answers</span>
 						<span class="spacer"></span>
-						<button class="btn btn-ghost btn-sm btn-square" aria-label="Move question {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
-						<button class="btn btn-ghost btn-sm btn-square" aria-label="Move question {i + 1} down" disabled={i === questions.length - 1} onclick={() => move(i, 1)}>↓</button>
+						<IconBtn icon="arrow-up" label="Up" hint="Move question {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)} />
+						<IconBtn icon="arrow-down" label="Down" hint="Move question {i + 1} down" disabled={i === questions.length - 1} onclick={() => move(i, 1)} />
 						<button class="btn btn-sm" onclick={() => (editing = q)}>Edit</button>
 						<button class="btn btn-sm btn-ghost text-error" onclick={() => delQ(q)}>Delete</button>
 					</div>
@@ -199,7 +200,7 @@
 			{/each}
 		{:else if tab === 'results'}
 			<div class="row small">
-				<span class="badge badge-soft gap-1" class:ok={connected}>{#if connected}<span class="live-dot" aria-hidden="true"></span>Live{:else}<Icon name="wifi-off" size={12} />Reconnecting…{/if}</span>
+				<span class="badge badge-soft gap-1" class:ok={connected}>{#if connected}<span class="status status-success animate-pulse" aria-hidden="true"></span>Live{:else}<Icon name="wifi-off" size={12} />Reconnecting…{/if}</span>
 				<span class="spacer"></span>
 				<a class="btn btn-sm" href={'/api/teacher/polls/' + id + '/export.csv'} download><Icon name="arrow-right" size={14} />Export CSV</a>
 				<button class="btn btn-sm btn-ghost text-error" onclick={reset}>Clear responses</button>
@@ -273,8 +274,6 @@
 	@media (min-width: 900px) { .lb-grid.two { grid-template-columns: 1fr 1fr; } }
 	.stats-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
 	.q-num { width: 1.75rem; height: 1.75rem; border-radius: 999px; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; background: var(--color-base-200); }
-	.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; animation: live 1.6s ease-in-out infinite; }
-	@keyframes live { 50% { opacity: 0.3; } }
 	.share { display: grid; gap: 1.5rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; }
 	@media (max-width: 640px) { .share { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; } }
 	.qr { background: #fff; padding: 0.75rem; border-radius: var(--radius-box); }

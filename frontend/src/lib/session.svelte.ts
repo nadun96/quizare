@@ -1,7 +1,7 @@
 import { api, ApiError } from './api';
 
 export type Role = 'student' | 'teacher' | 'admin';
-export type User = { id: string; email: string; name: string; role: Role; status: string; email_verified: boolean };
+export type User = { id: string; email: string; name: string; role: Role; status: string; email_verified: boolean; avatar?: string };
 
 class Auth {
 	user = $state<User | null>(null);

@@ -232,3 +232,13 @@ func (s *Service) CategoryMembers(ctx context.Context, teacherID, classroomID st
 		return m, err
 	})
 }
+
+// SharesClassroom reports whether one of a and b teaches a classroom the
+// other is enrolled in (pending or active). Teachers and their students may
+// see each other's profile pictures (D-49).
+func (s *Service) SharesClassroom(ctx context.Context, a, b string) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM content.classrooms c JOIN content.enrolments e ON e.classroom_id=c.id
+		WHERE e.status IN ('pending', 'active') AND ((c.teacher_id=$1 AND e.user_id=$2) OR (c.teacher_id=$2 AND e.user_id=$1)))`, a, b).Scan(&ok)
+	return ok, err
+}

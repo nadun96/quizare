@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Presenter screen for a poll (D-40): big, live results for the room.
 	// Keys: ← → question, R reveal (presenter-led), A answer and L leaderboard
-	// (scored polls, D-42), Q code, F full screen.
+	// (scored polls, D-42), N add a question while live (V2-05), B whiteboard
+	// (V2-09), Q code, F full screen.
 	import { onDestroy } from 'svelte';
 	import { Tween } from 'svelte/motion';
 	import { page } from '$app/state';
@@ -10,12 +11,18 @@
 	import QrCode from '$lib/QrCode.svelte';
 	import { TYPE_META } from '$lib/poll/meta';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
+	import PollQuestionEditor from '$lib/poll/PollQuestionEditor.svelte';
+	import Whiteboard from '$lib/board/Whiteboard.svelte';
+	import { BoardState, type BoardAccess, type BoardEvent } from '$lib/board/strokes.svelte';
+	import { teacherBoard } from '$lib/board/teacher';
+	import type { GroupsView } from '$lib/poll/types';
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import { groupRanks, secondsLeft } from '$lib/poll/scoring';
 	import type { Poll, TeacherResults } from '$lib/poll/types';
 	import RichText from '$lib/richtext/RichText.svelte';
 	import { LiveSocket } from '$lib/socket';
 	import Icon from '$lib/ui/Icon.svelte';
+	import IconBtn from '$lib/ui/IconBtn.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { flyIn, reduced } from '$lib/ui/motion';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -27,6 +34,44 @@
 	let showCode = $state(true);
 	let board = $state(false); // leaderboard instead of the question
 	let showKey = $state(false); // self-paced or other modes: this screen only
+	// Adding a question while live (V2-05).
+	let addDialog = $state<HTMLDialogElement>();
+	let adding = $state(false);
+	let addNext = $state(true);
+	let addShow = $state(true);
+	let jumpTo = $state('');
+	// Whiteboard (V2-09).
+	let showBoard = $state(false);
+	const wb = new BoardState();
+	const tb = $derived(teacherBoard(id));
+	let access = $state<BoardAccess>({ open: false, mode: 'teacher', groups: [], participants: [] });
+	let people = $state<GroupsView | null>(null);
+	async function loadBoard() {
+		const v = await tb.view();
+		wb.load(v);
+		if (v.access) access = v.access;
+	}
+	async function toggleBoard() {
+		showBoard = !showBoard;
+		if (showBoard) {
+			showCode = board = false;
+			await loadBoard().catch(() => toast('Could not load the board', 'error'));
+		}
+	}
+	async function saveAccess(patch: Partial<BoardAccess>) {
+		try {
+			access = await tb.access({ ...access, ...patch });
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Could not save', 'error');
+		}
+	}
+	async function loadPeople() {
+		people = await api.get<GroupsView>('/api/teacher/polls/' + id + '/groups').catch(() => null);
+	}
+	$effect(() => {
+		if (showBoard && access.mode === 'selected' && !people) loadPeople();
+	});
+	const toggleIn = (list: string[], x: string) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
 	let clockOffset = 0;
 	let now = $state(Date.now());
 	let connected = $state(false);
@@ -37,6 +82,10 @@
 		socket = new LiveSocket('/ws/teacher/polls/' + id);
 		socket.onStatus = (c) => (connected = c);
 		socket.onMessage = (m) => {
+			if (m.type === 'board') {
+				if (wb.apply(m as unknown as BoardEvent) && showBoard) loadBoard().catch(() => {});
+				return;
+			}
 			if (m.type !== 'results') return;
 			const first = !data;
 			data = m as unknown as TeacherResults;
@@ -56,6 +105,20 @@
 	const presenter = $derived(poll?.pacing === 'presenter');
 	const cur = $derived(presenter ? (poll?.current_index ?? 0) : index);
 	const q = $derived(questions[cur]);
+	// Self-paced: when a question is inserted before the one on screen, keep
+	// showing the same question.
+	let shownId = '';
+	$effect(() => {
+		if (presenter || !q) return;
+		if (shownId && q.id !== shownId && !jumpTo) {
+			const i = questions.findIndex((x) => x.id === shownId);
+			if (i >= 0 && i !== index) {
+				index = i;
+				return;
+			}
+		}
+		shownId = q.id;
+	});
 	const joined = new Tween(0, { duration: 500 });
 	$effect(() => {
 		joined.set(data?.participants ?? 0, reduced() ? { duration: 0 } : undefined);
@@ -99,14 +162,40 @@
 			toast(e instanceof ApiError ? e.message : 'Could not open', 'error');
 		}
 	}
+	function openAdd() {
+		adding = true;
+		queueMicrotask(() => addDialog?.showModal());
+	}
+	function closeAdd() {
+		addDialog?.close();
+		adding = false;
+	}
+	function added(q: { id: string }) {
+		closeAdd();
+		showCode = board = false;
+		if (addShow) jumpTo = q.id; // self-paced: this screen moves once the new question arrives
+		toast(addShow && presenter ? 'Question added and shown to everyone' : 'Question added');
+	}
+	$effect(() => {
+		if (!jumpTo) return;
+		const i = questions.findIndex((x) => x.id === jumpTo);
+		if (i < 0) return;
+		if (!presenter) {
+			index = i;
+			shownId = jumpTo;
+		}
+		jumpTo = '';
+	});
 	function key(e: KeyboardEvent) {
-		if ((e.target as HTMLElement)?.closest('input, textarea, select')) return;
+		if (adding || (e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], dialog')) return;
 		if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') (e.preventDefault(), go(cur + 1));
 		else if (e.key === 'ArrowLeft' || e.key === 'PageUp') (e.preventDefault(), go(cur - 1));
 		else if (e.key.toLowerCase() === 'r' && presenter) reveal();
 		else if (e.key.toLowerCase() === 'a' && poll?.scoring) toggleAnswer();
 		else if (e.key.toLowerCase() === 'l' && poll?.scoring) board = !board;
 		else if (e.key.toLowerCase() === 'q') showCode = !showCode;
+		else if (e.key.toLowerCase() === 'n') (e.preventDefault(), openAdd());
+		else if (e.key.toLowerCase() === 'b') toggleBoard();
 		else if (e.key.toLowerCase() === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {});
 	}
 	const host = $derived(poll ? poll.join_url.replace(/^https?:\/\//, '').replace(/\/p\/.*$/, '') : '');
@@ -125,7 +214,7 @@
 			<span class="join-hint">Join at <strong>{host}/join</strong> with <strong class="tabular code-inline">{poll.join_code}</strong></span>
 			<span class="badge badge-soft badge-lg gap-1 tabular" aria-live="polite"><Icon name="users" size={16} />{Math.round(joined.current)}</span>
 			{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={14} />Reconnecting</span>{/if}
-			<button class="btn btn-ghost btn-sm" onclick={() => (showCode = !showCode)} title="Show the join code (Q)"><Icon name="qr" size={18} /></button>
+			<IconBtn icon="qr" label="Join code" hint="Show the join code (Q)" size={18} tip="left" onclick={() => (showCode = !showCode)} />
 		</header>
 
 		{#if poll.status !== 'open'}
@@ -145,6 +234,34 @@
 						<p class="muted m-0 text-xl">{poll.identity === 'identified' ? 'Log in to take part.' : poll.identity === 'optional' ? 'Log in if you want your name on your answers.' : 'No login needed — answers are anonymous.'}</p>
 						<button class="btn btn-primary btn-lg mt-6" onclick={() => (showCode = false)}>Show the question<Icon name="arrow-right" size={18} /></button>
 					</div>
+				</section>
+			{:else if showBoard}
+				<section class="board-view" in:flyIn aria-label="Whiteboard">
+					<div class="board-controls">
+						<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={access.open} onchange={(e) => saveAccess({ open: e.currentTarget.checked })} />Show the board to participants</label>
+						<label class="m-0 flex items-center gap-2 font-normal" for="bd-mode">Who may draw</label>
+						<select id="bd-mode" class="select select-sm w-48" value={access.mode} onchange={(e) => saveAccess({ mode: e.currentTarget.value as BoardAccess['mode'] })}>
+							<option value="teacher">Only me</option>
+							<option value="everyone">Everyone</option>
+							<option value="selected">Selected people or groups</option>
+						</select>
+						{#if !access.open}<span class="small muted">Participants don't see the board yet.</span>{/if}
+					</div>
+					{#if access.mode === 'selected'}
+						<div class="pick small">
+							{#if !people}<span class="loading loading-dots loading-sm"></span>
+							{:else}
+								{#each people.groups as g (g.id)}
+									<label class="badge badge-outline badge-lg m-0 cursor-pointer gap-1.5 font-normal"><input type="checkbox" class="checkbox checkbox-xs" checked={access.groups.includes(g.id)} onchange={() => saveAccess({ groups: toggleIn(access.groups, g.id) })} /><span class="gdot" style:background="var(--cat-{g.color})" aria-hidden="true"></span>{g.name}</label>
+								{/each}
+								{#each [...people.groups.flatMap((g) => g.members ?? []), ...people.ungrouped] as m (m.participant_id)}
+									<label class="badge badge-outline badge-lg m-0 cursor-pointer gap-1.5 font-normal"><input type="checkbox" class="checkbox checkbox-xs" checked={access.participants.includes(m.participant_id)} onchange={() => saveAccess({ participants: toggleIn(access.participants, m.participant_id) })} />{m.name}</label>
+								{:else}<span class="muted">Nobody has joined yet.</span>{/each}
+								<button type="button" class="btn btn-ghost btn-xs" onclick={loadPeople}>Refresh</button>
+							{/if}
+						</div>
+					{/if}
+					<Whiteboard board={wb} client={tb} teacher title={poll.title + ' whiteboard'} />
 				</section>
 			{:else if board && poll.scoring}
 				<section class="question" in:flyIn>
@@ -188,12 +305,28 @@
 				<button class="btn" class:btn-primary={!poll.revealed} onclick={reveal}><Icon name={poll.revealed ? 'eye-off' : 'eye'} size={18} />{poll.revealed ? 'Hide results' : 'Reveal results'}</button>
 			{/if}
 			{#if poll.scoring}
-				{#if q?.key && !board}<button class="btn" aria-pressed={answerShown} onclick={toggleAnswer} title="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button>{/if}
-				<button class="btn" aria-pressed={board} onclick={() => (board = !board)} title="Leaderboard (L)"><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button>
+				{#if q?.key && !board}<span class="tooltip" data-tip="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><button class="btn" aria-pressed={answerShown} onclick={toggleAnswer}><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button></span>{/if}
+				<span class="tooltip" data-tip="Leaderboard (L)"><button class="btn" aria-pressed={board} onclick={() => (board = !board)}><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button></span>
 			{/if}
+			<span class="tooltip" data-tip="Whiteboard (B)"><button class="btn" aria-pressed={showBoard} onclick={toggleBoard}><Icon name="brush" size={18} />{showBoard ? 'Questions' : 'Board'}</button></span>
+			<span class="tooltip" data-tip="Add a question now (N)"><button class="btn" onclick={openAdd}><Icon name="plus" size={18} />Add question</button></span>
 			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>Next<Icon name="arrow-right" size={18} /></button>
 		</footer>
-		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
+		<dialog bind:this={addDialog} class="modal" aria-labelledby="add-h" oncancel={(e) => { e.preventDefault(); closeAdd(); }}>
+			{#if adding}
+				<div class="modal-box add-box">
+					<div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+						<h2 id="add-h" class="m-0 text-lg">Add a question now</h2>
+						<span class="spacer"></span>
+						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addNext} />Put it next</label>
+						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addShow} />{presenter ? 'Show it to everyone now' : 'Show it on this screen'}</label>
+					</div>
+					<PollQuestionEditor pollId={id} scoring={poll.scoring} pacing={poll.pacing} extra={{ after_id: addNext && q ? q.id : '', present: addShow && presenter }} onsaved={added} oncancel={closeAdd} />
+				</div>
+				<div class="modal-backdrop"><button tabindex="-1" aria-label="Close" onclick={closeAdd}>close</button></div>
+			{/if}
+		</dialog>
+		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}N add · B board · Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
 	{/if}
 </div>
 
@@ -207,6 +340,11 @@
 	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.5rem; }
 	.boards { display: grid; gap: 2rem; }
 	@media (min-width: 1000px) { .boards { grid-template-columns: 1.4fr 1fr; } }
+	.board-view { display: grid; gap: 0.75rem; }
+	.board-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+	.pick { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+	.gdot { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: inline-block; }
+	.add-box { width: min(72rem, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); }
 	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: var(--color-base-100); border: 2px solid var(--color-base-300); }
 	.timer.low { color: var(--color-error); border-color: var(--color-error); }
 	.hidden-note { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }

@@ -6,13 +6,14 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
 	import SessionTeams from '$lib/SessionTeams.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
 	import LiveLinks from '$lib/LiveLinks.svelte';
 	import { LiveSocket } from '$lib/socket';
 	import { STATE_BADGE, STATE_ICON, STATE_LABEL, type Dashboard } from '$lib/types';
 	import Icon from '$lib/ui/Icon.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import StatCounter from '$lib/ui/StatCounter.svelte';
-	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
 	import { fadeIn, flyIn } from '$lib/ui/motion';
 	import { toast } from '$lib/ui/toast.svelte';
 
@@ -98,7 +99,7 @@
 		toast('Session ended');
 	}
 	async function reinstate(attemptId: string) {
-		const reason = prompt('Reason for reinstating this attempt (logged):');
+		const reason = await promptDialog({ title: 'Reinstate this attempt?', body: 'The student can carry on. Your reason is logged with the attempt.', label: 'Reason', confirm: 'Reinstate', multiline: true, maxlength: 500 });
 		if (!reason) return;
 		try {
 			await api.post('/api/teacher/attempts/' + attemptId + '/reinstate', { reason });
@@ -136,7 +137,7 @@
 		<p class="small"><a href={'/t/quizzes/' + d.session.quiz_id}>← Quiz</a></p>
 			<div class="row">
 				<h1 class="m-0">{d.session.title}</h1>
-				<span class="badge badge-soft gap-1 {d.session.status === 'live' ? 'ok' : ''}">{#if d.session.status === 'live'}<span class="live-dot" aria-hidden="true"></span>{/if}{d.session.status}</span>
+				<span class="badge badge-soft gap-1 {d.session.status === 'live' ? 'ok' : ''}">{#if d.session.status === 'live'}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{d.session.status}</span>
 				{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={13} />reconnecting…</span>{/if}
 				<span class="spacer"></span>
 				<a class="btn" href={'/t/sessions/' + id + '/projector'} target="_blank"><Icon name="qr" size={16} />Show QR full screen</a>
@@ -211,7 +212,7 @@
 							{#each rows as r (r.attempt_id)}
 									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
 									<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>
-									<td>{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></td>
+									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
 									{#if teamsOn}
 										{@const team = d.teams?.find((t) => t.id === r.team_id)}
 										<td class="small">{#if team}<span class="inline-flex items-center gap-1"><span class="tdot" style:background="var(--cat-{team.color})" aria-hidden="true"></span>{team.name}{#if r.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>{:else}<span class="muted">—</span>{/if}</td>
@@ -245,6 +246,4 @@
 	tr.sel { background: color-mix(in oklab, var(--color-primary) 8%, transparent); }
 	.stats-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
 	.command-bar { position: sticky; top: 4.25rem; z-index: 4; }
-	.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; animation: live 1.6s ease-in-out infinite; }
-	@keyframes live { 50% { opacity: 0.3; } }
 </style>

@@ -15,7 +15,7 @@ Every module lives in `backend/internal/<name>`, owns one PostgreSQL schema, exp
 
 ## auth (schema `auth`)
 
-Accounts, passwords, sessions, verification, password reset, and admin account management (FR-ACC).
+Accounts, passwords, sessions, verification, password reset, and admin account management (FR-ACC). `account.go` lets people change their password and profile picture (D-49).
 
 - `password.go`: Argon2id (m=19456 KiB, t=2, p=1). `Hasher` runs at most N hashes at once with a queue of 200 and a 10 s acquire timeout; when full it returns `ErrBusy`, which becomes `503 Retry-After: 2`.
 - `service.go`: `Register`, `Login`, `CreateSession`, `Authenticate` (idle and absolute timeouts per role), `Logout`, `VerifyEmail`, `RequestPasswordReset`, `ResetPassword`, `UsersByID`, `CreateAdmin`.
@@ -95,7 +95,7 @@ The LLM gateway (FR-EV-02/03/05, ADR-09, ADR-16).
 
 ## poll (schema `poll`)
 
-Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `score.go` holds answer keys and marking (partial credit, speed bonus) and `leaderboard.go` the ranking (D-42); `groups.go` forms groups, enforces first-answer and captain rules and combines group scores (D-43); `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
+Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `score.go` holds answer keys and marking (partial credit, speed bonus) and `leaderboard.go` the ranking (D-42); `groups.go` forms groups, enforces first-answer and captain rules and combines group scores (D-43); `board.go` is the whiteboard: strokes, who may draw, and instant pushes (D-47); `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
 
 ## admin (no schema)
 

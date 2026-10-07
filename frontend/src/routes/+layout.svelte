@@ -8,6 +8,7 @@
 	import { flyIn } from '$lib/ui/motion';
 	import Icon from '$lib/ui/Icon.svelte';
 	import DisplayMenu from '$lib/ui/DisplayMenu.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
 	import Toaster from '$lib/ui/Toaster.svelte';
 	import DialogHost from '$lib/ui/DialogHost.svelte';
 
@@ -41,12 +42,25 @@
 		const t = e.currentTarget as HTMLDetailsElement;
 		if (t.open) menus.forEach((m) => m && m !== t && (m.open = false));
 	}
+	// Escape or a click outside closes an open menu (and Escape returns focus to it).
+	function menuKeys(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		const open = menus.find((m) => m?.open);
+		if (!open) return;
+		open.open = false;
+		open.querySelector('summary')?.focus();
+	}
+	function menuClicks(e: MouseEvent) {
+		for (const m of menus) if (m?.open && !m.contains(e.target as Node)) m.open = false;
+	}
 
 	async function logout() {
 		await auth.logout();
 		goto('/login');
 	}
 </script>
+
+<svelte:window onkeydown={menuKeys} onclick={menuClicks} />
 
 <a class="skip-link btn btn-primary btn-sm" href="#main">Skip to content</a>
 
@@ -72,15 +86,15 @@
 			</nav>
 			<span class="spacer"></span>
 			<details class="dropdown dropdown-end" bind:this={menus[1]} ontoggle={closeOthers}>
-				<summary class="btn btn-ghost btn-square" aria-label="Display settings" title="Display settings"><Icon name="sliders" size={20} /></summary>
-				<div class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-4 shadow-lg">
+				<summary class="btn btn-ghost btn-square" aria-label="Display settings"><Icon name="sliders" size={20} /></summary>
+				<div class="dropdown-content z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain rounded-box border border-base-300 bg-base-100 p-4 shadow-lg">
 					<DisplayMenu idPrefix="nav" />
 				</div>
 			</details>
 			{#if auth.user}
 				<details class="dropdown dropdown-end" bind:this={menus[2]} ontoggle={closeOthers}>
 					<summary class="btn btn-ghost gap-2 px-2" aria-label="Account menu">
-						<span class="avatar avatar-placeholder"><span class="grid size-8 place-items-center rounded-full bg-neutral text-sm leading-none text-neutral-content">{auth.user.name.slice(0, 1).toUpperCase()}</span></span>
+						<Avatar id={auth.user.id} name={auth.user.name} avatar={auth.user.avatar} size={32} />
 						<span class="hidden max-w-40 truncate md:inline">{auth.user.name}</span>
 					</summary>
 					<ul class="menu dropdown-content z-40 mt-2 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">

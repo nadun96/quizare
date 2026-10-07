@@ -204,7 +204,7 @@
 			<strong class="title">{st?.quiz_title ?? 'Quiz'}</strong>
 			<span class="spacer"></span>
 			{#if st?.team}
-				<span class="badge badge-soft gap-1 max-w-40" title="Your team"><span class="tdot" style:background="var(--cat-{st.team.color})" aria-hidden="true"></span><span class="truncate">{st.team.name}</span>{#if st.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>
+				<span class="tooltip tooltip-bottom" data-tip="Your team"><span class="badge badge-soft gap-1 max-w-40"><span class="tdot" style:background="var(--cat-{st.team.color})" aria-hidden="true"></span><span class="truncate">{st.team.name}</span>{#if st.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span></span>
 			{/if}
 			{#if !online}
 				<span class="badge badge-soft badge-warning gap-1" role="status"><Icon name="wifi-off" size={14} />Offline · answers will sync</span>

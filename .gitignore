@@ -16,6 +16,9 @@ node_modules/
 /backend/tmp/
 .DS_Store
 ~$*
+HOW-TO-RUN.local.md
+local/demo/demo_bots.py
+local/demo/demo_seed.py
 
 # Private local notes and demo helpers (credentials) — never commit
 *.local.md
