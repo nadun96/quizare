@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Presenter screen for a poll (D-40): big, live results for the room.
 	// Keys: ← → question, R reveal (presenter-led), A answer and L leaderboard
-	// (scored polls, D-42), Q code, F full screen.
+	// (scored polls, D-42), N add a question while live (V2-05), Q code,
+	// F full screen.
 	import { onDestroy } from 'svelte';
 	import { Tween } from 'svelte/motion';
 	import { page } from '$app/state';
@@ -10,6 +11,7 @@
 	import QrCode from '$lib/QrCode.svelte';
 	import { TYPE_META } from '$lib/poll/meta';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
+	import PollQuestionEditor from '$lib/poll/PollQuestionEditor.svelte';
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import { groupRanks, secondsLeft } from '$lib/poll/scoring';
 	import type { Poll, TeacherResults } from '$lib/poll/types';
@@ -27,6 +29,12 @@
 	let showCode = $state(true);
 	let board = $state(false); // leaderboard instead of the question
 	let showKey = $state(false); // self-paced or other modes: this screen only
+	// Adding a question while live (V2-05).
+	let addDialog = $state<HTMLDialogElement>();
+	let adding = $state(false);
+	let addNext = $state(true);
+	let addShow = $state(true);
+	let jumpTo = $state('');
 	let clockOffset = 0;
 	let now = $state(Date.now());
 	let connected = $state(false);
@@ -56,6 +64,20 @@
 	const presenter = $derived(poll?.pacing === 'presenter');
 	const cur = $derived(presenter ? (poll?.current_index ?? 0) : index);
 	const q = $derived(questions[cur]);
+	// Self-paced: when a question is inserted before the one on screen, keep
+	// showing the same question.
+	let shownId = '';
+	$effect(() => {
+		if (presenter || !q) return;
+		if (shownId && q.id !== shownId && !jumpTo) {
+			const i = questions.findIndex((x) => x.id === shownId);
+			if (i >= 0 && i !== index) {
+				index = i;
+				return;
+			}
+		}
+		shownId = q.id;
+	});
 	const joined = new Tween(0, { duration: 500 });
 	$effect(() => {
 		joined.set(data?.participants ?? 0, reduced() ? { duration: 0 } : undefined);
@@ -99,14 +121,39 @@
 			toast(e instanceof ApiError ? e.message : 'Could not open', 'error');
 		}
 	}
+	function openAdd() {
+		adding = true;
+		queueMicrotask(() => addDialog?.showModal());
+	}
+	function closeAdd() {
+		addDialog?.close();
+		adding = false;
+	}
+	function added(q: { id: string }) {
+		closeAdd();
+		showCode = board = false;
+		if (addShow) jumpTo = q.id; // self-paced: this screen moves once the new question arrives
+		toast(addShow && presenter ? 'Question added and shown to everyone' : 'Question added');
+	}
+	$effect(() => {
+		if (!jumpTo) return;
+		const i = questions.findIndex((x) => x.id === jumpTo);
+		if (i < 0) return;
+		if (!presenter) {
+			index = i;
+			shownId = jumpTo;
+		}
+		jumpTo = '';
+	});
 	function key(e: KeyboardEvent) {
-		if ((e.target as HTMLElement)?.closest('input, textarea, select')) return;
+		if (adding || (e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], dialog')) return;
 		if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') (e.preventDefault(), go(cur + 1));
 		else if (e.key === 'ArrowLeft' || e.key === 'PageUp') (e.preventDefault(), go(cur - 1));
 		else if (e.key.toLowerCase() === 'r' && presenter) reveal();
 		else if (e.key.toLowerCase() === 'a' && poll?.scoring) toggleAnswer();
 		else if (e.key.toLowerCase() === 'l' && poll?.scoring) board = !board;
 		else if (e.key.toLowerCase() === 'q') showCode = !showCode;
+		else if (e.key.toLowerCase() === 'n') (e.preventDefault(), openAdd());
 		else if (e.key.toLowerCase() === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {});
 	}
 	const host = $derived(poll ? poll.join_url.replace(/^https?:\/\//, '').replace(/\/p\/.*$/, '') : '');
@@ -191,9 +238,24 @@
 				{#if q?.key && !board}<button class="btn" aria-pressed={answerShown} onclick={toggleAnswer} title="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button>{/if}
 				<button class="btn" aria-pressed={board} onclick={() => (board = !board)} title="Leaderboard (L)"><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button>
 			{/if}
+			<button class="btn" onclick={openAdd} title="Add a question now (N)"><Icon name="plus" size={18} />Add question</button>
 			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>Next<Icon name="arrow-right" size={18} /></button>
 		</footer>
-		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
+		<dialog bind:this={addDialog} class="modal" aria-labelledby="add-h" oncancel={(e) => { e.preventDefault(); closeAdd(); }}>
+			{#if adding}
+				<div class="modal-box add-box">
+					<div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+						<h2 id="add-h" class="m-0 text-lg">Add a question now</h2>
+						<span class="spacer"></span>
+						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addNext} />Put it next</label>
+						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addShow} />{presenter ? 'Show it to everyone now' : 'Show it on this screen'}</label>
+					</div>
+					<PollQuestionEditor pollId={id} scoring={poll.scoring} pacing={poll.pacing} extra={{ after_id: addNext && q ? q.id : '', present: addShow && presenter }} onsaved={added} oncancel={closeAdd} />
+				</div>
+				<div class="modal-backdrop"><button tabindex="-1" aria-label="Close" onclick={closeAdd}>close</button></div>
+			{/if}
+		</dialog>
+		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}N add · Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
 	{/if}
 </div>
 
@@ -207,6 +269,7 @@
 	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.5rem; }
 	.boards { display: grid; gap: 2rem; }
 	@media (min-width: 1000px) { .boards { grid-template-columns: 1.4fr 1fr; } }
+	.add-box { width: min(72rem, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); }
 	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: var(--color-base-100); border: 2px solid var(--color-base-300); }
 	.timer.low { color: var(--color-error); border-color: var(--color-error); }
 	.hidden-note { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }

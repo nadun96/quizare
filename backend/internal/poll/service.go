@@ -529,26 +529,77 @@ func (in QuestionInput) question() (Question, error) {
 	return q, nil
 }
 
+// AddOptions place a question added while the poll runs (V2-05, D-46).
+type AddOptions struct {
+	// Insert right after the question being presented instead of at the end.
+	AfterCurrent bool `json:"after_current"`
+	// Or right after this question (self-paced presenter screens show any one).
+	AfterID string `json:"after_id"`
+	// Presenter pacing: move everyone to the new question at once.
+	Present bool `json:"present"`
+}
+
 func (s *Service) AddQuestion(ctx context.Context, teacherID, pollID string, in QuestionInput) (Question, error) {
-	if _, err := s.ownedPoll(ctx, teacherID, pollID); err != nil {
-		return Question{}, err
+	q, _, err := s.AddQuestionAt(ctx, teacherID, pollID, in, AddOptions{})
+	return q, err
+}
+
+// AddQuestionAt adds a question and returns its index in the poll. Live
+// screens hear about it on the hub's next flush (within half a second).
+func (s *Service) AddQuestionAt(ctx context.Context, teacherID, pollID string, in QuestionInput, opt AddOptions) (Question, int, error) {
+	p, err := s.ownedPoll(ctx, teacherID, pollID)
+	if err != nil {
+		return Question{}, 0, err
 	}
 	q, err := in.question()
 	if err != nil {
-		return q, err
+		return q, 0, err
 	}
 	body, _ := json.Marshal(q.Body)
-	var n int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM poll.questions WHERE poll_id=$1`, pollID).Scan(&n); err != nil {
-		return q, err
+	full, err := s.GetPoll(ctx, teacherID, pollID)
+	if err != nil {
+		return q, 0, err
 	}
+	n := len(full.Questions)
 	if n >= MaxQuestions {
-		return q, httpx.Conflict("a poll can have at most 50 questions")
+		return q, 0, httpx.Conflict("a poll can have at most 50 questions")
 	}
-	q, err = scanQuestion(s.pool.QueryRow(ctx, `INSERT INTO poll.questions (poll_id, position, type, text, body, required, key, points, time_limit_sec)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+questionCols, pollID, n, q.Type, q.Text, body, q.Required, keyJSON(q.Key), q.Points, q.TimeLimitSec))
+	index, position := n, n
+	if n > 0 {
+		position = full.Questions[n-1].Position + 1
+	}
+	after := -1
+	if opt.AfterCurrent && p.CurrentIndex < n {
+		after = p.CurrentIndex
+	}
+	for i, x := range full.Questions {
+		if opt.AfterID != "" && x.ID == opt.AfterID {
+			after = i
+		}
+	}
+	if after >= 0 {
+		index = after + 1
+		position = full.Questions[after].Position + 1
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE poll.questions SET position=position+1 WHERE poll_id=$1 AND position >= $2`, pollID, position); err != nil {
+			return err
+		}
+		var err error
+		q, err = scanQuestion(tx.QueryRow(ctx, `INSERT INTO poll.questions (poll_id, position, type, text, body, required, key, points, time_limit_sec)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+questionCols, pollID, position, q.Type, q.Text, body, q.Required, keyJSON(q.Key), q.Points, q.TimeLimitSec))
+		return err
+	})
+	if err != nil {
+		return q, 0, err
+	}
+	if opt.Present && p.Pacing == "presenter" {
+		if _, err := s.Present(ctx, teacherID, pollID, index, false, false); err != nil {
+			return q, index, err
+		}
+	}
 	s.hub.stateChanged(pollID)
-	return q, err
+	return q, index, nil
 }
 
 func (s *Service) ownedQuestion(ctx context.Context, teacherID, questionID string) (Question, error) {

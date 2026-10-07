@@ -979,9 +979,10 @@ paths:
     post:
       operationId: postTeacherPollsQuestions
       tags: [polls]
-      summary: Add a question (any of the 20 types)
+      summary: Add a question (any of the 20 types), also while the poll runs
+      description: Open polls show the new question to participants on the next live update (within half a second). `after_current` inserts it after the question being presented; `present` (presenter pacing) moves everyone to it.
       parameters: [{ $ref: '#/components/parameters/id' }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestionInput' } } } }
+      requestBody: { required: true, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/PollQuestionInput' }, { type: object, properties: { after_current: { type: boolean }, after_id: { type: string, description: 'Insert after this question' }, present: { type: boolean } } }] } } } }
       responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/PollQuestion' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/polls/{id}/questions/order:
     put:

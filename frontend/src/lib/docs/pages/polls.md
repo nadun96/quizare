@@ -61,6 +61,10 @@ Word-cloud entries are normalised: lower case, and punctuation turned into space
 
 The participant socket is read-only and carries no identity; answers go over REST. Because every participant gets the same update, "after answering" is applied by each browser to its own view, so it is a display rule, not secrecy. `never` is enforced on the server. This keeps 200 participants at one computation per change instead of 200.
 
+## Adding questions while live
+
+A question can be added to an open poll at any time (V2-05, D-46). The presenter screen has **Add question** (`N`), which opens the full question editor with two choices: **Put it next** (`after_id`: insert after the question on screen; `after_current` does the same for the presented question) and **Show it now** (presenter pacing: everyone moves to it; self-paced: the presenter screen jumps to it). Participants receive it on the hub's next flush, within half a second, without reloading. Answers and positions of the other questions are untouched; a self-paced presenter screen keeps showing the same question when one is inserted before it.
+
 ## Scoring and leaderboard
 
 Turning on **Score answers** (`scoring`) makes a poll a competition (V2-01, V2-02, D-42). Questions with an answer key earn points; opinion types (word cloud, rating, Likert, matrix, essay, code, media) are never scored.

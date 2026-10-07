@@ -235,11 +235,14 @@ func (s *Service) hReset(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) hAddQuestion(w http.ResponseWriter, r *http.Request) error {
-	var in QuestionInput
+	var in struct {
+		QuestionInput
+		AddOptions
+	}
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	q, err := s.AddQuestion(r.Context(), teacherID(r), chi.URLParam(r, "id"), in)
+	q, _, err := s.AddQuestionAt(r.Context(), teacherID(r), chi.URLParam(r, "id"), in.QuestionInput, in.AddOptions)
 	if err != nil {
 		return err
 	}
