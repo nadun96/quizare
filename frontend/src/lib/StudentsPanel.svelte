@@ -4,6 +4,7 @@
 	import { flip } from 'svelte/animate';
 	import { api, ApiError } from './api';
 	import Icon from './ui/Icon.svelte';
+	import IconBtn from './ui/IconBtn.svelte';
 	import EmptyState from './ui/EmptyState.svelte';
 	import { confirmDialog } from './ui/dialog.svelte';
 	import { fadeIn, flipMs } from './ui/motion';
@@ -111,13 +112,13 @@
 	<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-5">
 		<div class="flex flex-wrap items-center gap-2">
 			<span class="small font-semibold mr-1">Categories</span>
-			<button class="chip" class:on={filter === null} aria-pressed={filter === null} onclick={() => (filter = null)}>All <span class="muted tabular">{enrolments.length}</span></button>
+			<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === null} class:btn-soft={filter === null} aria-pressed={filter === null} onclick={() => (filter = null)}>All <span class="muted tabular">{enrolments.length}</span></button>
 			{#each categories as c (c.id)}
 				<span class="chip-wrap" animate:flip={{ duration: flipMs() }}>
-					<button class="chip" class:on={filter === c.id} aria-pressed={filter === c.id} onclick={() => (filter = filter === c.id ? null : c.id)}>
+					<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === c.id} class:btn-soft={filter === c.id} aria-pressed={filter === c.id} onclick={() => (filter = filter === c.id ? null : c.id)}>
 						<span class="dot" style:background="var(--cat-{c.color})" aria-hidden="true"></span>{c.name} <span class="muted tabular">{c.members}</span>
 					</button>
-					<button class="btn btn-ghost btn-xs btn-square" aria-label="Edit {c.name}" onclick={() => (editing = { ...c })}><Icon name="pencil" size={13} /></button>
+					<IconBtn icon="pencil" label="Edit" hint="Edit {c.name}" class="btn-ghost btn-xs" size={13} onclick={() => (editing = { ...c })} />
 				</span>
 			{/each}
 			<form class="flex items-center gap-1" onsubmit={create}>
@@ -179,7 +180,7 @@
 									{#each en.categories ?? [] as cid (cid)}
 										{@const c = byId[cid]}
 										{#if c}
-											<span class="tag"><span class="dot" style:background="var(--cat-{c.color})" aria-hidden="true"></span>{c.name}<button class="tag-x" aria-label="Remove {en.student_name} from {c.name}" onclick={() => untag(en, c)}><Icon name="x" size={11} /></button></span>
+											<span class="badge badge-soft gap-1 pr-0.5"><span class="dot" style:background="var(--cat-{c.color})" aria-hidden="true"></span>{c.name}<button class="btn btn-ghost btn-xs btn-circle" aria-label="Remove {en.student_name} from {c.name}" onclick={() => untag(en, c)}><Icon name="x" size={11} /></button></span>
 										{/if}
 									{/each}
 								</div>
@@ -202,14 +203,8 @@
 
 <style>
 	.chip-wrap { display: inline-flex; align-items: center; }
-	.chip { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2rem; padding: 0 0.7rem; border-radius: 999px; border: 1px solid var(--color-base-300); background: var(--color-base-100); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: background-color var(--motion-fast), border-color var(--motion-fast); }
-	.chip:hover { border-color: color-mix(in oklab, var(--color-primary) 45%, var(--color-base-300)); }
-	.chip.on { background: color-mix(in oklab, var(--color-primary) 12%, var(--color-base-100)); border-color: var(--color-primary); }
 	.dot { width: 0.6rem; height: 0.6rem; border-radius: 999px; flex: none; }
 	.swatch { width: 1.6rem; height: 1.6rem; border-radius: 999px; border: 2px solid var(--color-base-100); box-shadow: 0 0 0 1px var(--color-base-300); cursor: pointer; }
 	.swatch.on { box-shadow: 0 0 0 2px var(--color-base-content); }
-	.tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.05rem 0.25rem 0.05rem 0.5rem; border-radius: 999px; background: var(--color-base-200); font-size: 0.8rem; font-weight: 600; }
-	.tag-x { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 999px; border: 0; background: none; color: var(--color-muted); cursor: pointer; }
-	.tag-x:hover { background: var(--color-base-300); color: var(--color-base-content); }
 	tr.sel { background: color-mix(in oklab, var(--color-primary) 7%, transparent); }
 </style>

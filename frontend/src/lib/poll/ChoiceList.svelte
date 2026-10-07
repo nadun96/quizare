@@ -2,6 +2,7 @@
 	// Editable list of choices (options, rows, columns, boxes, statements).
 	import { flip } from 'svelte/animate';
 	import Icon from '../ui/Icon.svelte';
+	import IconBtn from '../ui/IconBtn.svelte';
 	import { flipMs } from '../ui/motion';
 	import type { Choice } from './types';
 
@@ -45,9 +46,9 @@
 						}
 					}}
 				/>
-				<button type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Move {noun} {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
-				<button type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Move {noun} {i + 1} down" disabled={i === items.length - 1} onclick={() => move(i, 1)}>↓</button>
-				<button type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Remove {noun} {i + 1}" disabled={items.length <= min} onclick={() => items.splice(i, 1)}><Icon name="x" size={15} /></button>
+				<IconBtn icon="arrow-up" label="Up" hint="Move {noun} {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)} />
+				<IconBtn icon="arrow-down" label="Down" hint="Move {noun} {i + 1} down" disabled={i === items.length - 1} onclick={() => move(i, 1)} />
+				<IconBtn icon="x" label="Remove" hint="Remove {noun} {i + 1}" size={15} disabled={items.length <= min} onclick={() => items.splice(i, 1)} />
 			</li>
 		{/each}
 	</ol>

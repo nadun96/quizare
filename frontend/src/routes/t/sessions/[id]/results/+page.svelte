@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { promptDialog } from '$lib/ui/dialog.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
@@ -51,9 +52,9 @@
 	const shown = $derived(filter === 'all' ? results : results.filter((r) => r.marks.some(needsReview)));
 
 	async function override(r: Result, m: Mark) {
-		const s = prompt(`Score for ${m.code} (0–${m.max_score})`, m.score == null ? '' : String(m.score));
+		const s = await promptDialog({ title: `Score for ${m.code}`, body: `Between 0 and ${m.max_score}. Leave it empty to keep the current mark.`, label: 'Score', value: m.score == null ? '' : String(m.score), inputmode: 'decimal', allowEmpty: true, confirm: 'Next' });
 		if (s === null) return;
-		const fb = prompt('Feedback for the student (optional)', m.feedback || m.ai_feedback || '');
+		const fb = await promptDialog({ title: 'Feedback for the student', body: 'Optional. Shown with the mark when results are released.', label: 'Feedback', value: m.feedback || m.ai_feedback || '', allowEmpty: true, multiline: true, maxlength: 2000 });
 		try {
 			await api.put('/api/teacher/marks/' + r.attempt_id + '/' + m.question_id, { score: s === '' ? undefined : Number(s), feedback: fb ?? undefined });
 			load();

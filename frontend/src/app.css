@@ -101,6 +101,13 @@
 	--color-field: #6b7d92;
 }
 
+/* daisyUI paints the page root with --root-bg (base-100) whenever a theme is
+   set; our pages sit on base-200, so keep the whole page one colour. */
+:root,
+[data-theme] {
+	--root-bg: var(--color-base-200);
+}
+
 /* Older component styles use these names; they now follow the active theme. */
 :root {
 	--bg: var(--color-base-200);
@@ -247,6 +254,8 @@
 
 	.input-sm, .select-sm { min-height: 2rem; }
 	.input-lg { min-height: 3.5rem; }
+	/* daisyUI stats dim titles to 60 %; use the checked secondary-text colour (AA). */
+	.stat-title, .stat-desc { color: var(--color-muted); opacity: 1; }
 	/* A card laid out as a row (toolbars, forms). */
 	.card.row { flex-direction: row; flex-wrap: wrap; align-items: center; }
 }
