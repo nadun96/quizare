@@ -64,6 +64,10 @@ const (
 	PollStorageLimit = 200 << 20 // per poll, all files together
 	MaxParticipants  = 2000
 	MaxQuestions     = 50
+	// JoinBurst joins can arrive at once from one network address, then four a
+	// second. A whole lecture hall behind one school router joins together
+	// (D-51); the limit still slows a script filling a poll with fake people.
+	JoinBurst = 150
 )
 
 type Choice struct {

@@ -29,7 +29,7 @@ export const NAV: { section: string; pages: [slug: string, title: string][] }[] 
 	},
 	{ section: 'Frontend', pages: [['frontend', 'Frontend app'], ['ux-research', 'UX research & design rules']] },
 	{ section: 'Interfaces', pages: [['api', 'HTTP API'], ['realtime', 'WebSocket protocol']] },
-	{ section: 'Operations', pages: [['security', 'Security & privacy'], ['deployment', 'Deployment'], ['testing', 'Testing']] },
+	{ section: 'Operations', pages: [['security', 'Security & privacy'], ['deployment', 'Deployment'], ['deploy-without-domain', 'Deploying without a domain'], ['testing', 'Testing']] },
 	{ section: 'Contributing', pages: [['contributing', 'Contributing'], ['decisions', 'Decision log']] }
 ];
 

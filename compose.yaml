@@ -47,6 +47,8 @@ services:
       - -c
       - shared_preload_libraries=pg_stat_statements
     shm_size: 256m
+    networks:
+      - quiz
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -68,6 +70,9 @@ services:
     environment:
       QP_DATABASE_URL: postgres://quiz:${POSTGRES_PASSWORD}@db:5432/quiz?sslmode=disable
       QP_BASE_URL: ${QP_BASE_URL:-http://localhost:8080}
+      # Believe X-Forwarded-For only from Caddy's fixed address below, so rate
+      # limits see each student's network instead of Caddy (D-51).
+      QP_TRUSTED_PROXIES: ${QP_CADDY_IP:-172.31.250.10}
       # First start writes a random 32-byte master key into the app volume.
       # Back the volume up: without the key, stored LLM API keys are unreadable.
       QP_KEK_GENERATE: "1"
@@ -82,6 +87,8 @@ services:
       - appdata:/var/lib/quiz
     ports:
       - "${QP_HTTP_BIND:-127.0.0.1:8080}:8080"
+    networks:
+      - quiz
 
   caddy:
     image: docker.io/library/caddy:2-alpine
@@ -98,10 +105,21 @@ services:
       - "${CADDY_HTTP_PORT:-80}:80"
       - "${CADDY_HTTPS_PORT:-443}:443"
       - "${CADDY_HTTPS_PORT:-443}:443/udp"
+    networks:
+      quiz:
+        ipv4_address: ${QP_CADDY_IP:-172.31.250.10}
     volumes:
       - ./deploy/container/Caddyfile:/etc/caddy/Caddyfile:ro,Z
       - caddydata:/data
       - caddyconfig:/config
+
+# A fixed subnet so Caddy has a known address. Change QP_COMPOSE_SUBNET and
+# QP_CADDY_IP together if it clashes with a network you already use.
+networks:
+  quiz:
+    ipam:
+      config:
+        - subnet: ${QP_COMPOSE_SUBNET:-172.31.250.0/24}
 
 volumes:
   pgdata:

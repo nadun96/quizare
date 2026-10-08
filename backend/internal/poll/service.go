@@ -50,7 +50,7 @@ type Service struct {
 
 func NewService(pool *pgxpool.Pool, classes Classrooms, users Users, baseURL string, log *slog.Logger) *Service {
 	s := &Service{pool: pool, classes: classes, users: users, baseURL: strings.TrimRight(baseURL, "/"), log: log, now: time.Now,
-		joins: auth.NewLimiter(30, 2*time.Second), answers: auth.NewLimiter(40, 100*time.Millisecond), uploads: auth.NewLimiter(5, 10*time.Second),
+		joins: auth.NewLimiter(JoinBurst, 250*time.Millisecond), answers: auth.NewLimiter(40, 100*time.Millisecond), uploads: auth.NewLimiter(5, 10*time.Second),
 		boardRate: auth.NewLimiter(30, 100*time.Millisecond)}
 	s.hub = newHub(s)
 	return s

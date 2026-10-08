@@ -3,6 +3,8 @@
 # QP_DOMAIN: a public domain gets a Let's Encrypt certificate; "localhost" or an
 # IP address gets a certificate from Caddy's internal CA (trust it on devices,
 # or accept the warning once).
+# No domain? A name like 203-0-113-5.sslip.io points at that IP and gets a
+# Let's Encrypt certificate (see home.env.example).
 
 {$QP_DOMAIN:localhost} {
 	encode zstd gzip

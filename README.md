@@ -115,6 +115,7 @@ Without `QP_SMTP_ADDR`, emails (verification, password reset) are written to the
 | `QP_KEK_FILE` | `$CREDENTIALS_DIRECTORY/kek` | 32-byte master key file (raw, hex or base64), mode 0400 |
 | `QP_BASE_URL` | `http://localhost:8080` | Public origin: QR links, Origin/CSRF checks |
 | `QP_LISTEN` | `127.0.0.1:8080` | Listen address (Caddy proxies to it) |
+| `QP_TRUSTED_PROXIES` | | Proxy IPs or CIDRs, besides loopback, whose `X-Forwarded-For` is believed (compose sets Caddy's address) |
 | `QP_DB_MAX_CONNS` | 15 | pgx pool size |
 | `QP_ARGON2_WORKERS` | 2 | Concurrent password hashes (login-burst memory cap) |
 | `QP_SMTP_ADDR`, `QP_SMTP_FROM`, `QP_SMTP_USER`, `QP_SMTP_PASSWORD_FILE` | | Optional SMTP relay |
@@ -136,6 +137,7 @@ echo 'a-strong-password' | docker compose exec -T app /app/server create-admin a
 
 - On first start the app writes a random master key into the `appdata` volume (`QP_KEK_GENERATE=1`). Back that volume up together with `pgdata`.
 - For phones on the LAN or a domain, use HTTPS: set `QP_DOMAIN` and `QP_BASE_URL=https://…` in `.env`, then run `docker compose --profile tls up -d`. Rootless Podman can't bind ports below 1024 by default, so set `CADDY_HTTP_PORT=8081` and `CADDY_HTTPS_PORT=8443` there.
+- To host from your own PC without buying a domain (students reach it through your router's public IP), copy `home.env.example` to `.env` and follow the steps at its top. It uses a free sslip.io name so Caddy can get a real certificate, and it covers port forwarding, CGNAT and a Cloudflare tunnel fallback. The in-app docs page *Deploying without a domain* (`/docs/deploy-without-domain`) covers this and the other setups without a domain: a VPS, a tunnel, and a classroom network only.
 
 ## Deployment (Ubuntu, single 4 GB host)
 
