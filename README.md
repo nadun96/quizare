@@ -137,7 +137,7 @@ echo 'a-strong-password' | docker compose exec -T app /app/server create-admin a
 
 - On first start the app writes a random master key into the `appdata` volume (`QP_KEK_GENERATE=1`). Back that volume up together with `pgdata`.
 - For phones on the LAN or a domain, use HTTPS: set `QP_DOMAIN` and `QP_BASE_URL=https://…` in `.env`, then run `docker compose --profile tls up -d`. Rootless Podman can't bind ports below 1024 by default, so set `CADDY_HTTP_PORT=8081` and `CADDY_HTTPS_PORT=8443` there.
-- To host from your own PC without buying a domain (students reach it through your router's public IP), copy `home.env.example` to `.env` and follow the steps at its top. It uses a free sslip.io name so Caddy can get a real certificate, and it covers port forwarding, CGNAT and a Cloudflare tunnel fallback.
+- To host from your own PC without buying a domain (students reach it through your router's public IP), copy `home.env.example` to `.env` and follow the steps at its top. It uses a free sslip.io name so Caddy can get a real certificate, and it covers port forwarding, CGNAT and a Cloudflare tunnel fallback. The in-app docs page *Deploying without a domain* (`/docs/deploy-without-domain`) covers this and the other setups without a domain: a VPS, a tunnel, and a classroom network only.
 
 ## Deployment (Ubuntu, single 4 GB host)
 
