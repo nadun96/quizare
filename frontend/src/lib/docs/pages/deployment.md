@@ -67,6 +67,8 @@ flowchart LR
 - **Start-up order.** Compose waits for `pg_isready`. The app also retries the database for `QP_DB_WAIT_SECONDS`, because some `podman-compose` versions ignore health conditions.
 - **Master key.** Bind-mounting a 0400 key file into a non-root container breaks on ownership. Instead, `QP_KEK_GENERATE=1` creates the key inside the `appdata` volume on first start and never overwrites it. The key is still never read from an environment variable (ADR-09). Back up `appdata` together with `pgdata`.
 - **HTTPS.** `__Host-` cookies need a secure context. `http://localhost` qualifies, a LAN address does not. The `tls` profile adds Caddy (`deploy/container/Caddyfile`) with automatic certificates for `QP_DOMAIN`, using the internal CA for `localhost` or an IP address.
+- **Hosting from a home or school PC.** No domain is needed: `home.env.example` uses a free sslip.io name for the router's public IP, so Caddy gets a Let's Encrypt certificate once ports 80 and 443 are forwarded (D-50). See [Deploying without a domain](/docs/deploy-without-domain) for this and the other setups without a domain.
+- **Client addresses.** Caddy has a fixed address on the compose network (`QP_CADDY_IP`, default `172.31.250.10`), and the app trusts `X-Forwarded-For` only from it (`QP_TRUSTED_PROXIES`), so rate limits count each student's network rather than Caddy (D-51).
 - **Database.** It has no published port. Tuning comes from `deploy/postgresql.conf.d/quiz.conf` and is passed as `-c` flags.
 - **Admin.** Run `echo 'pw' | docker compose exec -T app /app/server create-admin <email> <name>`.
 - **Backups.** Run `docker compose exec db pg_dump -U quiz -Fc quiz > quiz.dump`, or point `deploy/backup.sh` at the container.
