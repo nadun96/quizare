@@ -108,6 +108,9 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 // Build wires modules onto an existing pool.
 func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options) (*App, error) {
 	a := &App{cfg: cfg, log: log, pool: pool}
+	if err := httpx.TrustProxies(cfg.TrustedProxies); err != nil {
+		return nil, err
+	}
 
 	mailer := opt.Mailer
 	if mailer == nil {

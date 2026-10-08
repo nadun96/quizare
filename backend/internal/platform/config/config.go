@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/nadun96/quizplatform/internal/platform/httpx"
 )
 
 type Config struct {
@@ -21,6 +24,11 @@ type Config struct {
 	DevMode       bool   // relaxes nothing security-critical; enables verbose logs and console email
 	ShutdownWait  time.Duration
 	StaticDir     string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
+
+	// TrustedProxies are proxy IPs or CIDRs, besides loopback, whose
+	// X-Forwarded-For is believed (QP_TRUSTED_PROXIES, comma-separated), e.g.
+	// Caddy's container address in compose (D-51).
+	TrustedProxies []string
 
 	APIDocs bool // serve the OpenAPI spec and Swagger UI at /api/docs (QP_API_DOCS=0 disables)
 
@@ -43,6 +51,8 @@ func FromEnv() (Config, error) {
 		ShutdownWait:  10 * time.Second,
 		StaticDir:     os.Getenv("QP_STATIC_DIR"),
 
+		TrustedProxies: list(os.Getenv("QP_TRUSTED_PROXIES")),
+
 		APIDocs:          os.Getenv("QP_API_DOCS") != "0",
 		KEKGenerate:      os.Getenv("QP_KEK_GENERATE") == "1",
 		DBWait:           time.Duration(envInt("QP_DB_WAIT_SECONDS", 60)) * time.Second,
@@ -50,6 +60,9 @@ func FromEnv() (Config, error) {
 		SMTPFrom:         env("QP_SMTP_FROM", "no-reply@localhost"),
 		SMTPUser:         os.Getenv("QP_SMTP_USER"),
 		SMTPPasswordFile: os.Getenv("QP_SMTP_PASSWORD_FILE"),
+	}
+	if _, err := httpx.ParseProxies(c.TrustedProxies); err != nil {
+		return c, fmt.Errorf("QP_TRUSTED_PROXIES: %w", err)
 	}
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("QP_DATABASE_URL is required")
@@ -77,4 +90,14 @@ func envInt(k string, def int) int {
 		return v
 	}
 	return def
+}
+
+func list(v string) []string {
+	var out []string
+	for _, s := range strings.Split(v, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
