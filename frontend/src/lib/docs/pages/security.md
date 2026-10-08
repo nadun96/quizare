@@ -77,7 +77,8 @@ Resource link checks use `imageurl.Checker`. The dialer refuses non-public IPs (
 - **Identified polls** use the normal session cookie; classroom-only polls also require an active enrolment.
 - **Participants never see** names, participant ids, uploaded files or moderated answers. The participant WebSocket is read-only and carries no identity.
 - **Uploads** (file, audio, video) are typed by sniffing the bytes, not by the browser's claim, and limited to 5 MB, 3 MB and 12 MB respectively, with 200 MB per poll. Only the poll owner can download them. Downloads are sent with `Content-Security-Policy: sandbox`, `nosniff` and `no-store`, and only images, audio and video are shown inline.
-- Joins are rate-limited per IP address, and answers and uploads per participant.
+- Joins are rate-limited per IP address (150 at once, then 4 a second, so a class behind one school router can join together), and answers and uploads per participant.
+- **Client address.** `X-Forwarded-For` is believed only when the direct peer is loopback or listed in `QP_TRUSTED_PROXIES`, and the client is the rightmost address in it that isn't a trusted proxy, so a client can't choose its own address (D-51).
 
 ## Privacy (NFR-04, BR-13)
 

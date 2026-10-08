@@ -115,6 +115,7 @@ Without `QP_SMTP_ADDR`, emails (verification, password reset) are written to the
 | `QP_KEK_FILE` | `$CREDENTIALS_DIRECTORY/kek` | 32-byte master key file (raw, hex or base64), mode 0400 |
 | `QP_BASE_URL` | `http://localhost:8080` | Public origin: QR links, Origin/CSRF checks |
 | `QP_LISTEN` | `127.0.0.1:8080` | Listen address (Caddy proxies to it) |
+| `QP_TRUSTED_PROXIES` | | Proxy IPs or CIDRs, besides loopback, whose `X-Forwarded-For` is believed (compose sets Caddy's address) |
 | `QP_DB_MAX_CONNS` | 15 | pgx pool size |
 | `QP_ARGON2_WORKERS` | 2 | Concurrent password hashes (login-burst memory cap) |
 | `QP_SMTP_ADDR`, `QP_SMTP_FROM`, `QP_SMTP_USER`, `QP_SMTP_PASSWORD_FILE` | | Optional SMTP relay |

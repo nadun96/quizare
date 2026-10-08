@@ -16,9 +16,9 @@
 //          -e TEACHER_EMAIL=... -e TEACHER_PASSWORD=... \
 //          -e VIEWERS=200 -e DRAWERS=30 -e DURATION=3m loadtest/whiteboard.js
 //
-// Polls allow 30 joins at once per network address, then one every 2 s, so a
-// whole class behind one school router joins gradually. That is measured as
-// join_waits. To spread joins over many addresses instead, run k6 on the
+// Polls allow 150 joins at once per network address, then four a second
+// (D-51); more viewers than that from one address join gradually, which is
+// measured as join_waits. To spread joins over many addresses instead, run k6 on the
 // server itself (or behind its local proxy) with -e SPREAD_IPS=1: the server
 // trusts X-Forwarded-For only from loopback (ADR-12).
 //
