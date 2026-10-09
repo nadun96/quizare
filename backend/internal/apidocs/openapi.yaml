@@ -187,29 +187,34 @@ paths:
     get:
       operationId: getAdminUsers
       tags: [admin]
-      summary: List and search users
+      summary: List and search users (admins, and managers with "View users")
+      description: Role `manager` lists every manager, teacher-managers included. A manager sees that someone is a manager, but not their features.
       parameters:
-        - { name: role, in: query, schema: { type: string, enum: [student, teacher, admin] } }
+        - { name: role, in: query, schema: { type: string, enum: [student, teacher, manager, admin] } }
         - { name: status, in: query, schema: { type: string, enum: [active, pending_approval, suspended] } }
-        - { name: q, in: query, description: 'Name or email contains', schema: { type: string } }
-        - { name: limit, in: query, schema: { type: integer, maximum: 200 } }
-        - { name: offset, in: query, schema: { type: integer } }
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { users: { type: array, items: { $ref: '#/components/schemas/User' } } } } } } } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: sort, in: query, schema: { type: string, enum: [created, name, email, role, status] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, users: { type: array, items: { $ref: '#/components/schemas/User' } } } } } } } }
   /api/admin/users/{id}/status:
     post:
       operationId: postAdminUsersStatus
       tags: [admin]
-      summary: Activate/approve or suspend a user (FR-ACC-04/05)
+      summary: Activate/approve or suspend a user (FR-ACC-04/05; managers with "Manage users")
+      description: A manager may act only on teachers and students (403, logged, PL-FR-13). The last active admin can't be suspended (409 `last_admin`, PL-FR-17).
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, suspended] } } } } } }
-      responses: { '204': { description: 'Updated' }, '404': { $ref: '#/components/responses/NotFound' } }
+      responses: { '204': { description: 'Updated' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/admin/users/{id}:
     delete:
       operationId: deleteAdminUsersById
       tags: [admin]
       summary: Delete (anonymise) a user; results are kept
+      description: Same rules as changing the status (PL-FR-13, PL-FR-17).
       parameters: [{ $ref: '#/components/parameters/id' }]
-      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
+      responses: { '204': { description: 'Deleted' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/admin/auth-policy:
     get:
       operationId: getAdminAuthPolicy
@@ -248,9 +253,50 @@ paths:
       parameters:
         - { name: action, in: query, schema: { type: string } }
         - { name: target_type, in: query, schema: { type: string } }
-        - { name: before_id, in: query, description: 'Page backwards from this id', schema: { type: integer } }
-        - { name: limit, in: query, schema: { type: integer, maximum: 200 } }
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { events: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } } } } } } } }
+        - { name: actor, in: query, description: 'Only this user''s actions, e.g. one manager''s (PL-FR-15)', schema: { type: string, format: uuid } }
+        - { name: actor_role, in: query, description: 'The role the actor acted in', schema: { type: string, enum: [admin, manager] } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: sort, in: query, schema: { type: string, enum: [time] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, events: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } } } } } } } }
+
+  /api/admin/managers:
+    get:
+      operationId: getAdminManagers
+      tags: [admin]
+      summary: Managers with their features, who made them and their last activity (PL-FR-16; admins only)
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: sort, in: query, schema: { type: string, enum: [granted, name, email, active] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, managers: { type: array, items: { $ref: '#/components/schemas/ManagerRow' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postAdminManagers
+      tags: [admin]
+      summary: Make a manager (PL-FR-10, PL-FR-11; admins only)
+      description: Give `user_id` to make an active teacher a manager who keeps teaching, or `email` and `name` to create a manager-only account, which is emailed a link to set its password. Managers get only the features listed; "Manage users" brings "View users".
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MakeManagerInput' } } } }
+      responses: { '201': { description: 'Made', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }, '400': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/managers/{id}/features:
+    put:
+      operationId: putAdminManagersFeatures
+      tags: [admin]
+      summary: Change a manager's features; applies at once (PL-FR-12; admins only)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [features], properties: { features: { type: array, items: { $ref: '#/components/schemas/Feature' } } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/managers/{id}:
+    delete:
+      operationId: deleteAdminManagersById
+      tags: [admin]
+      summary: Remove the manager role (PL-FR-12; admins only)
+      description: A teacher-manager goes back to being a teacher; a manager-only account is suspended and signed out.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Removed' }, '404': { $ref: '#/components/responses/NotFound' } }
 
   # ---------------- teacher settings ----------------
   /api/teacher/settings:
@@ -272,8 +318,8 @@ paths:
       operationId: getTeacherClassrooms
       tags: [classrooms]
       summary: My classrooms
-      parameters: [{ name: archived, in: query, description: '`1` to include archived', schema: { type: string, enum: ['1'] } }]
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classrooms: { type: array, items: { $ref: '#/components/schemas/Classroom' } } } } } } } }
+      parameters: [{ name: archived, in: query, description: '`1` to include archived', schema: { type: string, enum: ['1'] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, name] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, classrooms: { type: array, items: { $ref: '#/components/schemas/Classroom' } } } } } } } }
     post:
       operationId: postTeacherClassrooms
       tags: [classrooms]
@@ -314,8 +360,8 @@ paths:
       operationId: getTeacherClassroomsEnrolments
       tags: [classrooms]
       summary: Students enrolled in a classroom
-      parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }]
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, name, number, status] } }, { name: category, in: query, description: 'Only students in this category', schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
   /api/teacher/enrolments/{id}:
     patch:
       operationId: patchTeacherEnrolmentsById
@@ -364,7 +410,8 @@ paths:
       operationId: getTeacherClassroomsModules
       tags: [classrooms]
       summary: Modules of a classroom, in order
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { modules: { type: array, items: { $ref: '#/components/schemas/Module' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [position, name] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, modules: { type: array, items: { $ref: '#/components/schemas/Module' } } } } } } } }
     post:
       operationId: postTeacherClassroomsModules
       tags: [classrooms]
@@ -386,7 +433,8 @@ paths:
       operationId: getTeacherModulesTopics
       tags: [classrooms]
       summary: Topics of a module, in order
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { topics: { type: array, items: { $ref: '#/components/schemas/Topic' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [position, name] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, topics: { type: array, items: { $ref: '#/components/schemas/Topic' } } } } } } } }
     post:
       operationId: postTeacherModulesTopics
       tags: [classrooms]
@@ -415,7 +463,8 @@ paths:
       operationId: getTeacherTopicsQuizzes
       tags: [quizzes]
       summary: Quizzes of a topic
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { quizzes: { type: array, items: { $ref: '#/components/schemas/Quiz' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, title, status] } }, { name: status, in: query, schema: { type: string, enum: [draft, ready, archived] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, quizzes: { type: array, items: { $ref: '#/components/schemas/Quiz' } } } } } } } }
     post:
       operationId: postTeacherTopicsQuizzes
       tags: [quizzes]
@@ -555,7 +604,8 @@ paths:
       operationId: getTeacherQuizzesSessions
       tags: [sessions]
       summary: Sessions of a quiz
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { sessions: { type: array, items: { $ref: '#/components/schemas/Session' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, title, status] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, sessions: { type: array, items: { $ref: '#/components/schemas/Session' } } } } } } } }
     post:
       operationId: postTeacherQuizzesSessions
       tags: [sessions]
@@ -639,8 +689,8 @@ paths:
       operationId: getTeacherSessionsEvents
       tags: [sessions]
       summary: Integrity log (joins, admissions, pauses, extensions, violations, reinstatements)
-      parameters: [{ $ref: '#/components/parameters/id' }]
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { events: { type: array, items: { $ref: '#/components/schemas/SessionEvent' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [time] } }, { name: kind, in: query, schema: { type: string } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, events: { type: array, items: { $ref: '#/components/schemas/SessionEvent' } } } } } } } }
   /api/teacher/sessions/{id}/release:
     post:
       operationId: postTeacherSessionsRelease
@@ -720,8 +770,8 @@ paths:
       operationId: getTeacherSessionsResults
       tags: [marking]
       summary: Every finished attempt with its marks, for review (FR-EV-06)
-      parameters: [{ $ref: '#/components/parameters/id' }]
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { results: { type: array, items: { $ref: '#/components/schemas/AttemptResult' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, number, score] } }, { name: review, in: query, description: '`1`: only results with marks to review', schema: { type: string, enum: ['1'] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, results: { type: array, items: { $ref: '#/components/schemas/AttemptResult' } } } } } } } }
   /api/teacher/marks/{attempt}/{question}:
     put:
       operationId: putTeacherMarksById
@@ -802,8 +852,8 @@ paths:
       operationId: getTeacherShareLinks
       tags: [analytics]
       summary: My public links (tokens are never listed)
-      parameters: [{ name: target_id, in: query, schema: { type: string, format: uuid } }]
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { links: { type: array, items: { $ref: '#/components/schemas/ShareLink' } } } } } } } }
+      parameters: [{ name: target_id, in: query, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created] } }, { name: scope, in: query, description: 'Only these scopes, comma-separated (e.g. session,quiz)', schema: { type: string } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, links: { type: array, items: { $ref: '#/components/schemas/ShareLink' } } } } } } } }
     post:
       operationId: postTeacherShareLinks
       tags: [analytics]
@@ -863,7 +913,8 @@ paths:
       operationId: getMyClassrooms
       tags: [student]
       summary: Classrooms I am enrolled in
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classrooms: { type: array, items: { type: object, properties: { classroom_id: { type: string }, name: { type: string }, status: { type: string }, student_number: { type: [string, 'null'] } } } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [name] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, classrooms: { type: array, items: { type: object, properties: { classroom_id: { type: string }, name: { type: string }, status: { type: string }, student_number: { type: [string, 'null'] } } } } } } } } } }
   /api/my/data:
     get:
       operationId: getMyData
@@ -949,7 +1000,8 @@ paths:
       operationId: getMyAttempts
       tags: [student]
       summary: My attempts and whether their results are released
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { attempts: { type: array, items: { $ref: '#/components/schemas/StudentAttempt' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, attempts: { type: array, items: { $ref: '#/components/schemas/StudentAttempt' } } } } } } } }
   /api/my/attempts/{id}/result:
     get:
       operationId: getMyAttemptsResult
@@ -980,7 +1032,8 @@ paths:
       operationId: getTeacherPolls
       tags: [polls]
       summary: The teacher's polls, newest first
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { polls: { type: array, items: { $ref: '#/components/schemas/Poll' } } } } } } } }
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, title, status] } }, { name: status, in: query, schema: { type: string, enum: [draft, open, closed] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, polls: { type: array, items: { $ref: '#/components/schemas/Poll' } } } } } } } }
     post:
       operationId: postTeacherPolls
       tags: [polls]
@@ -1076,6 +1129,29 @@ paths:
       summary: One row per participant, one column per question (formula-safe)
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { description: 'CSV', content: { text/csv: { schema: { type: string } } } } }
+  /api/teacher/polls/{id}/participants:
+    get:
+      operationId: getTeacherPollsParticipants
+      tags: [polls]
+      summary: Participants of a poll, paginated (PL-FR-02)
+      description: Number, nickname, real name of identified participants, group, answers given and points.
+      parameters: [{ $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, name, answered, score] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, participants: { type: array, items: { type: object, properties: { participant_id: { type: string, format: uuid }, number: { type: integer }, name: { type: string }, nickname: { type: string }, real_name: { type: string }, group: { type: string }, answered: { type: integer }, score: { type: number }, joined_at: { type: string, format: date-time } } } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/polls/{id}/questions/{qid}/answers:
+    get:
+      operationId: getTeacherPollsQuestionAnswers
+      tags: [polls]
+      summary: Every answer to a question, for moderation, paginated (PL-FR-02)
+      description: Live results keep the newest 300 text answers; this reaches all of them, newest first by default.
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+        - { name: qid, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: hidden, in: query, description: 'Only hidden (`true`) or only shown (`false`) answers', schema: { type: string, enum: ['true', 'false'] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, answers: { type: array, items: { type: object, properties: { participant_id: { type: string, format: uuid }, name: { type: string }, real_name: { type: string }, text: { type: string }, hidden: { type: boolean }, at: { type: string, format: date-time } } } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/polls/{id}/moderation:
     post:
       operationId: postTeacherPollsModeration
@@ -1290,6 +1366,10 @@ components:
     attempt: { name: attempt, in: path, required: true, schema: { type: string, format: uuid } }
     question: { name: question, in: path, required: true, schema: { type: string, format: uuid } }
     code: { name: code, in: path, required: true, description: 'Join code', schema: { type: string, example: K7Q2XM } }
+    page: { name: page, in: query, description: 'Page number, from 1 (PL-FR-01)', schema: { type: integer, minimum: 1, default: 1 } }
+    size: { name: size, in: query, description: 'Rows per page', schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+    q: { name: q, in: query, description: 'Search text; matches across all pages', schema: { type: string, maxLength: 200 } }
+    dir: { name: dir, in: query, description: 'Sort direction; each sort has its own default', schema: { type: string, enum: [asc, desc] } }
     pollToken: { name: X-Poll-Token, in: header, required: false, description: 'Anonymous participant token from join', schema: { type: string } }
 
   requestBodies:
@@ -1335,10 +1415,34 @@ components:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
         name: { type: string }
-        role: { type: string, enum: [student, teacher, admin] }
+        role: { type: string, enum: [student, teacher, manager, admin], description: '`manager` is a manager-only account; a teacher-manager is `teacher` with `manager` set' }
         status: { type: string, enum: [active, pending_approval, suspended, deleted] }
         email_verified: { type: boolean }
         avatar: { type: string, description: 'Profile picture version; absent when there is none (D-49)' }
+        created_at: { type: string, format: date-time, description: 'Only in admin lists' }
+        manager:
+          type: object
+          description: Present for managers (PL-FR-10). In a manager's user list, `features` is empty.
+          properties: { features: { type: array, items: { $ref: '#/components/schemas/Feature' } } }
+    Feature:
+      type: string
+      description: An admin feature a manager can be given (PL-FR-10)
+      enum: [view_users, manage_users, approval_policy, settings, usage, audit]
+    MakeManagerInput:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid, description: 'An active teacher, who keeps teaching' }
+        email: { type: string, format: email, description: 'For a new manager-only account' }
+        name: { type: string, maxLength: 100 }
+        features: { type: array, items: { $ref: '#/components/schemas/Feature' } }
+    ManagerRow:
+      allOf:
+        - { $ref: '#/components/schemas/User' }
+        - type: object
+          properties:
+            granted_at: { type: string, format: date-time }
+            granted_by: { type: string, description: 'Name of the admin who made them a manager' }
+            last_active_at: { type: string, format: date-time }
     RegisterInput:
       type: object
       required: [email, name, password, role]
@@ -1373,6 +1477,7 @@ components:
         id: { type: integer }
         actor_id: { type: [string, 'null'] }
         actor_name: { type: string }
+        actor_role: { type: string, enum: [admin, manager], description: 'The role the actor acted in (PL-FR-15); absent outside the admin console' }
         action: { type: string }
         target_type: { type: string }
         target_id: { type: string }

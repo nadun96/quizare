@@ -281,3 +281,66 @@ func (e *Env) LastEmailToken(addr, subject string) string {
 	}
 	return m[1]
 }
+
+// Paged is one page of a paginated list (PL-FR-01): the rows under the list's
+// own key, and the totals beside them.
+type Paged struct {
+	Rows  []map[string]any
+	Total int
+	Page  int
+	Size  int
+}
+
+// Page fetches path (which may already carry a query) with page and size,
+// and returns the rows under key.
+func (c *Client) Page(path, key string, pageNo, size int) Paged {
+	c.e.T.Helper()
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	var raw map[string]json.RawMessage
+	c.Call("GET", fmt.Sprintf("%s%spage=%d&size=%d", path, sep, pageNo, size), nil, 200, &raw)
+	var p Paged
+	if err := json.Unmarshal(raw[key], &p.Rows); err != nil {
+		c.e.T.Fatalf("%s: no %q list: %v", path, key, err)
+	}
+	_ = json.Unmarshal(raw["total"], &p.Total)
+	_ = json.Unmarshal(raw["page"], &p.Page)
+	_ = json.Unmarshal(raw["size"], &p.Size)
+	return p
+}
+
+// CheckPages checks a list holds want rows in all, split into pages of size:
+// every page but the last is full, the pages don't overlap (by idField), and
+// together they hold every row once (PL-FR-02's test per list).
+func (c *Client) CheckPages(path, key, idField string, want, size int) []map[string]any {
+	c.e.T.Helper()
+	seen := map[any]bool{}
+	var all []map[string]any
+	pages := (want + size - 1) / size
+	for n := 1; n <= pages+1; n++ {
+		p := c.Page(path, key, n, size)
+		if p.Total != want || p.Page != n || p.Size != size {
+			c.e.T.Fatalf("%s page %d: total %d page %d size %d, want total %d", path, n, p.Total, p.Page, p.Size, want)
+		}
+		wantRows := size
+		if n == pages {
+			wantRows = want - size*(pages-1)
+		} else if n > pages {
+			wantRows = 0
+		}
+		if len(p.Rows) != wantRows {
+			c.e.T.Fatalf("%s page %d has %d rows, want %d", path, n, len(p.Rows), wantRows)
+		}
+		for _, r := range p.Rows {
+			id := r[idField]
+			if seen[id] {
+				c.e.T.Fatalf("%s: %v is on two pages", path, id)
+			}
+			seen[id] = true
+			all = append(all, r)
+		}
+	}
+	return all
+}

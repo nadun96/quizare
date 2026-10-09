@@ -8,6 +8,10 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import type { Body, Key, QType, Response, Session } from '$lib/types';
 	import { toast } from '$lib/ui/toast.svelte';
+	import { Paged } from '$lib/paged.svelte';
+	import { urlState } from '$lib/urlstate';
+	import ListSearch from '$lib/ui/ListSearch.svelte';
+	import Pager from '$lib/ui/Pager.svelte';
 
 	type Mark = { question_id: string; code: string; type: QType; text: string; response: Response | null; key: Key; method: string; status: string; score: number | null; max_score: number; correct: boolean | null; feedback: string; ai_feedback: string; ai_rationale?: string; ai_marked: boolean; flagged: boolean; flag_reason?: string };
 	type Result = { attempt_id: string; user_id: string; student_number: string | null; state: string; score: number; max_score: number; pct: number; passed: boolean; complete: boolean; invalidated: boolean; marks: Mark[] };
@@ -18,13 +22,17 @@
 	const id = $derived(page.params.id ?? '');
 	let tab = $state<'marking' | 'analytics' | 'share' | 'log'>('marking');
 	let session = $state<Session | null>(null);
-	let results = $state<Result[]>([]);
+	let filter = $state<'all' | 'review'>(Paged.fromUrl(urlState, 'review', 'res') === '0' ? 'all' : 'review');
+	let kind = $state(Paged.fromUrl(urlState, 'kind', 'log'));
+	// Results, links and the integrity log, one page at a time on the server (PL-FR-02).
+	const results = new Paged<Result>(() => '/api/teacher/sessions/' + id + '/results', 'results', {
+		url: urlState, prefix: 'res', sort: 'joined', filters: () => ({ review: filter === 'review' ? '1' : '0' })
+	});
+	const links = new Paged<Link>(() => '/api/teacher/share-links', 'links', { sort: 'created', desc: true, filters: () => ({ target_id: id, scope: 'session' }) });
+	const events = new Paged<Ev>(() => '/api/teacher/sessions/' + id + '/events', 'events', { url: urlState, prefix: 'log', sort: 'time', filters: () => ({ kind }) });
 	let stats = $state<any>(null);
-	let links = $state<Link[]>([]);
-	let events = $state<Ev[]>([]);
 	let names = $state<Record<string, string>>({});
 	let estimate = $state<{ answers: number; estimated_tokens: number } | null>(null);
-	let filter = $state<'all' | 'review'>('review');
 	let notice = $state('');
 	let newToken = $state('');
 	let share = $state({ views: ['question_pct'] as string[], identify: 'anonymous', show_answers: false, expires_at: '' });
@@ -34,7 +42,7 @@
 		const dash = await api.get<{ session: Session; rows: { attempt_id: string; name: string }[] }>('/api/teacher/sessions/' + id);
 		session = dash.session;
 		names = Object.fromEntries(dash.rows.map((r) => [r.attempt_id, r.name]));
-		results = (await api.get<{ results: Result[] }>('/api/teacher/sessions/' + id + '/results')).results ?? [];
+		await results.load();
 		const qs = (await api.get<{ questions: { id: string; body: Body }[] }>('/api/teacher/quizzes/' + session.quiz_id + '/questions')).questions ?? [];
 		bodies = Object.fromEntries(qs.map((q) => [q.id, q.body]));
 		estimate = await api.get('/api/teacher/sessions/' + id + '/llm-estimate');
@@ -45,11 +53,15 @@
 	async function openTab(t: typeof tab) {
 		tab = t;
 		if (t === 'analytics') stats = await api.get('/api/teacher/sessions/' + id + '/analytics');
-		if (t === 'share') links = ((await api.get<{ links: Link[] }>('/api/teacher/share-links?target_id=' + id)).links ?? []).filter((l) => !l.scope?.startsWith('live_'));
-		if (t === 'log') events = (await api.get<{ events: Ev[] }>('/api/teacher/sessions/' + id + '/events')).events ?? [];
+		if (t === 'share') await links.load();
+		if (t === 'log') await events.load();
 	}
 	const needsReview = (m: Mark) => m.status === 'needs_manual' || m.status === 'pending' || m.flagged || m.ai_marked;
-	const shown = $derived(filter === 'all' ? results : results.filter((r) => r.marks.some(needsReview)));
+	const shown = $derived(results.rows);
+	function setFilter(f: 'all' | 'review') {
+		filter = f;
+		results.refilter();
+	}
 
 	async function override(r: Result, m: Mark) {
 		const s = await promptDialog({ title: `Score for ${m.code}`, body: `Between 0 and ${m.max_score}. Leave it empty to keep the current mark.`, label: 'Score', value: m.score == null ? '' : String(m.score), inputmode: 'decimal', allowEmpty: true, confirm: 'Next' });
@@ -124,8 +136,14 @@
 
 		{#if tab === 'marking'}
 			<div class="row small">
-				<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={filter} value="review" /> Needs review (manual, flagged or AI-marked)</label>
-				<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={filter} value="all" /> All students</label>
+				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'review'} onchange={() => setFilter('review')} /> Needs review (manual, flagged or AI-marked)</label>
+				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'all'} onchange={() => setFilter('all')} /> All students</label>
+				<span class="spacer"></span>
+				<ListSearch list={results} placeholder="Search student ID" label="Search results by student ID" />
+				<label class="small muted flex items-center gap-2">Sort
+					<select class="select select-sm w-auto" value={results.sort} onchange={(e) => results.sortBy(e.currentTarget.value)}>
+						<option value="joined">Join order</option><option value="number">Student ID</option><option value="score">Score</option>
+					</select></label>
 			</div>
 			{#each shown as r (r.attempt_id)}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
@@ -156,7 +174,8 @@
 						</div>
 					{/each}
 				</div>
-			{:else}<p class="muted">{filter === 'review' ? 'Nothing needs review.' : 'No finished attempts yet.'}</p>{/each}
+			{:else}<p class="muted">{!results.loaded ? 'Loading…' : results.q ? 'No results match.' : filter === 'review' ? 'Nothing needs review.' : 'No finished attempts yet.'}</p>{/each}
+			<Pager list={results} label="Results" />
 		{:else if tab === 'analytics'}
 			{#if stats}<AnalyticsView cls={stats.class} questions={stats.questions} students={stats.students} />{:else}<Skeleton lines={4} />{/if}
 		{:else if tab === 'share'}
@@ -181,7 +200,7 @@
 			</form>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 				<table class="table"><thead><tr><th>Shows</th><th>Created</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>
-					{#each links as l (l.id)}
+					{#each links.rows as l (l.id)}
 						<tr>
 							<td class="small">{l.views.join(', ')}{l.identify === 'student_id' ? ' · IDs' : ''}{l.show_answers ? ' · answers' : ''}</td>
 							<td class="small">{new Date(l.created_at).toLocaleString()}</td>
@@ -189,22 +208,32 @@
 							<td>{#if l.revoked_at}<span class="badge badge-soft">revoked</span>{:else}<span class="badge badge-soft badge-success">active</span>{/if}</td>
 							<td class="row">{#if !l.revoked_at}<button class="btn btn-sm" onclick={() => revoke(l)}>Revoke</button>{/if}<button class="btn btn-sm" onclick={() => regenerate(l)}>New link</button></td>
 						</tr>
+					{:else}<tr><td colspan="5" class="muted">{links.loaded ? 'No links yet.' : 'Loading…'}</td></tr>
 					{/each}
 				</tbody></table>
 			</div>
+			<Pager list={links} label="Links" />
 		{:else}
+			<div class="row">
+				<ListSearch list={events} placeholder="Search events" label="Search the integrity log" />
+				<select class="select select-sm w-auto" bind:value={kind} onchange={() => events.refilter()} aria-label="Event kind">
+					<option value="">All events</option><option value="violation">Violations</option><option value="admitted">Admitted</option><option value="started">Started</option><option value="submitted">Submitted</option><option value="reinstated">Reinstated</option>
+				</select>
+			</div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 				<table class="table"><thead><tr><th>Time</th><th>Event</th><th>Student</th><th>Details</th></tr></thead><tbody>
-					{#each events as e (e.id)}
+					{#each events.rows as e (e.id)}
 						<tr class:violation={e.kind === 'violation'}>
 							<td class="small">{new Date(e.created_at).toLocaleTimeString()}</td>
 							<td>{e.kind.replaceAll('_', ' ')}</td>
 							<td class="small">{e.attempt_id ? (names[e.attempt_id] ?? '') : ''}</td>
 							<td class="small">{Object.entries(e.details ?? {}).map(([k, v]) => `${k}: ${v}`).join(', ')}</td>
 						</tr>
+					{:else}<tr><td colspan="4" class="muted">{events.loaded ? 'No events.' : 'Loading…'}</td></tr>
 					{/each}
 				</tbody></table>
 			</div>
+			<Pager list={events} label="Integrity log" />
 		{/if}
 	{/if}
 </div>

@@ -24,6 +24,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 type Sessions interface {
@@ -438,12 +439,26 @@ func (s *Service) CreateLink(ctx context.Context, teacherID string, in ShareInpu
 	return l, err
 }
 
-func (s *Service) ListLinks(ctx context.Context, teacherID, targetID string) ([]ShareLink, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+linkCols+` FROM analytics.share_links WHERE teacher_id=$1 AND ($2='' OR target_id::text=$2) ORDER BY created_at DESC`, teacherID, targetID)
-	if err != nil {
-		return nil, err
+// LinkSorts are the orders of the share-link list (PL-FR-02 "result links").
+var LinkSorts = page.Sorts{"created": "created_at"}
+
+// ListLinks returns one page of a teacher's share links, for one target or
+// all, of some scopes (comma-separated) or all, searched by label, and how
+// many there are.
+func (s *Service) ListLinks(ctx context.Context, teacherID, targetID, scopes string, p page.Request) ([]ShareLink, int, error) {
+	where := ` FROM analytics.share_links WHERE teacher_id=$1 AND ($2='' OR target_id::text=$2) AND ($3 = '' OR coalesce(label, '') ILIKE $3)
+		AND ($4 = '' OR scope = ANY(string_to_array($4, ',')))`
+	args := []any{teacherID, targetID, p.Like(), scopes}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (ShareLink, error) { return scanLink(r) })
+	rows, err := s.pool.Query(ctx, `SELECT `+linkCols+where+p.OrderBy(LinkSorts, "id")+p.Limit(), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (ShareLink, error) { return scanLink(r) })
+	return list, total, err
 }
 
 func (s *Service) RevokeLink(ctx context.Context, teacherID, id string) error {

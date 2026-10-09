@@ -1,7 +1,10 @@
 import { api, ApiError } from './api';
 
-export type Role = 'student' | 'teacher' | 'admin';
-export type User = { id: string; email: string; name: string; role: Role; status: string; email_verified: boolean; avatar?: string };
+import type { Feature } from './staff';
+
+export type Role = 'student' | 'teacher' | 'manager' | 'admin';
+/** manager is set for managers, teacher-managers included (D-56). */
+export type User = { id: string; email: string; name: string; role: Role; status: string; email_verified: boolean; avatar?: string; manager?: { features: Feature[] } };
 
 class Auth {
 	user = $state<User | null>(null);
@@ -28,6 +31,7 @@ class Auth {
 			case 'teacher':
 				return '/t';
 			case 'admin':
+			case 'manager':
 				return '/admin';
 			case 'student':
 				return '/my';

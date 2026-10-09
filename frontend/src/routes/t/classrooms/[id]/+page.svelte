@@ -7,25 +7,28 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
 	import SettingsEditor from '$lib/SettingsEditor.svelte';
-	import type { Classroom, Module, Overrides, Topic } from '$lib/types';
+	import type { Classroom, Module, Overrides } from '$lib/types';
+	import { Paged } from '$lib/paged.svelte';
+	import { urlState } from '$lib/urlstate';
+	import Pager from '$lib/ui/Pager.svelte';
+	import TopicList from '$lib/TopicList.svelte';
 
 	import StudentsPanel, { type Enrolment } from '$lib/StudentsPanel.svelte';
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
 	let c = $state<Classroom | null>(null);
-	let modules = $state<(Module & { topics: Topic[] })[]>([]);
-	let enrolments = $state<Enrolment[]>([]);
+	// Modules one page at a time, in the teacher's order; each lists its own topics (PL-FR-02).
+	const modules = new Paged<Module>(() => '/api/teacher/classrooms/' + id + '/modules', 'modules', { url: urlState, prefix: 'mod', sort: 'position' });
+	let studentCount = $state(0);
 	let tab = $state<'content' | 'students' | 'settings' | 'join'>('content');
 	let newModule = $state('');
-	let newTopic = $state<Record<string, string>>({});
 	let errors = $state<Record<string, string>>({});
 	let notice = $state('');
 
 	async function load() {
 		c = await api.get<Classroom>('/api/teacher/classrooms/' + id);
-		const mods = (await api.get<{ modules: Module[] }>('/api/teacher/classrooms/' + id + '/modules')).modules ?? [];
-		modules = await Promise.all(mods.map(async (m) => ({ ...m, topics: (await api.get<{ topics: Topic[] }>('/api/teacher/modules/' + m.id + '/topics')).topics ?? [] })));
-		enrolments = (await api.get<{ enrolments: Enrolment[] }>('/api/teacher/classrooms/' + id + '/enrolments')).enrolments ?? [];
+		await modules.load();
+		studentCount = (await api.get<{ total: number }>('/api/teacher/classrooms/' + id + '/enrolments?size=1')).total ?? 0;
 	}
 	$effect(() => {
 		if (ready() && id) load().catch((e) => (notice = e.message));
@@ -35,40 +38,33 @@
 		e.preventDefault();
 		await api.post('/api/teacher/classrooms/' + id + '/modules', { name: newModule });
 		newModule = '';
-		load();
-	}
-	async function addTopic(moduleId: string, e: SubmitEvent) {
-		e.preventDefault();
-		await api.post('/api/teacher/modules/' + moduleId + '/topics', { name: newTopic[moduleId] });
-		newTopic[moduleId] = '';
-		load();
+		await modules.load();
+		modules.goTo(modules.pages); // the new module is last
 	}
 	async function rename(kind: 'modules' | 'topics', itemId: string, current: string) {
 		const name = await promptDialog({ title: kind === 'modules' ? 'Rename module' : 'Rename topic', label: 'Name', value: current, maxlength: 200 });
 		if (name && name !== current) {
 			await api.patch('/api/teacher/' + kind + '/' + itemId, { name });
-			load();
+			modules.load();
 		}
 	}
 	async function remove(kind: 'modules' | 'topics', itemId: string) {
 if (!(await confirmDialog({ title: 'Delete this ' + kind.slice(0, -1) + '?', body: 'Everything inside it is deleted too.', confirm: 'Delete', danger: true }))) return;
 		try {
 			await api.del('/api/teacher/' + kind + '/' + itemId);
-			load();
+			modules.load();
 		} catch (e) {
 			notice = e instanceof ApiError ? e.message : 'Delete failed';
 		}
 	}
 	async function setEnrolment(en: Enrolment, status: string) {
 		await api.patch('/api/teacher/enrolments/' + en.id, { status });
-		load();
 	}
 	async function editNumber(en: Enrolment) {
 		const v = await promptDialog({ title: 'Student ID', body: `For ${en.student_name}. It is attached to their answers.`, label: 'Student ID', value: en.student_number ?? '', allowEmpty: true, maxlength: 64 });
 		if (v === null) return;
 		try {
 			await api.patch('/api/teacher/enrolments/' + en.id, { student_number: v });
-			load();
 		} catch (e) {
 			notice = e instanceof ApiError ? (e.fields.student_number ?? e.message) : '';
 		}
@@ -109,37 +105,27 @@ if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules,
 		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}</div>
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['content', 'Modules & topics'], ['students', `Students (${enrolments.length})`], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
+			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
 
 		{#if tab === 'content'}
-			{#each modules as m (m.id)}
+			{#each modules.rows as m (m.id)}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 					<div class="row"><h3 style="margin:0">{m.name}</h3><span class="spacer"></span>
 						<button class="btn btn-sm" onclick={() => rename('modules', m.id, m.name)}>Rename</button>
 						<button class="btn btn-sm btn-error btn-outline" onclick={() => remove('modules', m.id)}>Delete</button></div>
-					{#each m.topics as t (t.id)}
-						<div class="row">
-							<a href={'/t/topics/' + t.id + '?name=' + encodeURIComponent(t.name)}>{t.name}</a>
-							<span class="spacer"></span>
-							<button class="btn btn-sm" onclick={() => rename('topics', t.id, t.name)}>Rename</button>
-							<button class="btn btn-sm btn-error btn-outline" onclick={() => remove('topics', t.id)}>Delete</button>
-						</div>
-					{/each}
-					<form class="row" onsubmit={(e) => addTopic(m.id, e)}>
-						<input class="input w-full" style="flex:1" placeholder="New topic" bind:value={newTopic[m.id]} required aria-label="New topic name" />
-						<button class="btn btn-sm">Add topic</button>
-					</form>
+					<TopicList moduleId={m.id} />
 				</div>
 			{/each}
+			<Pager list={modules} label="Modules" />
 			<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={addModule}>
 				<input class="input w-full" style="flex:1" placeholder="New module (e.g. Term 1)" bind:value={newModule} required aria-label="New module name" />
 				<button class="btn btn-primary">Add module</button>
 			</form>
 		{:else if tab === 'students'}
-			<StudentsPanel classroomId={id} {enrolments} onchange={load} oneditnumber={editNumber} onstatus={setEnrolment} />
+			<StudentsPanel classroomId={id} bind:count={studentCount} oneditnumber={editNumber} onstatus={setEnrolment} />
 		{:else if tab === 'settings'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">

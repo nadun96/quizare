@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"math"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -385,6 +388,91 @@ func (s *Service) SessionResults(ctx context.Context, teacherID, sessionID strin
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// ResultSorts are the orders of a session's results (PL-FR-02).
+var ResultSorts = page.Sorts{"joined": "", "number": "", "score": ""}
+
+// needsReview: a mark the teacher should look at before releasing results.
+func needsReview(m MarkView) bool {
+	return m.Status == "needs_manual" || m.Status == "pending" || m.Flagged || m.AIMarked
+}
+
+// SessionResultsPage returns one page of a session's results, optionally only
+// those needing review, searched by student ID, with the total. A session's
+// attempts are bounded by its size; without the review filter only the page's
+// attempts are marked up (ADR-25).
+func (s *Service) SessionResultsPage(ctx context.Context, teacherID, sessionID string, review bool, p page.Request) ([]AttemptResult, int, error) {
+	all, err := s.attempts.SessionMarkingData(ctx, teacherID, sessionID)
+	if err != nil {
+		return nil, 0, err
+	}
+	keep := all[:0]
+	for _, d := range all {
+		num := ""
+		if d.StudentNumber != nil {
+			num = *d.StudentNumber
+		}
+		if p.Matches(num) {
+			keep = append(keep, d)
+		}
+	}
+	// Results are needed before paging when the filter or the order depends on them.
+	if !review && p.Sort != "score" {
+		if p.Sort == "number" {
+			sort.SliceStable(keep, func(i, j int) bool {
+				return (strings.ToLower(numberOf(keep[i])) < strings.ToLower(numberOf(keep[j]))) != p.Desc
+			})
+		} else if p.Desc {
+			for i, j := 0, len(keep)-1; i < j; i, j = i+1, j-1 {
+				keep[i], keep[j] = keep[j], keep[i]
+			}
+		}
+		pg, total := page.Slice(keep, p)
+		out := make([]AttemptResult, 0, len(pg))
+		for _, d := range pg {
+			r, err := s.result(ctx, d)
+			if err != nil {
+				return nil, 0, err
+			}
+			out = append(out, r)
+		}
+		return out, total, nil
+	}
+	out := make([]AttemptResult, 0, len(keep))
+	for _, d := range keep {
+		r, err := s.result(ctx, d)
+		if err != nil {
+			return nil, 0, err
+		}
+		if review && !slices.ContainsFunc(r.Marks, needsReview) {
+			continue
+		}
+		out = append(out, r)
+	}
+	switch p.Sort {
+	case "score":
+		sort.SliceStable(out, func(i, j int) bool { return (out[i].Pct < out[j].Pct) != p.Desc })
+	case "number":
+		sort.SliceStable(out, func(i, j int) bool {
+			return (strings.ToLower(deref(out[i].StudentNumber)) < strings.ToLower(deref(out[j].StudentNumber))) != p.Desc
+		})
+	default:
+		if p.Desc {
+			slices.Reverse(out)
+		}
+	}
+	pg, total := page.Slice(out, p)
+	return pg, total, nil
+}
+
+func numberOf(d *live.MarkingData) string { return deref(d.StudentNumber) }
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 type OverrideInput struct {
