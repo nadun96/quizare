@@ -286,7 +286,9 @@
 			<ul class="files">
 				{#each r.files ?? [] as f (f.file.id)}
 					<li class="file-card" class:is-hidden={f.hidden} in:fadeIn>
-						{#if question.type === 'AUDIO'}
+						{#if f.file.removed}
+							<p class="small muted m-0">{f.file.name} · {f.name || 'Anonymous'} · removed in a storage clean-up</p>
+						{:else if question.type === 'AUDIO'}
 							<audio controls preload="none" src={fileURL(f.file.id)} class="w-full"></audio>
 						{:else if question.type === 'VIDEO'}
 							<!-- svelte-ignore a11y_media_has_caption -->
@@ -294,6 +296,7 @@
 						{:else if f.file.content_type.startsWith('image/')}
 							<a href={fileURL(f.file.id)} target="_blank" rel="noopener"><img src={fileURL(f.file.id)} alt="Upload from {f.name || 'a participant'}" class="thumb" loading="lazy" /></a>
 						{/if}
+						{#if !f.file.removed}
 						<div class="mt-2 flex items-center gap-2">
 							<div class="min-w-0 flex-1">
 								<p class="m-0 truncate font-semibold small">{f.file.name}</p>
@@ -302,6 +305,7 @@
 							<a class="btn btn-ghost btn-xs" href={fileURL(f.file.id)} download={f.file.name}>Download</a>
 							<button type="button" class="btn btn-ghost btn-xs" onclick={() => onmoderate?.({ question_id: question.id, participant_id: f.participant_id, hidden: !f.hidden })}>{f.hidden ? 'Unhide' : 'Hide'}</button>
 						</div>
+						{/if}
 					</li>
 				{/each}
 			</ul>

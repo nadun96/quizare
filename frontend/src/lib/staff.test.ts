@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { can, canActOn, consoleTabs, FEATURES, isStaff, roleLabel, withImplied } from './staff';
+import { can, canActOn, consoleTabs, FEATURES, fmtBytes, isStaff, roleLabel, withImplied } from './staff';
 
 // Managers in the admin console (D-56): what each person is shown. The
 // server enforces the same rules on every request.
@@ -26,7 +26,9 @@ describe('managers', () => {
 	});
 
 	it('shows each person only their tabs; managers never get the managers page', () => {
-		expect(consoleTabs(admin)).toEqual(['users', 'usage', 'settings', 'audit', 'managers']);
+		expect(consoleTabs(admin)).toEqual(['users', 'usage', 'settings', 'audit', 'storage', 'backups', 'managers']);
+		expect(consoleTabs(mgr(['cleanup']))).toEqual(['storage']);
+		expect(consoleTabs(mgr(['backups']))).toEqual(['backups']);
 		expect(consoleTabs(mgr([]))).toEqual([]);
 		expect(consoleTabs(mgr(['audit', 'view_users']))).toEqual(['users', 'audit']);
 		expect(consoleTabs(mgr(['approval_policy']))).toEqual(['settings']);
@@ -55,5 +57,17 @@ describe('managers', () => {
 		expect(roleLabel(mgr([]))).toBe('Teacher · manager');
 		expect(roleLabel(mgr([], 'manager'))).toBe('Manager');
 		expect(roleLabel(admin)).toBe('Admin');
+	});
+
+	it('warns before giving backups (PO-28)', () => {
+		expect(FEATURES.find((f) => f.id === 'backups')?.warn).toMatch(/all the platform's data/);
+		expect(FEATURES.filter((f) => f.warn).map((f) => f.id)).toEqual(['backups']);
+	});
+
+	it('formats sizes', () => {
+		expect(fmtBytes(512)).toBe('512 B');
+		expect(fmtBytes(1536)).toBe('1.5 KB');
+		expect(fmtBytes(5 * 1024 ** 3)).toBe('5.0 GB');
+		expect(fmtBytes(250 * 1024 ** 2)).toBe('250 MB');
 	});
 });

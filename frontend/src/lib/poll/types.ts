@@ -78,7 +78,7 @@ export type PollGroup = { id: string; poll_id: string; name: string; color: numb
 export type GroupsView = { groups: PollGroup[]; ungrouped: GroupMember[] };
 export type GroupAnswer = { by: string; value: PollAnswer };
 
-export type FileRef = { id: string; name: string; size: number; content_type: string };
+export type FileRef = { id: string; name: string; size: number; content_type: string; removed?: boolean };
 
 export type PollAnswer = {
 	selected?: string[];

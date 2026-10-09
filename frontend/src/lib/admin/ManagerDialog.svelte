@@ -148,6 +148,7 @@
 					<input type="checkbox" class="checkbox checkbox-sm mt-1" checked={features.includes(f.id)} onchange={(e) => toggle(f.id, e.currentTarget.checked)} />
 					<span>{f.label}<br /><span class="small muted">{f.hint}</span></span>
 				</label>
+				{#if f.warn && features.includes(f.id)}<p class="alert alert-soft alert-warning small m-0" role="alert">{f.warn}</p>{/if}
 			{/each}
 			{#if errors.features}<p class="field-error">{errors.features}</p>{/if}
 		</fieldset>

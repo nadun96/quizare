@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -32,6 +33,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/poll"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
+	"github.com/nadun96/quizplatform/internal/storage"
 	"github.com/nadun96/quizplatform/migrations"
 )
 
@@ -53,6 +55,7 @@ type App struct {
 	Analytics *analytics.Service
 	Admin     *admin.Service
 	Poll      *poll.Service
+	Storage   *storage.Service
 }
 
 // Options let tests swap infrastructure.
@@ -138,7 +141,13 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	if opt.RunJobs {
 		w = workers
 	}
-	rc, err := jobs.NewClient(pool, w, log)
+	snapshotWorker := &storage.SnapshotWorker{}
+	river.AddWorker(workers, snapshotWorker)
+	var periodic []*river.PeriodicJob
+	if opt.RunJobs {
+		periodic = append(periodic, storage.Periodic()) // hourly storage figures (PL-FR-04)
+	}
+	rc, err := jobs.NewClient(pool, w, log, periodic...)
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +179,17 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	analyticsWorker.Service = a.Analytics
 	a.Admin = admin.NewService(pool, a.Auth)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
+	a.Storage = storage.NewService(pool, a.Auth, log, cfg.BackupDir, cfg.NightlyBackupDir, opt.KEK)
+	snapshotWorker.Service = a.Storage
+	a.Storage.AddArea(storage.Area{ID: "poll_files", Label: "Uploaded files of polls closed before the date",
+		Preview: func(ctx context.Context, before time.Time) (storage.Freed, error) {
+			n, b, err := a.Poll.PreviewOldFiles(ctx, before)
+			return storage.Freed{Items: n, Bytes: b}, err
+		},
+		Run: func(ctx context.Context, _ string, before time.Time) (storage.Freed, error) {
+			n, b, err := a.Poll.DeleteOldFiles(ctx, before)
+			return storage.Freed{Items: n, Bytes: b}, err
+		}})
 	a.Analytics.SetPolls(a.Poll)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
@@ -200,6 +220,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Auth.AdminRoutes(ad)
 			ad.With(a.Auth.RequireFeature(auth.FeatSettings)).Route("/settings", a.Settings.AdminRoutes)
 			a.Admin.AdminRoutes(ad)
+			a.Storage.AdminRoutes(ad, a.Auth)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
@@ -261,10 +282,14 @@ func (a *App) Handler() http.Handler { return a.router }
 func (a *App) Start(ctx context.Context) error {
 	go a.Live.Run(ctx)
 	go a.Poll.Run(ctx)
+	if err := a.Storage.Recover(ctx); err != nil {
+		return err
+	}
 	return a.river.Start(ctx)
 }
 
 func (a *App) Close() {
+	a.Storage.Wait() // let a running backup finish its file
 	_ = a.river.Stop(context.Background())
 	if a.ownPool {
 		a.pool.Close()

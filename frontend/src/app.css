@@ -194,6 +194,7 @@
 @layer components {
 	.card { transition: box-shadow var(--motion) var(--ease-out), border-color var(--motion); }
 	.card + .card { margin-top: 1rem; }
+	.auto-grid > .card { margin-top: 0; } /* the grid's gap spaces them */
 	.card.interactive:hover { box-shadow: 0 6px 20px -8px color-mix(in oklab, var(--color-base-content) 25%, transparent); border-color: color-mix(in oklab, var(--color-primary) 35%, var(--color-base-300)); }
 
 	.table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); font-weight: 650; }

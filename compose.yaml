@@ -77,6 +77,9 @@ services:
       # Back the volume up: without the key, stored LLM API keys are unreadable.
       QP_KEK_GENERATE: "1"
       QP_DB_WAIT_SECONDS: "90"
+      # Backups made from the admin console (D-57). Keep a copy off this host:
+      # a backup is only as safe as the disk it's on.
+      QP_BACKUP_DIR: /var/lib/quiz/backups
       QP_API_DOCS: ${QP_API_DOCS:-1}
       QP_SMTP_ADDR: ${QP_SMTP_ADDR:-}
       QP_SMTP_FROM: ${QP_SMTP_FROM:-no-reply@localhost}

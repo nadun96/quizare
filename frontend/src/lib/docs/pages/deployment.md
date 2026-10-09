@@ -46,6 +46,8 @@ flowchart LR
    - Install `age` and `rclone`, configure an `offsite` remote, and put the age public key in `/etc/quiz/backup.pub`.
    - Enable `quiz-backup.timer`.
    - It keeps 14 daily and 8 weekly encrypted dumps. **Test a restore monthly.**
+   - Set `QP_NIGHTLY_BACKUP_DIR=/var/backups/quiz` for the server (it is in `quiz.service`), and the admin console shows the nightly backups and warns when the job hasn't succeeded for 2 days. The script makes its files readable by the `quiz` group for that.
+   - Admins can also export a backup from the console (Admin → Backups, D-57); it is written to `QP_BACKUP_DIR` (default `data/backups`) and encrypted with a passphrase chosen there.
 9. **Load test** before real classes. Follow the header of `loadtest/classroom.js`: ramp to 300 sockets in 60 s, with thresholds p95 save < 150 ms, admit → countdown < 500 ms, and login p95 < 3 s. If classes use the whiteboard, also run `loadtest/whiteboard.js` (`VIEWERS`, `DRAWERS`, `DURATION`; see its header) with the class size you expect.
 
 ## Containers
@@ -71,7 +73,26 @@ flowchart LR
 - **Client addresses.** Caddy has a fixed address on the compose network (`QP_CADDY_IP`, default `172.31.250.10`), and the app trusts `X-Forwarded-For` only from it (`QP_TRUSTED_PROXIES`), so rate limits count each student's network rather than Caddy (D-51).
 - **Database.** It has no published port. Tuning comes from `deploy/postgresql.conf.d/quiz.conf` and is passed as `-c` flags.
 - **Admin.** Run `echo 'pw' | docker compose exec -T app /app/server create-admin <email> <name>`.
-- **Backups.** Run `docker compose exec db pg_dump -U quiz -Fc quiz > quiz.dump`, or point `deploy/backup.sh` at the container.
+- **Backups.** Export them from the admin console (Admin → Backups): they go to `/var/lib/quiz/backups` in the `appdata` volume, so download a copy off the host. `docker compose exec db pg_dump -U quiz -Fc quiz > quiz.dump` still works too.
+
+## Restoring a backup
+
+A backup from the admin console restores with the server binary itself; no `pg_dump` or `pg_restore` is needed (D-57).
+
+1. Check the file and the passphrase (no database needed): `server check-backup qp-….qpbackup.age < passphrase.txt`. It reads the whole backup and checks every table's row count.
+2. Create a new, empty database, for example `createdb -O quiz quiz_restored`. Restore refuses a database that already has tables.
+3. Restore, with the master key the backup was made with in place:
+
+   ```sh
+   QP_DATABASE_URL=postgres://quiz@/quiz_restored?host=/var/run/postgresql \
+   QP_KEK_FILE=/etc/quiz/kek.key \
+   /srv/quiz/server restore-backup qp-….qpbackup.age < passphrase.txt
+   ```
+
+   It builds the schema the backup was made with, loads every table in one transaction, checks the row counts and the references between tables, and sets the sequences. It warns if `QP_KEK_FILE` isn't the key the backup was made with: everything else restores, but teachers would have to enter their AI keys again.
+4. Point the service at the restored database and start it; newer migrations apply as usual.
+
+In containers, run the same command with `docker compose run --rm -T -e QP_DATABASE_URL=… app /app/server restore-backup /var/lib/quiz/backups/qp-….qpbackup.age < passphrase.txt`. The nightly job's `.dump.age` files restore with `age -d -i backup.key file | pg_restore -d …`, as before.
 
 ## Upgrades
 

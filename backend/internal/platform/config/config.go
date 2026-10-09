@@ -15,15 +15,20 @@ import (
 )
 
 type Config struct {
-	ListenAddr    string // e.g. "127.0.0.1:8080" (Caddy proxies to it)
-	DatabaseURL   string
-	BaseURL       string // public origin, e.g. "https://quiz.example.edu"; used for QR links and Origin checks
-	KEKFile       string // path to the 32-byte master key file (mode 0400)
-	DBMaxConns    int32  // pgx pool size; architecture budget is 15
-	Argon2Workers int    // bounded hashing pool; architecture budget is 2
-	DevMode       bool   // relaxes nothing security-critical; enables verbose logs and console email
-	ShutdownWait  time.Duration
-	StaticDir     string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
+	ListenAddr  string // e.g. "127.0.0.1:8080" (Caddy proxies to it)
+	DatabaseURL string
+	BaseURL     string // public origin, e.g. "https://quiz.example.edu"; used for QR links and Origin checks
+	KEKFile     string // path to the 32-byte master key file (mode 0400)
+	// BackupDir holds backups made from the admin console (QP_BACKUP_DIR,
+	// default data/backups); NightlyBackupDir is where deploy/backup.sh
+	// writes (QP_NIGHTLY_BACKUP_DIR; empty = no nightly job to report on).
+	BackupDir        string
+	NightlyBackupDir string
+	DBMaxConns       int32 // pgx pool size; architecture budget is 15
+	Argon2Workers    int   // bounded hashing pool; architecture budget is 2
+	DevMode          bool  // relaxes nothing security-critical; enables verbose logs and console email
+	ShutdownWait     time.Duration
+	StaticDir        string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
 
 	// TrustedProxies are proxy IPs or CIDRs, besides loopback, whose
 	// X-Forwarded-For is believed (QP_TRUSTED_PROXIES, comma-separated), e.g.
@@ -41,15 +46,17 @@ type Config struct {
 
 func FromEnv() (Config, error) {
 	c := Config{
-		ListenAddr:    env("QP_LISTEN", "127.0.0.1:8080"),
-		DatabaseURL:   os.Getenv("QP_DATABASE_URL"),
-		BaseURL:       env("QP_BASE_URL", "http://localhost:8080"),
-		KEKFile:       os.Getenv("QP_KEK_FILE"),
-		DBMaxConns:    int32(envInt("QP_DB_MAX_CONNS", 15)),
-		Argon2Workers: envInt("QP_ARGON2_WORKERS", 2),
-		DevMode:       os.Getenv("QP_DEV") == "1",
-		ShutdownWait:  10 * time.Second,
-		StaticDir:     os.Getenv("QP_STATIC_DIR"),
+		ListenAddr:       env("QP_LISTEN", "127.0.0.1:8080"),
+		DatabaseURL:      os.Getenv("QP_DATABASE_URL"),
+		BaseURL:          env("QP_BASE_URL", "http://localhost:8080"),
+		KEKFile:          os.Getenv("QP_KEK_FILE"),
+		BackupDir:        env("QP_BACKUP_DIR", "data/backups"),
+		NightlyBackupDir: os.Getenv("QP_NIGHTLY_BACKUP_DIR"),
+		DBMaxConns:       int32(envInt("QP_DB_MAX_CONNS", 15)),
+		Argon2Workers:    envInt("QP_ARGON2_WORKERS", 2),
+		DevMode:          os.Getenv("QP_DEV") == "1",
+		ShutdownWait:     10 * time.Second,
+		StaticDir:        os.Getenv("QP_STATIC_DIR"),
 
 		TrustedProxies: list(os.Getenv("QP_TRUSTED_PROXIES")),
 
