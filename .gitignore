@@ -28,3 +28,6 @@ local/demo/demo_seed.py
 # Private reference documents (BA/architecture PDFs, spreadsheet) - kept locally, never committed
 /docs/
 .vscode/settings.json
+
+# LiveKit binaries downloaded by loadtest/tutoring-media.mjs
+/loadtest/.bin/
