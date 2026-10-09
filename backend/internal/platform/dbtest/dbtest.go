@@ -134,6 +134,38 @@ func New(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
+// NewEmpty returns a pool connected to a fresh database with no schema, for
+// restoring backups into.
+func NewEmpty(t testing.TB) *pgxpool.Pool {
+	t.Helper()
+	once.Do(setup)
+	if setupErr != nil {
+		t.Fatalf("dbtest setup: %v", setupErr)
+	}
+	ctx := context.Background()
+	name := fmt.Sprintf("qp_empty_%d_%d", os.Getpid(), counter.Add(1))
+	conn, err := pgx.Connect(ctx, baseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, "CREATE DATABASE "+name); err != nil {
+		t.Fatal(err)
+	}
+	conn.Close(ctx)
+	pool, err := db.Open(ctx, withDB(baseURL, name), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		pool.Close()
+		if c, err := pgx.Connect(ctx, baseURL); err == nil {
+			_, _ = c.Exec(ctx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)")
+			c.Close(ctx)
+		}
+	})
+	return pool
+}
+
 func withDB(raw, name string) string {
 	u, _ := url.Parse(raw)
 	u.Path = "/" + name

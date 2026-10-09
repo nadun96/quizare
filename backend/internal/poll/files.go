@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -181,4 +182,32 @@ func (s *Service) GetFile(ctx context.Context, teacherID, pollID, fileID string)
 func inlineSafe(ct string) bool {
 	t := baseType(ct)
 	return imageTypes[t] || strings.HasPrefix(t, "audio/") || strings.HasPrefix(t, "video/") || t == "application/ogg"
+}
+
+// Clean-up (PL-FR-06): the admin can free the space taken by uploaded files
+// of polls closed before a date. Answers stay, marked "removed", so results
+// still count them.
+const oldFiles = `FROM poll.files f JOIN poll.polls p ON p.id = f.poll_id WHERE p.status = 'closed' AND p.closed_at < $1`
+
+// PreviewOldFiles counts what DeleteOldFiles would remove.
+func (s *Service) PreviewOldFiles(ctx context.Context, before time.Time) (int, int64, error) {
+	var n int
+	var bytes int64
+	err := s.pool.QueryRow(ctx, `SELECT count(*), coalesce(sum(f.size), 0) `+oldFiles, before).Scan(&n, &bytes)
+	return n, bytes, err
+}
+
+// DeleteOldFiles removes those files and marks their answers.
+func (s *Service) DeleteOldFiles(ctx context.Context, before time.Time) (int, int64, error) {
+	var n int
+	var bytes int64
+	err := s.pool.QueryRow(ctx, `WITH gone AS (
+			DELETE FROM poll.files f USING poll.polls p
+			WHERE p.id = f.poll_id AND p.status = 'closed' AND p.closed_at < $1
+			RETURNING f.participant_id, f.question_id, f.size),
+		marked AS (
+			UPDATE poll.responses r SET value = jsonb_set(r.value, '{file,removed}', 'true')
+			FROM gone g WHERE r.participant_id = g.participant_id AND r.question_id = g.question_id AND r.value ? 'file')
+		SELECT count(*), coalesce(sum(size), 0) FROM gone`, before).Scan(&n, &bytes)
+	return n, bytes, err
 }

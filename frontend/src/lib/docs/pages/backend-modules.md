@@ -99,6 +99,10 @@ The LLM gateway (FR-EV-02/03/05, ADR-09, ADR-16).
 
 Live polls (D-40). `model.go` defines the 20 question types, their validation and answer checking; `aggregate.go` turns answers into live results; `files.go` sniffs and stores file, audio and video answers; `hub.go` pushes results to presenters and participants twice a second; `score.go` holds answer keys and marking (partial credit, speed bonus) and `leaderboard.go` the ranking (D-42); `groups.go` forms groups, enforces first-answer and captain rules and combines group scores (D-43); `board.go` is the whiteboard: strokes, who may draw, and instant pushes (D-47); `http.go` has the teacher, public and WebSocket routes and the CSV export. See [Live polls](polls.md).
 
+## storage (schema `storage`)
+
+Storage and backups (D-57, PL-FR-04 to PL-FR-09). `service.go` measures the database by area from PostgreSQL's catalogues (hourly, as a River periodic job, and on refresh), keeps the limits, runs clean-ups through areas other modules register (`AddArea`; polls offer their old uploaded files), makes console backups in the background, prunes them to the backup space, issues single-use download links and records the nightly job's files from `QP_NIGHTLY_BACKUP_DIR`. `archive.go` is the backup format: one `REPEATABLE READ, READ ONLY` snapshot written as COPY text per table, gzipped and encrypted with age under the admin's passphrase, plus `Check` and `Restore` (used by `server check-backup` and `server restore-backup`). `disk_*.go` reads free disk space.
+
 ## admin (no schema)
 
 Usage counts and the audit log for admins and managers given those features (filterable by person and by role acted in), plus `/api/my/data` (own-data export) for every user.

@@ -13,6 +13,8 @@
 	import SortHeader from '$lib/ui/SortHeader.svelte';
 	import { can, canActOn, consoleTabs, isAdmin, roleLabel, type ConsoleTab } from '$lib/staff';
 	import ManagerList from '$lib/admin/ManagerList.svelte';
+	import StoragePanel from '$lib/admin/StoragePanel.svelte';
+	import BackupsPanel from '$lib/admin/BackupsPanel.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
 
 	// The admin console, for admins and managers (D-56). A manager sees only
@@ -22,7 +24,7 @@
 	type Ev = { id: number; actor_name: string; actor_role?: string; action: string; target_type: string; target_id: string; details: unknown; created_at: string };
 	const ready = requireStaff();
 	const tabs = $derived(consoleTabs(auth.user));
-	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', audit: 'Audit log', managers: 'Managers' };
+	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', audit: 'Audit log', storage: 'Storage', backups: 'Backups', managers: 'Managers' };
 	let tab = $state<ConsoleTab | null>(null);
 	let role = $state(Paged.fromUrl(urlState, 'role'));
 	let status = $state(Paged.fromUrl(urlState, 'status'));
@@ -182,6 +184,10 @@
 			</tbody></table>
 		</div>
 		<Pager list={events} label="Audit log" />
+	{:else if tab === 'storage'}
+		<StoragePanel canStorage={can(auth.user, 'storage')} canCleanup={can(auth.user, 'cleanup')} />
+	{:else if tab === 'backups'}
+		<BackupsPanel />
 	{:else if tab === 'managers'}
 		<ManagerList onactivity={activity} />
 	{/if}

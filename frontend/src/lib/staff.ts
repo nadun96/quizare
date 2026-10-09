@@ -1,16 +1,25 @@
 // Admins and managers (PL-FR-10 to PL-FR-17, D-56). The server checks every
 // feature on every request; these helpers only decide what to show.
 
-export type Feature = 'view_users' | 'manage_users' | 'approval_policy' | 'settings' | 'usage' | 'audit';
+export type Feature = 'view_users' | 'manage_users' | 'approval_policy' | 'settings' | 'usage' | 'audit' | 'storage' | 'cleanup' | 'backups';
 
 /** The features an admin can give a manager, in the order they're offered. */
-export const FEATURES: { id: Feature; label: string; hint: string }[] = [
+export const FEATURES: { id: Feature; label: string; hint: string; warn?: string }[] = [
 	{ id: 'view_users', label: 'View users', hint: 'List and search users and see their status.' },
 	{ id: 'manage_users', label: 'Manage users', hint: 'Approve teachers, and activate, suspend or delete teachers and students. Never admins or managers. Includes viewing users.' },
 	{ id: 'approval_policy', label: 'Teacher approval policy', hint: 'Choose whether new teachers need approval.' },
 	{ id: 'settings', label: 'Platform settings', hint: "Change the platform's default settings." },
 	{ id: 'usage', label: 'Usage', hint: "See the platform's usage counts." },
-	{ id: 'audit', label: 'Audit log', hint: 'Read the audit log.' }
+	{ id: 'audit', label: 'Audit log', hint: 'Read the audit log.' },
+	{ id: 'storage', label: 'Storage', hint: 'See the space the platform uses and set the recording and backup limits.' },
+	{ id: 'cleanup', label: 'Clean-up', hint: 'Delete old uploaded files and old backups to free space.' },
+	{
+		id: 'backups',
+		label: 'Backups',
+		hint: 'Export and download full backups, and see the backup history.',
+		// PO-28: never given by default, and the admin is warned.
+		warn: "A backup holds all the platform's data: every account, answer, result and uploaded file. Give this only to someone you'd trust with all of it."
+	}
 ];
 
 export const featureLabel = (f: string) => FEATURES.find((x) => x.id === f)?.label ?? f;
@@ -51,7 +60,7 @@ export function roleLabel(u: Person): string {
 	return u.manager && u.role !== 'manager' ? r + ' · manager' : r;
 }
 
-export type ConsoleTab = 'users' | 'usage' | 'settings' | 'audit' | 'managers';
+export type ConsoleTab = 'users' | 'usage' | 'settings' | 'audit' | 'storage' | 'backups' | 'managers';
 
 /** The admin console's tabs this person can open, in order. */
 export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
@@ -60,6 +69,21 @@ export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
 	if (can(u, 'usage')) tabs.push('usage');
 	if (can(u, 'approval_policy') || can(u, 'settings')) tabs.push('settings');
 	if (can(u, 'audit')) tabs.push('audit');
+	if (can(u, 'storage') || can(u, 'cleanup')) tabs.push('storage');
+	if (can(u, 'backups')) tabs.push('backups');
 	if (isAdmin(u)) tabs.push('managers');
 	return tabs;
+}
+
+/** "1.5 GB": sizes as people read them (binary units, as the server). */
+export function fmtBytes(b: number): string {
+	if (!Number.isFinite(b) || b < 1024) return `${Math.max(0, Math.round(b || 0))} B`;
+	const units = ['KB', 'MB', 'GB', 'TB'];
+	let v = b / 1024;
+	let i = 0;
+	while (v >= 1024 && i < units.length - 1) {
+		v /= 1024;
+		i++;
+	}
+	return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
 }

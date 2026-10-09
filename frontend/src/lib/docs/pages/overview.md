@@ -43,7 +43,7 @@ flowchart LR
 | **Student** | Registers, enrols in classrooms, scans a QR to join a session, answers, sees released results | Cannot leave the quiz tab once started (proctoring) and never receives answer keys before release (BR-12) |
 | **Teacher** | Builds classrooms → modules → topics → quizzes, imports questions from CSV, runs live sessions, marks, publishes results, runs polls | Sees only their own data (BR-14) |
 | **Poll participant** | Anyone with a poll code: answers anonymously, or logged in when the poll identifies people | Never sees other participants' names or files (D-40) |
-| **Admin** | Manages accounts, platform defaults and policy; reads usage and the audit log; makes managers | Cannot read teachers' API keys or quiz content |
+| **Admin** | Manages accounts, platform defaults and policy; reads usage and the audit log; manages storage and backups; makes managers | Cannot read teachers' API keys or quiz content |
 | **Manager** | Does the admin features an admin gave them; a teacher can also be a manager (D-56) | Never acts on admins or other managers, and can't make managers |
 
 ## Technology

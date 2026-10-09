@@ -391,6 +391,8 @@ type FileRef struct {
 	Name        string `json:"name"`
 	Size        int    `json:"size"`
 	ContentType string `json:"content_type"`
+	// Removed: an admin's clean-up deleted the file; the answer stays (PL-FR-06).
+	Removed bool `json:"removed,omitempty"`
 }
 
 // Answer is one participant's answer; each type uses some fields.
