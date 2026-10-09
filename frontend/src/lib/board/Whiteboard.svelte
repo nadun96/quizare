@@ -44,6 +44,7 @@
 	$effect(() => {
 		if (!wrap) return;
 		const measure = () => {
+			toolbarH = toolbarEl?.offsetHeight ?? 0;
 			const r = wrap!.getBoundingClientRect();
 			const dpr = Math.min(window.devicePixelRatio || 1, 2);
 			px = { w: Math.round(r.width * dpr), h: Math.round(r.width * dpr * (BOARD_H / BOARD_W)) };
@@ -226,8 +227,54 @@
 		mine.push(gesture);
 		send({ gesture, tool: 'text', color, size, points: round([t.x, t.y]), text: t.value.trim().slice(0, 200) });
 	}
+	// ---- full screen, for the teacher and participants alike (D-54) ----
+	// The board fills the window at the largest 16:9 size that fits. Where the
+	// browser allows it, the whole page also goes full screen (hiding the
+	// browser's bars) rather than just the board, so dialogs and messages stay
+	// visible over it. iPhones only allow the in-page view.
+	let full = $state(false);
+	let toolbarH = $state(0);
+	let toolbarEl = $state<HTMLDivElement>();
+	let ownNative = false; // we put the page in full screen, so we take it out again
+	async function toggleFull() {
+		if (full) return exitFull();
+		full = true;
+		const el = document.documentElement;
+		if (el.requestFullscreen && !document.fullscreenElement) {
+			try {
+				await el.requestFullscreen({ navigationUI: 'hide' });
+				ownNative = true;
+			} catch {
+				/* the in-page view still works */
+			}
+		}
+	}
+	function exitFull() {
+		full = false;
+		if (ownNative && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+		ownNative = false;
+	}
+	// Esc in the browser's own full screen leaves it: leave ours too.
+	function fullscreenChange() {
+		if (ownNative && !document.fullscreenElement) {
+			ownNative = false;
+			full = false;
+		}
+	}
+	// The page behind mustn't scroll while the board covers it.
+	$effect(() => {
+		if (!full) return;
+		const el = document.documentElement;
+		const before = el.style.overflow;
+		el.style.overflow = 'hidden';
+		return () => {
+			el.style.overflow = before;
+		};
+	});
+
 	onDestroy(() => {
 		if (flushTimer) clearInterval(flushTimer);
+		if (full) exitFull();
 	});
 	async function exportPNG() {
 		const blob = await toPNG(board.strokes);
@@ -241,6 +288,10 @@
 	let root = $state<HTMLDivElement>();
 	// Ctrl+Z undoes while the focus is on the board's tools (or nowhere in particular).
 	function keys(e: KeyboardEvent) {
+		if (full && e.key === 'Escape' && !textAt) {
+			e.preventDefault();
+			return exitFull();
+		}
 		const a = document.activeElement;
 		const here = !a || a === document.body || !!root?.contains(a);
 		if (here && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && board.canDraw && !textAt) {
@@ -252,9 +303,10 @@
 </script>
 
 <svelte:window onkeydown={keys} />
+<svelte:document onfullscreenchange={fullscreenChange} />
 
-<div class="wb" role="group" aria-label="Whiteboard" bind:this={root}>
-	<div class="toolbar" role="toolbar" aria-label="Whiteboard tools">
+<div class="wb" class:full role="group" aria-label="Whiteboard" bind:this={root} style:--tb-h="{toolbarH}px">
+	<div class="toolbar" role="toolbar" aria-label="Whiteboard tools" bind:this={toolbarEl}>
 		{#if board.canDraw}
 			<div class="grp">
 				{#each TOOLS as [t, icon, name] (t)}
@@ -277,6 +329,7 @@
 			<span class="small muted flex items-center gap-1"><Icon name="eye" size={14} />View only</span>
 		{/if}
 		<span class="spacer"></span>
+		<IconBtn icon={full ? 'minimize' : 'maximize'} label={full ? 'Exit full screen' : 'Full screen'} hint={full ? 'Exit full screen (Esc)' : 'Full screen'} class="btn-sm btn-ghost" tip="left" aria-pressed={full} onclick={toggleFull} />
 		<span class="tooltip tooltip-left" data-tip="Download the board as a PNG image"><button type="button" class="btn btn-sm btn-ghost" onclick={exportPNG}><Icon name="download" size={16} />PNG</button></span>
 	</div>
 	<div class="surface" bind:this={wrap} role="img" aria-label={label}>
@@ -293,6 +346,13 @@
 
 <style>
 	.wb { display: grid; gap: 0.5rem; }
+	/* Full screen: above the page and its menus (z-40), below messages (z-50). */
+	.wb.full {
+		position: fixed; inset: 0; z-index: 45; align-content: start; overflow: auto;
+		background: var(--color-base-200);
+		padding: max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+	}
+	.wb.full .surface { justify-self: center; width: min(100%, calc((100dvh - var(--tb-h) - 1.5rem) * 16 / 9)); }
 	.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 	.grp { display: flex; flex-wrap: wrap; gap: 0.25rem; padding-right: 0.5rem; border-right: 1px solid var(--color-base-300); }
 	.swatch { width: 1.75rem; height: 1.75rem; border-radius: 999px; border: 2px solid var(--color-base-100); box-shadow: 0 0 0 1px var(--color-base-300); cursor: pointer; }

@@ -16,6 +16,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0010_categories.sql` | `content.categories`, `content.enrolment_categories` |
 | `0016_account.sql` | Profile pictures: `auth.avatars`, `avatar_version` on `auth.users` |
 | `0017_board_gesture_idx.sql` | Index on `poll.board_strokes (poll_id, gesture)`: erasing takes a stroke's whole gesture (D-52) |
+| `0018_session_start.sql` | `live.sessions.started_at`: when the teacher started the quiz for everyone (`start_mode = teacher`, D-53) |
 | `0015_poll_board.sql` | Whiteboard: `poll.board_strokes`, board access columns on `poll.polls` |
 | `0014_live_links.sql` | Share links gain the `live_session` and `live_poll` scopes and `nickname` identification |
 | `0013_session_teams.sql` | Session teams: `live.teams`, `team_id`/`captain` on `live.attempts` |

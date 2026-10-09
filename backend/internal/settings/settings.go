@@ -39,27 +39,30 @@ type Overrides struct {
 	QuestionTimeLimitSec *int    `json:"question_time_limit_sec,omitempty" levels:"quiz,question"`
 	QuizTimeLimitSec     *int    `json:"quiz_time_limit_sec,omitempty" levels:"topic,quiz,session,student"`
 	AdmissionMode        *string `json:"admission_mode,omitempty" levels:"classroom,session" enum:"manual,auto"`
-	EvaluationMethod     *string `json:"evaluation_method,omitempty" levels:"teacher,quiz,question" enum:"key,llm,manual"`
-	LLMKeyID             *string `json:"llm_key_id,omitempty" levels:"teacher,quiz,question"`
-	LLMModel             *string `json:"llm_model,omitempty" levels:"teacher,quiz,question"`
-	FeedbackMode         *string `json:"feedback_mode,omitempty" levels:"teacher,quiz,question" enum:"none,predefined,ai,both"`
-	ViolationPolicy      *string `json:"violation_policy,omitempty" levels:"classroom,quiz,session" enum:"invalidate,warn_then_invalidate,log_only"`
-	AllowedWarnings      *int    `json:"allowed_warnings,omitempty" levels:"classroom,quiz,session"`
-	BlurGraceMs          *int    `json:"blur_grace_ms,omitempty" levels:"classroom,quiz,session"`
-	DisconnectGraceSec   *int    `json:"disconnect_grace_sec,omitempty" levels:"classroom,quiz,session"`
-	QuestionOrder        *string `json:"question_order,omitempty" levels:"quiz,session" enum:"fixed,shuffled"`
-	OptionOrder          *string `json:"option_order,omitempty" levels:"quiz,question" enum:"fixed,shuffled"`
-	OneWayNavigation     *bool   `json:"one_way_navigation,omitempty" levels:"quiz"`
-	ResultsVisibility    *string `json:"results_visibility,omitempty" levels:"quiz,session" enum:"private,public"`
-	ResultsView          *string `json:"results_view,omitempty" levels:"quiz,session" enum:"individual,question_pct,pass_rate"`
-	ResultsRelease       *string `json:"results_release,omitempty" levels:"quiz,session" enum:"immediate,on_session_end,manual"`
-	ResultsShowAnswers   *bool   `json:"results_show_answers,omitempty" levels:"quiz,session"`
-	ResultsShowCorrect   *bool   `json:"results_show_correct,omitempty" levels:"quiz,session"`
-	ResultsShowFeedback  *bool   `json:"results_show_feedback,omitempty" levels:"quiz,session"`
-	PassMarkPct          *int    `json:"pass_mark_pct,omitempty" levels:"classroom,quiz"`
-	StudentIDRequired    *bool   `json:"student_id_required,omitempty" levels:"classroom"`
-	EnrolmentApproval    *bool   `json:"enrolment_approval,omitempty" levels:"classroom"`
-	AutoEnrolOnJoin      *bool   `json:"auto_enrol_on_join,omitempty" levels:"classroom"`
+	// StartMode: "countdown" starts each student's countdown on admission;
+	// "teacher" holds admitted students until the teacher starts (D-53).
+	StartMode           *string `json:"start_mode,omitempty" levels:"teacher,classroom,quiz,session" enum:"countdown,teacher"`
+	EvaluationMethod    *string `json:"evaluation_method,omitempty" levels:"teacher,quiz,question" enum:"key,llm,manual"`
+	LLMKeyID            *string `json:"llm_key_id,omitempty" levels:"teacher,quiz,question"`
+	LLMModel            *string `json:"llm_model,omitempty" levels:"teacher,quiz,question"`
+	FeedbackMode        *string `json:"feedback_mode,omitempty" levels:"teacher,quiz,question" enum:"none,predefined,ai,both"`
+	ViolationPolicy     *string `json:"violation_policy,omitempty" levels:"classroom,quiz,session" enum:"invalidate,warn_then_invalidate,log_only"`
+	AllowedWarnings     *int    `json:"allowed_warnings,omitempty" levels:"classroom,quiz,session"`
+	BlurGraceMs         *int    `json:"blur_grace_ms,omitempty" levels:"classroom,quiz,session"`
+	DisconnectGraceSec  *int    `json:"disconnect_grace_sec,omitempty" levels:"classroom,quiz,session"`
+	QuestionOrder       *string `json:"question_order,omitempty" levels:"quiz,session" enum:"fixed,shuffled"`
+	OptionOrder         *string `json:"option_order,omitempty" levels:"quiz,question" enum:"fixed,shuffled"`
+	OneWayNavigation    *bool   `json:"one_way_navigation,omitempty" levels:"quiz"`
+	ResultsVisibility   *string `json:"results_visibility,omitempty" levels:"quiz,session" enum:"private,public"`
+	ResultsView         *string `json:"results_view,omitempty" levels:"quiz,session" enum:"individual,question_pct,pass_rate"`
+	ResultsRelease      *string `json:"results_release,omitempty" levels:"quiz,session" enum:"immediate,on_session_end,manual"`
+	ResultsShowAnswers  *bool   `json:"results_show_answers,omitempty" levels:"quiz,session"`
+	ResultsShowCorrect  *bool   `json:"results_show_correct,omitempty" levels:"quiz,session"`
+	ResultsShowFeedback *bool   `json:"results_show_feedback,omitempty" levels:"quiz,session"`
+	PassMarkPct         *int    `json:"pass_mark_pct,omitempty" levels:"classroom,quiz"`
+	StudentIDRequired   *bool   `json:"student_id_required,omitempty" levels:"classroom"`
+	EnrolmentApproval   *bool   `json:"enrolment_approval,omitempty" levels:"classroom"`
+	AutoEnrolOnJoin     *bool   `json:"auto_enrol_on_join,omitempty" levels:"classroom"`
 	// Teams in live sessions (V2-06, V2-07, D-44).
 	TeamMode       *string `json:"team_mode,omitempty" levels:"quiz,session" enum:"off,manual,random,categories,self"`
 	TeamAcceptance *string `json:"team_acceptance,omitempty" levels:"quiz,session" enum:"all,first,captain,best"`
@@ -73,6 +76,7 @@ type Effective struct {
 	QuestionTimeLimitSec int    `json:"question_time_limit_sec"`
 	QuizTimeLimitSec     int    `json:"quiz_time_limit_sec"`
 	AdmissionMode        string `json:"admission_mode"`
+	StartMode            string `json:"start_mode"`
 	EvaluationMethod     string `json:"evaluation_method"`
 	LLMKeyID             string `json:"llm_key_id"`
 	LLMModel             string `json:"llm_model"`
@@ -104,6 +108,7 @@ func Defaults() Effective {
 	return Effective{
 		CountdownSeconds:   60,
 		AdmissionMode:      "manual",
+		StartMode:          "countdown",
 		EvaluationMethod:   "key",
 		FeedbackMode:       "predefined",
 		ViolationPolicy:    "invalidate",

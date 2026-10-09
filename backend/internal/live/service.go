@@ -178,13 +178,13 @@ func (s *Service) CreateSession(ctx context.Context, teacherID, quizID string, i
 
 func (s *Service) joinURL(code string) string { return s.baseURL + "/j/" + code }
 
-const sessionCols = `id, quiz_id, teacher_id, classroom_id, title, join_code, status, settings, extension_sec, created_at, ended_at, released_at`
+const sessionCols = `id, quiz_id, teacher_id, classroom_id, title, join_code, status, settings, extension_sec, created_at, ended_at, released_at, started_at`
 
 func scanSession(r pgx.Row, withSnapshot bool) (*Session, error) {
 	var sess Session
 	var st, snap []byte
 	dst := []any{&sess.ID, &sess.QuizID, &sess.TeacherID, &sess.ClassroomID, &sess.Title, &sess.JoinCode, &sess.Status, &st,
-		&sess.ExtensionSec, &sess.CreatedAt, &sess.EndedAt, &sess.ReleasedAt}
+		&sess.ExtensionSec, &sess.CreatedAt, &sess.EndedAt, &sess.ReleasedAt, &sess.StartedAt}
 	if withSnapshot {
 		dst = append(dst, &snap)
 	}
@@ -578,10 +578,13 @@ func (s *Service) Join(ctx context.Context, userID, code, studentNumber, teamID 
 
 func (s *Service) admitTx(ctx context.Context, tx pgx.Tx, sess *Session, a *Attempt, actor string) error {
 	v := s.sessionView(sess)
-	countdown := v.Effective(nil, a.Overrides).CountdownSeconds
-	admit(a, s.now(), countdown)
-	if countdown == 0 {
-		v.startAttempt(a, s.now())
+	eff := v.Effective(nil, a.Overrides)
+	details := map[string]any{"countdown_seconds": eff.CountdownSeconds}
+	if eff.StartMode == "teacher" && v.StartedAt == nil {
+		hold(a) // waits for the teacher's Start (D-53)
+		details["waiting_for_teacher"] = true
+	} else {
+		v.beginCountdown(a, s.now(), eff.CountdownSeconds)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE live.sessions SET status='live' WHERE id=$1 AND status='open'`, sess.ID); err != nil {
 		return err
@@ -591,7 +594,77 @@ func (s *Service) admitTx(ctx context.Context, tx pgx.Tx, sess *Session, a *Atte
 			x.Status = SessionLive
 		}
 	})
-	return s.event(ctx, tx, sess.ID, a.ID, actor, "admitted", map[string]int{"countdown_seconds": countdown})
+	return s.event(ctx, tx, sess.ID, a.ID, actor, "admitted", details)
+}
+
+// beginCountdown starts an admitted student's countdown; with no countdown
+// the quiz starts at once.
+func (sess *Session) beginCountdown(a *Attempt, now time.Time, countdownSec int) {
+	admit(a, now, countdownSec)
+	if countdownSec == 0 {
+		sess.startAttempt(a, now)
+	}
+}
+
+// StartInput is the teacher's Start command (D-53). Without Now, students
+// waiting for the teacher begin their countdown and those already counting
+// down carry on; with Now, everyone selected starts the quiz at once.
+type StartInput struct {
+	Target
+	Now bool `json:"now"`
+}
+
+// TeacherStart starts the quiz for admitted students (D-53). Starting for
+// all also lets students admitted later count down by themselves.
+func (s *Service) TeacherStart(ctx context.Context, teacherID, sessionID string, in StartInput) (int, error) {
+	sess, err := s.live(ctx, teacherID, sessionID)
+	if err != nil {
+		return 0, err
+	}
+	if in.All {
+		now := s.now()
+		if _, err := s.pool.Exec(ctx, `UPDATE live.sessions SET started_at=coalesce(started_at,$2) WHERE id=$1`, sessionID, now); err != nil {
+			return 0, err
+		}
+		s.updateCached(sessionID, func(x *Session) {
+			if x.StartedAt == nil {
+				x.StartedAt = &now
+			}
+		})
+	}
+	ids, err := s.targets(ctx, sessionID, in.Target, StateAdmitted)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, id := range ids {
+		_, err := s.change(ctx, id, func(tx pgx.Tx, _ *Session, a *Attempt) error {
+			if a.State != StateAdmitted {
+				return nil
+			}
+			v := s.sessionView(sess)
+			now := s.now()
+			switch {
+			case in.Now:
+				v.startAttempt(a, now)
+				n++
+				return s.event(ctx, tx, sessionID, a.ID, teacherID, "started", map[string]string{"by": "teacher"})
+			case a.CountdownDeadline == nil:
+				countdown := v.Effective(nil, a.Overrides).CountdownSeconds
+				v.beginCountdown(a, now, countdown)
+				n++
+				return s.event(ctx, tx, sessionID, a.ID, teacherID, "countdown_started", map[string]int{"countdown_seconds": countdown})
+			}
+			return nil // already counting down
+		})
+		if err != nil {
+			return n, err
+		}
+	}
+	if in.All {
+		s.hub.markDirty(sessionID)
+	}
+	return n, nil
 }
 
 // ---------- teacher controls ----------
@@ -840,6 +913,9 @@ func (s *Service) Start(ctx context.Context, userID, attemptID string) (*Attempt
 		case StateInProgress, StatePaused:
 			return nil // idempotent
 		case StateAdmitted:
+			if a.CountdownDeadline == nil {
+				return errWrongState("your teacher hasn't started the quiz yet") // D-53
+			}
 			sess.startAttempt(a, s.now())
 			return s.event(ctx, tx, sess.ID, a.ID, userID, "started", map[string]string{"by": "student"})
 		default:

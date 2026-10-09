@@ -29,6 +29,7 @@
 	let extendMin = $state(5);
 	let countdown = $state<number | ''>('');
 	let admission = $state('');
+	let startMode = $state('');
 	let teamMode = $state('');
 	let teamAcceptance = $state('');
 	let teamCalc = $state('');
@@ -60,6 +61,7 @@
 		if (d && countdown === '') {
 			countdown = (d.session.settings.countdown_seconds as number) ?? '';
 			admission = (d.session.settings.admission_mode as string) ?? '';
+			startMode = (d.session.settings.start_mode as string) ?? '';
 			teamMode = (d.session.settings.team_mode as string) ?? '';
 			teamAcceptance = (d.session.settings.team_acceptance as string) ?? '';
 			teamCalc = (d.session.settings.team_calc as string) ?? '';
@@ -85,7 +87,7 @@
 		notice = '';
 		try {
 			const r = await api.post<{ affected: number }>('/api/teacher/sessions/' + id + '/' + action, { all, attempt_ids: all ? [] : [...selected], ...extra });
-			const verb: Record<string, string> = { admit: 'Admitted', pause: 'Paused', resume: 'Resumed', extend: 'Extended time for' };
+			const verb: Record<string, string> = { admit: 'Admitted', pause: 'Paused', resume: 'Resumed', extend: 'Extended time for', start: 'Started' };
 			toast(`${verb[action] ?? action} ${r.affected} student${r.affected === 1 ? '' : 's'}`, r.affected ? 'success' : 'info');
 			if (!all) selected = new Set();
 		} catch (e) {
@@ -114,6 +116,8 @@
 		else o.countdown_seconds = Number(countdown);
 		if (admission) o.admission_mode = admission;
 		else delete o.admission_mode;
+		if (startMode) o.start_mode = startMode;
+		else delete o.start_mode;
 		for (const [k, v] of [['team_mode', teamMode], ['team_acceptance', teamAcceptance], ['team_calc', teamCalc]]) {
 			if (v) o[k] = v;
 			else delete o[k];
@@ -122,6 +126,14 @@
 		toast('Session settings saved');
 	}
 	const teamsOn = $derived(!!d?.team_mode && d.team_mode !== 'off');
+	// Admitted students either wait for the teacher (no countdown, D-53) or count down.
+	const readyCount = $derived(rows.filter((r) => r.state === 'admitted' && r.countdown_deadline == null).length);
+	const counting = $derived(rows.filter((r) => r.state === 'admitted' && r.countdown_deadline != null).length);
+	const selectedReady = $derived(rows.some((r) => selected.has(r.attempt_id) && r.state === 'admitted'));
+	function countdownLeft(r: Dashboard['rows'][number]) {
+		void now;
+		return r.countdown_deadline != null ? Math.max(0, r.countdown_deadline - socket.clock.serverNow()) : null;
+	}
 	const total = $derived(rows.length);
 	const flagged = $derived(rows.filter((r) => r.violations > 0 || r.state === 'invalidated').length);
 	const finished = $derived((d?.counts.submitted ?? 0) + (d?.counts.invalidated ?? 0));
@@ -165,6 +177,8 @@
 						<strong>Session settings</strong>
 						<div><label for="cd">Countdown (seconds)</label><input class="input w-full" id="cd" type="number" min="0" bind:value={countdown} placeholder="inherit" /></div>
 						<div><label for="adm">Admission</label><select class="select w-full" id="adm" bind:value={admission}><option value="">Inherit</option><option value="manual">I admit students</option><option value="auto">Admit automatically</option></select></div>
+						<div><label for="sm">Quiz start</label><select class="select w-full" id="sm" bind:value={startMode}><option value="">Inherit</option><option value="countdown">Countdown starts when admitted</option><option value="teacher">I press Start</option></select>
+							<p class="small muted m-0 mt-1">{(startMode || d.start_mode) === 'teacher' ? 'Admitted students wait until you press Start, then the countdown runs.' : 'Each student’s countdown starts as soon as they’re admitted.'}</p></div>
 						<div><label for="tm">Teams</label><select class="select w-full" id="tm" bind:value={teamMode}><option value="">Inherit</option><option value="off">No teams</option><option value="manual">I put students in teams</option><option value="random">At random as they join</option><option value="categories">From classroom categories</option><option value="self">Students choose</option></select></div>
 						{#if (teamMode || teamsOn) && teamMode !== 'off'}
 							<div><label for="ta">Team marks count</label><select class="select w-full" id="ta" bind:value={teamAcceptance}><option value="">Inherit</option><option value="all">Every member's marks</option><option value="first">First answer per question</option><option value="captain">Captain's marks</option><option value="best">Best mark per question</option></select></div>
@@ -191,6 +205,14 @@
 						<div class="card card-border command-bar bg-base-100 shadow-sm p-3 sm:p-4 row">
 						<button class="btn btn-primary" onclick={() => cmd('admit', true)} disabled={!d.counts.waiting}>Admit all waiting ({d.counts.waiting ?? 0})</button>
 						<button class="btn" onclick={() => cmd('admit', false)} disabled={!selected.size}>Admit selected</button>
+						{#if d.start_mode === 'teacher' || readyCount}
+							<button class="btn btn-success" onclick={() => cmd('start', true)} disabled={!readyCount} title="Starts the countdown for every admitted student; students admitted later count down by themselves">
+								<Icon name="play" size={16} />Start quiz{readyCount ? ` (${readyCount} ready)` : ''}</button>
+						{/if}
+						{#if selectedReady}<button class="btn" onclick={() => cmd('start', false)}><Icon name="play" size={16} />Start selected</button>{/if}
+						{#if counting || readyCount}
+							<button class="btn" onclick={() => cmd('start', selected.size === 0, { now: true })} title="Skips the rest of the countdown"><Icon name="skip-forward" size={16} />Start now{selected.size ? ' (selected)' : ''}</button>
+						{/if}
 						<button class="btn" onclick={() => cmd('pause', selected.size === 0)}>Pause {selected.size ? 'selected' : 'all'}</button>
 						<button class="btn" onclick={() => cmd('resume', selected.size === 0)}>Resume {selected.size ? 'selected' : 'all'}</button>
 						<span class="row"><input class="input w-full" type="number" min="1" style="width:5rem" bind:value={extendMin} aria-label="Minutes" />
@@ -198,6 +220,7 @@
 					</div>
 						<div class="row small">
 							<span class="muted">Select:</span> <button class="btn btn-sm" onclick={() => selectState('waiting')}>waiting</button>
+						<button class="btn btn-sm" onclick={() => selectState('admitted')}>admitted</button>
 						<button class="btn btn-sm" onclick={() => selectState('in_progress')}>in progress</button>
 						<button class="btn btn-sm" onclick={() => selectState('paused')}>paused</button>
 						<button class="btn btn-sm" onclick={() => (selected = new Set())}>none</button>
@@ -217,7 +240,7 @@
 										{@const team = d.teams?.find((t) => t.id === r.team_id)}
 										<td class="small">{#if team}<span class="inline-flex items-center gap-1"><span class="tdot" style:background="var(--cat-{team.color})" aria-hidden="true"></span>{team.name}{#if r.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>{:else}<span class="muted">—</span>{/if}</td>
 									{/if}
-									<td><span class="badge badge-soft {STATE_BADGE[r.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[r.state] ?? ''}</span> {STATE_LABEL[r.state]}</span>{#if !r.connected && (r.state === 'in_progress' || r.state === 'waiting')}<br /><span class="small muted">offline</span>{/if}</td>
+									<td><span class="badge badge-soft {STATE_BADGE[r.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[r.state] ?? ''}</span> {r.state === 'admitted' ? (r.countdown_deadline == null ? 'Ready' : `Starting in ${formatDuration(countdownLeft(r))}`) : STATE_LABEL[r.state]}</span>{#if !r.connected && (r.state === 'in_progress' || r.state === 'waiting')}<br /><span class="small muted">offline</span>{/if}</td>
 									<td class="small min-w-32">
 										<div class="flex items-center gap-2"><progress class="progress progress-primary w-20" value={r.answered} max={r.total || 1} aria-hidden="true"></progress><span class="tabular">{r.answered}/{r.total}</span></div>
 										{#if r.state === 'in_progress'}<span class="muted">on Q{r.index + 1}</span>{/if}

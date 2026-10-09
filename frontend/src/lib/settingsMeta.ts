@@ -8,6 +8,7 @@ export const SETTINGS: Meta[] = [
 	{ key: 'question_time_limit_sec', label: 'Time limit per question', kind: 'int', unit: 's', levels: ['quiz', 'question'], help: '0 = no limit' },
 	{ key: 'quiz_time_limit_sec', label: 'Quiz time limit', kind: 'int', unit: 's', levels: ['topic', 'quiz', 'session', 'student'], help: '0 = no limit' },
 	{ key: 'admission_mode', label: 'Admission', kind: 'enum', levels: ['classroom', 'session'], options: [['manual', 'Teacher admits'], ['auto', 'Admit automatically']] },
+	{ key: 'start_mode', label: 'Quiz start', kind: 'enum', levels: ['teacher', 'classroom', 'quiz', 'session'], options: [['countdown', 'Countdown starts on admission'], ['teacher', 'Teacher presses Start']] },
 	{ key: 'evaluation_method', label: 'Marking method', kind: 'enum', levels: ['teacher', 'quiz', 'question'], options: [['key', 'Answer key'], ['llm', 'LLM'], ['manual', 'Manual']] },
 	{ key: 'feedback_mode', label: 'Feedback', kind: 'enum', levels: ['teacher', 'quiz', 'question'], options: [['none', 'None'], ['predefined', 'Predefined'], ['ai', 'AI'], ['both', 'Predefined + AI']] },
 	{ key: 'llm_model', label: 'LLM model override', kind: 'text', levels: ['teacher', 'quiz', 'question'] },
