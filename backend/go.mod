@@ -3,6 +3,7 @@ module github.com/nadun96/quizplatform
 go 1.26.3
 
 require (
+	filippo.io/age v1.2.1
 	github.com/anthropics/anthropic-sdk-go v1.78.0
 	github.com/coder/websocket v1.8.15
 	github.com/fergusstrange/embedded-postgres v1.34.0
@@ -13,10 +14,11 @@ require (
 	github.com/riverqueue/river/rivertype v0.48.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.57.0
+	golang.org/x/image v0.46.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
-	filippo.io/age v1.2.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
@@ -34,8 +36,6 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 )
