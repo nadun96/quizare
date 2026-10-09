@@ -165,6 +165,29 @@ describe('Whiteboard', () => {
 		expect(v.target.querySelector('[role=img]')?.getAttribute('aria-label')).toBe('Whiteboard with 1 mark');
 		v.done();
 	});
+	test('viewers and drawers can open the board full screen and leave it (D-54)', () => {
+		for (const canDraw of [false, true]) {
+			const v = render(canDraw);
+			const wb = v.target.querySelector<HTMLElement>('.wb')!;
+			const btn = () => v.target.querySelector<HTMLButtonElement>('[aria-label="Full screen"], [aria-label="Exit full screen (Esc)"]')!;
+			expect(wb.classList.contains('full')).toBe(false);
+			btn().click();
+			flushSync();
+			expect(wb.classList.contains('full')).toBe(true);
+			expect(btn().getAttribute('aria-pressed')).toBe('true');
+			expect(document.documentElement.style.overflow).toBe('hidden'); // the page behind doesn't scroll
+			window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+			flushSync();
+			expect(wb.classList.contains('full')).toBe(false);
+			expect(document.documentElement.style.overflow).toBe('');
+			btn().click();
+			flushSync();
+			btn().click(); // the same button leaves it
+			flushSync();
+			expect(wb.classList.contains('full')).toBe(false);
+			v.done();
+		}
+	});
 	test('drawers get tools, colours and sizes; only teachers can clear', () => {
 		const v = render(true);
 		expect(v.target.querySelectorAll('[role=toolbar] button[aria-pressed]').length).toBeGreaterThanOrEqual(8 + 8 + 3);
