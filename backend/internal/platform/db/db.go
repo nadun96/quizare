@@ -58,6 +58,25 @@ func OpenWait(ctx context.Context, url string, maxConns int32, wait time.Duratio
 // Migrate applies every *.sql file in fsys (lexical order) that has not been
 // applied yet, each in its own transaction.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys embed.FS) error {
+	return MigrateTo(ctx, pool, fsys, "")
+}
+
+// Versions lists the migrations in fsys, in the order they apply.
+func Versions(fsys embed.FS) ([]string, error) {
+	names, err := fs.Glob(fsys, "*.sql")
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(names)
+	for i, n := range names {
+		names[i] = strings.TrimSuffix(n, ".sql")
+	}
+	return names, nil
+}
+
+// MigrateTo is Migrate, stopping after version last ("" = all). Restoring a
+// backup builds the schema the backup was made with, then loads its data.
+func MigrateTo(ctx context.Context, pool *pgxpool.Pool, fsys embed.FS, last string) error {
 	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS public.schema_migrations (
 		version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
 		return err
@@ -74,6 +93,9 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys embed.FS) error {
 			return err
 		}
 		if exists {
+			if version == last {
+				return nil
+			}
 			continue
 		}
 		sqlBytes, err := fsys.ReadFile(name)
@@ -90,6 +112,12 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys embed.FS) error {
 		if err != nil {
 			return fmt.Errorf("migration %s: %w", name, err)
 		}
+		if version == last {
+			return nil
+		}
+	}
+	if last != "" {
+		return fmt.Errorf("migration %s is not part of this version", last)
 	}
 	return nil
 }

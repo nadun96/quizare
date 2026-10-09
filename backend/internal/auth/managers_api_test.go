@@ -104,6 +104,9 @@ func TestEachFeatureGrantsOnlyItself(t *testing.T) {
 		{"GET", "/api/admin/settings", nil, 200, auth.FeatSettings},
 		{"GET", "/api/admin/usage", nil, 200, auth.FeatUsage},
 		{"GET", "/api/admin/audit", nil, 200, auth.FeatAudit},
+		{"GET", "/api/admin/storage", nil, 200, auth.FeatStorage},
+		{"GET", "/api/admin/storage/cleanup", nil, 200, auth.FeatCleanup},
+		{"GET", "/api/admin/backups", nil, 200, auth.FeatBackups},
 		{"GET", "/api/admin/managers", nil, 200, ""},
 		{"POST", "/api/admin/managers", map[string]any{"email": "x@example.com", "name": "X", "features": []string{}}, 201, ""},
 	}

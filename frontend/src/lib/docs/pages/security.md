@@ -86,6 +86,7 @@ Resource link checks use `imageurl.Checker`. The dialer refuses non-public IPs (
 - **Users can download their own data** from `GET /api/my/data`.
 - **Deleting an account anonymises it** rather than removing rows, so a teacher's results stay intact.
 - **Public links never show names or emails.** Students appear as "Student N", or by classroom student ID if the teacher chooses. Individual answers appear only when explicitly enabled. Links are hashed, revocable and can expire.
+- **Backups** (D-57) are encrypted before they reach the disk, with age and a passphrase the admin types for each backup; the passphrase is held in memory only while the backup runs and is never stored, so neither the server's disk nor a downloaded copy can be read without it. Files are written as `….part` and renamed when complete, with mode 0600. Downloads go through a link that works once, for the person who asked for it, for one hour; only its hash is stored. Exporting, downloading and deleting are audited. The master key is not in a backup: it must be kept separately, and a restore says whether the key file in place matches.
 - **Audit log.** It records admin and manager actions (with the role the person acted in), refused manager attempts, mark overrides, reinstatements, key changes, releases and share links.
 
 **Not built yet:** a scheduled retention job that anonymises old attempts (D-34).

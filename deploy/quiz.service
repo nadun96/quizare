@@ -19,6 +19,10 @@ Environment=QP_BASE_URL=https://quiz.example.edu
 Environment=QP_DATABASE_URL=postgres://quiz@/quiz?host=/var/run/postgresql
 Environment=QP_DB_MAX_CONNS=15
 Environment=QP_ARGON2_WORKERS=2
+# Backups made from the admin console (PL-FR-07, D-57), and where
+# deploy/backup.sh writes, so the console can show the nightly job.
+Environment=QP_BACKUP_DIR=/srv/quiz/data/backups
+Environment=QP_NIGHTLY_BACKUP_DIR=/var/backups/quiz
 # Optional SMTP relay; the password comes from a file, never the environment.
 #Environment=QP_SMTP_ADDR=smtp.example.edu:587
 #Environment=QP_SMTP_FROM=quiz@example.edu

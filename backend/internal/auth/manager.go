@@ -32,6 +32,12 @@ const (
 	FeatSettings       Feature = "settings"
 	FeatUsage          Feature = "usage"
 	FeatAudit          Feature = "audit"
+	FeatStorage        Feature = "storage" // storage overview and limits (PL-FR-04, PL-FR-05)
+	FeatCleanup        Feature = "cleanup" // clean-ups (PL-FR-06)
+	// FeatBackups exports and downloads backups (PL-FR-07, PL-FR-08). A
+	// backup holds all the platform's data, so it is never given by default
+	// and the admin is warned when giving it (PO-28).
+	FeatBackups Feature = "backups"
 
 	// featAdmin is never given: routes behind it are for admins only
 	// (making and changing managers, PL-FR-13).
@@ -39,13 +45,13 @@ const (
 )
 
 // Features lists what can be given, in the order the admin sees them.
-// Storage, clean-up, recordings, tutoring resources and backups join the
-// list with their features.
-var Features = []Feature{FeatViewUsers, FeatManageUsers, FeatApprovalPolicy, FeatSettings, FeatUsage, FeatAudit}
+// Recordings and tutoring resources join the list with tutoring.
+var Features = []Feature{FeatViewUsers, FeatManageUsers, FeatApprovalPolicy, FeatSettings, FeatUsage, FeatAudit, FeatStorage, FeatCleanup, FeatBackups}
 
 var featureLabels = map[Feature]string{
 	FeatViewUsers: "View users", FeatManageUsers: "Manage users", FeatApprovalPolicy: "Teacher approval policy",
 	FeatSettings: "Platform settings", FeatUsage: "Usage", FeatAudit: "Audit log",
+	FeatStorage: "Storage", FeatCleanup: "Clean-up", FeatBackups: "Backups",
 }
 
 // Manager is what a manager may do in the admin console.
