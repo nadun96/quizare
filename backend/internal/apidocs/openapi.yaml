@@ -30,7 +30,9 @@ tags:
   - name: auth
     description: Accounts and sessions (FR-ACC)
   - name: admin
-    description: Platform administration (admin role)
+    description: Platform administration (admins, and managers with the route's feature, D-56)
+  - name: storage
+    description: Storage overview, limits, clean-up and encrypted backups (PL-FR-04 to PL-FR-09, D-57)
   - name: settings
     description: Hierarchical configuration (BA §7)
   - name: classrooms
@@ -297,6 +299,86 @@ paths:
       description: A teacher-manager goes back to being a teacher; a manager-only account is suspended and signed out.
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '204': { description: 'Removed' }, '404': { $ref: '#/components/responses/NotFound' } }
+
+  /api/admin/storage:
+    get:
+      operationId: getAdminStorage
+      tags: [admin, storage]
+      summary: Space the platform uses, at most an hour old (PL-FR-04; "Storage" feature)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/StorageOverview' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/admin/storage/refresh:
+    post:
+      operationId: postAdminStorageRefresh
+      tags: [admin, storage]
+      summary: Measure again now (at most every 30 seconds)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/StorageOverview' } } } } }
+  /api/admin/storage/limits:
+    put:
+      operationId: putAdminStorageLimits
+      tags: [admin, storage]
+      summary: Set the recording limit and the space kept for backups (PL-FR-05)
+      description: Each at least 100 MB and at most the free disk space plus what that kind already uses. A smaller backup space deletes the oldest console backups at once.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StorageLimits' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/StorageLimits' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/storage/cleanup:
+    get:
+      operationId: getAdminStorageCleanup
+      tags: [admin, storage]
+      summary: What can be cleaned up (PL-FR-06; "Clean-up" feature)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { areas: { type: array, items: { type: object, properties: { id: { type: string }, label: { type: string } } } } } } } } } }
+    post:
+      operationId: postAdminStorageCleanup
+      tags: [admin, storage]
+      summary: Delete an area's data from before a date; audited
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CleanupInput' } } } }
+      responses: { '200': { description: 'What was deleted', content: { application/json: { schema: { $ref: '#/components/schemas/Freed' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/storage/cleanup/preview:
+    post:
+      operationId: postAdminStorageCleanupPreview
+      tags: [admin, storage]
+      summary: What a clean-up would delete and the space it frees
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CleanupInput' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Freed' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/backups:
+    get:
+      operationId: getAdminBackups
+      tags: [admin, storage]
+      summary: Backup history, console and nightly (PL-FR-08; "Backups" feature)
+      parameters:
+        - { name: kind, in: query, schema: { type: string, enum: [console, nightly] } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: sort, in: query, schema: { type: string, enum: [started, size] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, backups: { type: array, items: { $ref: '#/components/schemas/Backup' } }, nightly: { $ref: '#/components/schemas/NightlyStatus' } } } } } } }
+    post:
+      operationId: postAdminBackups
+      tags: [admin, storage]
+      summary: Start a full, encrypted backup (PL-FR-07)
+      description: Runs in the background; follow it in the list. The passphrase encrypts the file and is never stored. Refused while another backup runs, or when the free space is under about twice the database's size.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [passphrase], properties: { passphrase: { type: string, minLength: 12 } } } } } }
+      responses: { '202': { description: 'Started', content: { application/json: { schema: { $ref: '#/components/schemas/Backup' } } } }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/backups/{id}:
+    delete:
+      operationId: deleteAdminBackupsById
+      tags: [admin, storage]
+      summary: Delete a backup's file; the history row stays
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' }, '410': { description: 'No longer on the server', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+  /api/admin/backups/{id}/link:
+    post:
+      operationId: postAdminBackupsLink
+      tags: [admin, storage]
+      summary: A single-use download link for the caller, valid for an hour (PL-NFR-03)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: 'Link', content: { application/json: { schema: { type: object, properties: { url: { type: string }, expires_at: { type: string, format: date-time } } } } } }, '410': { description: 'No longer on the server', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+  /api/admin/backups/download/{token}:
+    get:
+      operationId: getAdminBackupsDownload
+      tags: [admin, storage]
+      summary: Download a backup; the link works once, for the person who asked for it
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: 'The encrypted backup', content: { application/octet-stream: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
 
   # ---------------- teacher settings ----------------
   /api/teacher/settings:
@@ -1427,7 +1509,60 @@ components:
     Feature:
       type: string
       description: An admin feature a manager can be given (PL-FR-10)
-      enum: [view_users, manage_users, approval_policy, settings, usage, audit]
+      enum: [view_users, manage_users, approval_policy, settings, usage, audit, storage, cleanup, backups]
+    StorageLimits:
+      type: object
+      properties:
+        recording_limit_bytes: { type: integer, format: int64 }
+        backup_space_bytes: { type: integer, format: int64 }
+    StorageOverview:
+      type: object
+      properties:
+        taken_at: { type: string, format: date-time }
+        db_bytes: { type: integer, format: int64 }
+        areas: { type: object, additionalProperties: { type: integer, format: int64 }, description: 'Bytes by area: accounts, classrooms, quizzes_sessions, answers, polls, poll_uploads, whiteboards, results, audit, ai_marking, profile_pictures, jobs, system, other' }
+        backups_bytes: { type: integer, format: int64 }
+        recordings_bytes: { type: integer, format: int64 }
+        disk_free: { type: integer, format: int64 }
+        disk_total: { type: integer, format: int64 }
+        limits: { $ref: '#/components/schemas/StorageLimits' }
+        fixed_limits: { type: array, items: { type: object, properties: { label: { type: string }, value: { type: string } } } }
+        growth: { type: array, items: { type: object, properties: { day: { type: string, format: date }, db_bytes: { type: integer }, backups_bytes: { type: integer } } } }
+        nightly: { $ref: '#/components/schemas/NightlyStatus' }
+        running: { $ref: '#/components/schemas/Backup' }
+    NightlyStatus:
+      type: object
+      description: What deploy/backup.sh last reported (QP_NIGHTLY_BACKUP_DIR)
+      properties:
+        configured: { type: boolean }
+        last_run_at: { type: string, format: date-time }
+        last_run_ok: { type: boolean }
+        last_success_at: { type: string, format: date-time }
+        stale: { type: boolean, description: 'No success for 2 days' }
+    CleanupInput:
+      type: object
+      required: [area, before]
+      properties:
+        area: { type: string, example: poll_files }
+        before: { type: string, format: date, description: 'Data from before this day (UTC)' }
+    Freed: { type: object, properties: { items: { type: integer }, bytes: { type: integer, format: int64 } } }
+    Backup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [console, nightly] }
+        name: { type: string }
+        status: { type: string, enum: [running, done, failed] }
+        created_by: { type: string }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        size_bytes: { type: integer, format: int64 }
+        tables_done: { type: integer }
+        tables_total: { type: integer }
+        rows_done: { type: integer }
+        error: { type: string }
+        on_server: { type: boolean }
+        deleted_at: { type: string, format: date-time }
     MakeManagerInput:
       type: object
       properties:

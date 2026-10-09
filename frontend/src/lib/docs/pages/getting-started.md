@@ -71,6 +71,8 @@ Open <http://localhost:5173>, register a teacher and a student (use two browsers
 | `QP_API_DOCS` | on | `0` stops serving `/api/docs` |
 | `QP_KEK_GENERATE` | off | `1` creates the KEK file (0400) on first start if it is missing; never overwrites (containers) |
 | `QP_DB_WAIT_SECONDS` | 60 | How long startup keeps retrying an unreachable database |
+| `QP_BACKUP_DIR` | `data/backups` | Where backups made from the admin console are written (D-57) |
+| `QP_NIGHTLY_BACKUP_DIR` | none | `deploy/backup.sh`'s folder, so the console can show the nightly job |
 | `QP_SMTP_ADDR`, `QP_SMTP_FROM`, `QP_SMTP_USER`, `QP_SMTP_PASSWORD_FILE` | | SMTP relay; the password is read from a file |
 | `QP_DEV` | | `1` for development conveniences |
 

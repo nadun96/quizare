@@ -48,12 +48,14 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 // NewClient builds a River client. With workers == nil the client is
-// insert-only (useful in tests and for processes that must not run jobs).
-func NewClient(pool *pgxpool.Pool, workers *river.Workers, logger *slog.Logger) (*river.Client[pgx.Tx], error) {
+// insert-only (useful in tests and for processes that must not run jobs);
+// periodic jobs run only with workers.
+func NewClient(pool *pgxpool.Pool, workers *river.Workers, logger *slog.Logger, periodic ...*river.PeriodicJob) (*river.Client[pgx.Tx], error) {
 	cfg := &river.Config{Logger: logger}
 	if workers != nil {
 		cfg.Workers = workers
 		cfg.Queues = queueConfig
+		cfg.PeriodicJobs = periodic
 	}
 	return river.NewClient(riverpgxv5.New(pool), cfg)
 }
