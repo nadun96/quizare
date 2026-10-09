@@ -10,7 +10,7 @@ export type Stroke = { id: number; by: string; gesture: string; tool: Tool; colo
 export type NewStroke = Omit<Stroke, 'id' | 'by'>;
 export type BoardView = { type: 'board_state'; open: boolean; mode: string; can_draw: boolean; me: string; strokes: Stroke[]; access?: BoardAccess };
 export type BoardAccess = { open: boolean; mode: 'teacher' | 'everyone' | 'selected'; groups: string[]; participants: string[] };
-export type BoardEvent = { type: 'board'; op: 'add' | 'remove' | 'clear' | 'access'; strokes?: Stroke[]; ids?: number[]; open?: boolean };
+export type BoardEvent = { type: 'board'; op: 'add' | 'remove' | 'clear' | 'access'; strokes?: Stroke[]; ids?: number[]; open?: boolean; upto?: number };
 
 /** Ink colours, chosen to read on the white board (contrast ≥ 3:1 for marks). */
 export const INKS: [string, string][] = [
@@ -26,17 +26,51 @@ export function newGesture(): string {
 	return Date.now().toString(36) + '-' + seq.toString(36) + '-' + Math.random().toString(36).slice(2, 6);
 }
 
-/** The board's state on one screen, kept in sync by socket events. */
+/**
+ * The board's state on one screen, kept in sync by socket events (D-52).
+ * Events can arrive out of order: a stroke's add can come after its removal
+ * (the eraser was quicker than the save's echo) or after a clear. Removed ids
+ * are remembered and a clear records the highest id it took, so neither kind
+ * of late add brings a stroke back.
+ */
 export class BoardState {
-	strokes = $state<Stroke[]>([]);
+	/** Replaced, never mutated: strokes can be many, so they aren't deeply reactive. */
+	strokes = $state.raw<Stroke[]>([]);
 	open = $state(false);
 	canDraw = $state(false);
 	mode = $state('teacher');
 	me = $state('');
 	access = $state<BoardAccess | null>(null);
+	/** Bumped whenever strokes change other than by appending, so a screen knows to redraw everything. */
+	rev = 0;
 
+	private ids = new Set<number>();
+	private removed = new Set<number>();
+	private clearedUpTo = 0;
+	/** Adds seen while the view is being fetched, merged into it on load. */
+	private fresh: Stroke[] | null = null;
+
+	private keep = (s: Stroke) => s.id > this.clearedUpTo && !this.removed.has(s.id);
+	private set(list: Stroke[], appended = false) {
+		if (!appended) {
+			this.rev++;
+			this.ids = new Set(list.map((s) => s.id));
+		}
+		this.strokes = list;
+	}
+
+	/** Call before fetching the view, so strokes drawn meanwhile aren't lost. */
+	fetching() {
+		this.fresh = [];
+	}
 	load(v: BoardView) {
-		this.strokes = v.strokes ?? [];
+		const snap = v.strokes ?? [];
+		const have = new Set(snap.map((s) => s.id));
+		const extra = (this.fresh ?? []).filter((s) => !have.has(s.id));
+		this.fresh = null;
+		const all = [...snap, ...extra].filter(this.keep);
+		if (extra.length) all.sort((a, b) => a.id - b.id);
+		this.set(all);
 		this.open = v.open;
 		this.canDraw = v.can_draw;
 		this.mode = v.mode;
@@ -47,24 +81,83 @@ export class BoardState {
 	apply(e: BoardEvent): boolean {
 		switch (e.op) {
 			case 'add': {
-				const have = new Set(this.strokes.map((s) => s.id));
-				const fresh = (e.strokes ?? []).filter((s) => !have.has(s.id));
-				if (fresh.length) this.strokes = [...this.strokes, ...fresh];
+				const strokes = e.strokes ?? [];
+				this.fresh?.push(...strokes);
+				const fresh = strokes.filter((s) => this.keep(s) && !this.ids.has(s.id));
+				if (fresh.length) {
+					for (const s of fresh) this.ids.add(s.id);
+					this.set([...this.strokes, ...fresh], true);
+				}
 				return false;
 			}
 			case 'remove': {
-				const gone = new Set(e.ids ?? []);
-				this.strokes = this.strokes.filter((s) => !gone.has(s.id));
+				const gone = e.ids ?? [];
+				for (const id of gone) this.removed.add(id);
+				if (gone.some((id) => this.ids.has(id))) this.set(this.strokes.filter((s) => !this.removed.has(s.id)));
 				return false;
 			}
-			case 'clear':
-				this.strokes = [];
+			case 'clear': {
+				// Without the server's figure (a local clear), everything known so far.
+				const upto = e.upto ?? this.strokes.reduce((m, s) => Math.max(m, s.id), 0);
+				this.clearedUpTo = Math.max(this.clearedUpTo, upto);
+				for (const id of this.removed) if (id <= this.clearedUpTo) this.removed.delete(id);
+				this.set(this.strokes.filter(this.keep));
 				return false;
+			}
 		}
 		return true; // access changed: who may draw is personal
 	}
 	mine(s: Stroke) {
 		return s.by === this.me;
+	}
+	/** Every saved piece of the gestures these strokes belong to. */
+	gestures(hit: Iterable<Stroke>): Stroke[] {
+		const keys = new Set<string>();
+		for (const s of hit) keys.add(s.by + '|' + s.gesture);
+		return this.strokes.filter((s) => keys.has(s.by + '|' + s.gesture));
+	}
+}
+
+/**
+ * Sends new strokes one request at a time (D-52). Whatever is drawn while a
+ * request is on its way goes in the next one (up to 20 strokes), so pieces of
+ * a line are saved in order, and a slow connection sends fewer, larger
+ * requests instead of falling behind.
+ */
+export class StrokeQueue {
+	/** Queued or on their way; drawn on the overlay until saved. */
+	pending = $state.raw<NewStroke[]>([]);
+	private queue: NewStroke[] = [];
+	private busy: Promise<void> | null = null;
+
+	constructor(
+		private send: (s: NewStroke[]) => Promise<Stroke[]>,
+		private saved: (s: Stroke[]) => void,
+		private failed: (e: unknown) => void
+	) {}
+
+	push(s: NewStroke) {
+		this.queue.push(s);
+		this.pending = [...this.pending, s];
+		this.busy ??= this.run();
+	}
+	private async run() {
+		while (this.queue.length) {
+			const batch = this.queue.splice(0, 20);
+			try {
+				this.saved(await this.send(batch));
+			} catch (e) {
+				this.failed(e);
+			} finally {
+				const done = new Set(batch);
+				this.pending = this.pending.filter((x) => !done.has(x));
+			}
+		}
+		this.busy = null;
+	}
+	/** Resolves once everything queued so far has been sent. */
+	idle(): Promise<void> {
+		return this.busy ?? Promise.resolve();
 	}
 }
 
@@ -168,10 +261,37 @@ function segDist(px: number, py: number, x1: number, y1: number, x2: number, y2:
 	return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
+const boxes = new WeakMap<object, [number, number, number, number]>();
+/** A stroke's bounding box in board units, remembered per stroke. */
+function box(s: Pick<Stroke, 'tool' | 'size' | 'points' | 'text'>): [number, number, number, number] {
+	let b = boxes.get(s);
+	if (!b) {
+		const p = s.points;
+		b = [Infinity, Infinity, -Infinity, -Infinity];
+		for (let i = 0; i + 1 < p.length; i += 2) {
+			b[0] = Math.min(b[0], p[i]);
+			b[1] = Math.min(b[1], p[i + 1]);
+			b[2] = Math.max(b[2], p[i]);
+			b[3] = Math.max(b[3], p[i + 1]);
+		}
+		if (s.tool === 'text') {
+			// Generous: the exact test below decides.
+			const size = textSize(s.size);
+			const lines = (s.text ?? '').split('\n');
+			b[2] += Math.max(...lines.map((l) => l.length)) * size;
+			b[3] += lines.length * size * 1.5;
+		}
+		boxes.set(s, b);
+	}
+	return b;
+}
+
 /** Whether a stroke passes within r board units of (x, y). */
 export function hits(s: Pick<Stroke, 'tool' | 'size' | 'points' | 'text'>, x: number, y: number, r: number): boolean {
 	const p = s.points;
 	const reach = r + (s.tool === 'highlighter' ? s.size * 2 : s.size / 2);
+	const [x1, y1, x2, y2] = box(s);
+	if (x < x1 - reach || x > x2 + reach || y < y1 - reach || y > y2 + reach) return false;
 	switch (s.tool) {
 		case 'pen':
 		case 'highlighter':
