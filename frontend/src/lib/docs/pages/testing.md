@@ -14,7 +14,7 @@ Every feature ships with tests. Backend integration tests run against a **real P
 | Design system | `ui/theme.test.ts`, `ui/themes.test.ts` | WCAG AA contrast for every colour pair in our two themes (from `app.css`) and in every generated daisyUI theme (from `static/themes`), and that the generated files match the installed daisyUI |
 | End-to-end | ad hoc, headless Chrome | The real binary with the built SPA on a throwaway database: quiz flow, rich text editor, UI crawl (light/dark, phone/desktop, 320 px overflow), polls (every input type, live results, presenter, identity modes). Not part of CI yet. |
 | Load | `loadtest/classroom.js` | k6, 300 sockets, the architecture §2.3 thresholds |
-| Load | `loadtest/whiteboard.js` | k6, one poll board: viewers on live sockets, drawers sending pen pieces every 200 ms, the teacher clearing each minute. Thresholds: draw → viewer p95 < 1 s (V2-09), stroke save p95 < 150 ms, board load p95 < 1 s, no dropped sockets. |
+| Load | `loadtest/whiteboard.js` | k6, one poll board: viewers on live sockets, drawers sending pen pieces every 200 ms, the teacher clearing each minute. A latecomer joins every 2 s and loads the busy board. Thresholds: draw → viewer p95 < 1 s (V2-09), stroke save p95 < 150 ms, board load p95 < 1 s (also for latecomers), no dropped sockets. On one laptop running k6, the server and PostgreSQL (D-52), 200 viewers and 30 drawers: draw → viewer p95 96 ms, save p95 20 ms, latecomer load p95 175 ms (boards of up to 5,900 strokes), no drops. 300 viewers and 60 drawers: 158 ms, 63 ms and 418 ms (up to 11,900 strokes), no drops. |
 
 ## The database harness
 

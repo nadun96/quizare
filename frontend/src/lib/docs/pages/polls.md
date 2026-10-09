@@ -71,7 +71,16 @@ Every poll has a whiteboard (V2-09, D-47), opened from the presenter screen (**B
 
 - **Tools.** Pen, highlighter, line, arrow, rectangle, ellipse, text and an eraser; eight ink colours and three sizes; undo (`Ctrl+Z`); clear (teacher); **PNG** export at 1920×1080. Coordinates are on a fixed 1600×900 board, so marks look the same on every screen.
 - **Who sees and draws.** The board is hidden from participants until the teacher turns on **Show the board to participants**. Who may draw: only the teacher (default), everyone, or selected groups and participants. Participants can erase and undo only their own marks; the teacher can erase anything.
-- **Real time.** Strokes are saved over REST (`/board/strokes`, at most 20 per request, rate-limited per participant) and pushed at once to every open socket of the poll as `board` events (`add`, `remove`, `clear`, `access`), without waiting for the results flush. Pen lines are sent in pieces every 200 ms while being drawn, so viewers see them grow; pieces share a gesture id, so undo removes the whole line. Late joiners load every stroke with `GET /board`.
+- **Real time.** Strokes are saved over REST (`/board/strokes`, at most 20 per request, rate-limited per participant) and pushed to every open socket of the poll as `board` events (`add`, `remove`, `clear`, `access`), without waiting for the results flush. Pen lines are sent in pieces every 200 ms while being drawn, so viewers see them grow; pieces share a gesture id, so undo removes the whole line. Late joiners load every stroke with `GET /board`.
+- **Keeping screens in step (D-52).**
+  - **Erasing:** the eraser removes every piece of a line it touches, not just the piece under it; the server expands erased ids to their whole gesture, per owner.
+  - **Sending:** each browser sends one request at a time, batching what was drawn meanwhile, so pieces arrive in order. Undo waits for pieces still on their way.
+  - **Grouping:** the server groups board events for 50 ms and merges consecutive adds and removes, so a busy board sends each screen about 20 messages a second rather than one per piece.
+  - **Out-of-order events:** screens remember removed ids, and a `clear` event carries `upto`, the highest id it removed, so a late `add` never brings a stroke back.
+  - **Reconnecting:** a screen reloads the board when its socket reconnects, keeping strokes that arrived while the reload was on its way.
+  - **Loading:** screens that load a board at the same moment share one database read and one JSON encoding.
+  - **Per-stroke work:** the access settings and stroke count are kept in memory, so a stroke piece costs one insert.
+- **Drawing on screen.** New strokes are drawn on top of the board; only removals, clears, reloads and resizes redraw it all. The stroke being drawn is repainted at most once per frame.
 - Stroke `by` is "t" for the teacher or the participant's opaque key, so a browser can recognise its own marks without ids being published.
 
 ## Scoring and leaderboard

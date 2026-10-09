@@ -48,6 +48,7 @@
 	let wbLoaded = $state(false);
 	async function loadBoard() {
 		try {
+			wb.fetching();
 			wb.load(await pollClient.board(code));
 			wbLoaded = true;
 		} catch {
@@ -107,6 +108,12 @@
 			if (v.scoring && v.joined && (revealed || v.leaderboard_mode === 'everyone')) scoresSoon();
 			// Teammates' answers and captaincy come from the personal view too.
 			else if (v.joined && teamPlay) scoresSoon();
+		};
+		// Board events missed while disconnected: reload the board on reconnect (D-52).
+		let wasOpen = false;
+		socket.onStatus = (c) => {
+			if (c && wasOpen && wbLoaded) loadBoard();
+			wasOpen ||= c;
 		};
 		socket.open();
 		return () => socket?.close();

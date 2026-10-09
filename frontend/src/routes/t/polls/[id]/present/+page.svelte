@@ -47,6 +47,7 @@
 	let access = $state<BoardAccess>({ open: false, mode: 'teacher', groups: [], participants: [] });
 	let people = $state<GroupsView | null>(null);
 	async function loadBoard() {
+		wb.fetching();
 		const v = await tb.view();
 		wb.load(v);
 		if (v.access) access = v.access;
@@ -80,7 +81,13 @@
 	$effect(() => {
 		if (!ready() || !id) return;
 		socket = new LiveSocket('/ws/teacher/polls/' + id);
-		socket.onStatus = (c) => (connected = c);
+		let wasOpen = false;
+		socket.onStatus = (c) => {
+			connected = c;
+			// Board events missed while disconnected: reload the board (D-52).
+			if (c && wasOpen && showBoard) loadBoard().catch(() => {});
+			wasOpen ||= c;
+		};
 		socket.onMessage = (m) => {
 			if (m.type === 'board') {
 				if (wb.apply(m as unknown as BoardEvent) && showBoard) loadBoard().catch(() => {});
