@@ -20,7 +20,7 @@ const (
 // Attempt states (FR-SS-10 dashboard columns).
 const (
 	StateWaiting     = "waiting"
-	StateAdmitted    = "admitted" // countdown running
+	StateAdmitted    = "admitted" // countdown running, or waiting for the teacher to start (no deadline, D-53)
 	StateInProgress  = "in_progress"
 	StatePaused      = "paused"
 	StateSubmitted   = "submitted"
@@ -56,7 +56,10 @@ type Session struct {
 	CreatedAt    time.Time          `json:"created_at"`
 	EndedAt      *time.Time         `json:"ended_at,omitempty"`
 	ReleasedAt   *time.Time         `json:"results_released_at,omitempty"`
-	Snapshot     *Snapshot          `json:"-"`
+	// StartedAt is when the teacher started the quiz for everyone (D-53).
+	// From then on, students admitted later count down by themselves.
+	StartedAt *time.Time `json:"started_at,omitempty"`
+	Snapshot  *Snapshot  `json:"-"`
 }
 
 // Effective resolves configuration for this session, optionally for one
