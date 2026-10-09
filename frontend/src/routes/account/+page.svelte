@@ -33,7 +33,7 @@
 			<p class="small muted">Saved on this device. Larger text and reduced motion also apply during quizzes.</p>
 			<DisplayMenu idPrefix="acct" />
 		</div>
-		{#if auth.user.role !== 'admin'}
+		{#if auth.user.role !== 'admin' && auth.user.role !== 'manager'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 				<h2 style="margin-top:0">Delete account</h2>
 				<p class="small muted">Your name and email are removed. Your teachers keep anonymised quiz results.</p>

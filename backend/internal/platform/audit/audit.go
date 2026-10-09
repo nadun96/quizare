@@ -14,6 +14,21 @@ type Execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
+type roleKey struct{}
+
+// WithActorRole marks the request as acting in a role ("admin" or "manager"),
+// recorded with every event it logs (PL-FR-15).
+func WithActorRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, roleKey{}, role)
+}
+
+func actorRole(ctx context.Context) any {
+	if r, _ := ctx.Value(roleKey{}).(string); r != "" {
+		return r
+	}
+	return nil
+}
+
 // Log writes one audit event. actorID may be "" for system actions.
 func Log(ctx context.Context, db Execer, actorID, action, targetType, targetID string, details any) error {
 	var b []byte
@@ -29,7 +44,7 @@ func Log(ctx context.Context, db Execer, actorID, action, targetType, targetID s
 	if actorID != "" {
 		actor = actorID
 	}
-	_, err := db.Exec(ctx, `INSERT INTO audit.events(actor_id, action, target_type, target_id, details)
-		VALUES ($1, $2, $3, $4, $5)`, actor, action, targetType, targetID, b)
+	_, err := db.Exec(ctx, `INSERT INTO audit.events(actor_id, actor_role, action, target_type, target_id, details)
+		VALUES ($1, $2, $3, $4, $5, $6)`, actor, actorRole(ctx), action, targetType, targetID, b)
 	return err
 }

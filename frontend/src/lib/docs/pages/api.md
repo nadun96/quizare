@@ -37,7 +37,7 @@ The full reference, with schemas for every request and response, is the OpenAPI 
 | Prefix | Role | Covers |
 |--------|------|--------|
 | `/api/auth/*` | public / any | register, login, logout, me, verify, reset, delete own account |
-| `/api/admin/*` | admin | users, auth policy, platform settings, usage, audit |
+| `/api/admin/*` | admin, or a manager with the route's feature (D-56) | users, auth policy, platform settings, usage, audit; managers (admins only) |
 | `/api/teacher/settings` | teacher | teacher defaults |
 | `/api/teacher/classrooms…`, `/modules…`, `/topics…`, `/enrolments…` | teacher | content tree, enrolments |
 | `/api/teacher/quizzes…`, `/questions…`, `/resources…`, `/quiz-template.csv` | teacher | authoring, CSV, resources, readiness, preview |

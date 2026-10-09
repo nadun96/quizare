@@ -30,6 +30,10 @@ const (
 	RoleStudent Role = "student"
 	RoleTeacher Role = "teacher"
 	RoleAdmin   Role = "admin"
+	// RoleManager is a manager-only account (PO-29): it has the admin
+	// features it was given and nothing else. A teacher who is also a
+	// manager keeps RoleTeacher and has Manager set.
+	RoleManager Role = "manager"
 )
 
 const (
@@ -51,6 +55,8 @@ type User struct {
 	Avatar string `json:"avatar,omitempty"`
 	// CreatedAt is set only in the admin's user list.
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+	// Manager is set for managers (PL-FR-10): the admin features they have.
+	Manager *Manager `json:"manager,omitempty"`
 }
 
 // Timeouts per role (ADR-13): students get long-lived sessions so most are
@@ -61,6 +67,16 @@ var sessionTimeouts = map[Role]timeouts{
 	RoleStudent: {7 * 24 * time.Hour, 30 * 24 * time.Hour},
 	RoleTeacher: {24 * time.Hour, 14 * 24 * time.Hour},
 	RoleAdmin:   {30 * time.Minute, 12 * time.Hour},
+	RoleManager: {30 * time.Minute, 12 * time.Hour},
+}
+
+// timeoutsFor gives managers, teacher-managers included, admin limits
+// because they act on other people's accounts (PL-NFR-08).
+func timeoutsFor(u User) timeouts {
+	if u.Manager != nil {
+		return sessionTimeouts[RoleAdmin]
+	}
+	return sessionTimeouts[u.Role]
 }
 
 var (
@@ -90,8 +106,11 @@ type Service struct {
 type cachedSession struct {
 	user      User
 	expiresAt time.Time
+	created   time.Time
 	lastSeen  time.Time
 	fetched   time.Time
+	// managerSeen is when last_active_at was last written for a manager.
+	managerSeen time.Time
 }
 
 const sessionCacheTTL = 30 * time.Second
@@ -182,11 +201,18 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (User, error) 
 	return u, err
 }
 
+// newTokenTx stores a one-time token and returns it.
+func (s *Service) newTokenTx(ctx context.Context, tx pgx.Tx, userID, purpose string, ttl time.Duration) (string, error) {
+	token, hash := newToken()
+	_, err := tx.Exec(ctx, `INSERT INTO auth.tokens(token_hash, user_id, purpose, expires_at) VALUES ($1,$2,$3,$4)`,
+		hash, userID, purpose, s.now().Add(ttl))
+	return token, err
+}
+
 // issueTokenTx stores a one-time token and enqueues the email that carries it.
 func (s *Service) issueTokenTx(ctx context.Context, tx pgx.Tx, u User, purpose string, ttl time.Duration) error {
-	token, hash := newToken()
-	if _, err := tx.Exec(ctx, `INSERT INTO auth.tokens(token_hash, user_id, purpose, expires_at) VALUES ($1,$2,$3,$4)`,
-		hash, u.ID, purpose, s.now().Add(ttl)); err != nil {
+	token, err := s.newTokenTx(ctx, tx, u.ID, purpose, ttl)
+	if err != nil {
 		return err
 	}
 	var msg qmail.Message
@@ -199,7 +225,7 @@ func (s *Service) issueTokenTx(ctx context.Context, tx pgx.Tx, u User, purpose s
 		msg.Subject = "Reset your password"
 		msg.Body = fmt.Sprintf("Hi %s,\n\nReset your password:\n%s/reset-password?token=%s\n\nThe link expires in 1 hour. If you did not ask for this, ignore this email.", u.Name, s.baseURL, token)
 	}
-	_, err := s.jobs.InsertTx(ctx, tx, qmail.Args{Message: msg}, nil)
+	_, err = s.jobs.InsertTx(ctx, tx, qmail.Args{Message: msg}, nil)
 	return err
 }
 
@@ -220,10 +246,11 @@ func (s *Service) Login(ctx context.Context, in LoginInput, ip, userAgent string
 	var u User
 	var hash string
 	var verified *time.Time
-	err := s.pool.QueryRow(ctx, `SELECT id, email, name, role, status, password_hash, email_verified_at, coalesce(avatar_version, '')
-		FROM auth.users WHERE email=$1 AND status <> 'deleted'`, email).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified, &u.Avatar)
-	if errors.Is(err, pgx.ErrNoRows) {
+	var mgr managerCols
+	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.password_hash, u.email_verified_at, coalesce(u.avatar_version, ''), `+managerSelect+`
+		FROM auth.users u `+managerJoin+` WHERE u.email=$1 AND u.status <> 'deleted'`, email).
+		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified, &u.Avatar, &mgr.is, &mgr.features)
+	if errors.Is(err, pgx.ErrNoRows) || hash == "!" { // '!': a manager account with no password yet
 		// Spend the same work as a real check so timing does not reveal accounts.
 		_, _ = s.hasher.Verify(ctx, in.Password, s.dummyHash(ctx))
 		return User{}, "", time.Time{}, errInvalidCredentials
@@ -245,6 +272,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput, ip, userAgent string
 		return User{}, "", time.Time{}, errPendingApproval
 	}
 	u.EmailVerified = verified != nil
+	u.Manager = mgr.manager()
 	token, expires, err := s.CreateSession(ctx, u, userAgent)
 	return u, token, expires, err
 }
@@ -252,7 +280,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput, ip, userAgent string
 // CreateSession issues a fresh session token for an already-authenticated user.
 func (s *Service) CreateSession(ctx context.Context, u User, userAgent string) (string, time.Time, error) {
 	token, tokenHash := newToken()
-	expires := s.now().Add(sessionTimeouts[u.Role].absolute)
+	expires := s.now().Add(timeoutsFor(u).absolute)
 	if len(userAgent) > 256 {
 		userAgent = userAgent[:256]
 	}
@@ -290,9 +318,10 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, bool, e
 	s.cacheMu.Unlock()
 	if !ok || now.Sub(c.fetched) > sessionCacheTTL {
 		var verified *time.Time
-		err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, s.expires_at, s.last_seen_at, coalesce(u.avatar_version, '')
-			FROM auth.sessions s JOIN auth.users u ON u.id = s.user_id WHERE s.token_hash=$1`, []byte(key)).
-			Scan(&c.user.ID, &c.user.Email, &c.user.Name, &c.user.Role, &c.user.Status, &verified, &c.expiresAt, &c.lastSeen, &c.user.Avatar)
+		var mgr managerCols
+		err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, s.expires_at, s.created_at, s.last_seen_at, coalesce(u.avatar_version, ''), `+managerSelect+`
+			FROM auth.sessions s JOIN auth.users u ON u.id = s.user_id `+managerJoin+` WHERE s.token_hash=$1`, []byte(key)).
+			Scan(&c.user.ID, &c.user.Email, &c.user.Name, &c.user.Role, &c.user.Status, &verified, &c.expiresAt, &c.created, &c.lastSeen, &c.user.Avatar, &mgr.is, &mgr.features)
 		if errors.Is(err, pgx.ErrNoRows) {
 			s.dropCache(key)
 			return User{}, false, nil
@@ -301,10 +330,13 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, bool, e
 			return User{}, false, err
 		}
 		c.user.EmailVerified = verified != nil
+		c.user.Manager = mgr.manager()
 		c.fetched = now
 	}
-	t := sessionTimeouts[c.user.Role]
-	if c.user.Status != StatusActive || now.After(c.expiresAt) || now.Sub(c.lastSeen) > t.idle {
+	t := timeoutsFor(c.user)
+	// A teacher made a manager mid-session gets the manager limits at once,
+	// although the session was issued with a teacher's expiry.
+	if c.user.Status != StatusActive || now.After(c.expiresAt) || now.Sub(c.created) > t.absolute || now.Sub(c.lastSeen) > t.idle {
 		_, _ = s.pool.Exec(ctx, `DELETE FROM auth.sessions WHERE token_hash=$1`, []byte(key))
 		s.dropCache(key)
 		return User{}, false, nil
@@ -315,6 +347,13 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, bool, e
 			return User{}, false, err
 		}
 		c.lastSeen = now
+	}
+	// The managers page shows each manager's last activity (PL-FR-16).
+	if c.user.Manager != nil && now.Sub(c.managerSeen) > time.Minute {
+		if _, err := s.pool.Exec(ctx, `UPDATE auth.managers SET last_active_at=$2 WHERE user_id=$1`, c.user.ID, now); err != nil {
+			return User{}, false, err
+		}
+		c.managerSeen = now
 	}
 	s.cacheMu.Lock()
 	s.cache[key] = c
@@ -426,12 +465,15 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 func (s *Service) GetUser(ctx context.Context, id string) (User, error) {
 	var u User
 	var verified *time.Time
-	err := s.pool.QueryRow(ctx, `SELECT id, email, name, role, status, email_verified_at, coalesce(avatar_version, '') FROM auth.users WHERE id=$1`, id).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &verified, &u.Avatar)
+	var mgr managerCols
+	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, coalesce(u.avatar_version, ''), `+managerSelect+`
+		FROM auth.users u `+managerJoin+` WHERE u.id=$1`, id).
+		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &verified, &u.Avatar, &mgr.is, &mgr.features)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, httpx.ErrNotFound
 	}
 	u.EmailVerified = verified != nil
+	u.Manager = mgr.manager()
 	return u, err
 }
 

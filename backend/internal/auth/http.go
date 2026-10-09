@@ -104,13 +104,15 @@ func (s *Service) Routes(r chi.Router) {
 	r.Method("POST", "/password-reset/confirm", httpx.Handler(s.handleResetConfirm))
 }
 
-// AdminRoutes mounts account management under /api/admin (caller enforces admin role).
+// AdminRoutes mounts account management under /api/admin (the caller lets in
+// admins and managers; each route checks its feature, PL-NFR-06).
 func (s *Service) AdminRoutes(r chi.Router) {
-	r.Method("GET", "/users", httpx.Handler(s.handleListUsers))
-	r.Method("POST", "/users/{id}/status", httpx.Handler(s.handleSetStatus))
-	r.Method("DELETE", "/users/{id}", httpx.Handler(s.handleDeleteUser))
-	r.Method("GET", "/auth-policy", httpx.Handler(s.handleGetPolicy))
-	r.Method("PUT", "/auth-policy", httpx.Handler(s.handleSetPolicy))
+	r.With(s.RequireFeature(FeatViewUsers)).Method("GET", "/users", httpx.Handler(s.handleListUsers))
+	r.With(s.RequireFeature(FeatManageUsers)).Method("POST", "/users/{id}/status", httpx.Handler(s.handleSetStatus))
+	r.With(s.RequireFeature(FeatManageUsers)).Method("DELETE", "/users/{id}", httpx.Handler(s.handleDeleteUser))
+	r.With(s.RequireFeature(FeatApprovalPolicy)).Method("GET", "/auth-policy", httpx.Handler(s.handleGetPolicy))
+	r.With(s.RequireFeature(FeatApprovalPolicy)).Method("PUT", "/auth-policy", httpx.Handler(s.handleSetPolicy))
+	s.managerRoutes(r)
 }
 
 func writeBusy(w http.ResponseWriter, err error) bool {
@@ -245,6 +247,14 @@ func (s *Service) handleListUsers(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
+	// A manager sees that someone is a manager, not what they may do.
+	if MustUser(r.Context()).Role != RoleAdmin {
+		for i := range users {
+			if users[i].Manager != nil {
+				users[i].Manager = &Manager{Features: []Feature{}}
+			}
+		}
+	}
 	page.Write(w, "users", users, total, p)
 	return nil
 }
@@ -256,7 +266,7 @@ func (s *Service) handleSetStatus(w http.ResponseWriter, r *http.Request) error 
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	if err := s.SetStatus(r.Context(), MustUser(r.Context()).ID, chi.URLParam(r, "id"), in.Status); err != nil {
+	if err := s.SetStatus(r.Context(), MustUser(r.Context()), chi.URLParam(r, "id"), in.Status); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -264,7 +274,7 @@ func (s *Service) handleSetStatus(w http.ResponseWriter, r *http.Request) error 
 }
 
 func (s *Service) handleDeleteUser(w http.ResponseWriter, r *http.Request) error {
-	if err := s.DeleteUser(r.Context(), MustUser(r.Context()).ID, chi.URLParam(r, "id")); err != nil {
+	if err := s.DeleteUser(r.Context(), MustUser(r.Context()), chi.URLParam(r, "id")); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
