@@ -11,9 +11,15 @@
 	import Icon from '$lib/ui/Icon.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { flyIn } from '$lib/ui/motion';
+	import { Paged } from '$lib/paged.svelte';
+	import { urlState } from '$lib/urlstate';
+	import ListSearch from '$lib/ui/ListSearch.svelte';
+	import Pager from '$lib/ui/Pager.svelte';
 
 	const ready = requireRole('teacher');
-	let polls = $state<Poll[] | null>(null);
+	let status = $state(Paged.fromUrl(urlState, 'status'));
+	// Polls, newest first, one page at a time (PL-FR-02).
+	const polls = new Paged<Poll>(() => '/api/teacher/polls', 'polls', { url: urlState, sort: 'created', desc: true, filters: () => ({ status }) });
 	let classrooms = $state<Classroom[]>([]);
 	let creating = $state(false);
 	let title = $state('');
@@ -24,8 +30,8 @@
 
 	$effect(() => {
 		if (!ready()) return;
-		api.get<{ polls: Poll[] }>('/api/teacher/polls').then((r) => (polls = r.polls));
-		api.get<{ classrooms: Classroom[] }>('/api/teacher/classrooms').then((r) => (classrooms = r.classrooms ?? []));
+		polls.load();
+		api.get<{ classrooms: Classroom[] }>('/api/teacher/classrooms?size=100&sort=name').then((r) => (classrooms = r.classrooms ?? []));
 	});
 
 	async function create(e: SubmitEvent) {
@@ -64,13 +70,22 @@
 		</form>
 	{/if}
 
-	{#if polls === null}
+	<div class="flex flex-wrap items-center gap-3">
+		<ListSearch list={polls} placeholder="Search title or join code" label="Search polls" />
+		<select class="select select-sm w-auto" bind:value={status} onchange={() => polls.refilter()} aria-label="Status"><option value="">All polls</option><option value="draft">Drafts</option><option value="open">Open</option><option value="closed">Closed</option></select>
+		<span class="spacer"></span>
+		<label class="small muted flex items-center gap-2">Sort
+			<select class="select select-sm w-auto" value={polls.sort} onchange={(e) => polls.sortBy(e.currentTarget.value, e.currentTarget.value === 'created')}>
+				<option value="created">Newest first</option><option value="title">Title A–Z</option>
+			</select></label>
+	</div>
+	{#if !polls.loaded}
 		<div class="auto-grid"><Skeleton lines={2} /><Skeleton lines={2} /></div>
-	{:else if polls.length === 0 && !creating}
+	{:else if polls.total === 0 && !creating && !polls.q && !status}
 		<div class="card card-border bg-base-100"><EmptyState icon="chart" title="No polls yet">Create one to ask a quick question with a word cloud, rating, scale or any other input.</EmptyState></div>
 	{:else}
 		<div class="auto-grid">
-			{#each polls as p, i (p.id)}
+			{#each polls.rows as p, i (p.id)}
 				<a class="card card-border interactive bg-base-100 p-4 text-inherit no-underline shadow-sm sm:p-5" href={'/t/polls/' + p.id} in:flyIn={{ delay: Math.min(i, 8) * 40 }}>
 					<div class="flex items-start gap-3">
 						<span class="grid size-10 flex-none place-items-center rounded-xl bg-primary/10 text-primary" aria-hidden="true"><Icon name="chart" size={20} /></span>
@@ -81,7 +96,9 @@
 						</div>
 					</div>
 				</a>
+			{:else}<p class="muted">No polls match.</p>
 			{/each}
 		</div>
+		<Pager list={polls} label="Polls" />
 	{/if}
 </div>

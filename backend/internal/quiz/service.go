@@ -19,6 +19,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
 
@@ -188,15 +189,27 @@ func (s *Service) effective(ctx context.Context, q Quiz) (settings.Effective, er
 	return settings.Resolve(base, layers...), nil
 }
 
-func (s *Service) ListQuizzes(ctx context.Context, teacherID, topicID string) ([]Quiz, error) {
+// QuizSorts are the orders of a topic's quiz list (PL-FR-01).
+var QuizSorts = page.Sorts{"created": "q.created_at", "title": "lower(q.title)", "status": "q.status"}
+
+// ListQuizzes returns one page of a topic's quizzes, searched by title and
+// filtered by status, and how many there are.
+func (s *Service) ListQuizzes(ctx context.Context, teacherID, topicID, status string, p page.Request) ([]Quiz, int, error) {
 	if _, err := s.topics.TopicContext(ctx, teacherID, topicID); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT `+quizCols+` FROM quiz.quizzes q WHERE q.topic_id=$1 AND q.teacher_id=$2 ORDER BY q.created_at`, topicID, teacherID)
+	where := ` FROM quiz.quizzes q WHERE q.topic_id=$1 AND q.teacher_id=$2 AND ($3 = '' OR q.title ILIKE $3) AND ($4 = '' OR q.status = $4)`
+	args := []any{topicID, teacherID, p.Like(), status}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+quizCols+where+p.OrderBy(QuizSorts, "q.id")+p.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Quiz, error) { return scanQuiz(r) })
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Quiz, error) { return scanQuiz(r) })
+	return list, total, err
 }
 
 func (s *Service) UpdateQuiz(ctx context.Context, teacherID, id string, in QuizInput) (Quiz, error) {

@@ -1,6 +1,8 @@
 <script lang="ts">
 	// A classroom's students with categories (V2-03, D-41): filter by category,
 	// search, select several and add them to (or remove them from) a category.
+	// Students come one page at a time from the server, which filters,
+	// searches and sorts across all of them (PL-FR-01 to PL-FR-03).
 	import { flip } from 'svelte/animate';
 	import { api, ApiError } from './api';
 	import Icon from './ui/Icon.svelte';
@@ -10,27 +12,46 @@
 	import { confirmDialog } from './ui/dialog.svelte';
 	import { fadeIn, flipMs } from './ui/motion';
 	import { toast } from './ui/toast.svelte';
+	import { Paged } from './paged.svelte';
+	import { urlState } from './urlstate';
+	import ListSearch from './ui/ListSearch.svelte';
+	import Pager from './ui/Pager.svelte';
+	import SortHeader from './ui/SortHeader.svelte';
 
 	export type Enrolment = { id: string; user_id?: string; student_name: string; student_email: string; student_avatar?: string; student_number: string | null; status: string; created_at: string; categories?: string[] };
 	export type Category = { id: string; classroom_id: string; name: string; color: number; position: number; members: number };
 
 	let {
 		classroomId,
-		enrolments,
-		onchange,
+		count = $bindable(0),
 		oneditnumber,
 		onstatus
 	}: {
 		classroomId: string;
-		enrolments: Enrolment[];
-		onchange: () => void | Promise<void>;
-		oneditnumber: (e: Enrolment) => void;
-		onstatus: (e: Enrolment, status: string) => void;
+		/** Students in the classroom, for the tab label. */
+		count?: number;
+		oneditnumber: (e: Enrolment) => Promise<void>;
+		onstatus: (e: Enrolment, status: string) => Promise<void>;
 	} = $props();
 
 	let categories = $state<Category[]>([]);
-	let filter = $state<string | null>(null); // category id, or null for everyone
-	let query = $state('');
+	let filter = $state<string | null>(Paged.fromUrl(urlState, 'category', 'st') || null); // category id, or null for everyone
+	const list = new Paged<Enrolment>(() => '/api/teacher/classrooms/' + classroomId + '/enrolments', 'enrolments', {
+		url: urlState, prefix: 'st', sort: 'joined', filters: () => ({ category: filter ?? undefined })
+	});
+	async function reload() {
+		await list.load();
+		if (!filter && !list.q) count = list.total;
+	}
+	$effect(() => {
+		if (classroomId) reload();
+	});
+	async function setFilter(id: string | null) {
+		filter = id;
+		selected = new Set();
+		await list.refilter();
+		if (!filter && !list.q) count = list.total;
+	}
 	let selected = $state<Set<string>>(new Set());
 	let newName = $state('');
 	let editing = $state<Category | null>(null);
@@ -44,13 +65,7 @@
 	});
 
 	const byId = $derived(Object.fromEntries(categories.map((c) => [c.id, c])));
-	const shown = $derived(
-		enrolments.filter((e) => {
-			if (filter && !e.categories?.includes(filter)) return false;
-			const q = query.trim().toLowerCase();
-			return !q || e.student_name.toLowerCase().includes(q) || e.student_email.toLowerCase().includes(q) || (e.student_number ?? '').toLowerCase().includes(q);
-		})
-	);
+	const shown = $derived(list.rows);
 	const allShownSelected = $derived(shown.length > 0 && shown.every((e) => selected.has(e.id)));
 
 	function toggle(id: string) {
@@ -88,10 +103,10 @@
 	async function remove(c: Category) {
 		if (!(await confirmDialog({ title: `Delete “${c.name}”?`, body: 'Students stay in the classroom; only the label is removed.', confirm: 'Delete category', danger: true }))) return;
 		await api.del('/api/teacher/categories/' + c.id);
-		if (filter === c.id) filter = null;
 		editing = null;
 		await loadCategories();
-		await onchange();
+		if (filter === c.id) await setFilter(null);
+		else await reload();
 	}
 	async function assign(assigned: boolean) {
 		const c = byId[target];
@@ -99,12 +114,20 @@
 		const r = await api.post<{ affected: number }>('/api/teacher/categories/' + c.id + '/members', { enrolment_ids: [...selected], assigned });
 		toast(assigned ? `Added ${r.affected} to “${c.name}”` : `Removed ${r.affected} from “${c.name}”`, r.affected ? 'success' : 'info');
 		await loadCategories();
-		await onchange();
+		await reload();
 	}
 	async function untag(e: Enrolment, c: Category) {
 		await api.post('/api/teacher/categories/' + c.id + '/members', { enrolment_ids: [e.id], assigned: false });
 		await loadCategories();
-		await onchange();
+		await reload();
+	}
+	async function setStatus(e: Enrolment, s: string) {
+		await onstatus(e, s);
+		await reload();
+	}
+	async function editNumber(e: Enrolment) {
+		await oneditnumber(e);
+		await reload();
 	}
 </script>
 
@@ -113,10 +136,10 @@
 	<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-5">
 		<div class="flex flex-wrap items-center gap-2">
 			<span class="small font-semibold mr-1">Categories</span>
-			<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === null} class:btn-soft={filter === null} aria-pressed={filter === null} onclick={() => (filter = null)}>All <span class="muted tabular">{enrolments.length}</span></button>
+			<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === null} class:btn-soft={filter === null} aria-pressed={filter === null} onclick={() => setFilter(null)}>All <span class="muted tabular">{count}</span></button>
 			{#each categories as c (c.id)}
 				<span class="chip-wrap" animate:flip={{ duration: flipMs() }}>
-					<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === c.id} class:btn-soft={filter === c.id} aria-pressed={filter === c.id} onclick={() => (filter = filter === c.id ? null : c.id)}>
+					<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === c.id} class:btn-soft={filter === c.id} aria-pressed={filter === c.id} onclick={() => setFilter(filter === c.id ? null : c.id)}>
 						<span class="dot" style:background="var(--cat-{c.color})" aria-hidden="true"></span>{c.name} <span class="muted tabular">{c.members}</span>
 					</button>
 					<IconBtn icon="pencil" label="Edit" hint="Edit {c.name}" class="btn-ghost btn-xs" size={13} onclick={() => (editing = { ...c })} />
@@ -145,7 +168,7 @@
 
 	<!-- Search and bulk actions -->
 	<div class="flex flex-wrap items-center gap-2">
-		<input class="input input-sm w-full max-w-xs" type="search" bind:value={query} placeholder="Search name, email or student ID" aria-label="Search students" />
+		<ListSearch {list} placeholder="Search name, email or student ID" label="Search students" />
 		<span class="spacer"></span>
 		{#if selected.size}
 			<span class="small" in:fadeIn><strong>{selected.size}</strong> selected</span>
@@ -160,14 +183,14 @@
 	</div>
 
 	<div class="card card-border bg-base-100 p-0 shadow-sm table-wrap">
-		{#if enrolments.length === 0}
+		{#if list.loaded && count === 0 && !filter && !list.q}
 			<EmptyState icon="users" title="No students yet">Share the join code from the Join code tab.</EmptyState>
 		{:else}
 			<table class="table">
 				<thead>
 					<tr>
-						<th class="w-10"><input type="checkbox" class="checkbox checkbox-sm" checked={allShownSelected} onchange={toggleAll} aria-label="Select all shown" /></th>
-						<th>Name</th><th>Student ID</th><th>Categories</th><th>Status</th><th></th>
+						<th class="w-10"><input type="checkbox" class="checkbox checkbox-sm" checked={allShownSelected} onchange={toggleAll} aria-label="Select all on this page" /></th>
+						<th><SortHeader {list} key="name" label="Name" /></th><th><SortHeader {list} key="number" label="Student ID" /></th><th>Categories</th><th><SortHeader {list} key="status" label="Status" /></th><th><span class="sr-only">Actions</span></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -175,7 +198,7 @@
 						<tr class:sel={selected.has(en.id)}>
 							<td><input type="checkbox" class="checkbox checkbox-sm" checked={selected.has(en.id)} onchange={() => toggle(en.id)} aria-label="Select {en.student_name}" /></td>
 							<td><span class="flex items-center gap-2"><Avatar id={en.user_id ?? ''} name={en.student_name} avatar={en.student_avatar} size={30} /><span class="min-w-0">{en.student_name}<br /><span class="small muted">{en.student_email}</span></span></span></td>
-							<td class="whitespace-nowrap">{en.student_number ?? '—'} <button class="btn btn-ghost btn-xs" onclick={() => oneditnumber(en)}>Edit</button></td>
+							<td class="whitespace-nowrap">{en.student_number ?? '—'} <button class="btn btn-ghost btn-xs" onclick={() => editNumber(en)}>Edit</button></td>
 							<td>
 								<div class="flex flex-wrap gap-1">
 									{#each en.categories ?? [] as cid (cid)}
@@ -188,18 +211,19 @@
 							</td>
 							<td><span class="badge badge-soft {en.status === 'active' ? 'ok' : en.status === 'pending' ? 'warn' : ''}">{en.status}</span></td>
 							<td class="whitespace-nowrap">
-								{#if en.status !== 'active'}<button class="btn btn-sm" onclick={() => onstatus(en, 'active')}>Approve</button>{/if}
-								{#if en.status === 'pending'}<button class="btn btn-sm" onclick={() => onstatus(en, 'rejected')}>Reject</button>{/if}
-								{#if en.status === 'active'}<button class="btn btn-sm btn-error btn-outline" onclick={() => onstatus(en, 'removed')}>Remove</button>{/if}
+								{#if en.status !== 'active'}<button class="btn btn-sm" onclick={() => setStatus(en, 'active')}>Approve</button>{/if}
+								{#if en.status === 'pending'}<button class="btn btn-sm" onclick={() => setStatus(en, 'rejected')}>Reject</button>{/if}
+								{#if en.status === 'active'}<button class="btn btn-sm btn-error btn-outline" onclick={() => setStatus(en, 'removed')}>Remove</button>{/if}
 							</td>
 						</tr>
 					{:else}
-						<tr><td colspan="6" class="muted">No students match.</td></tr>
+						<tr><td colspan="6" class="muted">{list.loaded ? 'No students match.' : 'Loading…'}</td></tr>
 					{/each}
 				</tbody>
 			</table>
 		{/if}
 	</div>
+	<Pager {list} label="Students" />
 </div>
 
 <style>

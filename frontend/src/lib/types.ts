@@ -87,6 +87,7 @@ export type Quiz = {
 	question_count: number;
 	total_marks: number;
 	warnings_accepted: boolean;
+	created_at?: string;
 };
 export type Session = { id: string; quiz_id: string; title: string; join_code: string; join_url: string; status: string; settings: Overrides; extension_sec: number; created_at: string; results_released_at?: string; started_at?: string };
 export type DashboardRow = {

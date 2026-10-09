@@ -3,12 +3,12 @@ package auth
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 // Admin account management (FR-ACC-04, FR-ACC-05). Admins manage accounts but
@@ -17,32 +17,32 @@ import (
 type UserFilter struct {
 	Role   string
 	Status string
-	Query  string
-	Limit  int
-	Offset int
 }
 
-func (s *Service) ListUsers(ctx context.Context, f UserFilter) ([]User, error) {
-	if f.Limit <= 0 || f.Limit > 200 {
-		f.Limit = 50
+// UserSorts are the columns the admin's user list sorts by (PL-FR-01).
+var UserSorts = page.Sorts{"created": "created_at", "name": "lower(name)", "email": "lower(email)", "role": "role", "status": "status"}
+
+// ListUsers returns one page of users matching the filter and search, and
+// how many match in all.
+func (s *Service) ListUsers(ctx context.Context, f UserFilter, p page.Request) ([]User, int, error) {
+	where := ` FROM auth.users WHERE ($1 = '' OR role = $1) AND ($2 = '' OR status = $2)
+		  AND ($3 = '' OR email ILIKE $3 OR name ILIKE $3)`
+	args := []any{f.Role, f.Status, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id, email, name, role, status, email_verified_at IS NOT NULL
-		FROM auth.users
-		WHERE ($1 = '' OR role = $1) AND ($2 = '' OR status = $2)
-		  AND ($3 = '' OR email ILIKE '%' || $3 || '%' OR name ILIKE '%' || $3 || '%')
-		ORDER BY created_at DESC LIMIT $4 OFFSET $5`, f.Role, f.Status, escapeLike(f.Query), f.Limit, f.Offset)
+	rows, err := s.pool.Query(ctx, `SELECT id, email, name, role, status, email_verified_at IS NOT NULL, created_at`+where+
+		p.OrderBy(UserSorts, "id")+p.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (User, error) {
+	users, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (User, error) {
 		var u User
-		err := r.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified)
+		err := r.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified, &u.CreatedAt)
 		return u, err
 	})
-}
-
-func escapeLike(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+	return users, total, err
 }
 
 // SetStatus activates (or approves), or suspends an account. Suspending

@@ -49,6 +49,8 @@ type User struct {
 	// Avatar is the profile picture's version ("" = none); the image is at
 	// /api/avatars/{id}?v={avatar} (D-49).
 	Avatar string `json:"avatar,omitempty"`
+	// CreatedAt is set only in the admin's user list.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 }
 
 // Timeouts per role (ADR-13): students get long-lived sessions so most are

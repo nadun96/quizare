@@ -2,6 +2,8 @@
 	// Public live leaderboard links (V2-08, D-45): anyone with the link sees
 	// the rankings update, without logging in. Names never appear.
 	import { api, ApiError } from './api';
+	import { Paged } from './paged.svelte';
+	import Pager from './ui/Pager.svelte';
 	import QrCode from './QrCode.svelte';
 	import Icon from './ui/Icon.svelte';
 	import { confirmDialog } from './ui/dialog.svelte';
@@ -12,7 +14,8 @@
 	let { scope, targetId, teams = false }: { scope: 'live_poll' | 'live_session'; targetId: string; teams?: boolean } = $props();
 
 	const poll = $derived(scope === 'live_poll');
-	let links = $state<Link[]>([]);
+	// The links of this target and scope, one page at a time (PL-FR-02).
+	const links = new Paged<Link>(() => '/api/teacher/share-links', 'links', { sort: 'created', desc: true, filters: () => ({ target_id: targetId, scope }) });
 	let fresh = $state<{ id: string; url: string } | null>(null);
 	let label = $state('');
 	let people = $state(true);
@@ -23,10 +26,7 @@
 	let busy = $state(false);
 
 	const urlFor = (token: string) => location.origin + '/live/' + token;
-	async function load() {
-		const r = await api.get<{ links: Link[] }>('/api/teacher/share-links?target_id=' + targetId);
-		links = (r.links ?? []).filter((l) => l.scope === scope);
-	}
+	const load = () => links.load();
 	$effect(() => {
 		if (targetId) load().catch(() => {});
 	});
@@ -115,9 +115,9 @@
 		</div>
 	{/if}
 
-	{#if links.length}
+	{#if links.total}
 		<ul class="links">
-			{#each links as l (l.id)}
+			{#each links.rows as l (l.id)}
 				<li class="link" class:off={!!l.revoked_at}>
 					<span class="min-w-0 flex-1">
 						<span class="block truncate font-semibold">{l.label || shows(l)}</span>
@@ -129,6 +129,7 @@
 				</li>
 			{/each}
 		</ul>
+		<Pager list={links} label="Live links" />
 	{/if}
 </section>
 

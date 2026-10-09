@@ -18,6 +18,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 // TokenHeader carries an anonymous participant's device token.
@@ -26,6 +27,7 @@ const TokenHeader = "X-Poll-Token"
 // TeacherRoutes mounts poll management under /api/teacher.
 func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("GET", "/polls", httpx.Handler(s.hList))
+	s.listRoutes(r) // paginated participants and answers (PL-FR-02)
 	r.Method("POST", "/polls", httpx.Handler(s.hCreate))
 	r.Method("GET", "/polls/{id}", httpx.Handler(s.hGet))
 	r.Method("PUT", "/polls/{id}", httpx.Handler(s.hUpdate))
@@ -145,11 +147,12 @@ func caller(r *http.Request) Caller {
 }
 
 func (s *Service) hList(w http.ResponseWriter, r *http.Request) error {
-	l, err := s.ListPolls(r.Context(), teacherID(r))
+	pg := page.Parse(r, PollSorts, "created", true)
+	l, total, err := s.ListPolls(r.Context(), teacherID(r), r.URL.Query().Get("status"), pg)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"polls": l})
+	page.Write(w, "polls", l, total, pg)
 	return nil
 }
 

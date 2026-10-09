@@ -12,6 +12,11 @@
 	import QuestionView from '$lib/QuestionView.svelte';
 	import RichText from '$lib/richtext/RichText.svelte';
 	import SettingsEditor from '$lib/SettingsEditor.svelte';
+	import { Paged } from '$lib/paged.svelte';
+	import { urlState } from '$lib/urlstate';
+	import ListSearch from '$lib/ui/ListSearch.svelte';
+	import Pager from '$lib/ui/Pager.svelte';
+	import SortHeader from '$lib/ui/SortHeader.svelte';
 	import { QTYPE_LABEL, type Overrides, type Question, type Quiz, type Session, type StudentQuestion } from '$lib/types';
 
 	type Report = { imported: number; rejected: { row: number; code: string; errors: Record<string, string> }[] };
@@ -19,7 +24,8 @@
 	const id = $derived(page.params.id ?? '');
 	let quiz = $state<Quiz | null>(null);
 	let questions = $state<Question[]>([]);
-	let sessions = $state<Session[]>([]);
+	// A quiz's sessions, newest first, one page at a time (PL-FR-02).
+	const sessions = new Paged<Session>(() => '/api/teacher/quizzes/' + id + '/sessions', 'sessions', { url: urlState, prefix: 'ses', sort: 'created', desc: true });
 	let readiness = $state<{ blocking: string[]; warnings: string[] }>({ blocking: [], warnings: [] });
 	let tab = $state<'questions' | 'import' | 'settings' | 'sessions' | 'preview'>('questions');
 	let editing = $state<Question | 'new' | null>(null);
@@ -33,7 +39,7 @@
 	async function load() {
 		quiz = await api.get<Quiz>('/api/teacher/quizzes/' + id);
 		questions = (await api.get<{ questions: Question[] }>('/api/teacher/quizzes/' + id + '/questions')).questions ?? [];
-		sessions = (await api.get<{ sessions: Session[] }>('/api/teacher/quizzes/' + id + '/sessions')).sessions ?? [];
+		await sessions.load();
 		readiness = await api.get('/api/teacher/quizzes/' + id + '/readiness');
 	}
 	$effect(() => {
@@ -163,7 +169,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 			<button class="tab" role="tab" aria-selected={tab === 'questions'} class:tab-active={tab === 'questions'} onclick={() => (tab = 'questions')}>Questions</button>
 			<button class="tab" role="tab" aria-selected={tab === 'import'} class:tab-active={tab === 'import'} onclick={() => (tab = 'import')}>CSV import</button>
 			<button class="tab" role="tab" aria-selected={tab === 'settings'} class:tab-active={tab === 'settings'} onclick={() => (tab = 'settings')}>Settings</button>
-			<button class="tab" role="tab" aria-selected={tab === 'sessions'} class:tab-active={tab === 'sessions'} onclick={() => (tab = 'sessions')}>Sessions ({sessions.length})</button>
+			<button class="tab" role="tab" aria-selected={tab === 'sessions'} class:tab-active={tab === 'sessions'} onclick={() => (tab = 'sessions')}>Sessions ({sessions.total})</button>
 			<button class="tab" role="tab" aria-selected={tab === 'preview'} class:tab-active={tab === 'preview'} onclick={loadPreview}>Preview</button>
 		</div>
 
@@ -242,19 +248,21 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 			<p class="small muted">Changes apply to new sessions; running sessions keep the settings they started with.</p>
 			<div><button class="btn btn-error btn-outline" onclick={delQuiz}>Delete quiz</button></div>
 		{:else if tab === 'sessions'}
+			<ListSearch list={sessions} placeholder="Search title or join code" label="Search sessions" />
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
-				<table class="table"><thead><tr><th>Session</th><th>Code</th><th>Status</th><th>Started</th><th></th></tr></thead><tbody>
-					{#each sessions as s (s.id)}
+				<table class="table"><thead><tr><th><SortHeader list={sessions} key="title" label="Session" /></th><th>Code</th><th><SortHeader list={sessions} key="status" label="Status" /></th><th><SortHeader list={sessions} key="created" label="Started" desc /></th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+					{#each sessions.rows as s (s.id)}
 						<tr>
 							<td>{s.title}</td><td><strong>{s.join_code}</strong></td>
 							<td><span class="badge badge-soft {s.status === 'live' ? 'ok' : ''}">{s.status}</span></td>
 							<td class="small">{new Date(s.created_at).toLocaleString()}</td>
 							<td class="row"><a class="btn btn-sm" href={'/t/sessions/' + s.id}>Dashboard</a><a class="btn btn-sm" href={'/t/sessions/' + s.id + '/results'}>Results</a></td>
 						</tr>
-					{:else}<tr><td colspan="5" class="muted">No sessions yet.</td></tr>{/each}
+					{:else}<tr><td colspan="5" class="muted">{sessions.q ? 'No sessions match.' : 'No sessions yet.'}</td></tr>{/each}
 				</tbody></table>
 			</div>
-			{#if sessions.length}<a class="btn" href={'/t/quizzes/' + id + '/analytics'}>Quiz analytics across sessions</a>{/if}
+			<Pager list={sessions} label="Sessions" />
+			{#if sessions.total}<a class="btn" href={'/t/quizzes/' + id + '/analytics'}>Quiz analytics across sessions</a>{/if}
 		{:else}
 			<p class="small muted">This is what students see. Answer keys are not included.</p>
 			{#each preview as q, i (q.id)}

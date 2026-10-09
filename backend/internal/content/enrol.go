@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
 
@@ -153,6 +157,56 @@ func (s *Service) GetEnrolment(ctx context.Context, classroomID, userID string) 
 	return e, err == nil, err
 }
 
+// EnrolmentSorts are the orders of a classroom's student list (PL-FR-01).
+var EnrolmentSorts = page.Sorts{"joined": "", "name": "", "number": "", "status": ""}
+
+// ListEnrolmentsPage returns one page of a classroom's enrolments, searched by
+// name, email or student ID and sorted (PL-FR-01 to PL-FR-03). Names live in
+// the auth module, so the classroom's enrolments (bounded by its size) are
+// filtered and sorted here and only the page is sent (ADR-25).
+func (s *Service) ListEnrolmentsPage(ctx context.Context, teacherID, classroomID, status, category string, p page.Request) ([]Enrolment, int, error) {
+	all, err := s.ListEnrolments(ctx, teacherID, classroomID, status)
+	if err != nil {
+		return nil, 0, err
+	}
+	list := all[:0]
+	for _, e := range all {
+		num := ""
+		if e.StudentNumber != nil {
+			num = *e.StudentNumber
+		}
+		if category != "" && !slices.Contains(e.Categories, category) {
+			continue
+		}
+		if p.Matches(e.StudentName, e.StudentEmail, num) {
+			list = append(list, e)
+		}
+	}
+	key := func(e Enrolment) string {
+		switch p.Sort {
+		case "name":
+			return strings.ToLower(e.StudentName)
+		case "number":
+			if e.StudentNumber == nil {
+				return "\uffff"
+			}
+			return strings.ToLower(*e.StudentNumber)
+		case "status":
+			return e.Status
+		}
+		return e.CreatedAt.Format(time.RFC3339Nano)
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		a, b := key(list[i]), key(list[j])
+		if a == b {
+			return list[i].ID < list[j].ID
+		}
+		return (a < b) != p.Desc
+	})
+	out, total := page.Slice(list, p)
+	return out, total, nil
+}
+
 // ListEnrolments returns a classroom's enrolments with student names for its teacher.
 func (s *Service) ListEnrolments(ctx context.Context, teacherID, classroomID, status string) ([]Enrolment, error) {
 	if _, err := s.GetClassroom(ctx, teacherID, classroomID); err != nil {
@@ -239,16 +293,24 @@ type StudentClassroom struct {
 	StudentNumber *string `json:"student_number"`
 }
 
-func (s *Service) MyClassrooms(ctx context.Context, userID string) ([]StudentClassroom, error) {
-	rows, err := s.pool.Query(ctx, `SELECT c.id, c.name, e.status, e.student_number
-		FROM content.enrolments e JOIN content.classrooms c ON c.id=e.classroom_id
-		WHERE e.user_id=$1 AND e.status IN ('active','pending') AND c.archived_at IS NULL ORDER BY c.name`, userID)
-	if err != nil {
-		return nil, err
+// MyClassrooms returns one page of a student's classrooms, by name.
+func (s *Service) MyClassrooms(ctx context.Context, userID string, p page.Request) ([]StudentClassroom, int, error) {
+	where := ` FROM content.enrolments e JOIN content.classrooms c ON c.id=e.classroom_id
+		WHERE e.user_id=$1 AND e.status IN ('active','pending') AND c.archived_at IS NULL AND ($2 = '' OR c.name ILIKE $2)`
+	args := []any{userID, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (StudentClassroom, error) {
+	rows, err := s.pool.Query(ctx, `SELECT c.id, c.name, e.status, e.student_number`+where+
+		p.OrderBy(page.Sorts{"name": "lower(c.name)"}, "c.id")+p.Limit(), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (StudentClassroom, error) {
 		var sc StudentClassroom
 		err := r.Scan(&sc.ClassroomID, &sc.Name, &sc.Status, &sc.StudentNumber)
 		return sc, err
 	})
+	return list, total, err
 }

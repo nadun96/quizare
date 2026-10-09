@@ -11,6 +11,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -280,26 +281,35 @@ type StudentAttempt struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
-func (s *Service) MyAttempts(ctx context.Context, userID string) ([]StudentAttempt, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.user_id=$1 ORDER BY a.created_at DESC LIMIT 200`, userID)
+// MyAttempts returns one page of a student's attempts, newest first, searched
+// by session or quiz title, and how many there are (PL-FR-02 "My results").
+func (s *Service) MyAttempts(ctx context.Context, userID string, p page.Request) ([]StudentAttempt, int, error) {
+	where := ` FROM live.attempts a JOIN live.sessions s ON s.id = a.session_id
+		WHERE a.user_id=$1 AND ($2 = '' OR s.title ILIKE $2 OR s.snapshot->>'quiz_title' ILIKE $2)`
+	args := []any{userID, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+attemptCols+where+p.OrderBy(page.Sorts{"created": "a.created_at"}, "a.id")+p.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (*Attempt, error) { return scanAttempt(r) })
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]StudentAttempt, 0, len(list))
 	for _, a := range list {
 		sess, err := s.session(ctx, a.SessionID)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		v := s.sessionView(sess)
 		out = append(out, StudentAttempt{AttemptID: a.ID, SessionID: v.ID, SessionTitle: v.Title, QuizTitle: v.Snapshot.QuizTitle,
 			State: a.State, Released: released(v, a, v.Effective(nil, a.Overrides)), SubmittedAt: a.SubmittedAt, CreatedAt: a.CreatedAt})
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // OwnMarkingData returns an attempt's data for the student who owns it.

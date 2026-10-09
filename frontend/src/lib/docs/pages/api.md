@@ -10,6 +10,7 @@ The full reference, with schemas for every request and response, is the OpenAPI 
 - **Ownership**: another teacher's or student's resource returns **404**, not 403, so ids can't be probed.
 - **IDs** are UUIDs. Join codes are uppercase alphanumerics without `0/O/1/I`.
 - **Times** are RFC 3339 in JSON, except live-session deadlines, which are epoch **milliseconds** of server time.
+- **Lists are paginated** (D-55, PL-FR-01). Every list whose data can grow takes `page` (from 1), `size` (1–100, default 25), `q` (search across all pages), `sort` (a key the endpoint lists in the spec) and `dir` (`asc` or `desc`; each sort has its own default). The response keeps the list's own key and adds `total` (rows matching, on all pages), `page` and `size`: `{"classrooms": [...], "total": 340, "page": 2, "size": 25}`. Bad values fall back to the defaults instead of failing, so old links still open; an unknown `sort` is ignored. Lists that can't grow past a small fixed size (a quiz's questions) and the live dashboards are not paginated.
 
 ## Errors
 

@@ -7,20 +7,29 @@
 	import Icon from '$lib/ui/Icon.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { flyIn } from '$lib/ui/motion';
+	import { Paged } from '$lib/paged.svelte';
+	import { urlState } from '$lib/urlstate';
+	import ListSearch from '$lib/ui/ListSearch.svelte';
+	import Pager from '$lib/ui/Pager.svelte';
 
 	type Attempt = { attempt_id: string; session_title: string; quiz_title: string; state: string; released: boolean; created_at: string };
 	type Cls = { classroom_id: string; name: string; status: string; student_number: string | null };
-	let attempts = $state<Attempt[] | null>(null);
-	let classes = $state<Cls[]>([]);
+	// Results and classrooms, one page at a time (PL-FR-02 "My results").
+	const attempts = new Paged<Attempt>(() => '/api/my/attempts', 'attempts', { url: urlState, sort: 'created', desc: true });
+	const classes = new Paged<Cls>(() => '/api/my/classrooms', 'classrooms', { url: urlState, prefix: 'cls', sort: 'name' });
+	// Running attempts are the newest, so the first page shows them; keep them while paging back.
+	let liveNow = $state<Attempt[]>([]);
 
 	$effect(() => {
 		if (!auth.loaded) return;
 		if (!auth.user) return void goto(loginUrl('/my'));
-		api.get<{ attempts: Attempt[] }>('/api/my/attempts').then((r) => (attempts = r.attempts));
-		api.get<{ classrooms: Cls[] }>('/api/my/classrooms').then((r) => (classes = r.classrooms ?? []));
+		attempts.load();
+		classes.load();
 	});
 	const live = (s: string) => ['waiting', 'admitted', 'in_progress', 'paused'].includes(s);
-	const liveNow = $derived((attempts ?? []).filter((a) => live(a.state)));
+	$effect(() => {
+		if (attempts.loaded && attempts.page === 1 && !attempts.q) liveNow = attempts.rows.filter((a) => live(a.state));
+	});
 </script>
 
 <div class="page-container vstack">
@@ -38,15 +47,16 @@
 		</a>
 	{/each}
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
-		{#if attempts === null}
+		{#if !attempts.loaded}
 			<Skeleton card={false} lines={3} />
-		{:else if attempts.length === 0}
+		{:else if attempts.total === 0 && !attempts.q}
 			<EmptyState icon="qr" title="No quizzes yet">Scan the QR code your teacher shows, or <a href="/join">enter the join code</a>.</EmptyState>
 		{:else}
+			<div class="mb-3"><ListSearch list={attempts} placeholder="Search quizzes" label="Search my quizzes" /></div>
 			<div class="table-wrap"><table class="table">
 				<thead><tr><th>Quiz</th><th>Status</th><th></th></tr></thead>
 				<tbody>
-					{#each attempts as a (a.attempt_id)}
+					{#each attempts.rows as a (a.attempt_id)}
 						<tr>
 							<td><strong>{a.session_title}</strong><br /><span class="small muted">{new Date(a.created_at).toLocaleString()}</span></td>
 							<td><span class="badge badge-soft {STATE_BADGE[a.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[a.state] ?? ''}</span> {STATE_LABEL[a.state] ?? a.state}</span></td>
@@ -56,17 +66,20 @@
 								{:else}<span class="small muted">Results not released</span>{/if}
 							</td>
 						</tr>
+					{:else}<tr><td colspan="3" class="muted">No quizzes match.</td></tr>
 					{/each}
 				</tbody>
 			</table></div>
+			<div class="mt-3"><Pager list={attempts} label="My quizzes" /></div>
 		{/if}
 	</div>
 	<h2>My classrooms</h2>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
-		{#each classes as c (c.classroom_id)}
+		{#each classes.rows as c (c.classroom_id)}
 			<p>{c.name} {#if c.student_number}<span class="muted small">· ID {c.student_number}</span>{/if} {#if c.status === 'pending'}<span class="badge badge-soft badge-warning">awaiting approval</span>{/if}</p>
 		{:else}
-			<p class="muted">You're not enrolled in any classroom yet.</p>
+			<p class="muted">{classes.loaded ? "You're not enrolled in any classroom yet." : 'Loading…'}</p>
 		{/each}
+		<Pager list={classes} label="My classrooms" />
 	</div>
 </div>

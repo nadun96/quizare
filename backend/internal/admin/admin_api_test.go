@@ -3,6 +3,7 @@ package admin_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/png"
 	"strings"
@@ -85,4 +86,26 @@ func TestMyDataExportAndSelfDelete(t *testing.T) {
 
 	ad := e.NewUser(auth.RoleAdmin)
 	ad.Call("DELETE", "/api/auth/me", map[string]string{"password": "password123"}, 400, nil)
+}
+
+// The audit log is paginated newest first, filtered and searched across pages (PL-FR-01).
+func TestAuditIsPaginated(t *testing.T) {
+	e := apptest.New(t)
+	ad := e.NewUser(auth.RoleAdmin)
+	for i := range 7 {
+		if _, err := e.Pool.Exec(context.Background(), `INSERT INTO audit.events (action, target_type, target_id, details)
+			VALUES ('pager_test', 'thing', $1, '{}')`, fmt.Sprint(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all := ad.CheckPages("/api/admin/audit?action=pager_test", "events", "id", 7, 3)
+	if all[0]["target_id"] != "6" || all[6]["target_id"] != "0" {
+		t.Fatalf("newest first: %v … %v", all[0]["target_id"], all[6]["target_id"])
+	}
+	if p := ad.Page("/api/admin/audit?action=pager_test&dir=asc", "events", 1, 3); p.Rows[0]["target_id"] != "0" {
+		t.Fatalf("oldest first: %v", p.Rows[0]["target_id"])
+	}
+	if p := ad.Page("/api/admin/audit?q=pager_t", "events", 1, 25); p.Total != 7 {
+		t.Fatalf("search: %d", p.Total)
+	}
 }

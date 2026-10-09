@@ -10,6 +10,7 @@ Every module lives in `backend/internal/<name>`, owns one PostgreSQL schema, exp
 | `platform/db` | Opens the pgx pool; `Migrate` applies `migrations/*.sql` in order, each in its own transaction, recorded in `public.schema_migrations`. |
 | `platform/httpx` | `Handler`, `Error` and its helpers (`Invalid`, `Conflict`, ...), `Decode` (1 MiB, unknown fields rejected), `Recover`, `SecurityHeaders`, `SameOrigin`, `ClientIP`, `SPA`. |
 | `platform/jobs` | River client, queue names and caps, the `Inserter` interface (`InsertTx`), River migrations. |
+| `platform/page` | Server pagination (D-55): `Parse` reads `page`, `size`, `q`, `sort` and `dir` against a whitelist of sort keys (`Sorts`), `OrderBy` adds a unique tie-breaker so no row shows on two pages, `Like` escapes the search for `ILIKE`, `Write` sends the list with `total`, `page` and `size`. `Slice` and `Matches` page lists that are bounded by something else and need another module's data to search or sort (a classroom's students by name, a poll's participants and answers). |
 | `platform/audit` | `audit.Log(ctx, tx, actor, action, targetType, targetID, details)`: write it inside the transaction of the action. |
 | `platform/dbtest` | Real-Postgres test harness (see [Testing](testing.md)). |
 
