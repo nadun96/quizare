@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 // CookieName uses the __Host- prefix: Secure, no Domain, Path=/ (ADR-13).
@@ -240,13 +240,12 @@ func (s *Service) handleResetConfirm(w http.ResponseWriter, r *http.Request) err
 
 func (s *Service) handleListUsers(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	offset, _ := strconv.Atoi(q.Get("offset"))
-	users, err := s.ListUsers(r.Context(), UserFilter{Role: q.Get("role"), Status: q.Get("status"), Query: q.Get("q"), Limit: limit, Offset: offset})
+	p := page.Parse(r, UserSorts, "created", true)
+	users, total, err := s.ListUsers(r.Context(), UserFilter{Role: q.Get("role"), Status: q.Get("status")}, p)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"users": users})
+	page.Write(w, "users", users, total, p)
 	return nil
 }
 

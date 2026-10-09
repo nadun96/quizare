@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -400,17 +401,29 @@ type Event struct {
 	CreatedAt time.Time       `json:"created_at"`
 }
 
-func (s *Service) Events(ctx context.Context, teacherID, sessionID string) ([]Event, error) {
+// EventSorts: the integrity log is read in time order, or newest first.
+var EventSorts = page.Sorts{"time": "id"}
+
+// Events returns one page of a session's integrity log, filtered by kind and
+// searched in the kind and details, and how many events match.
+func (s *Service) Events(ctx context.Context, teacherID, sessionID, kind string, p page.Request) ([]Event, int, error) {
 	if _, err := s.ownedSession(ctx, teacherID, sessionID); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id, attempt_id, actor_id, kind, details, created_at FROM live.events WHERE session_id=$1 ORDER BY id`, sessionID)
+	where := ` FROM live.events WHERE session_id=$1 AND ($2 = '' OR kind = $2) AND ($3 = '' OR kind ILIKE $3 OR details::text ILIKE $3)`
+	args := []any{sessionID, kind, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id, attempt_id, actor_id, kind, details, created_at`+where+p.OrderBy(EventSorts, "id")+p.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Event, error) {
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Event, error) {
 		var e Event
 		err := r.Scan(&e.ID, &e.AttemptID, &e.ActorID, &e.Kind, &e.Details, &e.CreatedAt)
 		return e, err
 	})
+	return list, total, err
 }

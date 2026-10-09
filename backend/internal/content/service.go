@@ -16,6 +16,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
 
@@ -182,13 +183,24 @@ func scanClassroom(row pgx.Row) (Classroom, error) {
 	return c, err
 }
 
-func (s *Service) ListClassrooms(ctx context.Context, teacherID string, includeArchived bool) ([]Classroom, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+classroomCols+` FROM content.classrooms
-		WHERE teacher_id=$1 AND ($2 OR archived_at IS NULL) ORDER BY created_at DESC`, teacherID, includeArchived)
-	if err != nil {
-		return nil, err
+// ClassroomSorts are the orders of a teacher's classroom list (PL-FR-01).
+var ClassroomSorts = page.Sorts{"created": "created_at", "name": "lower(name)"}
+
+// ListClassrooms returns one page of a teacher's classrooms, searched by name,
+// and how many there are in all.
+func (s *Service) ListClassrooms(ctx context.Context, teacherID string, includeArchived bool, p page.Request) ([]Classroom, int, error) {
+	where := ` FROM content.classrooms WHERE teacher_id=$1 AND ($2 OR archived_at IS NULL) AND ($3 = '' OR name ILIKE $3)`
+	args := []any{teacherID, includeArchived, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Classroom, error) { return scanClassroom(r) })
+	rows, err := s.pool.Query(ctx, `SELECT `+classroomCols+where+p.OrderBy(ClassroomSorts, "id")+p.Limit(), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Classroom, error) { return scanClassroom(r) })
+	return list, total, err
 }
 
 // GetClassroom returns a classroom owned by teacherID, with effective settings.
@@ -316,14 +328,25 @@ func (s *Service) CreateModule(ctx context.Context, teacherID, classroomID strin
 	return m, err
 }
 
-func (s *Service) ListModules(ctx context.Context, teacherID, classroomID string) ([]Module, error) {
-	rows, err := s.pool.Query(ctx, `SELECT m.id, m.classroom_id, m.name, m.position, m.settings
-		FROM content.modules m JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE m.classroom_id=$1 AND c.teacher_id=$2 ORDER BY m.position, m.created_at`, classroomID, teacherID)
-	if err != nil {
-		return nil, err
+// NodeSorts order modules and topics: by their position (the teacher's own
+// order) or by name.
+var NodeSorts = page.Sorts{"position": "position", "name": "lower(name)"}
+
+// ListModules returns one page of a classroom's modules and how many there are.
+func (s *Service) ListModules(ctx context.Context, teacherID, classroomID string, p page.Request) ([]Module, int, error) {
+	where := ` FROM content.modules m JOIN content.classrooms c ON c.id=m.classroom_id
+		WHERE m.classroom_id=$1 AND c.teacher_id=$2 AND ($3 = '' OR m.name ILIKE $3)`
+	args := []any{classroomID, teacherID, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Module, error) {
+	rows, err := s.pool.Query(ctx, `SELECT m.id, m.classroom_id, m.name, m.position, m.settings`+where+
+		p.OrderBy(page.Sorts{"position": "m.position", "name": "lower(m.name)"}, "m.created_at")+p.Limit(), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Module, error) {
 		var m Module
 		var raw []byte
 		if err := r.Scan(&m.ID, &m.ClassroomID, &m.Name, &m.Position, &raw); err != nil {
@@ -332,6 +355,7 @@ func (s *Service) ListModules(ctx context.Context, teacherID, classroomID string
 		m.Settings, err = settings.Parse(raw)
 		return m, err
 	})
+	return list, total, err
 }
 
 func (s *Service) UpdateModule(ctx context.Context, teacherID, id string, in NodeInput) error {
@@ -383,14 +407,21 @@ func (s *Service) CreateTopic(ctx context.Context, teacherID, moduleID string, i
 	return t, err
 }
 
-func (s *Service) ListTopics(ctx context.Context, teacherID, moduleID string) ([]Topic, error) {
-	rows, err := s.pool.Query(ctx, `SELECT t.id, t.module_id, t.name, t.position, t.settings
-		FROM content.topics t JOIN content.modules m ON m.id=t.module_id JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE t.module_id=$1 AND c.teacher_id=$2 ORDER BY t.position, t.created_at`, moduleID, teacherID)
-	if err != nil {
-		return nil, err
+// ListTopics returns one page of a module's topics and how many there are.
+func (s *Service) ListTopics(ctx context.Context, teacherID, moduleID string, p page.Request) ([]Topic, int, error) {
+	where := ` FROM content.topics t JOIN content.modules m ON m.id=t.module_id JOIN content.classrooms c ON c.id=m.classroom_id
+		WHERE t.module_id=$1 AND c.teacher_id=$2 AND ($3 = '' OR t.name ILIKE $3)`
+	args := []any{moduleID, teacherID, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Topic, error) {
+	rows, err := s.pool.Query(ctx, `SELECT t.id, t.module_id, t.name, t.position, t.settings`+where+
+		p.OrderBy(page.Sorts{"position": "t.position", "name": "lower(t.name)"}, "t.created_at")+p.Limit(), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Topic, error) {
 		var t Topic
 		var raw []byte
 		if err := r.Scan(&t.ID, &t.ModuleID, &t.Name, &t.Position, &raw); err != nil {
@@ -399,6 +430,7 @@ func (s *Service) ListTopics(ctx context.Context, teacherID, moduleID string) ([
 		t.Settings, err = settings.Parse(raw)
 		return t, err
 	})
+	return list, total, err
 }
 
 // TopicDetail is a topic with its place in the hierarchy, for the topic page.

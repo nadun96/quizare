@@ -23,7 +23,10 @@ async function render(props: Record<string, unknown>) {
 			return json(l, 201);
 		}
 		if (init.method === 'DELETE') return new Response(null, { status: 204 });
-		return json({ links });
+		// The server filters by scope (and target), as the Go endpoint does.
+		const scope = new URL(url, 'http://x').searchParams.get('scope');
+		const rows = links.filter((l) => !scope || scope.split(',').includes(l.scope));
+		return json({ links: rows, total: rows.length, page: 1, size: 25 });
 	});
 	const target = document.createElement('div');
 	document.body.append(target);
@@ -44,7 +47,8 @@ describe('LiveLinks', () => {
 		v.target.querySelector('form')!.requestSubmit();
 		await vi.waitFor(() => expect(v.target.querySelector<HTMLInputElement>('input[aria-label="Live link"]')?.value).toBe(location.origin + '/live/tok123'));
 		expect(calls.find((c) => c.method === 'POST')!.body).toMatchObject({ scope: 'live_poll', target_id: 'p1', views: ['leaderboard', 'teams'], identify: 'nickname', label: 'Room 4' });
-		// Only this scope's links are listed.
+		// Only this scope's links are listed: the request asks for them.
+	expect(calls.filter((c) => c.method === 'GET').at(-1)!.url).toContain('scope=live_poll');
 		await vi.waitFor(() => expect(v.target.querySelectorAll('li.link')).toHaveLength(1));
 		v.done();
 	});

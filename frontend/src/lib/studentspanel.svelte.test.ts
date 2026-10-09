@@ -13,11 +13,18 @@ const students = [
 	{ id: 'e3', student_name: 'Nimal Fernando', student_email: 'nimal@x', student_number: null, status: 'pending', created_at: '' }
 ];
 
+// A fake server that filters and searches enrolments as the Go server does (PL-FR-03).
 const calls: { method: string; url: string; body?: unknown }[] = [];
 function fakeFetch() {
 	vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
 		calls.push({ method: init.method ?? 'GET', url, body: init.body ? JSON.parse(init.body as string) : undefined });
-		const body = url.endsWith('/categories') ? { categories: cats } : { affected: 1 };
+		let body: unknown = { affected: 1 };
+		if (url.endsWith('/categories')) body = { categories: cats };
+		else if (url.includes('/enrolments')) {
+			const q = new URL(url, 'http://x').searchParams;
+			const rows = students.filter((s) => (!q.get('category') || s.categories?.includes(q.get('category')!)) && (!q.get('q') || s.student_name.toLowerCase().includes(q.get('q')!.toLowerCase())));
+			body = { enrolments: rows, total: rows.length, page: 1, size: 25 };
+		}
 		return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 	});
 }
@@ -26,32 +33,37 @@ afterEach(() => {
 	calls.length = 0;
 });
 
-async function render(onchange = () => {}) {
+async function render() {
 	fakeFetch();
 	const target = document.createElement('div');
 	document.body.append(target);
-	const c = mount(StudentsPanel, { target, props: { classroomId: 'k', enrolments: students, onchange, oneditnumber: () => {}, onstatus: () => {} } });
+	const props = $state({ classroomId: 'k', count: 0, oneditnumber: async () => {}, onstatus: async () => {} });
+	const c = mount(StudentsPanel, { target, props });
+	await vi.waitFor(() => expect(target.querySelectorAll('tbody tr').length).toBe(3));
 	await vi.waitFor(() => expect(target.querySelectorAll('.chip').length).toBe(3));
 	flushSync();
-	return { target, done: () => (unmount(c), target.remove()) };
+	return { target, props, done: () => (unmount(c), target.remove()) };
 }
 const rows = (t: HTMLElement) => [...t.querySelectorAll('tbody tr')].map((r) => r.textContent ?? '');
+const lastList = () => calls.filter((c) => c.url.includes('/enrolments')).at(-1)!.url;
 
 describe('StudentsPanel', () => {
-	test('category chips filter the list; search narrows it', async () => {
+	test('the server filters by category and searches; the count comes from its total', async () => {
 		const v = await render();
-		expect(rows(v.target)).toHaveLength(3);
-		(v.target.querySelectorAll<HTMLButtonElement>('.chip')[2]).click(); // Needs support
-		flushSync();
-		expect(rows(v.target)).toHaveLength(1);
+		expect(v.props.count).toBe(3);
+		expect(v.target.querySelector('.chip')!.textContent).toContain('3');
+		v.target.querySelectorAll<HTMLButtonElement>('.chip')[2].click(); // Needs support
+		await vi.waitFor(() => expect(rows(v.target)).toHaveLength(1));
+		expect(lastList()).toContain('category=c2');
 		expect(rows(v.target)[0]).toContain('Kasun');
-		(v.target.querySelectorAll<HTMLButtonElement>('.chip')[0]).click(); // All
-		flushSync();
+		v.target.querySelectorAll<HTMLButtonElement>('.chip')[0].click(); // All
+		await vi.waitFor(() => expect(rows(v.target)).toHaveLength(3));
 		const search = v.target.querySelector<HTMLInputElement>('input[type=search]')!;
 		search.value = 'nim';
 		search.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		expect(rows(v.target)).toHaveLength(1);
+		search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+		await vi.waitFor(() => expect(rows(v.target)).toHaveLength(1));
+		expect(lastList()).toContain('q=nim');
 		expect(rows(v.target)[0]).toContain('Nimal');
 		v.done();
 	});
@@ -63,9 +75,8 @@ describe('StudentsPanel', () => {
 		v.done();
 	});
 
-	test('select students and add them to a category', async () => {
-		let changed = 0;
-		const v = await render(() => void changed++);
+	test('select students on the page and add them to a category, then reload', async () => {
+		const v = await render();
 		const boxes = v.target.querySelectorAll<HTMLInputElement>('tbody input[type=checkbox]');
 		boxes[1].click();
 		boxes[2].click();
@@ -75,8 +86,9 @@ describe('StudentsPanel', () => {
 		sel.value = 'c1';
 		sel.dispatchEvent(new Event('change', { bubbles: true }));
 		flushSync();
+		const before = calls.length;
 		[...v.target.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Add to')!.click();
-		await vi.waitFor(() => expect(changed).toBe(1));
+		await vi.waitFor(() => expect(calls.slice(before).some((c) => c.url.includes('/enrolments'))).toBe(true));
 		const post = calls.find((c) => c.method === 'POST');
 		expect(post?.url).toBe('/api/teacher/categories/c1/members');
 		expect(post?.body).toEqual({ enrolment_ids: ['e2', 'e3'], assigned: true });

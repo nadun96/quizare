@@ -7,6 +7,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 // TeacherRoutes mounts teacher endpoints (teacher role enforced by caller).
@@ -48,11 +49,12 @@ func (s *Service) StudentRoutes(r chi.Router) {
 func uid(r *http.Request) string { return auth.MustUser(r.Context()).ID }
 
 func (s *Service) hListClassrooms(w http.ResponseWriter, r *http.Request) error {
-	list, err := s.ListClassrooms(r.Context(), uid(r), r.URL.Query().Get("archived") == "1")
+	p := page.Parse(r, ClassroomSorts, "created", true)
+	list, total, err := s.ListClassrooms(r.Context(), uid(r), r.URL.Query().Get("archived") == "1", p)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"classrooms": list})
+	page.Write(w, "classrooms", list, total, p)
 	return nil
 }
 
@@ -119,11 +121,12 @@ func (s *Service) hRegenerateCode(w http.ResponseWriter, r *http.Request) error 
 }
 
 func (s *Service) hListEnrolments(w http.ResponseWriter, r *http.Request) error {
-	list, err := s.ListEnrolments(r.Context(), uid(r), chi.URLParam(r, "id"), r.URL.Query().Get("status"))
+	p := page.Parse(r, EnrolmentSorts, "joined", false)
+	list, total, err := s.ListEnrolmentsPage(r.Context(), uid(r), chi.URLParam(r, "id"), r.URL.Query().Get("status"), r.URL.Query().Get("category"), p)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"enrolments": list})
+	page.Write(w, "enrolments", list, total, p)
 	return nil
 }
 
@@ -145,11 +148,12 @@ func (s *Service) hListModules(w http.ResponseWriter, r *http.Request) error {
 	if _, err := s.GetClassroom(r.Context(), uid(r), id); err != nil {
 		return err
 	}
-	list, err := s.ListModules(r.Context(), uid(r), id)
+	p := page.Parse(r, NodeSorts, "position", false)
+	list, total, err := s.ListModules(r.Context(), uid(r), id, p)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"modules": list})
+	page.Write(w, "modules", list, total, p)
 	return nil
 }
 
@@ -187,11 +191,12 @@ func (s *Service) hDeleteModule(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) hListTopics(w http.ResponseWriter, r *http.Request) error {
-	list, err := s.ListTopics(r.Context(), uid(r), chi.URLParam(r, "id"))
+	p := page.Parse(r, NodeSorts, "position", false)
+	list, total, err := s.ListTopics(r.Context(), uid(r), chi.URLParam(r, "id"), p)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"topics": list})
+	page.Write(w, "topics", list, total, p)
 	return nil
 }
 
@@ -263,11 +268,12 @@ func (s *Service) hEnrol(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) hMyClassrooms(w http.ResponseWriter, r *http.Request) error {
-	list, err := s.MyClassrooms(r.Context(), uid(r))
+	p := page.Parse(r, page.Sorts{"name": ""}, "name", false)
+	list, total, err := s.MyClassrooms(r.Context(), uid(r), p)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"classrooms": list})
+	page.Write(w, "classrooms", list, total, p)
 	return nil
 }
 
