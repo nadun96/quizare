@@ -46,12 +46,14 @@ type Service struct {
 	answers   *auth.Limiter // per participant
 	boardRate *auth.Limiter // per participant: board writes
 	uploads   *auth.Limiter // per participant
+	bc        *boardCache   // whiteboard access and stroke counts
+	reads     boardReads    // whiteboard loads that share a read
 }
 
 func NewService(pool *pgxpool.Pool, classes Classrooms, users Users, baseURL string, log *slog.Logger) *Service {
 	s := &Service{pool: pool, classes: classes, users: users, baseURL: strings.TrimRight(baseURL, "/"), log: log, now: time.Now,
 		joins: auth.NewLimiter(JoinBurst, 250*time.Millisecond), answers: auth.NewLimiter(40, 100*time.Millisecond), uploads: auth.NewLimiter(5, 10*time.Second),
-		boardRate: auth.NewLimiter(30, 100*time.Millisecond)}
+		boardRate: auth.NewLimiter(30, 100*time.Millisecond), bc: newBoardCache()}
 	s.hub = newHub(s)
 	return s
 }

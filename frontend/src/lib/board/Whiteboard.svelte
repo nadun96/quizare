@@ -1,14 +1,15 @@
 <script lang="ts">
-	// Real-time whiteboard (V2-09, D-47). Pen lines are sent in pieces every
-	// 200 ms while drawing, so viewers see them grow; shapes and text are sent
-	// when finished. Pieces waiting for the server are drawn on an overlay so
-	// nothing flickers, and socket echoes are de-duplicated by stroke id.
+	// Real-time whiteboard (V2-09, D-47, D-52). Pen lines are sent in pieces
+	// every 200 ms while drawing, so viewers see them grow; shapes and text are
+	// sent when finished. Pieces go out one request at a time, in order, and
+	// are drawn on an overlay until saved so nothing flickers. New strokes are
+	// drawn on top of the board; only removals and resizes redraw it all.
 	import { onDestroy } from 'svelte';
 	import Icon, { type IconName } from '../ui/Icon.svelte';
 	import IconBtn from '../ui/IconBtn.svelte';
 	import { confirmDialog } from '../ui/dialog.svelte';
 	import { toast } from '../ui/toast.svelte';
-	import { BOARD_H, BOARD_W, type BoardState, drawStroke, hits, INKS, type NewStroke, newGesture, render, round, SIZES, type Stroke, thin, toPNG, type Tool } from './strokes.svelte';
+	import { BOARD_H, BOARD_W, type BoardState, drawStroke, hits, INKS, type NewStroke, newGesture, render, round, SIZES, type Stroke, StrokeQueue, thin, toPNG, type Tool } from './strokes.svelte';
 
 	type Client = {
 		add: (strokes: NewStroke[]) => Promise<Stroke[]>;
@@ -24,9 +25,8 @@
 	let main = $state<HTMLCanvasElement>();
 	let over = $state<HTMLCanvasElement>();
 	let px = $state({ w: 0, h: 0 });
-	let hidden = $state(new Set<number>()); // erased locally, waiting for the server
-	let pending = $state<NewStroke[]>([]); // sent, waiting for ids
-	let draft = $state<NewStroke | null>(null); // being drawn
+	let hidden = $state.raw(new Set<number>()); // erased locally, waiting for the server
+	let draft = $state.raw<NewStroke | null>(null); // being drawn; its points array grows in place
 	let textAt = $state<{ x: number; y: number; value: string } | null>(null);
 	let textInput = $state<HTMLInputElement>();
 	// The press on the canvas keeps focus there; move it to the text box once it exists.
@@ -57,19 +57,42 @@
 		ro.observe(wrap);
 		return () => ro.disconnect();
 	});
+	// The board: strokes that were only appended are drawn on top; anything
+	// else (a removal, a clear, a reload, a resize) redraws it all.
+	let shown: { count: number; rev: number; hidden: Set<number> | null; w: number; h: number } = { count: 0, rev: -1, hidden: null, w: 0, h: 0 };
 	$effect(() => {
 		const ctx = main?.getContext('2d');
-		if (!ctx || !px.w) return;
-		render(ctx, board.strokes.filter((s) => !hidden.has(s.id)), px.w, px.h);
+		const list = board.strokes;
+		const h = hidden;
+		const { w, h: ht } = px;
+		if (!ctx || !w) return;
+		if (shown.rev === board.rev && shown.hidden === h && shown.w === w && shown.h === ht && list.length >= shown.count) {
+			ctx.setTransform(w / BOARD_W, 0, 0, ht / BOARD_H, 0, 0);
+			for (let i = shown.count; i < list.length; i++) if (!h.has(list[i].id)) drawStroke(ctx, list[i]);
+		} else render(ctx, h.size ? list.filter((s) => !h.has(s.id)) : list, w, ht);
+		shown = { count: list.length, rev: board.rev, hidden: h, w, h: ht };
 	});
-	$effect(() => {
+	// The overlay (unsaved pieces and the stroke being drawn): at most once a frame.
+	const frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (f: () => void) => setTimeout(f, 16);
+	let painting = false;
+	function paintOver() {
+		painting = false;
 		const ctx = over?.getContext('2d');
 		if (!ctx || !px.w) return;
 		ctx.setTransform(1, 0, 0, 1, 0, 0);
 		ctx.clearRect(0, 0, px.w, px.h);
 		ctx.setTransform(px.w / BOARD_W, 0, 0, px.h / BOARD_H, 0, 0);
-		for (const s of pending) drawStroke(ctx, s);
+		for (const s of queue.pending) drawStroke(ctx, s);
 		if (draft) drawStroke(ctx, draft);
+	}
+	$effect(() => {
+		void queue.pending;
+		void draft;
+		void px.w;
+		if (!painting) {
+			painting = true;
+			frame(paintOver);
+		}
 	});
 
 	function at(e: PointerEvent): [number, number] {
@@ -77,17 +100,12 @@
 		return [((e.clientX - r.left) / r.width) * BOARD_W, ((e.clientY - r.top) / r.height) * BOARD_H];
 	}
 
-	async function send(s: NewStroke) {
-		pending = [...pending, s];
-		try {
-			const saved = await client.add([s]);
-			board.apply({ type: 'board', op: 'add', strokes: saved });
-		} catch (e) {
-			toast(e instanceof Error ? e.message : 'Could not draw', 'error');
-		} finally {
-			pending = pending.filter((x) => x !== s);
-		}
-	}
+	const queue = new StrokeQueue(
+		(s) => client.add(s),
+		(saved) => board.apply({ type: 'board', op: 'add', strokes: saved }),
+		(e) => toast(e instanceof Error ? e.message : 'Could not draw', 'error')
+	);
+	const send = (s: NewStroke) => queue.push(s);
 
 	// ---- pen and highlighter: pieces every 200 ms ----
 	let sentUpTo = 0;
@@ -121,11 +139,12 @@
 		}
 		const gesture = newGesture();
 		mine.push(gesture);
-		draft = { gesture, tool, color, size, points: [x, y] };
-		if (tool === 'pen' || tool === 'highlighter') {
+		const line = tool === 'pen' || tool === 'highlighter';
+		draft = { gesture, tool, color, size, points: line ? [x, y] : [x, y, x, y] };
+		if (line) {
 			sentUpTo = 0;
 			flushTimer = setInterval(() => flushPiece(), 200);
-		} else draft.points = [x, y, x, y];
+		}
 	}
 	function move(e: PointerEvent) {
 		if (!board.canDraw) return;
@@ -133,11 +152,11 @@
 		if (!draft) return;
 		const [x, y] = at(e);
 		if (draft.tool === 'pen' || draft.tool === 'highlighter') {
-			// Coalesced events keep fast strokes smooth.
+			// Coalesced events keep fast strokes smooth. Points are appended in
+			// place; a new draft object tells the overlay to repaint.
 			const evs = (e.getCoalescedEvents?.() ?? []).length ? e.getCoalescedEvents() : [e];
-			const add: number[] = [];
-			for (const ev of evs) add.push(...at(ev));
-			draft = { ...draft, points: [...draft.points, ...add] };
+			for (const ev of evs) draft.points.push(...at(ev));
+			draft = { ...draft };
 		} else draft = { ...draft, points: [start[0], start[1], x, y] };
 	}
 	function up() {
@@ -158,19 +177,17 @@
 		}
 		draft = null;
 	}
-	onDestroy(() => flushTimer && clearInterval(flushTimer));
 
-	// ---- eraser: whole strokes; participants only their own ----
+	// ---- eraser: whole lines (every piece of a gesture); participants only their own ----
 	function erase(x: number, y: number) {
-		let changed = false;
+		const hit: Stroke[] = [];
 		for (const s of board.strokes) {
 			if (erasing.has(s.id) || (!teacher && !board.mine(s))) continue;
-			if (hits(s, x, y, 10)) {
-				erasing.add(s.id);
-				changed = true;
-			}
+			if (hits(s, x, y, 10)) hit.push(s);
 		}
-		if (changed) hidden = new Set([...hidden, ...erasing]);
+		if (!hit.length) return;
+		for (const s of board.gestures(hit)) erasing.add(s.id);
+		hidden = new Set([...hidden, ...erasing]);
 	}
 	async function eraseIds(ids: number[]) {
 		try {
@@ -187,6 +204,8 @@
 		const g = mine.pop();
 		if (!g) return toast('Nothing of yours to undo', 'info');
 		try {
+			// Pieces of the line may still be on their way: undo them too.
+			await queue.idle();
 			const gone = await client.erase([], g);
 			board.apply({ type: 'board', op: 'remove', ids: gone });
 		} catch {
@@ -207,6 +226,9 @@
 		mine.push(gesture);
 		send({ gesture, tool: 'text', color, size, points: round([t.x, t.y]), text: t.value.trim().slice(0, 200) });
 	}
+	onDestroy(() => {
+		if (flushTimer) clearInterval(flushTimer);
+	});
 	async function exportPNG() {
 		const blob = await toPNG(board.strokes);
 		if (!blob) return toast('Export is not supported in this browser', 'warning');

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -67,6 +68,20 @@ type BoardView struct {
 	Me      string       `json:"me"` // own "by" value
 	Strokes []Stroke     `json:"strokes"`
 	Access  *BoardAccess `json:"access,omitempty"` // teacher only
+
+	raw json.RawMessage // Strokes, encoded once for every screen loading together
+}
+
+// MarshalJSON writes the shared encoding of the strokes when there is one.
+func (v BoardView) MarshalJSON() ([]byte, error) {
+	type plain BoardView
+	if v.raw == nil {
+		return json.Marshal(plain(v))
+	}
+	return json.Marshal(struct {
+		plain
+		Strokes json.RawMessage `json:"strokes"`
+	}{plain(v), v.raw})
 }
 
 func (st *Stroke) clean() map[string]string {
@@ -121,16 +136,155 @@ func (st *Stroke) clean() map[string]string {
 	return f
 }
 
+// boardCache keeps each board's access settings and stroke count in memory
+// (one app process, ADR-01), so a stroke piece costs one write instead of an
+// access read, a count over the whole board and a transaction (D-52).
+type boardCache struct {
+	mu     sync.Mutex
+	access map[string]BoardAccess
+	// count may run high after strokes go with a removed participant, and
+	// low by a few concurrent writes; the board is recounted before a write
+	// is refused as full.
+	count map[string]int
+}
+
+func newBoardCache() *boardCache {
+	return &boardCache{access: map[string]BoardAccess{}, count: map[string]int{}}
+}
+
+func (c *boardCache) setAccess(pollID string, a BoardAccess) {
+	c.mu.Lock()
+	c.access[pollID] = a
+	c.mu.Unlock()
+}
+
+func (c *boardCache) adjust(pollID string, d int) {
+	c.mu.Lock()
+	if n, ok := c.count[pollID]; ok {
+		c.count[pollID] = max(0, n+d)
+	}
+	c.mu.Unlock()
+}
+
+func (c *boardCache) reset(pollID string) {
+	c.mu.Lock()
+	c.count[pollID] = 0
+	c.mu.Unlock()
+}
+
 // ---------- reading ----------
 
 func (s *Service) boardAccess(ctx context.Context, pollID string) (BoardAccess, error) {
-	var a BoardAccess
+	s.bc.mu.Lock()
+	a, ok := s.bc.access[pollID]
+	s.bc.mu.Unlock()
+	if ok {
+		return a, nil
+	}
 	err := s.pool.QueryRow(ctx, `SELECT board_open, board_mode, board_groups::text[], board_participants::text[] FROM poll.polls WHERE id=$1`, pollID).
 		Scan(&a.Open, &a.Mode, &a.Groups, &a.Participants)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, httpx.ErrNotFound
 	}
+	if err == nil {
+		s.bc.setAccess(pollID, a)
+	}
 	return a, err
+}
+
+// boardRead is one read of a board, shared by every request waiting for it.
+type boardRead struct {
+	done    chan struct{}
+	strokes []Stroke
+	raw     json.RawMessage
+	err     error
+}
+
+// boardReads lets screens that load a board at the same moment (a class
+// joining, or reconnecting after a Wi-Fi blip) share one database read and
+// one JSON encoding (D-52). A request never takes a read that was already
+// under way when it arrived, which could miss strokes drawn just before:
+// it waits for the next one, shared by everyone who arrived meanwhile.
+type boardReads struct {
+	mu      sync.Mutex
+	running map[string]*boardRead
+	next    map[string]*boardRead
+}
+
+func (s *Service) boardStrokes(ctx context.Context, p *Poll) ([]Stroke, json.RawMessage, error) {
+	r := &s.reads
+	r.mu.Lock()
+	if r.running == nil {
+		r.running, r.next = map[string]*boardRead{}, map[string]*boardRead{}
+	}
+	var rd *boardRead
+	if cur := r.running[p.ID]; cur == nil {
+		rd = &boardRead{done: make(chan struct{})}
+		r.running[p.ID] = rd
+		r.mu.Unlock()
+		s.readBoard(p, rd)
+	} else {
+		rd = r.next[p.ID]
+		if rd == nil {
+			rd = &boardRead{done: make(chan struct{})}
+			r.next[p.ID] = rd
+			go func() {
+				<-cur.done
+				r.mu.Lock()
+				delete(r.next, p.ID)
+				r.running[p.ID] = rd
+				r.mu.Unlock()
+				s.readBoard(p, rd)
+			}()
+		}
+		r.mu.Unlock()
+	}
+	select {
+	case <-rd.done:
+		return rd.strokes, rd.raw, rd.err
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+}
+
+// readBoard runs a shared read; it doesn't stop when one waiting request goes away.
+func (s *Service) readBoard(p *Poll, rd *boardRead) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	rd.strokes, rd.err = s.strokes(ctx, p)
+	if rd.err == nil {
+		rd.raw, rd.err = json.Marshal(rd.strokes)
+	}
+	s.reads.mu.Lock()
+	if s.reads.running[p.ID] == rd {
+		delete(s.reads.running, p.ID)
+	}
+	s.reads.mu.Unlock()
+	close(rd.done)
+}
+
+// reserveStrokes makes room for k more strokes, or refuses when the board is full.
+func (s *Service) reserveStrokes(ctx context.Context, pollID string, k int) error {
+	s.bc.mu.Lock()
+	n, ok := s.bc.count[pollID]
+	if ok && n+k <= MaxStrokes {
+		s.bc.count[pollID] = n + k
+		s.bc.mu.Unlock()
+		return nil
+	}
+	s.bc.mu.Unlock()
+	// Not counted since start, or apparently full: count for real.
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM poll.board_strokes WHERE poll_id=$1`, pollID).Scan(&n); err != nil {
+		return err
+	}
+	s.bc.mu.Lock()
+	defer s.bc.mu.Unlock()
+	if n+k > MaxStrokes {
+		s.bc.count[pollID] = n
+		return httpx.Conflict("the board is full; clear it to keep drawing")
+	}
+	s.bc.count[pollID] = n + k
+	return nil
 }
 
 // mayDraw decides whether a participant can draw now.
@@ -203,7 +357,7 @@ func (s *Service) Board(ctx context.Context, code string, c Caller) (BoardView, 
 			return v, err
 		}
 	}
-	v.Strokes, err = s.strokes(ctx, p)
+	v.Strokes, v.raw, err = s.boardStrokes(ctx, p)
 	return v, err
 }
 
@@ -218,7 +372,7 @@ func (s *Service) TeacherBoard(ctx context.Context, teacherID, pollID string) (B
 		return BoardView{}, err
 	}
 	v := BoardView{Type: "board_state", Open: a.Open, Mode: a.Mode, CanDraw: true, Me: "t", Access: &a}
-	v.Strokes, err = s.strokes(ctx, p)
+	v.Strokes, v.raw, err = s.boardStrokes(ctx, p)
 	return v, err
 }
 
@@ -237,31 +391,44 @@ func (s *Service) addStrokes(ctx context.Context, p *Poll, pid *string, in Strok
 			return nil, httpx.Invalid(f)
 		}
 	}
-	var n int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM poll.board_strokes WHERE poll_id=$1`, p.ID).Scan(&n); err != nil {
+	if err := s.reserveStrokes(ctx, p.ID, len(in.Strokes)); err != nil {
 		return nil, err
 	}
-	if n+len(in.Strokes) > MaxStrokes {
-		return nil, httpx.Conflict("the board is full; clear it to keep drawing")
-	}
-	out := make([]Stroke, 0, len(in.Strokes))
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		for _, st := range in.Strokes {
-			var text any
-			if st.Text != "" {
-				text = st.Text
-			}
-			if err := tx.QueryRow(ctx, `INSERT INTO poll.board_strokes (poll_id, participant_id, gesture, tool, color, size, points, text)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, p.ID, pid, st.Gesture, st.Tool, st.Color, st.Size, st.Points, text).Scan(&st.ID); err != nil {
-				return err
-			}
-			st.By = byOf(p.ID, pid)
-			out = append(out, st)
+	// One statement for the whole batch: atomic without a transaction, and a
+	// single round trip. Rows of a VALUES list are inserted and returned in order.
+	var q strings.Builder
+	q.WriteString(`INSERT INTO poll.board_strokes (poll_id, participant_id, gesture, tool, color, size, points, text) VALUES `)
+	args := []any{p.ID, pid}
+	for i, st := range in.Strokes {
+		var text any
+		if st.Text != "" {
+			text = st.Text
 		}
-		return nil
-	})
+		if i > 0 {
+			q.WriteString(",")
+		}
+		n := len(args)
+		fmt.Fprintf(&q, "($1,$2,$%d,$%d,$%d,$%d,$%d,$%d)", n+1, n+2, n+3, n+4, n+5, n+6)
+		args = append(args, st.Gesture, st.Tool, st.Color, st.Size, st.Points, text)
+	}
+	q.WriteString(" RETURNING id")
+	rows, err := s.pool.Query(ctx, q.String(), args...)
 	if err != nil {
+		s.bc.adjust(p.ID, -len(in.Strokes))
 		return nil, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err == nil && len(ids) != len(in.Strokes) {
+		err = fmt.Errorf("board insert returned %d ids for %d strokes", len(ids), len(in.Strokes))
+	}
+	if err != nil {
+		s.bc.adjust(p.ID, -len(in.Strokes))
+		return nil, err
+	}
+	out := make([]Stroke, len(in.Strokes))
+	for i, st := range in.Strokes {
+		st.ID, st.By = ids[i], byOf(p.ID, pid)
+		out[i] = st
 	}
 	s.hub.board(p.ID, map[string]any{"type": "board", "op": "add", "strokes": out})
 	return out, nil
@@ -269,6 +436,8 @@ func (s *Service) addStrokes(ctx context.Context, p *Poll, pid *string, in Strok
 
 // removeStrokes deletes strokes by id or by gesture. Participants can only
 // remove their own; the teacher (pid nil, teacher true) can remove any.
+// Erasing by id takes the whole gesture of each stroke hit: a pen line is
+// saved in pieces, and erasing part of it must not leave the rest (D-52).
 func (s *Service) removeStrokes(ctx context.Context, p *Poll, pid *string, teacher bool, ids []int64, gesture string) ([]int64, error) {
 	if len(ids) > 2000 {
 		return nil, httpx.Invalid(map[string]string{"ids": "too many strokes at once"})
@@ -279,7 +448,8 @@ func (s *Service) removeStrokes(ctx context.Context, p *Poll, pid *string, teach
 		q += `gesture=$2`
 		args = append(args, gesture)
 	} else {
-		q += `id = ANY($2)`
+		q += `(id = ANY($2) OR (gesture, coalesce(participant_id::text, 't')) IN (
+			SELECT gesture, coalesce(participant_id::text, 't') FROM poll.board_strokes WHERE poll_id=$1 AND id = ANY($2)))`
 		args = append(args, ids)
 	}
 	switch {
@@ -297,6 +467,7 @@ func (s *Service) removeStrokes(ctx context.Context, p *Poll, pid *string, teach
 	if err != nil {
 		return nil, err
 	}
+	s.bc.adjust(p.ID, -len(gone))
 	if len(gone) > 0 {
 		s.hub.board(p.ID, map[string]any{"type": "board", "op": "remove", "ids": gone})
 	}
@@ -371,6 +542,7 @@ func (s *Service) SetBoardAccess(ctx context.Context, teacherID, pollID string, 
 		p.ID, in.Open, in.Mode, groups, people); err != nil {
 		return in, err
 	}
+	s.bc.setAccess(p.ID, in)
 	s.hub.board(p.ID, map[string]any{"type": "board", "op": "access", "open": in.Open})
 	s.hub.stateChanged(p.ID)
 	return in, nil
@@ -381,26 +553,75 @@ func (s *Service) ClearBoard(ctx context.Context, teacherID, pollID string) erro
 	if err != nil {
 		return err
 	}
-	if _, err := s.pool.Exec(ctx, `DELETE FROM poll.board_strokes WHERE poll_id=$1`, p.ID); err != nil {
+	// upto is the highest id cleared: a stroke saved just before the clear,
+	// whose add event is still on its way, must not reappear on screens.
+	var upto int64
+	if err := s.pool.QueryRow(ctx, `WITH d AS (DELETE FROM poll.board_strokes WHERE poll_id=$1 RETURNING id) SELECT coalesce(max(id), 0) FROM d`, p.ID).Scan(&upto); err != nil {
 		return err
 	}
-	s.hub.board(p.ID, map[string]any{"type": "board", "op": "clear"})
+	s.bc.reset(p.ID)
+	s.hub.board(p.ID, map[string]any{"type": "board", "op": "clear", "upto": upto})
 	return nil
 }
 
 // ---------- hub ----------
 
-// board pushes a board event to every open screen of the poll right away,
-// without waiting for the twice-a-second results flush.
+// boardWindow groups board events (D-52). Everything that happens on a
+// poll's board within it reaches each screen together, with consecutive adds
+// (and removes) merged into one event. A busy board then sends a screen about
+// 20 messages a second instead of one per piece drawn, which keeps phones and
+// slow connections from falling behind and being dropped as slow consumers.
+// It is still far inside the 1 s target for strokes to appear (V2-09).
+const boardWindow = 50 * time.Millisecond
+
+// board queues a board event for every open screen of the poll; it goes out
+// within boardWindow, without waiting for the twice-a-second results flush.
 func (h *Hub) board(pollID string, ev map[string]any) {
-	ev["at"] = time.Now().UnixMilli()
-	msg, _ := json.Marshal(ev)
-	h.mu.Lock()
-	for c := range h.audience[pollID] {
-		c.push(msg)
+	h.bmu.Lock()
+	q, waiting := h.boards[pollID]
+	if n := len(q); n > 0 && q[n-1]["op"] == ev["op"] {
+		switch ev["op"] {
+		case "add":
+			a, _ := q[n-1]["strokes"].([]Stroke)
+			b, _ := ev["strokes"].([]Stroke)
+			q[n-1]["strokes"] = append(append([]Stroke(nil), a...), b...)
+			ev = nil
+		case "remove":
+			a, _ := q[n-1]["ids"].([]int64)
+			b, _ := ev["ids"].([]int64)
+			q[n-1]["ids"] = append(append([]int64(nil), a...), b...)
+			ev = nil
+		}
 	}
-	for c := range h.presenters[pollID] {
-		c.push(msg)
+	if ev != nil {
+		q = append(q, ev)
+	}
+	h.boards[pollID] = q
+	h.bmu.Unlock()
+	if !waiting {
+		time.AfterFunc(boardWindow, func() { h.flushBoard(pollID) })
+	}
+}
+
+func (h *Hub) flushBoard(pollID string) {
+	h.bmu.Lock()
+	q := h.boards[pollID]
+	delete(h.boards, pollID)
+	h.bmu.Unlock()
+	at := time.Now().UnixMilli()
+	msgs := make([][]byte, 0, len(q))
+	for _, ev := range q {
+		ev["at"] = at
+		msg, _ := json.Marshal(ev)
+		msgs = append(msgs, msg)
+	}
+	h.mu.Lock()
+	for _, set := range []map[*client]struct{}{h.audience[pollID], h.presenters[pollID]} {
+		for c := range set {
+			for _, m := range msgs {
+				c.push(m)
+			}
+		}
 	}
 	h.mu.Unlock()
 }

@@ -23,7 +23,8 @@
 // trusts X-Forwarded-For only from loopback (ADR-12).
 //
 // Thresholds: draw → viewer p95 < 1 s (V2-09), stroke save p95 < 150 ms,
-// board load p95 < 1 s, no unexpected socket closes, < 1 % failed checks.
+// board load p95 < 1 s (on joining, and for latecomers joining the busy
+// board), no unexpected socket closes, < 1 % failed checks.
 import http from 'k6/http';
 import ws from 'k6/experimental/websockets'; // k6 ≤ 1.3; newer releases also offer k6/websockets
 import { check, sleep } from 'k6';
@@ -40,6 +41,8 @@ const SPREAD = !!__ENV.SPREAD_IPS;
 const e2e = new Trend('stroke_draw_to_viewer_ms', true);
 const savePiece = new Trend('stroke_save_ms', true);
 const boardLoad = new Trend('board_load_ms', true);
+const lateLoad = new Trend('late_board_load_ms', true); // joining a board that's already busy
+const lateSize = new Trend('late_board_strokes');
 const joinWaits = new Counter('join_waits');
 const received = new Counter('board_events_received');
 const sent = new Counter('stroke_pieces_sent');
@@ -54,12 +57,15 @@ export const options = {
 	scenarios: {
 		viewers: { executor: 'ramping-vus', exec: 'viewer', startVUs: 0, stages: [{ duration: RAMP, target: VIEWERS }, { duration: DURATION, target: VIEWERS }], gracefulRampDown: '5s' },
 		drawers: { executor: 'constant-vus', exec: 'drawer', vus: DRAWERS, duration: DURATION, startTime: RAMP },
-		teacher: { executor: 'constant-vus', exec: 'teacher', vus: 1, duration: DURATION, startTime: RAMP }
+		teacher: { executor: 'constant-vus', exec: 'teacher', vus: 1, duration: DURATION, startTime: RAMP },
+		// Latecomers: one every 2 s joins the busy board and loads all of it.
+		latecomers: { executor: 'constant-arrival-rate', exec: 'latecomer', rate: 1, timeUnit: '2s', duration: DURATION, startTime: RAMP, preAllocatedVUs: 5 }
 	},
 	thresholds: {
 		stroke_draw_to_viewer_ms: ['p(95)<1000', 'p(99)<2000'],
 		stroke_save_ms: ['p(95)<150', 'p(99)<400'],
 		board_load_ms: ['p(95)<1000'],
+		late_board_load_ms: ['p(95)<1000'],
 		ws_unexpected_closes: ['count==0'],
 		checks_ok: ['rate>0.99']
 	}
@@ -111,6 +117,13 @@ function join(code) {
 }
 
 export function viewer(data) {
+	// One session per viewer: k6 restarts an iteration as soon as it ends, so
+	// a viewer whose socket just closed waits out the run instead of joining
+	// and loading the whole board again at the last moment.
+	if (Date.now() > data.endAt - 3000) {
+		sleep(Math.max(0, (data.endAt - Date.now()) / 1000 + 2));
+		return;
+	}
 	const token = join(data.code);
 	if (!token) return;
 	const t0 = Date.now();
@@ -153,6 +166,16 @@ export function viewer(data) {
 			socket.close();
 		}, Math.max(1000, data.endAt - Date.now()));
 	};
+}
+
+export function latecomer(data) {
+	const token = join(data.code);
+	if (!token) return;
+	const t0 = Date.now();
+	const r = http.get(`${BASE}/api/polls/${data.code}/board`, { headers: headers({ 'X-Poll-Token': token }) });
+	lateLoad.add(Date.now() - t0);
+	ok.add(check(r, { 'late board loads': (x) => x.status === 200 }));
+	if (r.status === 200) lateSize.add((r.json('strokes') || []).length);
 }
 
 export function drawer(data) {
