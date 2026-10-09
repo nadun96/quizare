@@ -248,6 +248,13 @@
 					<span>Once the quiz starts, stay on this screen. Leaving it or switching apps {st.violation_policy === 'log_only' ? 'is recorded' : 'may end your attempt'}.</span>
 				</div>
 			</div>
+		{:else if st.state === 'admitted' && st.countdown_deadline == null}
+			<div class="state-card" in:flyIn>
+				<div class="pulse-dot" aria-hidden="true"><span></span></div>
+				<h1>You're in</h1>
+				<p class="lead" role="status">Waiting for your teacher to start the quiz. Keep this page open.</p>
+				<p class="small muted">{st.total} question{st.total === 1 ? '' : 's'} · Stay on this screen until you finish.</p>
+			</div>
 		{:else if st.state === 'admitted'}
 			<div class="state-card" in:flyIn>
 				<h1>Get ready</h1>

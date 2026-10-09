@@ -586,6 +586,20 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { $ref: '#/components/requestBodies/Target' }
       responses: { '200': { $ref: '#/components/responses/Affected' }, '410': { $ref: '#/components/responses/Gone' } }
+  /api/teacher/sessions/{id}/start:
+    post:
+      operationId: postTeacherSessionsStart
+      tags: [sessions]
+      summary: Start the quiz for admitted students (D-53)
+      description: >-
+        Without `now`, students waiting for the teacher begin their countdown (or start at once with a 0-second
+        countdown); students already counting down carry on. With `now`, every selected admitted student starts at
+        once. With `all`, students admitted later count down by themselves.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/Target' }, { type: object, properties: { now: { type: boolean } } }] } } }
+      responses: { '200': { $ref: '#/components/responses/Affected' }, '410': { $ref: '#/components/responses/Gone' } }
   /api/teacher/sessions/{id}/pause:
     post:
       operationId: postTeacherSessionsPause
@@ -1376,6 +1390,7 @@ components:
         question_time_limit_sec: { type: integer, minimum: 0, description: 'quiz, question' }
         quiz_time_limit_sec: { type: integer, minimum: 0, description: 'topic, quiz, session, student' }
         admission_mode: { type: string, enum: [manual, auto], description: 'classroom, session' }
+        start_mode: { type: string, enum: [countdown, teacher], description: 'teacher, classroom, quiz, session. countdown: each student counts down from admission; teacher: admitted students wait for the teacher''s Start (D-53)' }
         evaluation_method: { type: string, enum: [key, llm, manual], description: 'teacher, quiz, question' }
         llm_key_id: { type: string, description: 'teacher, quiz, question' }
         llm_model: { type: string, description: 'teacher, quiz, question' }
