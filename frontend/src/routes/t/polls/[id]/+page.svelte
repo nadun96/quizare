@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AnswerList from '$lib/poll/AnswerList.svelte';
+	import ParticipantList from '$lib/poll/ParticipantList.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onDestroy } from 'svelte';
@@ -31,7 +33,7 @@
 	let poll = $state<Poll | null>(null);
 	let results = $state<TeacherResults | null>(null);
 	let classrooms = $state<Classroom[]>([]);
-	let tab = $state<'questions' | 'results' | 'groups' | 'settings' | 'share'>('questions');
+	let tab = $state<'questions' | 'results' | 'groups' | 'settings' | 'share' | 'people'>('questions');
 	let editing = $state<PollQuestion | 'new' | null>(null);
 	let settings = $state<PollSettings | null>(null);
 	let classroomId = $state<string | null>(null);
@@ -47,7 +49,7 @@
 	$effect(() => {
 		if (!ready() || !id) return;
 		load().catch(() => goto('/t/polls'));
-		api.get<{ classrooms: Classroom[] }>('/api/teacher/classrooms').then((r) => (classrooms = r.classrooms ?? []));
+		api.get<{ classrooms: Classroom[] }>('/api/teacher/classrooms?size=100&sort=name').then((r) => (classrooms = r.classrooms ?? []));
 		socket = new LiveSocket('/ws/teacher/polls/' + id);
 		socket.onStatus = (c) => (connected = c);
 		socket.onMessage = (m) => {
@@ -114,7 +116,7 @@
 		toast('Poll deleted');
 		goto('/t/polls');
 	}
-	async function moderate(m: { question_id: string; participant_id?: string; word?: string; hidden: boolean }) {
+	async function moderate(m: { question_id: string; participant_id?: string; word?: string; hidden: boolean }): Promise<void> {
 		await api.post('/api/teacher/polls/' + id + '/moderation', m);
 		toast(m.hidden ? 'Hidden from participants' : 'Shown again', 'info');
 	}
@@ -162,7 +164,7 @@
 		</div>
 
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ...(poll.groups !== 'off' ? [['groups', 'Groups']] : []), ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
+			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ['people', `Participants (${poll.participants})`], ...(poll.groups !== 'off' ? [['groups', 'Groups']] : []), ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -226,10 +228,13 @@
 					<p class="small muted m-0">Question {i + 1} · {TYPE_META[q.type].label}</p>
 					<RichText text={q.text} format={q.body.format} blanks="chip" class="mb-3 font-semibold" />
 					<PollResults question={q} result={results?.results[q.id]} teacher pollId={id} onmoderate={moderate} />
+					<AnswerList pollId={id} questionId={q.id} onmoderate={moderate} />
 				</section>
 			{:else}
 				<div class="card card-border bg-base-100"><EmptyState icon="chart" title="Nothing to show yet">Add questions and open the poll.</EmptyState></div>
 			{/each}
+		{:else if tab === 'people'}
+			<ParticipantList pollId={id} scoring={poll.scoring} groups={poll.groups !== 'off'} />
 		{:else if tab === 'groups'}
 			<GroupsPanel pollId={id} settings={settingsOf(poll)} hasClassroom={!!poll.classroom_id} participants={poll.participants} />
 		{:else if tab === 'settings'}

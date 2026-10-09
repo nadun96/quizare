@@ -3,12 +3,12 @@ package auth
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 // Admin account management (FR-ACC-04, FR-ACC-05). Admins manage accounts but
@@ -17,51 +17,53 @@ import (
 type UserFilter struct {
 	Role   string
 	Status string
-	Query  string
-	Limit  int
-	Offset int
 }
 
-func (s *Service) ListUsers(ctx context.Context, f UserFilter) ([]User, error) {
-	if f.Limit <= 0 || f.Limit > 200 {
-		f.Limit = 50
+// UserSorts are the columns the admin's user list sorts by (PL-FR-01).
+var UserSorts = page.Sorts{"created": "u.created_at", "name": "lower(u.name)", "email": "lower(u.email)", "role": "u.role", "status": "u.status"}
+
+// ListUsers returns one page of users matching the filter and search, and
+// how many match in all.
+// Role "manager" lists every manager, teacher-managers included.
+func (s *Service) ListUsers(ctx context.Context, f UserFilter, p page.Request) ([]User, int, error) {
+	where := ` FROM auth.users u ` + managerJoin + ` WHERE ($1 = '' OR u.role = $1 OR ($1 = 'manager' AND m.user_id IS NOT NULL))
+		  AND ($2 = '' OR u.status = $2) AND ($3 = '' OR u.email ILIKE $3 OR u.name ILIKE $3)`
+	args := []any{f.Role, f.Status, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id, email, name, role, status, email_verified_at IS NOT NULL
-		FROM auth.users
-		WHERE ($1 = '' OR role = $1) AND ($2 = '' OR status = $2)
-		  AND ($3 = '' OR email ILIKE '%' || $3 || '%' OR name ILIKE '%' || $3 || '%')
-		ORDER BY created_at DESC LIMIT $4 OFFSET $5`, f.Role, f.Status, escapeLike(f.Query), f.Limit, f.Offset)
+	rows, err := s.pool.Query(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at IS NOT NULL, u.created_at, `+managerSelect+where+
+		p.OrderBy(UserSorts, "u.id")+p.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (User, error) {
+	users, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (User, error) {
 		var u User
-		err := r.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified)
+		var mgr managerCols
+		err := r.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified, &u.CreatedAt, &mgr.is, &mgr.features)
+		u.Manager = mgr.manager()
 		return u, err
 	})
-}
-
-func escapeLike(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+	return users, total, err
 }
 
 // SetStatus activates (or approves), or suspends an account. Suspending
-// revokes all of the user's sessions immediately.
-func (s *Service) SetStatus(ctx context.Context, actorID, userID, status string) error {
+// revokes all of the user's sessions immediately. A manager may act only on
+// teachers and students (PL-FR-13), and the last admin stays (PL-FR-17).
+func (s *Service) SetStatus(ctx context.Context, actor User, userID, status string) error {
 	if status != StatusActive && status != StatusSuspended {
 		return httpx.BadRequest("status must be active or suspended")
 	}
-	if actorID == userID {
+	if actor.ID == userID {
 		return httpx.BadRequest("you cannot change your own status")
 	}
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		var prev string
-		err := tx.QueryRow(ctx, `SELECT status FROM auth.users WHERE id=$1 AND status <> 'deleted' FOR UPDATE`, userID).Scan(&prev)
-		if err == pgx.ErrNoRows {
-			return httpx.ErrNotFound
-		}
-		if err != nil {
-			return err
+	return s.actOnUser(ctx, actor, userID, "change_status", func(tx pgx.Tx, target targetUser) error {
+		prev := target.status
+		if status == StatusSuspended && target.role == RoleAdmin {
+			if err := lastAdminCheck(ctx, tx, userID); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.Exec(ctx, `UPDATE auth.users SET status=$2, updated_at=now() WHERE id=$1`, userID, status); err != nil {
 			return err
@@ -72,25 +74,36 @@ func (s *Service) SetStatus(ctx context.Context, actorID, userID, status string)
 			}
 		}
 		s.dropUserCache(userID)
-		return audit.Log(ctx, tx, actorID, "user_status_changed", "user", userID, map[string]string{"from": prev, "to": status})
+		return audit.Log(ctx, tx, actor.ID, "user_status_changed", "user", userID, map[string]string{"from": prev, "to": status})
 	})
 }
 
 // DeleteUser anonymises the account: personal data is scrubbed and login is
 // impossible, but attempts and answers remain for the teacher's records
 // (NFR-04 deletion on request; BR-16 keeps results).
-func (s *Service) DeleteUser(ctx context.Context, actorID, userID string) error {
-	if actorID == userID {
+func (s *Service) DeleteUser(ctx context.Context, actor User, userID string) error {
+	if actor.ID == userID {
 		return httpx.BadRequest("you cannot delete your own account here")
 	}
-	return s.anonymise(ctx, actorID, userID)
+	return s.actOnUser(ctx, actor, userID, "delete", func(tx pgx.Tx, target targetUser) error {
+		if target.role == RoleAdmin {
+			if err := lastAdminCheck(ctx, tx, userID); err != nil {
+				return err
+			}
+		}
+		return s.anonymiseTx(ctx, tx, actor.ID, userID)
+	})
 }
 
 // DeleteOwnAccount lets a student or teacher delete their account after
-// re-entering their password (NFR-04). Admin accounts are removed by another admin.
+// re-entering their password (NFR-04). Admin and manager-only accounts are
+// removed by an admin.
 func (s *Service) DeleteOwnAccount(ctx context.Context, u User, password string) error {
 	if u.Role == RoleAdmin {
 		return httpx.BadRequest("ask another admin to remove an admin account")
+	}
+	if u.Role == RoleManager {
+		return httpx.BadRequest("ask an admin to remove a manager account")
 	}
 	var hash string
 	if err := s.pool.QueryRow(ctx, `SELECT password_hash FROM auth.users WHERE id=$1`, u.ID).Scan(&hash); err != nil {
@@ -103,33 +116,36 @@ func (s *Service) DeleteOwnAccount(ctx context.Context, u User, password string)
 	if !ok {
 		return errInvalidCredentials
 	}
-	return s.anonymise(ctx, u.ID, u.ID)
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		return s.anonymiseTx(ctx, tx, u.ID, u.ID)
+	})
 }
 
-func (s *Service) anonymise(ctx context.Context, actorID, userID string) error {
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE auth.users
+func (s *Service) anonymiseTx(ctx context.Context, tx pgx.Tx, actorID, userID string) error {
+	tag, err := tx.Exec(ctx, `UPDATE auth.users
 			SET status='deleted', email=$2, name='Deleted user', password_hash='!', email_verified_at=NULL, avatar_version=NULL, updated_at=now()
 			WHERE id=$1 AND status <> 'deleted'`, userID, fmt.Sprintf("deleted+%s@invalid", userID))
-		if err != nil {
-			return err
-		}
-		if tag.RowsAffected() == 0 {
-			return httpx.ErrNotFound
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM auth.sessions WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		// The profile picture is personal data too (D-49).
-		if _, err := tx.Exec(ctx, `DELETE FROM auth.avatars WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM auth.tokens WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		s.dropUserCache(userID)
-		return audit.Log(ctx, tx, actorID, "user_deleted", "user", userID, nil)
-	})
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return httpx.ErrNotFound
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth.sessions WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
+	// The profile picture is personal data too (D-49).
+	if _, err := tx.Exec(ctx, `DELETE FROM auth.avatars WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth.tokens WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth.managers WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
+	s.dropUserCache(userID)
+	return audit.Log(ctx, tx, actorID, "user_deleted", "user", userID, nil)
 }
 
 type Policy struct {

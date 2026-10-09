@@ -10,6 +10,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 // TeacherRoutes mounts quiz authoring under /api/teacher (role enforced by caller).
@@ -47,11 +48,12 @@ func uid(r *http.Request) string { return auth.MustUser(r.Context()).ID }
 func id(r *http.Request) string  { return chi.URLParam(r, "id") }
 
 func (s *Service) hListQuizzes(w http.ResponseWriter, r *http.Request) error {
-	list, err := s.ListQuizzes(r.Context(), uid(r), id(r))
+	p := page.Parse(r, QuizSorts, "created", false)
+	list, total, err := s.ListQuizzes(r.Context(), uid(r), id(r), r.URL.Query().Get("status"), p)
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, 200, map[string]any{"quizzes": list})
+	page.Write(w, "quizzes", list, total, p)
 	return nil
 }
 

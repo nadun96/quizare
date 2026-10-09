@@ -20,6 +20,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -258,22 +259,33 @@ func (s *Service) ownedSession(ctx context.Context, teacherID, id string) (*Sess
 	return sess, nil
 }
 
-func (s *Service) ListSessions(ctx context.Context, teacherID, quizID string) ([]Session, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+sessionCols+` FROM live.sessions WHERE quiz_id=$1 AND teacher_id=$2 ORDER BY created_at DESC`, quizID, teacherID)
+// SessionSorts are the orders of a quiz's session list (PL-FR-01).
+var SessionSorts = page.Sorts{"created": "created_at", "title": "lower(title)", "status": "status"}
+
+// ListSessions returns one page of a quiz's sessions, searched by title or
+// join code, and how many there are.
+func (s *Service) ListSessions(ctx context.Context, teacherID, quizID string, p page.Request) ([]Session, int, error) {
+	where := ` FROM live.sessions WHERE quiz_id=$1 AND teacher_id=$2 AND ($3 = '' OR title ILIKE $3 OR join_code ILIKE $3)`
+	args := []any{quizID, teacherID, p.Like()}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+sessionCols+where+p.OrderBy(SessionSorts, "id")+p.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
-	var out []Session
+	out := []Session{}
 	for rows.Next() {
 		sess, err := scanSession(rows, false)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		sess.JoinURL = s.joinURL(sess.JoinCode)
 		out = append(out, *sess)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 // UpdateSettings changes session-level overrides, e.g. the countdown before

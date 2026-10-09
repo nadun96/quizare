@@ -19,6 +19,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 // Classrooms is the slice of the content module polls need.
@@ -307,21 +308,32 @@ func (s *Service) GetPoll(ctx context.Context, teacherID, id string) (*Poll, err
 	return p, err
 }
 
-func (s *Service) ListPolls(ctx context.Context, teacherID string) ([]*Poll, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+pollCols+` FROM poll.polls p WHERE p.teacher_id=$1 ORDER BY p.created_at DESC`, teacherID)
+// PollSorts are the orders of a teacher's poll list (PL-FR-01).
+var PollSorts = page.Sorts{"created": "p.created_at", "title": "lower(p.title)", "status": "p.status"}
+
+// ListPolls returns one page of a teacher's polls, searched by title or join
+// code and filtered by status, and how many there are.
+func (s *Service) ListPolls(ctx context.Context, teacherID, status string, pg page.Request) ([]*Poll, int, error) {
+	where := ` FROM poll.polls p WHERE p.teacher_id=$1 AND ($2 = '' OR p.title ILIKE $2 OR p.join_code ILIKE $2) AND ($3 = '' OR p.status = $3)`
+	args := []any{teacherID, pg.Like(), status}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+pollCols+where+pg.OrderBy(PollSorts, "p.id")+pg.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	out := []*Poll{}
 	for rows.Next() {
 		p, err := s.scanPoll(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (s *Service) UpdatePoll(ctx context.Context, teacherID, id string, in PollInput) (*Poll, error) {

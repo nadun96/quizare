@@ -26,12 +26,14 @@
 	type Link = { href: string; label: string };
 	const links = $derived<Link[]>(
 		auth.user?.role === 'teacher'
-			? [{ href: '/t', label: 'Classrooms' }, { href: '/t/polls', label: 'Polls' }, { href: '/t/settings', label: 'Settings' }]
+			? [{ href: '/t', label: 'Classrooms' }, { href: '/t/polls', label: 'Polls' }, { href: '/t/settings', label: 'Settings' }, ...(auth.user.manager ? [{ href: '/admin', label: 'Manage' }] : [])]
 			: auth.user?.role === 'student'
 				? [{ href: '/my', label: 'My quizzes' }, { href: '/join', label: 'Join' }]
 				: auth.user?.role === 'admin'
 					? [{ href: '/admin', label: 'Admin' }]
-					: []
+					: auth.user?.role === 'manager'
+						? [{ href: '/admin', label: 'Manage' }]
+						: []
 	);
 	const current = (href: string) => page.url.pathname === href || (href !== '/t' && page.url.pathname.startsWith(href + '/')) || (href === '/t' && page.url.pathname.startsWith('/t/') && !page.url.pathname.startsWith('/t/settings') && !page.url.pathname.startsWith('/t/polls'));
 

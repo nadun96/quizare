@@ -14,6 +14,7 @@ ADR-09, ADR-10, ADR-13 and ADR-16, with NFR-01…07 and BR-10/12/13/14. This pag
   | Student | 7 days | 30 days |
   | Teacher | 24 h | 14 days |
   | Admin | 30 min | 12 h |
+  | Manager (teacher-managers too) | 30 min | 12 h |
 
 - **Why Lax, not Strict**: so the session survives opening a QR link from a camera app. CSRF is covered by the custom header plus the Origin check (`httpx.SameOrigin`), and WebSocket upgrades check Origin.
 - **Rate limits** (token bucket): 300 burst per IP (a class shares one NAT address) and 10 per email, refilling one every 30 s.
@@ -27,7 +28,7 @@ ADR-09, ADR-10, ADR-13 and ADR-16, with NFR-01…07 and BR-10/12/13/14. This pag
 
 ## Authorisation
 
-Every query is scoped to the owner (`teacher_id`, or the attempt's `user_id`), and foreign ids return 404 (BR-14). Roles are enforced per route group with `RequireRole`. Admins can't read quiz content, answers or keys; the admin module only counts rows.
+Every query is scoped to the owner (`teacher_id`, or the attempt's `user_id`), and foreign ids return 404 (BR-14). Roles are enforced per route group with `RequireRole`. The admin console lets in admins and managers (`RequireStaff`), and each admin route also checks its feature with `RequireFeature` on every request: a manager without it gets 404 and the attempt goes to the audit log. Managers can act only on teachers and students, never on admins or other managers, and only admins make or change managers (D-56). Admins can't read quiz content, answers or keys; the admin module only counts rows.
 
 ## Answer keys
 
@@ -85,6 +86,6 @@ Resource link checks use `imageurl.Checker`. The dialer refuses non-public IPs (
 - **Users can download their own data** from `GET /api/my/data`.
 - **Deleting an account anonymises it** rather than removing rows, so a teacher's results stay intact.
 - **Public links never show names or emails.** Students appear as "Student N", or by classroom student ID if the teacher chooses. Individual answers appear only when explicitly enabled. Links are hashed, revocable and can expire.
-- **Audit log.** It records admin actions, mark overrides, reinstatements, key changes, releases and share links.
+- **Audit log.** It records admin and manager actions (with the role the person acted in), refused manager attempts, mark overrides, reinstatements, key changes, releases and share links.
 
 **Not built yet:** a scheduled retention job that anonymises old attempts (D-34).

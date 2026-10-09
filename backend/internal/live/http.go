@@ -9,6 +9,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -31,14 +32,12 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		return nil
 	}))
 	r.Method("GET", "/quizzes/{id}/sessions", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
-		list, err := s.ListSessions(r.Context(), uid(r), pid(r))
+		p := page.Parse(r, SessionSorts, "created", true)
+		list, total, err := s.ListSessions(r.Context(), uid(r), pid(r), p)
 		if err != nil {
 			return err
 		}
-		if list == nil {
-			list = []Session{}
-		}
-		httpx.JSON(w, 200, map[string]any{"sessions": list})
+		page.Write(w, "sessions", list, total, p)
 		return nil
 	}))
 	r.Method("GET", "/sessions/{id}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
@@ -113,11 +112,12 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		return nil
 	}))
 	r.Method("GET", "/sessions/{id}/events", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
-		ev, err := s.Events(r.Context(), uid(r), pid(r))
+		p := page.Parse(r, EventSorts, "time", false)
+		ev, total, err := s.Events(r.Context(), uid(r), pid(r), r.URL.Query().Get("kind"), p)
 		if err != nil {
 			return err
 		}
-		httpx.JSON(w, 200, map[string]any{"events": ev})
+		page.Write(w, "events", ev, total, p)
 		return nil
 	}))
 	r.Method("POST", "/sessions/{id}/release", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
@@ -300,11 +300,12 @@ func (s *Service) StudentRoutes(r chi.Router) {
 	}))
 	r.Method("POST", "/attempts/{id}/violations", httpx.Handler(s.handleViolation))
 	r.Method("GET", "/my/attempts", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
-		list, err := s.MyAttempts(r.Context(), uid(r))
+		p := page.Parse(r, page.Sorts{"created": ""}, "created", true)
+		list, total, err := s.MyAttempts(r.Context(), uid(r), p)
 		if err != nil {
 			return err
 		}
-		httpx.JSON(w, 200, map[string]any{"attempts": list})
+		page.Write(w, "attempts", list, total, p)
 		return nil
 	}))
 }

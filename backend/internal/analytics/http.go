@@ -8,6 +8,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 func uid(r *http.Request) string { return auth.MustUser(r.Context()).ID }
@@ -41,11 +42,12 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		return err
 	}))
 	r.Method("GET", "/share-links", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
-		list, err := s.ListLinks(r.Context(), uid(r), r.URL.Query().Get("target_id"))
+		p := page.Parse(r, LinkSorts, "created", true)
+		list, total, err := s.ListLinks(r.Context(), uid(r), r.URL.Query().Get("target_id"), r.URL.Query().Get("scope"), p)
 		if err != nil {
 			return err
 		}
-		httpx.JSON(w, 200, map[string]any{"links": list})
+		page.Write(w, "links", list, total, p)
 		return nil
 	}))
 	r.Method("POST", "/share-links", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {

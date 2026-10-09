@@ -195,9 +195,10 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			api.Route("/docs", apidocs.Routes)
 		}
 		api.Route("/admin", func(ad chi.Router) {
-			ad.Use(auth.RequireRole(auth.RoleAdmin))
+			// Admins and managers; each route checks its own feature (PL-NFR-06, D-56).
+			ad.Use(auth.RequireStaff)
 			a.Auth.AdminRoutes(ad)
-			ad.Route("/settings", a.Settings.AdminRoutes)
+			ad.With(a.Auth.RequireFeature(auth.FeatSettings)).Route("/settings", a.Settings.AdminRoutes)
 			a.Admin.AdminRoutes(ad)
 		})
 		api.Route("/teacher", func(t chi.Router) {

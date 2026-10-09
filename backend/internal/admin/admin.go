@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 )
 
 type Service struct {
@@ -84,6 +84,7 @@ type AuditEvent struct {
 	ID         int64           `json:"id"`
 	ActorID    *string         `json:"actor_id"`
 	ActorName  string          `json:"actor_name,omitempty"`
+	ActorRole  string          `json:"actor_role,omitempty"` // "admin" or "manager" (PL-FR-15)
 	Action     string          `json:"action"`
 	TargetType string          `json:"target_type"`
 	TargetID   string          `json:"target_id"`
@@ -91,26 +92,39 @@ type AuditEvent struct {
 	CreatedAt  time.Time       `json:"created_at"`
 }
 
-// Audit pages backwards through the audit log (NFR-15).
-func (s *Service) Audit(ctx context.Context, action, targetType string, beforeID int64, limit int) ([]AuditEvent, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+// AuditSorts: the audit log is read newest first, or oldest first.
+var AuditSorts = page.Sorts{"time": "e.id"}
+
+// AuditFilter narrows the audit log; Actor is a user id, so the admin can
+// see everything one manager did (PL-FR-15).
+type AuditFilter struct {
+	Action, TargetType, Actor, ActorRole string
+}
+
+// Audit returns one page of the audit log (NFR-15, PL-FR-01), newest first by
+// default, filtered and searched by action, target or actor name, with the
+// number of matching events.
+func (s *Service) Audit(ctx context.Context, f AuditFilter, p page.Request) ([]AuditEvent, int, error) {
+	where := ` FROM audit.events e LEFT JOIN auth.users u ON u.id = e.actor_id
+		WHERE ($1 = '' OR e.action = $1) AND ($2 = '' OR e.target_type = $2)
+		  AND ($3 = '' OR e.action ILIKE $3 OR e.target_type ILIKE $3 OR u.name ILIKE $3)
+		  AND ($4 = '' OR e.actor_id = nullif($4, '')::uuid) AND ($5 = '' OR e.actor_role = $5)`
+	args := []any{f.Action, f.TargetType, p.Like(), f.Actor, f.ActorRole}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	if beforeID <= 0 {
-		beforeID = 1<<62 - 1
-	}
-	rows, err := s.pool.Query(ctx, `SELECT e.id, e.actor_id, coalesce(u.name,''), e.action, e.target_type, e.target_id, e.details, e.created_at
-		FROM audit.events e LEFT JOIN auth.users u ON u.id = e.actor_id
-		WHERE e.id < $1 AND ($2 = '' OR e.action = $2) AND ($3 = '' OR e.target_type = $3)
-		ORDER BY e.id DESC LIMIT $4`, beforeID, action, targetType, limit)
+	rows, err := s.pool.Query(ctx, `SELECT e.id, e.actor_id, coalesce(u.name,''), coalesce(e.actor_role,''), e.action, e.target_type, e.target_id, e.details, e.created_at`+
+		where+p.OrderBy(AuditSorts, "e.id")+p.Limit(), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (AuditEvent, error) {
+	ev, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (AuditEvent, error) {
 		var e AuditEvent
-		err := r.Scan(&e.ID, &e.ActorID, &e.ActorName, &e.Action, &e.TargetType, &e.TargetID, &e.Details, &e.CreatedAt)
+		err := r.Scan(&e.ID, &e.ActorID, &e.ActorName, &e.ActorRole, &e.Action, &e.TargetType, &e.TargetID, &e.Details, &e.CreatedAt)
 		return e, err
 	})
+	return ev, total, err
 }
 
 // MyData exports everything stored about the calling user (NFR-04, ADR-16
@@ -151,9 +165,9 @@ func (s *Service) MyData(ctx context.Context, userID string) (map[string]any, er
 	return out, nil
 }
 
-// AdminRoutes mounts under /api/admin (admin role enforced by caller).
+// AdminRoutes mounts under /api/admin; each route checks its feature (PL-NFR-06).
 func (s *Service) AdminRoutes(r chi.Router) {
-	r.Method("GET", "/usage", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+	r.With(s.auth.RequireFeature(auth.FeatUsage)).Method("GET", "/usage", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		u, err := s.Usage(r.Context())
 		if err != nil {
 			return err
@@ -161,15 +175,14 @@ func (s *Service) AdminRoutes(r chi.Router) {
 		httpx.JSON(w, 200, u)
 		return nil
 	}))
-	r.Method("GET", "/audit", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+	r.With(s.auth.RequireFeature(auth.FeatAudit)).Method("GET", "/audit", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		q := r.URL.Query()
-		before, _ := strconv.ParseInt(q.Get("before_id"), 10, 64)
-		limit, _ := strconv.Atoi(q.Get("limit"))
-		ev, err := s.Audit(r.Context(), q.Get("action"), q.Get("target_type"), before, limit)
+		p := page.Parse(r, AuditSorts, "time", true)
+		ev, total, err := s.Audit(r.Context(), AuditFilter{Action: q.Get("action"), TargetType: q.Get("target_type"), Actor: q.Get("actor"), ActorRole: q.Get("actor_role")}, p)
 		if err != nil {
 			return err
 		}
-		httpx.JSON(w, 200, map[string]any{"events": ev})
+		page.Write(w, "events", ev, total, p)
 		return nil
 	}))
 }
