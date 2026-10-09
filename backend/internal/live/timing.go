@@ -14,6 +14,13 @@ const Grace = 2 * time.Second
 func ptrTime(t time.Time) *time.Time { return &t }
 func ptrInt64(v int64) *int64        { return &v }
 
+// hold admits a student without a countdown: they wait for the teacher to
+// start the quiz (start_mode=teacher, D-53).
+func hold(a *Attempt) {
+	a.State = StateAdmitted
+	a.CountdownDeadline = nil
+}
+
 // admit starts the pre-quiz countdown (FR-SS-05).
 func admit(a *Attempt, now time.Time, countdownSec int) {
 	a.State = StateAdmitted

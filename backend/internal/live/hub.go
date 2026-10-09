@@ -303,10 +303,13 @@ type DashboardRow struct {
 	ExtensionSec  int     `json:"extension_sec"`
 	QuizDeadline  *int64  `json:"quiz_deadline"`
 	RemainingMs   *int64  `json:"remaining_ms"` // while paused
-	Connected     bool    `json:"connected"`
-	InvalidReason string  `json:"invalid_reason,omitempty"`
-	TeamID        *string `json:"team_id,omitempty"`
-	Captain       bool    `json:"captain,omitempty"`
+	// CountdownDeadline is set while an admitted student counts down; an
+	// admitted student without one waits for the teacher (D-53).
+	CountdownDeadline *int64  `json:"countdown_deadline"`
+	Connected         bool    `json:"connected"`
+	InvalidReason     string  `json:"invalid_reason,omitempty"`
+	TeamID            *string `json:"team_id,omitempty"`
+	Captain           bool    `json:"captain,omitempty"`
 }
 
 type Dashboard struct {
@@ -315,7 +318,8 @@ type Dashboard struct {
 	Session    Session        `json:"session"`
 	Counts     map[string]int `json:"counts"`
 	Rows       []DashboardRow `json:"rows"`
-	TeamMode   string         `json:"team_mode"` // D-44
+	TeamMode   string         `json:"team_mode"`  // D-44
+	StartMode  string         `json:"start_mode"` // D-53
 	Teams      []TeamInfo     `json:"teams,omitempty"`
 }
 
@@ -365,10 +369,11 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 		d.Rows = append(d.Rows, DashboardRow{
 			AttemptID: a.ID, UserID: a.UserID, Name: users[a.UserID].Name, Avatar: users[a.UserID].Avatar, StudentNumber: a.StudentNumber, State: a.State,
 			Index: a.Current, Total: len(a.Order), Answered: p.answered, Warnings: a.Warnings, Violations: a.Violations,
-			ExtensionSec: a.ExtensionSec, QuizDeadline: ms(a.QuizDeadline), RemainingMs: a.QuizRemainingMs,
+			ExtensionSec: a.ExtensionSec, QuizDeadline: ms(a.QuizDeadline), RemainingMs: a.QuizRemainingMs, CountdownDeadline: ms(a.CountdownDeadline),
 			Connected: s.hub.isConnected(a.ID), InvalidReason: a.InvalidReason, TeamID: a.TeamID, Captain: a.Captain,
 		})
 	}
+	d.StartMode = v.Effective(nil, settings.Overrides{}).StartMode
 	if d.TeamMode = v.Effective(nil, settings.Overrides{}).TeamMode; d.TeamMode != "off" {
 		if d.Teams, err = s.teamInfos(ctx, sessionID); err != nil {
 			return d, err

@@ -76,6 +76,18 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		}
 	}
 	r.Method("POST", "/sessions/{id}/admit", bulk(func(r *http.Request, t Target) (int, error) { return s.Admit(r.Context(), uid(r), pid(r), t) }))
+	r.Method("POST", "/sessions/{id}/start", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in StartInput
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		n, err := s.TeacherStart(r.Context(), uid(r), pid(r), in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, map[string]int{"affected": n})
+		return nil
+	}))
 	r.Method("POST", "/sessions/{id}/pause", bulk(func(r *http.Request, t Target) (int, error) { return s.Pause(r.Context(), uid(r), pid(r), t) }))
 	r.Method("POST", "/sessions/{id}/resume", bulk(func(r *http.Request, t Target) (int, error) { return s.Resume(r.Context(), uid(r), pid(r), t) }))
 	r.Method("POST", "/sessions/{id}/extend", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {

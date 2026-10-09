@@ -25,7 +25,7 @@ stateDiagram-v2
 |------------|--------------|
 | join | Student scans the QR or enters the code (`POST /api/join/sessions/{code}`) |
 | admit | Teacher admits one, a group or all; automatic under `admission_mode = auto` |
-| start | The countdown reaches zero (ticker), or the student presses Start |
+| start | The countdown reaches zero (ticker), the student presses Start during the countdown, or the teacher presses **Start now** |
 | pause / resume | Teacher, for one, a selection or all students |
 | finish | Last question answered, quiz time up, student submits, or the session ends |
 | violation | A detected signal under `invalidate` (or once warnings run out under `warn_then_invalidate`) |
@@ -83,6 +83,7 @@ The server owns all time. Deadlines are `timestamptz`; the browser only renders 
 | Rule | Implementation |
 |------|----------------|
 | Countdown after admission (default 60 s) | `admit()` sets `countdown_deadline`; a 0-second countdown starts immediately |
+| Teacher starts the quiz (`start_mode = teacher`, D-53) | Admission calls `hold()`: the student is `admitted` with no `countdown_deadline`, so the ticker skips them and their own Start is refused. `POST /sessions/{id}/start` begins their countdown; with `now: true` it starts the quiz at once, also for students already counting down. Starting for `all` sets `sessions.started_at`, after which later admissions count down by themselves |
 | Quiz limit | `start()` sets `quiz_deadline = now + limit + session extension + student extension` |
 | Session duration overrides the quiz's | Ordinary settings resolution: the session layer wins |
 | Question limit | `question_deadline = shown_at + limit`, stored uncapped; `EffectiveQuestionDeadline` = min(question, quiz) |

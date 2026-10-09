@@ -88,7 +88,7 @@ export type Quiz = {
 	total_marks: number;
 	warnings_accepted: boolean;
 };
-export type Session = { id: string; quiz_id: string; title: string; join_code: string; join_url: string; status: string; settings: Overrides; extension_sec: number; created_at: string; results_released_at?: string };
+export type Session = { id: string; quiz_id: string; title: string; join_code: string; join_url: string; status: string; settings: Overrides; extension_sec: number; created_at: string; results_released_at?: string; started_at?: string };
 export type DashboardRow = {
 	attempt_id: string;
 	name: string;
@@ -104,12 +104,14 @@ export type DashboardRow = {
 	extension_sec: number;
 	quiz_deadline: number | null;
 	remaining_ms: number | null;
+	/** Set while an admitted student counts down; admitted without it = waiting for the teacher (D-53). */
+	countdown_deadline?: number | null;
 	connected: boolean;
 	invalid_reason?: string;
 	team_id?: string;
 	captain?: boolean;
 };
-export type Dashboard = { type: 'dashboard'; server_time: number; session: Session; counts: Record<string, number>; rows: DashboardRow[]; team_mode?: string; teams?: TeamInfo[] };
+export type Dashboard = { type: 'dashboard'; server_time: number; session: Session; counts: Record<string, number>; rows: DashboardRow[]; team_mode?: string; teams?: TeamInfo[]; start_mode?: 'countdown' | 'teacher' };
 
 // Teams in live sessions (D-44).
 export type TeamInfo = { id: string; name: string; color: number; position: number; category_id?: string; members: number };

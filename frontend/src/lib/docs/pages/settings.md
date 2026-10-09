@@ -40,6 +40,7 @@ When a session is created, defaults, platform, teacher and the classroom-to-quiz
 | `question_time_limit_sec` | quiz, question | 0 (none) | seconds |
 | `quiz_time_limit_sec` | topic, quiz, session, student | 0 (none) | seconds |
 | `admission_mode` | classroom, session | `manual` | `manual`, `auto` |
+| `start_mode` | teacher, classroom, quiz, session | `countdown` | `countdown` (each student counts down from admission), `teacher` (admitted students wait for the teacher's Start, D-53) |
 | `evaluation_method` | teacher, quiz, question | `key` | `key`, `llm`, `manual` |
 | `llm_key_id`, `llm_model` | teacher, quiz, question | teacher default key/model | |
 | `feedback_mode` | teacher, quiz, question | `predefined` | `none`, `predefined`, `ai`, `both` |
