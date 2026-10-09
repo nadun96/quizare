@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, test } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
-import { BoardState, drawStroke, hits, newGesture, round, thin, type Stroke } from './strokes.svelte';
+import { BoardState, drawStroke, hits, newGesture, round, StrokeQueue, thin, type NewStroke, type Stroke } from './strokes.svelte';
 import Whiteboard from './Whiteboard.svelte';
 
 const s = (over: Partial<Stroke>): Stroke => ({ id: 1, by: 't', gesture: 'g', tool: 'pen', color: '#111827', size: 4, points: [0, 0, 100, 0], ...over });
@@ -24,6 +24,100 @@ describe('board state', () => {
 		const ids = new Set(Array.from({ length: 200 }, newGesture));
 		expect(ids.size).toBe(200);
 		for (const id of ids) expect(id).toMatch(/^[A-Za-z0-9_-]{1,40}$/);
+	});
+});
+
+describe('board sync (D-52)', () => {
+	const view = (strokes: Stroke[]) => ({ type: 'board_state' as const, open: true, mode: 'everyone', can_draw: true, me: 'k1', strokes });
+	test('a late add never brings back a removed or cleared stroke', () => {
+		const b = new BoardState();
+		b.load(view([s({ id: 1 })]));
+		// The eraser was quicker than the echo of stroke 2's save.
+		b.apply({ type: 'board', op: 'remove', ids: [2] });
+		b.apply({ type: 'board', op: 'add', strokes: [s({ id: 2 })] });
+		expect(b.strokes.map((x) => x.id)).toEqual([1]);
+		// A clear up to 5: 4 was saved before it, 6 after.
+		b.apply({ type: 'board', op: 'clear', upto: 5 });
+		b.apply({ type: 'board', op: 'add', strokes: [s({ id: 4 }), s({ id: 6 })] });
+		expect(b.strokes.map((x) => x.id)).toEqual([6]);
+		// A local clear (no figure from the server) covers everything known.
+		b.apply({ type: 'board', op: 'clear' });
+		b.apply({ type: 'board', op: 'add', strokes: [s({ id: 6 })] });
+		expect(b.strokes).toEqual([]);
+	});
+	test('reloading keeps strokes drawn while the view was on its way', () => {
+		const b = new BoardState();
+		b.load(view([s({ id: 1 }), s({ id: 2 })]));
+		b.fetching();
+		b.apply({ type: 'board', op: 'add', strokes: [s({ id: 4 })] });
+		b.apply({ type: 'board', op: 'remove', ids: [2] });
+		// The snapshot was read before 4 was saved and before 2 was erased.
+		b.load(view([s({ id: 1 }), s({ id: 2 }), s({ id: 3 })]));
+		expect(b.strokes.map((x) => x.id)).toEqual([1, 3, 4]);
+	});
+	test('appends keep the revision; removals and loads change it', () => {
+		const b = new BoardState();
+		b.load(view([s({ id: 1 })]));
+		const r = b.rev;
+		b.apply({ type: 'board', op: 'add', strokes: [s({ id: 2 })] });
+		expect(b.rev).toBe(r);
+		b.apply({ type: 'board', op: 'remove', ids: [9] }); // not on this board
+		expect(b.rev).toBe(r);
+		b.apply({ type: 'board', op: 'remove', ids: [1] });
+		expect(b.rev).toBe(r + 1);
+	});
+	test("the eraser takes every piece of a line, and only that owner's", () => {
+		const b = new BoardState();
+		b.load(view([s({ id: 1, by: 'k1', gesture: 'g' }), s({ id: 2, by: 'k1', gesture: 'g' }), s({ id: 3, by: 'k2', gesture: 'g' }), s({ id: 4, by: 'k1', gesture: 'h' })]));
+		expect(b.gestures([b.strokes[1]]).map((x) => x.id)).toEqual([1, 2]);
+	});
+});
+
+describe('stroke queue (D-52)', () => {
+	const piece = (n: number): NewStroke => ({ gesture: 'g', tool: 'pen', color: '#111827', size: 4, points: [n, n] });
+	test('one request at a time, in order, batching what queued meanwhile', async () => {
+		const calls: number[][] = [];
+		let release: () => void = () => {};
+		let id = 0;
+		const saved: number[] = [];
+		const q = new StrokeQueue(
+			(batch) => {
+				calls.push(batch.map((b) => b.points[0]));
+				return new Promise((r) => (release = () => r(batch.map((b) => ({ ...b, id: ++id, by: 'k' })))));
+			},
+			(out) => saved.push(...out.map((o) => o.points[0])),
+			() => {}
+		);
+		q.push(piece(1));
+		q.push(piece(2));
+		q.push(piece(3));
+		expect(calls).toEqual([[1]]); // 2 and 3 wait for the first request
+		expect(q.pending.length).toBe(3);
+		release();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(calls).toEqual([[1], [2, 3]]);
+		release();
+		await q.idle();
+		expect(saved).toEqual([1, 2, 3]);
+		expect(q.pending).toEqual([]);
+	});
+	test('a failed request is reported and the queue goes on', async () => {
+		const failed: unknown[] = [];
+		let n = 0;
+		const q = new StrokeQueue(
+			async (batch) => {
+				if (n++ === 0) throw new Error('slow down');
+				return batch.map((b, i) => ({ ...b, id: i + 1, by: 'k' }));
+			},
+			() => {},
+			(e) => failed.push(e)
+		);
+		q.push(piece(1));
+		q.push(piece(2));
+		await q.idle();
+		expect(failed.length).toBe(1);
+		expect(q.pending).toEqual([]);
 	});
 });
 

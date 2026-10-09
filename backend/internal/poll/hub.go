@@ -16,6 +16,9 @@ type Hub struct {
 	audience   map[string]map[*client]struct{} // poll id → participant sockets
 	dirty      map[string]map[string]bool      // poll id → question ids ("*" = all)
 	cache      map[string]Result               // "pollID/questionID/t|p" → last result
+
+	bmu    sync.Mutex
+	boards map[string][]map[string]any // poll id → board events waiting for boardWindow
 }
 
 type client struct {
@@ -37,7 +40,7 @@ func (c *client) push(msg []byte) {
 
 func newHub(s *Service) *Hub {
 	return &Hub{svc: s, presenters: map[string]map[*client]struct{}{}, audience: map[string]map[*client]struct{}{},
-		dirty: map[string]map[string]bool{}, cache: map[string]Result{}}
+		dirty: map[string]map[string]bool{}, cache: map[string]Result{}, boards: map[string][]map[string]any{}}
 }
 
 func add(m map[string]map[*client]struct{}, key string, c *client) {
