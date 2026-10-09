@@ -187,9 +187,10 @@ paths:
     get:
       operationId: getAdminUsers
       tags: [admin]
-      summary: List and search users
+      summary: List and search users (admins, and managers with "View users")
+      description: Role `manager` lists every manager, teacher-managers included. A manager sees that someone is a manager, but not their features.
       parameters:
-        - { name: role, in: query, schema: { type: string, enum: [student, teacher, admin] } }
+        - { name: role, in: query, schema: { type: string, enum: [student, teacher, manager, admin] } }
         - { name: status, in: query, schema: { type: string, enum: [active, pending_approval, suspended] } }
         - { $ref: '#/components/parameters/page' }
         - { $ref: '#/components/parameters/size' }
@@ -201,17 +202,19 @@ paths:
     post:
       operationId: postAdminUsersStatus
       tags: [admin]
-      summary: Activate/approve or suspend a user (FR-ACC-04/05)
+      summary: Activate/approve or suspend a user (FR-ACC-04/05; managers with "Manage users")
+      description: A manager may act only on teachers and students (403, logged, PL-FR-13). The last active admin can't be suspended (409 `last_admin`, PL-FR-17).
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, suspended] } } } } } }
-      responses: { '204': { description: 'Updated' }, '404': { $ref: '#/components/responses/NotFound' } }
+      responses: { '204': { description: 'Updated' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/admin/users/{id}:
     delete:
       operationId: deleteAdminUsersById
       tags: [admin]
       summary: Delete (anonymise) a user; results are kept
+      description: Same rules as changing the status (PL-FR-13, PL-FR-17).
       parameters: [{ $ref: '#/components/parameters/id' }]
-      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
+      responses: { '204': { description: 'Deleted' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/admin/auth-policy:
     get:
       operationId: getAdminAuthPolicy
@@ -250,12 +253,50 @@ paths:
       parameters:
         - { name: action, in: query, schema: { type: string } }
         - { name: target_type, in: query, schema: { type: string } }
+        - { name: actor, in: query, description: 'Only this user''s actions, e.g. one manager''s (PL-FR-15)', schema: { type: string, format: uuid } }
+        - { name: actor_role, in: query, description: 'The role the actor acted in', schema: { type: string, enum: [admin, manager] } }
         - { $ref: '#/components/parameters/page' }
         - { $ref: '#/components/parameters/size' }
         - { $ref: '#/components/parameters/q' }
         - { $ref: '#/components/parameters/dir' }
         - { name: sort, in: query, schema: { type: string, enum: [time] } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, events: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } } } } } } } }
+
+  /api/admin/managers:
+    get:
+      operationId: getAdminManagers
+      tags: [admin]
+      summary: Managers with their features, who made them and their last activity (PL-FR-16; admins only)
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: sort, in: query, schema: { type: string, enum: [granted, name, email, active] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, managers: { type: array, items: { $ref: '#/components/schemas/ManagerRow' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postAdminManagers
+      tags: [admin]
+      summary: Make a manager (PL-FR-10, PL-FR-11; admins only)
+      description: Give `user_id` to make an active teacher a manager who keeps teaching, or `email` and `name` to create a manager-only account, which is emailed a link to set its password. Managers get only the features listed; "Manage users" brings "View users".
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MakeManagerInput' } } } }
+      responses: { '201': { description: 'Made', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }, '400': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/managers/{id}/features:
+    put:
+      operationId: putAdminManagersFeatures
+      tags: [admin]
+      summary: Change a manager's features; applies at once (PL-FR-12; admins only)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [features], properties: { features: { type: array, items: { $ref: '#/components/schemas/Feature' } } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/managers/{id}:
+    delete:
+      operationId: deleteAdminManagersById
+      tags: [admin]
+      summary: Remove the manager role (PL-FR-12; admins only)
+      description: A teacher-manager goes back to being a teacher; a manager-only account is suspended and signed out.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Removed' }, '404': { $ref: '#/components/responses/NotFound' } }
 
   # ---------------- teacher settings ----------------
   /api/teacher/settings:
@@ -1374,10 +1415,34 @@ components:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
         name: { type: string }
-        role: { type: string, enum: [student, teacher, admin] }
+        role: { type: string, enum: [student, teacher, manager, admin], description: '`manager` is a manager-only account; a teacher-manager is `teacher` with `manager` set' }
         status: { type: string, enum: [active, pending_approval, suspended, deleted] }
         email_verified: { type: boolean }
         avatar: { type: string, description: 'Profile picture version; absent when there is none (D-49)' }
+        created_at: { type: string, format: date-time, description: 'Only in admin lists' }
+        manager:
+          type: object
+          description: Present for managers (PL-FR-10). In a manager's user list, `features` is empty.
+          properties: { features: { type: array, items: { $ref: '#/components/schemas/Feature' } } }
+    Feature:
+      type: string
+      description: An admin feature a manager can be given (PL-FR-10)
+      enum: [view_users, manage_users, approval_policy, settings, usage, audit]
+    MakeManagerInput:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid, description: 'An active teacher, who keeps teaching' }
+        email: { type: string, format: email, description: 'For a new manager-only account' }
+        name: { type: string, maxLength: 100 }
+        features: { type: array, items: { $ref: '#/components/schemas/Feature' } }
+    ManagerRow:
+      allOf:
+        - { $ref: '#/components/schemas/User' }
+        - type: object
+          properties:
+            granted_at: { type: string, format: date-time }
+            granted_by: { type: string, description: 'Name of the admin who made them a manager' }
+            last_active_at: { type: string, format: date-time }
     RegisterInput:
       type: object
       required: [email, name, password, role]
@@ -1412,6 +1477,7 @@ components:
         id: { type: integer }
         actor_id: { type: [string, 'null'] }
         actor_name: { type: string }
+        actor_role: { type: string, enum: [admin, manager], description: 'The role the actor acted in (PL-FR-15); absent outside the admin console' }
         action: { type: string }
         target_type: { type: string }
         target_id: { type: string }

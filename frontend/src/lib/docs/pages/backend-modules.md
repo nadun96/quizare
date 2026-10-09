@@ -20,7 +20,8 @@ Accounts, passwords, sessions, verification, password reset, and admin account m
 
 - `password.go`: Argon2id (m=19456 KiB, t=2, p=1). `Hasher` runs at most N hashes at once with a queue of 200 and a 10 s acquire timeout; when full it returns `ErrBusy`, which becomes `503 Retry-After: 2`.
 - `service.go`: `Register`, `Login`, `CreateSession`, `Authenticate` (idle and absolute timeouts per role), `Logout`, `VerifyEmail`, `RequestPasswordReset`, `ResetPassword`, `UsersByID`, `CreateAdmin`.
-- `admin.go`: `ListUsers`, `SetStatus`, `DeleteUser` and `DeleteOwnAccount` (both anonymise), and `GetPolicy`/`SetPolicy` (teacher approval).
+- `admin.go`: `ListUsers`, `SetStatus`, `DeleteUser` and `DeleteOwnAccount` (both anonymise), and `GetPolicy`/`SetPolicy` (teacher approval). A manager may act only on teachers and students, and the last active admin can't be suspended or deleted.
+- `manager.go` (D-56): the admin features a manager can be given (`Features`), the `RequireStaff` and `RequireFeature` route checks, and `ListManagers`, `MakeManager` (an existing teacher, or a new manager-only account), `SetManagerFeatures` and `RemoveManager`.
 - `http.go`: `Middleware`, `RequireRole`, `CurrentUser`/`MustUser`, cookie helpers, and the routes.
 - `ratelimit.go`: token bucket. Per IP: burst 300, refill every 200 ms (a class shares one NAT address). Per email: burst 10, refill every 30 s.
 
@@ -100,7 +101,7 @@ Live polls (D-40). `model.go` defines the 20 question types, their validation an
 
 ## admin (no schema)
 
-Usage counts and the audit log for admins, plus `/api/my/data` (own-data export) for every user.
+Usage counts and the audit log for admins and managers given those features (filterable by person and by role acted in), plus `/api/my/data` (own-data export) for every user.
 
 ## apidocs (no schema)
 
