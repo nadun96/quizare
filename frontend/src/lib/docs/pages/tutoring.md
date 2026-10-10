@@ -113,7 +113,7 @@ openssl rand -hex 32 > .data/tutoring.secret
 printf 'tutoring: %s\n' "$(openssl rand -hex 24)" > .data/livekit-keys.yaml
 
 # LiveKit (from the pinned build the load test downloads, loadtest/.bin)
-livekit-server --dev --bind 127.0.0.1   # or with a config naming key_file: .data/livekit-keys.yaml
+livekit-server --config .data/livekit.yaml   # the config below
 
 # the platform
 QP_TUTORING_URL=http://localhost:8090 QP_TUTORING_SECRET_FILE=.data/tutoring.secret … go run ./cmd/server
@@ -125,6 +125,24 @@ TUTOR_PLATFORM_URL=http://127.0.0.1:8080 TUTOR_PLATFORM_ORIGIN=http://localhost:
 LIVEKIT_URL=http://127.0.0.1:7880 LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880 \
 LIVEKIT_API_KEY=tutoring LIVEKIT_API_SECRET_FILE=../backend/.data/livekit-keys.yaml go run ./cmd/tutor
 ```
+
+`.data/livekit.yaml` for one computer. It offers browsers only the loopback address: left to itself, LiveKit also offers every other address of the computer, and where those change (Windows rotates its temporary IPv6 addresses) Chrome stops with "could not establish pc connection".
+
+```yaml
+port: 7880
+bind_addresses: ["127.0.0.1"]
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  node_ip: 127.0.0.1
+  use_external_ip: false
+  enable_loopback_candidate: true
+  ips:
+    includes: ["127.0.0.1/32"]
+key_file: livekit-keys.yaml   # mode 0400; on Windows, which can't set that, write the key inline: keys: {tutoring: <secret>}
+```
+
+If Windows refuses the ports (`netsh interface ipv4 show excludedportrange protocol=tcp` lists the reserved ranges), move all three, and the `LIVEKIT_*` addresses with them.
 
 | Variable | Default | Meaning |
 |---|---|---|
