@@ -46,7 +46,7 @@ func (s *Service) message(ctx context.Context, id int64) (Message, error) {
 // visibleTo says whether a participant sees a message.
 func (m Message) visibleTo(userID, role string) bool {
 	switch {
-	case m.Audience == "everyone", role == "teacher", m.UserID == userID:
+	case m.Audience == "everyone", role == "teacher", role == "coteacher", m.UserID == userID:
 		return true
 	case m.Audience == "one":
 		return m.ToUser != nil && *m.ToUser == userID
@@ -86,7 +86,7 @@ func (s *Service) Post(ctx context.Context, p authn.Person, id string, in PostIn
 	audience := "everyone"
 	var to *string
 	now := s.now()
-	if me.Role == "teacher" {
+	if me.Staff() {
 		if in.To != "" {
 			if _, err := s.participant(ctx, id, in.To); err != nil {
 				return Message{}, err
@@ -116,7 +116,7 @@ func (s *Service) Post(ctx context.Context, p authn.Person, id string, in PostIn
 		}
 	}
 	m, err := scanMessage(s.pool.QueryRow(ctx, `INSERT INTO tutoring.messages (session_id, user_id, name, from_teacher, audience, to_user, text, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING `+messageCols, id, p.ID, me.Name, me.Role == "teacher", audience, to, text, now))
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING `+messageCols, id, p.ID, me.Name, me.Staff(), audience, to, text, now))
 	if err != nil {
 		return m, err
 	}
@@ -141,7 +141,7 @@ func (s *Service) History(ctx context.Context, p authn.Person, id string, before
 		before = 1 << 62
 	}
 	rows, _ := s.pool.Query(ctx, `SELECT `+messageCols+` FROM tutoring.messages WHERE session_id=$1 AND id < $2 AND deleted_at IS NULL
-		AND ($3 OR audience='everyone' OR user_id=$4 OR to_user=$4) ORDER BY id DESC LIMIT $5`, id, before, me.Role == "teacher", p.ID, limit)
+		AND ($3 OR audience='everyone' OR user_id=$4 OR to_user=$4) ORDER BY id DESC LIMIT $5`, id, before, me.Staff(), p.ID, limit)
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Message, error) { return scanMessage(r) })
 	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
 		list[i], list[j] = list[j], list[i]
@@ -151,7 +151,7 @@ func (s *Service) History(ctx context.Context, p authn.Person, id string, before
 
 // DeleteMessage removes a message for everyone (TS-FR-42).
 func (s *Service) DeleteMessage(ctx context.Context, p authn.Person, id string, msgID int64) error {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	if _, err := s.staffed(ctx, p, id); err != nil {
 		return err
 	}
 	tag, err := s.pool.Exec(ctx, `UPDATE tutoring.messages SET deleted_at=$3 WHERE session_id=$1 AND id=$2 AND deleted_at IS NULL`, id, msgID, s.now())
@@ -169,7 +169,7 @@ func (s *Service) DeleteMessage(ctx context.Context, p authn.Person, id string, 
 
 // Pin pins one message everyone can see, or unpins (msgID 0) (TS-FR-45).
 func (s *Service) Pin(ctx context.Context, p authn.Person, id string, msgID int64) error {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	if _, err := s.staffed(ctx, p, id); err != nil {
 		return err
 	}
 	var pinned *int64
@@ -192,7 +192,7 @@ func (s *Service) Pin(ctx context.Context, p authn.Person, id string, msgID int6
 
 // MuteChat stops or lets again one student write in the chat (TS-FR-42).
 func (s *Service) MuteChat(ctx context.Context, p authn.Person, id, userID string, muted bool) error {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	if _, err := s.staffed(ctx, p, id); err != nil {
 		return err
 	}
 	tag, err := s.pool.Exec(ctx, `UPDATE tutoring.participants SET chat_muted=$3 WHERE session_id=$1 AND user_id=$2 AND role='student'`, id, userID, muted)

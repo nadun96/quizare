@@ -24,9 +24,10 @@ import (
 	"github.com/nadun96/quizplatform/tutoring/internal/web"
 )
 
-// Platform answers who may take part in a classroom.
+// Platform answers who may take part in a classroom, and finds teachers.
 type Platform interface {
 	Access(ctx context.Context, classroomID, userID string) (platform.Access, error)
+	Teacher(ctx context.Context, email string) (platform.Person, error)
 }
 
 // Media is the media server's part (LiveKit).
@@ -57,32 +58,37 @@ func New(pool *pgxpool.Pool, p Platform, m Media, mediaURL string, log *slog.Log
 // ---------- model ----------
 
 type Session struct {
-	ID            string     `json:"id"`
-	TeacherID     string     `json:"teacher_id"`
-	TeacherName   string     `json:"teacher_name"`
-	ClassroomID   string     `json:"classroom_id"`
-	ClassroomName string     `json:"classroom_name"`
-	Title         string     `json:"title"`
-	JoinCode      string     `json:"join_code"`
-	Status        string     `json:"status"` // open, live, ended
-	AdmitMode     string     `json:"admit_mode"`
-	Locked        bool       `json:"locked"`
-	ChatMode      string     `json:"chat_mode"`
-	SlowSeconds   int        `json:"slow_seconds"`
-	PinnedID      *int64     `json:"pinned_id,omitempty"`
-	ScheduledAt   *time.Time `json:"scheduled_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	StartedAt     *time.Time `json:"started_at,omitempty"`
-	EndedAt       *time.Time `json:"ended_at,omitempty"`
+	ID            string `json:"id"`
+	TeacherID     string `json:"teacher_id"`
+	TeacherName   string `json:"teacher_name"`
+	ClassroomID   string `json:"classroom_id"`
+	ClassroomName string `json:"classroom_name"`
+	Title         string `json:"title"`
+	JoinCode      string `json:"join_code"`
+	Status        string `json:"status"` // open, live, ended
+	AdmitMode     string `json:"admit_mode"`
+	Locked        bool   `json:"locked"`
+	ChatMode      string `json:"chat_mode"`
+	SlowSeconds   int    `json:"slow_seconds"`
+	PinnedID      *int64 `json:"pinned_id,omitempty"`
+	// BroadcasterID is who broadcasts when it isn't the lead teacher
+	// (TS-FR-17); BroadcastOffer is someone asked who hasn't answered.
+	BroadcasterID  *string    `json:"broadcaster_id,omitempty"`
+	BroadcastOffer *string    `json:"broadcast_offer,omitempty"`
+	Layout         string     `json:"layout"` // spotlight, side or grid (TS-FR-13)
+	ScheduledAt    *time.Time `json:"scheduled_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	EndedAt        *time.Time `json:"ended_at,omitempty"`
 }
 
 const sessionCols = `id, teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, status, admit_mode, locked, chat_mode,
-	slow_seconds, pinned_id, scheduled_at, created_at, started_at, ended_at`
+	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, scheduled_at, created_at, started_at, ended_at`
 
 func scanSession(row pgx.Row) (Session, error) {
 	var s Session
 	err := row.Scan(&s.ID, &s.TeacherID, &s.TeacherName, &s.ClassroomID, &s.ClassroomName, &s.Title, &s.JoinCode, &s.Status, &s.AdmitMode,
-		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt)
+		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s, web.ErrNotFound
 	}
@@ -93,7 +99,7 @@ func scanSession(row pgx.Row) (Session, error) {
 type Participant struct {
 	UserID      string     `json:"user_id"`
 	Name        string     `json:"name"`
-	Role        string     `json:"role"`  // teacher or student
+	Role        string     `json:"role"`  // teacher (the lead), coteacher or student
 	State       string     `json:"state"` // waiting, admitted, refused, removed
 	AllowMic    bool       `json:"allow_mic"`
 	AllowCamera bool       `json:"allow_camera"`
@@ -115,12 +121,11 @@ func scanParticipant(row pgx.Row) (Participant, error) {
 	return p, err
 }
 
-// Sources are what p may publish: everything for teachers, only what the
-// teacher allowed for students (TS-FR-20, TS-FR-21).
-func (p Participant) Sources() []string {
-	if p.Role == "teacher" {
-		return []string{media.Camera, media.Microphone, media.Screen, media.ScreenAudio}
-	}
+// Staff are the lead teacher and co-teachers.
+func (p Participant) Staff() bool { return p.Role == "teacher" || p.Role == "coteacher" }
+
+// allowed is what the teacher let a student share (TS-FR-20, TS-FR-21).
+func (p Participant) allowed() []string {
 	out := []string{}
 	if p.AllowMic {
 		out = append(out, media.Microphone)
@@ -135,12 +140,12 @@ func (p Participant) Sources() []string {
 }
 
 var (
-	errEnded     = web.NewError(http.StatusGone, "session_ended", "this session has ended")
-	errLocked    = web.NewError(http.StatusForbidden, "session_locked", "this session is locked: nobody new can join")
-	errRemoved   = web.NewError(http.StatusForbidden, "removed", "the teacher removed you from this session")
-	errRefused   = web.NewError(http.StatusForbidden, "refused", "the teacher didn't admit you to this session")
-	errNotLive   = web.NewError(http.StatusConflict, "not_live", "the session hasn't started yet")
-	errTeachOnly = web.NewError(http.StatusForbidden, "forbidden", "only the session's teacher can do this")
+	errEnded    = web.NewError(http.StatusGone, "session_ended", "this session has ended")
+	errLocked   = web.NewError(http.StatusForbidden, "session_locked", "this session is locked: nobody new can join")
+	errRemoved  = web.NewError(http.StatusForbidden, "removed", "the teacher removed you from this session")
+	errRefused  = web.NewError(http.StatusForbidden, "refused", "the teacher didn't admit you to this session")
+	errNotLive  = web.NewError(http.StatusConflict, "not_live", "the session hasn't started yet")
+	errLeadOnly = web.NewError(http.StatusForbidden, "lead_only", "only the lead teacher can do this")
 )
 
 // ---------- sessions ----------
@@ -206,7 +211,8 @@ var sessionSorts = map[string]string{"created": "created_at", "title": "lower(ti
 
 // List returns one page of a teacher's sessions (TS-FR-90, TS-FR-91).
 func (s *Service) List(ctx context.Context, p authn.Person, classroomID, status string, pg Page) ([]Session, int, error) {
-	where := ` FROM tutoring.sessions WHERE teacher_id=$1 AND ($2 = '' OR classroom_id::text = $2) AND ($3 = '' OR status = $3) AND ($4 = '' OR title ILIKE $4)`
+	where := ` FROM tutoring.sessions WHERE (teacher_id=$1 OR id IN (SELECT session_id FROM tutoring.coteachers WHERE user_id=$1))
+		AND ($2 = '' OR classroom_id::text = $2) AND ($3 = '' OR status = $3) AND ($4 = '' OR title ILIKE $4)`
 	args := []any{p.ID, classroomID, status, pg.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
@@ -221,16 +227,33 @@ func (s *Service) session(ctx context.Context, id string) (Session, error) {
 	return scanSession(s.pool.QueryRow(ctx, `SELECT `+sessionCols+` FROM tutoring.sessions WHERE id=$1`, id))
 }
 
-// owned returns a session the caller teaches.
+// owned returns a session the caller leads: choosing the broadcaster,
+// co-teachers, removing people and ending are the lead teacher's (TS-FR-71).
 func (s *Service) owned(ctx context.Context, p authn.Person, id string) (Session, error) {
-	sess, err := s.session(ctx, id)
+	sess, err := s.staffed(ctx, p, id)
 	if err != nil {
 		return sess, err
 	}
 	if sess.TeacherID != p.ID {
-		return sess, web.ErrNotFound // like other people's resources on the platform
+		return sess, errLeadOnly
 	}
 	return sess, nil
+}
+
+// staffed returns a session the caller leads or co-teaches: admitting,
+// hands, permissions, mute and chat moderation are theirs too (TS-FR-71).
+func (s *Service) staffed(ctx context.Context, p authn.Person, id string) (Session, error) {
+	sess, err := s.session(ctx, id)
+	if err != nil {
+		return sess, err
+	}
+	if sess.TeacherID == p.ID {
+		return sess, nil
+	}
+	if me, err := s.participant(ctx, id, p.ID); err == nil && me.Role == "coteacher" && me.State == "admitted" {
+		return sess, nil
+	}
+	return sess, web.ErrNotFound // like other people's resources on the platform
 }
 
 func (s *Service) participant(ctx context.Context, sessionID, userID string) (Participant, error) {
@@ -253,11 +276,14 @@ func (s *Service) logAction(ctx context.Context, sessionID, actorID, action stri
 type View struct {
 	Session      Session       `json:"session"`
 	Me           Participant   `json:"me"`
-	Participants []Participant `json:"participants,omitempty"` // teachers only
-	Online       int           `json:"online"`
-	Waiting      int           `json:"waiting"`
-	Pinned       *Message      `json:"pinned,omitempty"`
-	MediaURL     string        `json:"media_url"`
+	Participants []Participant `json:"participants,omitempty"` // teachers and co-teachers only
+	// Teachers are the lead teacher and co-teachers, so students know who
+	// teaches (TS-FR-73).
+	Teachers []Person `json:"teachers"`
+	Online   int      `json:"online"`
+	Waiting  int      `json:"waiting"`
+	Pinned   *Message `json:"pinned,omitempty"`
+	MediaURL string   `json:"media_url"`
 }
 
 // Join enters a session by its code. The platform checks the classroom:
@@ -272,9 +298,16 @@ func (s *Service) Join(ctx context.Context, p authn.Person, code string) (View, 
 		return View{}, errEnded
 	}
 	role := "student"
-	if sess.TeacherID == p.ID {
+	var co bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tutoring.coteachers WHERE session_id=$1 AND user_id=$2)`, sess.ID, p.ID).Scan(&co); err != nil {
+		return View{}, err
+	}
+	switch {
+	case sess.TeacherID == p.ID:
 		role = "teacher"
-	} else {
+	case co: // the lead teacher chose them; no classroom check (TS-FR-70)
+		role = "coteacher"
+	default:
 		a, err := s.platform.Access(ctx, sess.ClassroomID, p.ID)
 		if err != nil {
 			return View{}, err
@@ -329,28 +362,43 @@ func (s *Service) View(ctx context.Context, p authn.Person, sessionID string) (V
 	return v, nil
 }
 
-// MediaToken lets an admitted person join the session's media room, with
-// exactly the sources they may publish (TS-NFR-21, TS-NFR-22). Teachers
-// can join before the start to check their devices; students once it is live.
-func (s *Service) MediaToken(ctx context.Context, p authn.Person, sessionID string) (string, error) {
+// MediaTokens are the tokens one person joins the media rooms with.
+type MediaTokens struct {
+	URL   string `json:"url"`
+	Main  string `json:"main"`            // the broadcast everyone watches
+	Stage string `json:"stage,omitempty"` // backstage: students' tracks, for teachers only
+}
+
+// MediaToken lets an admitted person join the session's media rooms, with
+// exactly the sources they may publish in each and what they may watch
+// (TS-NFR-21, TS-NFR-22). Teachers can join before the start to check their
+// devices; students once it is live.
+func (s *Service) MediaToken(ctx context.Context, p authn.Person, sessionID string) (MediaTokens, error) {
 	sess, err := s.session(ctx, sessionID)
 	if err != nil {
-		return "", err
+		return MediaTokens{}, err
 	}
 	me, err := s.participant(ctx, sessionID, p.ID)
 	if err != nil {
-		return "", err
+		return MediaTokens{}, err
 	}
 	switch {
 	case sess.Status == "ended":
-		return "", errEnded
+		return MediaTokens{}, errEnded
 	case me.State != "admitted":
-		return "", web.NewError(http.StatusForbidden, "not_admitted", "you haven't been admitted yet")
+		return MediaTokens{}, web.NewError(http.StatusForbidden, "not_admitted", "you haven't been admitted yet")
 	case me.Role == "student" && sess.Status != "live":
-		return "", errNotLive
+		return MediaTokens{}, errNotLive
 	}
 	meta, _ := json.Marshal(map[string]string{"role": me.Role})
-	return s.media.Token(media.Grant{Room: sess.ID, Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: true, Sources: me.Sources()})
+	out := MediaTokens{URL: s.mediaURL}
+	if out.Main, err = s.media.Token(media.Grant{Room: sess.ID, Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: true, Sources: mainSources(sess, me)}); err != nil {
+		return out, err
+	}
+	if stage := stageSources(sess, me); me.Staff() || len(stage) > 0 {
+		out.Stage, err = s.media.Token(media.Grant{Room: stageRoom(sess.ID), Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: me.Staff(), Sources: stage})
+	}
+	return out, err
 }
 
 // ---------- the teacher's controls ----------
@@ -389,14 +437,19 @@ func (s *Service) End(ctx context.Context, p authn.Person, id string) error {
 	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.visits SET left_at=$2 WHERE session_id=$1 AND left_at IS NULL`, id, now); err != nil {
 		return err
 	}
-	if err := s.media.EndRoom(ctx, id); err != nil && !errors.Is(err, media.ErrNotInRoom) {
-		s.log.Warn("ending media room", "session", id, "err", err)
-	}
+	// Browsers hear first, so they leave the media rooms themselves; then the
+	// rooms go, which stops anything still being sent.
 	s.hub.end(id)
+	for _, room := range []string{id, stageRoom(id)} {
+		if err := s.media.EndRoom(ctx, room); err != nil && !errors.Is(err, media.ErrNotInRoom) {
+			s.log.Warn("ending media room", "session", id, "room", room, "err", err)
+		}
+	}
 	return nil
 }
 
 type SettingsInput struct {
+	Layout      *string `json:"layout,omitempty"`
 	Locked      *bool   `json:"locked,omitempty"`
 	AdmitMode   *string `json:"admit_mode,omitempty"`
 	ChatMode    *string `json:"chat_mode,omitempty"`
@@ -407,11 +460,19 @@ var chatModes = map[string]bool{"off": true, "to_teacher": true, "everyone": tru
 
 // Settings changes the lock (TS-FR-61), admission and chat (TS-FR-40, TS-FR-42); it applies at once.
 func (s *Service) Settings(ctx context.Context, p authn.Person, id string, in SettingsInput) error {
-	sess, err := s.owned(ctx, p, id)
+	// Co-teachers moderate the chat; the lock, admission and layout are the lead's.
+	get := s.staffed
+	if in.Locked != nil || in.AdmitMode != nil || in.Layout != nil {
+		get = s.owned
+	}
+	sess, err := get(ctx, p, id)
 	if err != nil {
 		return err
 	}
 	f := map[string]string{}
+	if in.Layout != nil && *in.Layout != "spotlight" && *in.Layout != "side" && *in.Layout != "grid" {
+		f["layout"] = "spotlight, side or grid"
+	}
 	if in.AdmitMode != nil && *in.AdmitMode != "auto" && *in.AdmitMode != "manual" {
 		f["admit_mode"] = "admit automatically or manually"
 	}
@@ -425,7 +486,8 @@ func (s *Service) Settings(ctx context.Context, p authn.Person, id string, in Se
 		return web.Invalid(f)
 	}
 	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.sessions SET locked=coalesce($2, locked), admit_mode=coalesce($3, admit_mode),
-		chat_mode=coalesce($4, chat_mode), slow_seconds=coalesce($5, slow_seconds) WHERE id=$1`, sess.ID, in.Locked, in.AdmitMode, in.ChatMode, in.SlowSeconds); err != nil {
+		chat_mode=coalesce($4, chat_mode), slow_seconds=coalesce($5, slow_seconds), layout=coalesce($6, layout) WHERE id=$1`,
+		sess.ID, in.Locked, in.AdmitMode, in.ChatMode, in.SlowSeconds, in.Layout); err != nil {
 		return err
 	}
 	s.logAction(ctx, id, p.ID, "settings_changed", nil, in)
@@ -435,7 +497,7 @@ func (s *Service) Settings(ctx context.Context, p authn.Person, id string, in Se
 
 // Admit lets waiting students in, or refuses them (TS-FR-03).
 func (s *Service) Admit(ctx context.Context, p authn.Person, id string, userIDs []string, admit bool) (int, error) {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	if _, err := s.staffed(ctx, p, id); err != nil {
 		return 0, err
 	}
 	state := "admitted"
@@ -467,7 +529,12 @@ func (s *Service) Remove(ctx context.Context, p authn.Person, id, userID string)
 	if tag.RowsAffected() == 0 {
 		return web.ErrNotFound
 	}
-	if err := s.media.Remove(ctx, id, userID); err != nil && !errors.Is(err, media.ErrNotInRoom) {
+	for _, room := range []string{id, stageRoom(id)} {
+		if err := s.media.Remove(ctx, room, userID); err != nil && !errors.Is(err, media.ErrNotInRoom) {
+			return err
+		}
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.sessions SET broadcaster_id = NULLIF(broadcaster_id, $2), broadcast_offer = NULLIF(broadcast_offer, $2) WHERE id=$1`, id, userID); err != nil {
 		return err
 	}
 	s.logAction(ctx, id, p.ID, "removed", &userID, nil)
@@ -491,7 +558,7 @@ type PermissionsInput struct {
 }
 
 func (s *Service) SetPermissions(ctx context.Context, p authn.Person, id string, in PermissionsInput) (int, error) {
-	sess, err := s.owned(ctx, p, id)
+	sess, err := s.staffed(ctx, p, id)
 	if err != nil {
 		return 0, err
 	}
@@ -508,9 +575,7 @@ func (s *Service) SetPermissions(ctx context.Context, p authn.Person, id string,
 	}
 	for _, c := range changed {
 		// Live at once for anyone connected; the next token carries it otherwise.
-		if err := s.media.SetPermission(ctx, sess.ID, c.UserID, true, c.Sources()); err != nil && !errors.Is(err, media.ErrNotInRoom) {
-			s.log.Warn("media permission", "session", id, "user", c.UserID, "err", err)
-		}
+		s.applyMedia(ctx, sess, c)
 		if in.Ask {
 			s.hub.send(id, c.UserID, event{Type: "ask", Data: map[string]bool{"mic": in.Mic != nil && *in.Mic, "camera": in.Camera != nil && *in.Camera, "screen": in.Screen != nil && *in.Screen}})
 		}
@@ -530,7 +595,7 @@ type MuteInput struct {
 }
 
 func (s *Service) Mute(ctx context.Context, p authn.Person, id string, in MuteInput) error {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	if _, err := s.staffed(ctx, p, id); err != nil {
 		return err
 	}
 	var sources []string
@@ -560,8 +625,10 @@ func (s *Service) Mute(ctx context.Context, p authn.Person, id string, in MuteIn
 		targets = []string{in.UserID}
 	}
 	for _, u := range targets {
-		if err := s.media.Mute(ctx, id, u, sources...); err != nil && !errors.Is(err, media.ErrNotInRoom) {
-			return err
+		for _, room := range []string{id, stageRoom(id)} {
+			if err := s.media.Mute(ctx, room, u, sources...); err != nil && !errors.Is(err, media.ErrNotInRoom) {
+				return err
+			}
 		}
 	}
 	s.logAction(ctx, id, p.ID, "muted", nil, in)
@@ -594,7 +661,7 @@ func (s *Service) Hand(ctx context.Context, p authn.Person, id string, raised bo
 
 // LowerHand lowers a student's hand for them.
 func (s *Service) LowerHand(ctx context.Context, p authn.Person, id, userID string) error {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	if _, err := s.staffed(ctx, p, id); err != nil {
 		return err
 	}
 	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.participants SET hand_at=NULL WHERE session_id=$1 AND user_id=$2`, id, userID); err != nil {

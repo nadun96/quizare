@@ -49,11 +49,15 @@ func (f *fixture) join(p *testenv.Person, want int) tutor.View {
 
 func (f *fixture) path(rest string) string { return "/api/sessions/" + f.sess.ID + rest }
 
-// sources reads what a LiveKit token lets its holder publish.
-func sources(t *testing.T, f *fixture, p *testenv.Person) []string {
+// grant is what one LiveKit token allows.
+type grant struct {
+	Room      string
+	Sources   []string
+	Subscribe bool
+}
+
+func readGrant(t *testing.T, f *fixture, p *testenv.Person, raw string) grant {
 	t.Helper()
-	var out struct{ Token string }
-	p.Call("POST", f.path("/media-token"), nil, 200, &out)
 	var c struct {
 		jwt.RegisteredClaims
 		Video struct {
@@ -65,10 +69,10 @@ func sources(t *testing.T, f *fixture, p *testenv.Person) []string {
 			CanPublishSources []string `json:"canPublishSources"`
 		} `json:"video"`
 	}
-	if _, err := jwt.ParseWithClaims(out.Token, &c, func(*jwt.Token) (any, error) { return f.e.LKSecret, nil }); err != nil {
+	if _, err := jwt.ParseWithClaims(raw, &c, func(*jwt.Token) (any, error) { return f.e.LKSecret, nil }); err != nil {
 		t.Fatal(err)
 	}
-	if c.Subject != p.ID || c.Video.Room != f.sess.ID || !c.Video.RoomJoin || !c.Video.CanSubscribe || c.Video.CanPublishData || c.Issuer != "devkey" {
+	if c.Subject != p.ID || !c.Video.RoomJoin || c.Video.CanPublishData || c.Issuer != "devkey" {
 		t.Fatalf("token claims = %+v", c)
 	}
 	if ttl := c.ExpiresAt.Sub(time.Now()); ttl > media.TokenTTL || ttl < media.TokenTTL-time.Minute {
@@ -78,7 +82,46 @@ func sources(t *testing.T, f *fixture, p *testenv.Person) []string {
 		t.Fatalf("canPublish %v with sources %v", c.Video.CanPublish, c.Video.CanPublishSources)
 	}
 	slices.Sort(c.Video.CanPublishSources)
-	return c.Video.CanPublishSources
+	return grant{Room: c.Video.Room, Sources: c.Video.CanPublishSources, Subscribe: c.Video.CanSubscribe}
+}
+
+// grants reads p's tokens: the broadcast, and backstage if they have one.
+func grants(t *testing.T, f *fixture, p *testenv.Person) (grant, *grant) {
+	t.Helper()
+	var out struct{ Main, Stage, URL string }
+	p.Call("POST", f.path("/media-token"), nil, 200, &out)
+	main := readGrant(t, f, p, out.Main)
+	if main.Room != f.sess.ID || !main.Subscribe {
+		t.Fatalf("main grant = %+v", main)
+	}
+	if out.Stage == "" {
+		return main, nil
+	}
+	st := readGrant(t, f, p, out.Stage)
+	if st.Room != f.sess.ID+"-stage" {
+		t.Fatalf("stage grant = %+v", st)
+	}
+	return main, &st
+}
+
+// sources is what p may publish to everyone.
+func sources(t *testing.T, f *fixture, p *testenv.Person) []string {
+	t.Helper()
+	m, _ := grants(t, f, p)
+	return m.Sources
+}
+
+// backstage is what p may publish for the teachers only (nil: no backstage token).
+func backstage(t *testing.T, f *fixture, p *testenv.Person) []string {
+	t.Helper()
+	_, st := grants(t, f, p)
+	if st == nil {
+		return nil
+	}
+	if st.Subscribe != (p.Role == "teacher") {
+		t.Fatalf("%s may watch backstage: %v", p.Name, st.Subscribe)
+	}
+	return st.Sources
 }
 
 func TestCreatingAndListingSessions(t *testing.T) {
@@ -199,12 +242,18 @@ func TestJoiningAdmittingStartingAndEnding(t *testing.T) {
 	if got := sources(t, f, f.teacher); !slices.Equal(got, []string{"camera", "microphone", "screen_share", "screen_share_audio"}) {
 		t.Fatalf("teacher sources = %v", got)
 	}
+	if _, st := grants(t, f, f.teacher); st == nil || !st.Subscribe || len(st.Sources) != 0 { // watches backstage, publishes nothing there
+		t.Fatalf("teacher backstage = %+v", st)
+	}
 	ann.Call("POST", f.path("/start"), nil, 404, nil) // only the teacher
 	f.teacher.Call("POST", f.path("/start"), nil, 204, nil)
 	f.teacher.Call("POST", f.path("/start"), nil, 409, nil)
-	// A student may publish nothing by default (TS-FR-20).
+	// A student may publish nothing by default (TS-FR-20), and gets no backstage token.
 	if got := sources(t, f, ann); len(got) != 0 {
 		t.Fatalf("student sources = %v", got)
+	}
+	if got := backstage(t, f, ann); got != nil {
+		t.Fatalf("student backstage = %v", got)
 	}
 
 	// Locked: nobody new, though those already in may come back (TS-FR-61).
@@ -222,7 +271,7 @@ func TestJoiningAdmittingStartingAndEnding(t *testing.T) {
 
 	// Removed: out, and can't come back (TS-FR-60).
 	f.teacher.Call("DELETE", f.path("/participants/"+cara.ID), nil, 204, nil)
-	if calls := f.e.LiveKit.Calls("RemoveParticipant"); len(calls) != 1 || calls[0].Body["identity"] != cara.ID {
+	if calls := f.e.LiveKit.Calls("RemoveParticipant"); len(calls) != 2 || calls[0].Body["identity"] != cara.ID {
 		t.Fatalf("media remove = %+v", calls)
 	}
 	code, body = cara.Do("POST", "/api/join/"+f.sess.JoinCode, nil)
@@ -232,7 +281,7 @@ func TestJoiningAdmittingStartingAndEnding(t *testing.T) {
 
 	// Ending stops everything (TS-FR-04).
 	f.teacher.Call("POST", f.path("/end"), nil, 204, nil)
-	if calls := f.e.LiveKit.Calls("DeleteRoom"); len(calls) != 1 || calls[0].Body["room"] != f.sess.ID {
+	if calls := f.e.LiveKit.Calls("DeleteRoom"); len(calls) != 2 || calls[0].Body["room"] != f.sess.ID || calls[1].Body["room"] != f.sess.ID+"-stage" {
 		t.Fatalf("media end = %+v", calls)
 	}
 	ann.Call("POST", "/api/join/"+f.sess.JoinCode, nil, 410, nil)
@@ -274,16 +323,31 @@ func TestPermissionsHandsAndMuting(t *testing.T) {
 	if ask["data"].(map[string]any)["mic"] != true {
 		t.Fatalf("ask = %v", ask)
 	}
-	if got := sources(t, f, ann); !slices.Equal(got, []string{"microphone"}) {
-		t.Fatalf("ann sources = %v", got)
+	// Allowed devices publish backstage: to the teachers, never to other students (TS-FR-25, TS-FR-37).
+	if got := backstage(t, f, ann); !slices.Equal(got, []string{"microphone"}) {
+		t.Fatalf("ann backstage = %v", got)
+	}
+	if got := sources(t, f, ann); len(got) != 0 {
+		t.Fatalf("ann broadcasts %v", got)
 	}
 	calls := f.e.LiveKit.Calls("UpdateParticipant")
-	if len(calls) != 1 || calls[0].Body["identity"] != ann.ID {
+	if len(calls) != 2 {
 		t.Fatalf("live permission = %+v", calls)
 	}
-	perm := calls[0].Body["permission"].(map[string]any)
-	if perm["canPublish"] != true || fmt.Sprint(perm["canPublishSources"]) != "[MICROPHONE]" || perm["canPublishData"] != false {
-		t.Fatalf("permission sent = %v", perm)
+	for _, c := range calls {
+		perm := c.Body["permission"].(map[string]any)
+		switch c.Body["room"] {
+		case f.sess.ID + "-stage":
+			if c.Body["identity"] != ann.ID || perm["canPublish"] != true || fmt.Sprint(perm["canPublishSources"]) != "[MICROPHONE]" || perm["canSubscribe"] != false || perm["canPublishData"] != false {
+				t.Fatalf("backstage permission = %v", c.Body)
+			}
+		case f.sess.ID:
+			if perm["canPublish"] != false || perm["canSubscribe"] != true {
+				t.Fatalf("broadcast permission = %v", c.Body)
+			}
+		default:
+			t.Fatalf("room %v", c.Body["room"])
+		}
 	}
 	tv = tutor.View{} // decoding into a used struct keeps fields the reply leaves out
 	f.teacher.Call("GET", f.path(""), nil, 200, &tv)
@@ -296,13 +360,13 @@ func TestPermissionsHandsAndMuting(t *testing.T) {
 	f.teacher.Call("PUT", f.path("/permissions"), tutor.PermissionsInput{All: true, Screen: &yes}, 200, nil)
 	no := false
 	f.teacher.Call("PUT", f.path("/permissions"), tutor.PermissionsInput{UserIDs: []string{ann.ID}, Mic: &no}, 200, nil)
-	if got := sources(t, f, ann); !slices.Equal(got, []string{"screen_share", "screen_share_audio"}) {
-		t.Fatalf("ann sources = %v", got)
+	if got := backstage(t, f, ann); !slices.Equal(got, []string{"screen_share", "screen_share_audio"}) {
+		t.Fatalf("ann backstage = %v", got)
 	}
-	if got := sources(t, f, bob); !slices.Equal(got, []string{"screen_share", "screen_share_audio"}) {
-		t.Fatalf("bob sources = %v", got)
+	if got := backstage(t, f, bob); !slices.Equal(got, []string{"screen_share", "screen_share_audio"}) {
+		t.Fatalf("bob backstage = %v", got)
 	}
-	if calls := f.e.LiveKit.Calls("UpdateParticipant"); len(calls) != 3 {
+	if calls := f.e.LiveKit.Calls("UpdateParticipant"); len(calls) != 6 { // both rooms each time
 		t.Fatalf("live permission calls = %d", len(calls))
 	}
 	f.teacher.Call("PUT", f.path("/permissions"), tutor.PermissionsInput{}, 422, nil)
@@ -312,8 +376,8 @@ func TestPermissionsHandsAndMuting(t *testing.T) {
 	f.e.LiveKit.Tracks[ann.ID] = []media.Track{{Sid: "TR_mic_a", Source: "MICROPHONE"}, {Sid: "TR_scr_a", Source: "SCREEN_SHARE"}}
 	f.e.LiveKit.Tracks[bob.ID] = []media.Track{{Sid: "TR_mic_b", Source: "MICROPHONE", Muted: true}}
 	f.teacher.Call("POST", f.path("/mute"), tutor.MuteInput{All: true, Mic: true}, 204, nil)
-	muted := f.e.LiveKit.Calls("MutePublishedTrack")
-	if len(muted) != 1 || muted[0].Body["trackSid"] != "TR_mic_a" || muted[0].Body["muted"] != true {
+	muted := f.e.LiveKit.Calls("MutePublishedTrack") // the fake lists the same tracks in both rooms
+	if len(muted) != 2 || muted[0].Body["trackSid"] != "TR_mic_a" || muted[1].Body["trackSid"] != "TR_mic_a" || muted[0].Body["muted"] != true {
 		t.Fatalf("muted = %+v", muted)
 	}
 	f.teacher.Call("POST", f.path("/mute"), tutor.MuteInput{UserID: ann.ID}, 422, nil)

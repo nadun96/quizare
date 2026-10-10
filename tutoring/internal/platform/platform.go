@@ -75,3 +75,38 @@ func (c *Client) Access(ctx context.Context, classroomID, userID string) (Access
 	}
 	return a, e
 }
+
+// Person is a teacher the platform found.
+type Person struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// Teacher finds an active teacher account by email, for co-teachers
+// (TS-FR-70). Anyone else is "not found".
+func (c *Client) Teacher(ctx context.Context, email string) (Person, error) {
+	var p Person
+	token, err := c.keys.ServiceToken()
+	if err != nil {
+		return p, err
+	}
+	body, _ := json.Marshal(map[string]string{"email": email})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/internal/tutoring/teacher", bytes.NewReader(body))
+	if err != nil {
+		return p, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return p, ErrUnavailable
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return p, json.NewDecoder(resp.Body).Decode(&p)
+	case resp.StatusCode == http.StatusNotFound:
+		return p, web.ErrNotFound
+	}
+	return p, ErrUnavailable
+}

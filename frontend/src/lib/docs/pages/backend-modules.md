@@ -105,7 +105,7 @@ Storage and backups (D-57, PL-FR-04 to PL-FR-09). `service.go` measures the data
 
 ## tutorlink (no schema)
 
-The platform's side of tutoring (D-59, ADR-23). `tutorlink.go` signs 5-minute tokens naming the logged-in person for the separate tutoring service (`POST /api/tutoring/token`), says whether tutoring is on (`GET /api/tutoring/config`), and answers the tutoring service's `POST /internal/tutoring/access` (not under `/api`; it needs the service's own one-minute token) from `content.ClassroomAccess`. Off unless `QP_TUTORING_URL` and `QP_TUTORING_SECRET_FILE` are set. The tutoring service itself is a separate Go module in `tutoring/`; see [Tutoring sessions](tutoring.md).
+The platform's side of tutoring (D-59, ADR-23). `tutorlink.go` signs 5-minute tokens naming the logged-in person for the separate tutoring service (`POST /api/tutoring/token`), says whether tutoring is on (`GET /api/tutoring/config`), and answers the tutoring service's `POST /internal/tutoring/access` (from `content.ClassroomAccess`) and `POST /internal/tutoring/teacher` (an active teacher by email, for co-teachers) — not under `/api`, and only with the service's own one-minute token. Off unless `QP_TUTORING_URL` and `QP_TUTORING_SECRET_FILE` are set. The tutoring service itself is a separate Go module in `tutoring/`; see [Tutoring sessions](tutoring.md).
 
 ## admin (no schema)
 

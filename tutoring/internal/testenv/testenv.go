@@ -131,6 +131,7 @@ type Platform struct {
 	Teachers  map[string]string          // classroom → teacher
 	Enrolled  map[string]map[string]bool // classroom → students
 	Archived  map[string]bool
+	Accounts  map[string]platform.Person // teacher accounts by email
 	Calls     int
 	BadTokens int
 }
@@ -150,9 +151,22 @@ func (p *Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.Calls++
 	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if _, err := jwt.Parse(raw, func(*jwt.Token) (any, error) { return Secret, nil }, jwt.WithIssuer("tutoring"), jwt.WithAudience("quiz-platform"),
-		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil || r.URL.Path != "/internal/tutoring/access" {
+		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil || (r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher") {
 		p.BadTokens++
 		w.WriteHeader(404)
+		return
+	}
+	if r.URL.Path == "/internal/tutoring/teacher" {
+		var in struct {
+			Email string `json:"email"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		t, ok := p.Accounts[strings.ToLower(in.Email)]
+		if !ok {
+			w.WriteHeader(404)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(t)
 		return
 	}
 	var in struct{ ClassroomID, UserID string }
@@ -240,7 +254,7 @@ type Env struct {
 // New starts the service with fakes around it.
 func New(t testing.TB) *Env {
 	t.Helper()
-	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}},
+	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}, Accounts: map[string]platform.Person{}},
 		LiveKit: &LiveKit{Tracks: map[string][]media.Track{}}, Origin: "https://quiz.example.edu", LKSecret: []byte("livekit-secret-of-at-least-32-chars!!")}
 	plat := httptest.NewServer(e.Platform)
 	lk := httptest.NewServer(e.LiveKit)
@@ -256,20 +270,28 @@ func New(t testing.TB) *Env {
 
 // Person is someone with a platform token.
 type Person struct {
-	e    *Env
-	ID   string
-	Name string
-	Role string
+	e     *Env
+	ID    string
+	Name  string
+	Role  string
+	Email string
 }
 
 func uuid(n int64, kind byte) string {
 	return fmt.Sprintf("%08x-0000-4000-8%03x-%012x", n, kind, n)
 }
 
-// NewPerson makes someone the platform would vouch for.
+// NewPerson makes someone the platform would vouch for. Teachers can be
+// found by their email (Email).
 func (e *Env) NewPerson(role, name string) *Person {
 	n := e.seq.Add(1)
-	return &Person{e: e, ID: uuid(n, 1), Name: name, Role: role}
+	p := &Person{e: e, ID: uuid(n, 1), Name: name, Role: role, Email: fmt.Sprintf("%s%d@example.edu", role, n)}
+	if role == "teacher" {
+		e.Platform.mu.Lock()
+		e.Platform.Accounts[p.Email] = platform.Person{ID: p.ID, Name: name}
+		e.Platform.mu.Unlock()
+	}
+	return p
 }
 
 // NewClassroom makes a classroom taught by teacher.

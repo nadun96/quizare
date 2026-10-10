@@ -11,11 +11,11 @@
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { looksLikeComputer, TutorClient, TutorSocket, tutoringConfig, type SocketEvent } from '$lib/tutoring/client';
-	import { SessionMedia, type Tile } from '$lib/tutoring/media.svelte';
+	import { SessionMedia, type Tile, type Tokens } from '$lib/tutoring/media.svelte';
 	import TrackView from '$lib/tutoring/TrackView.svelte';
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
-	import { CHAT_MODES, type Attendee, type ChatMessage, type TutoringView } from '$lib/tutoring/types';
+	import { broadcasterName, CHAT_MODES, isBroadcaster, isStaffRole, LAYOUTS, publishTarget, type Attendee, type ChatMessage, type TutoringSession, type TutoringView } from '$lib/tutoring/types';
 
 	const code = page.params.code ?? '';
 	const client = new TutorClient();
@@ -29,16 +29,35 @@
 	let socket: TutorSocket | null = null;
 	let side = $state<'chat' | 'people' | 'attendance'>('chat');
 	let ask = $state<{ mic: boolean; camera: boolean; screen: boolean } | null>(null);
+	let offer = $state(false); // asked to broadcast (TS-FR-17)
+	let myLayout = $state<TutoringSession['layout'] | null>(null); // a student's own choice (TS-FR-13)
+	let lastLayout = '';
 	let cameras = $state<MediaDeviceInfo[]>([]);
 	let attendance = $state<Attendee[]>([]);
 	let historyLoaded = false;
 
-	const teacher = $derived(view?.me.role === 'teacher');
+	// Staff: the lead teacher and co-teachers; some controls are the lead's only.
+	const teacher = $derived(isStaffRole(view?.me.role));
+	const lead = $derived(view?.me.role === 'teacher');
 	const admitted = $derived(view?.me.state === 'admitted');
 	const live = $derived(view?.session.status === 'live');
 	const link = $derived(typeof location !== 'undefined' ? location.origin + '/tutor/' + code : '');
-	const main = $derived<Tile | undefined>(media.tiles.find((t) => !t.local) ?? media.tiles[0]);
-	const others = $derived(media.tiles.filter((t) => t !== main));
+	// The broadcast, and backstage (students' and co-teachers' tracks, seen by the teachers only).
+	const broadcast = $derived(media.tiles.filter((t) => !t.backstage));
+	const stageTiles = $derived(media.tiles.filter((t) => t.backstage && (teacher || t.local)));
+	const main = $derived<Tile | undefined>(broadcast.find((t) => !t.local) ?? broadcast[0]);
+	const others = $derived(broadcast.filter((t) => t !== main));
+	const layout = $derived(myLayout ?? view?.session.layout ?? 'spotlight');
+	// The lead teacher keeps only the microphone while someone else broadcasts.
+	const sidelined = $derived(!!view && lead && !!view.session.broadcaster_id);
+	$effect(() => {
+		// A new layout from the teacher replaces a student's own choice.
+		const l = view?.session.layout ?? '';
+		if (l !== lastLayout) {
+			lastLayout = l;
+			myLayout = null;
+		}
+	});
 
 	onMount(async () => {
 		if (!looksLikeComputer(window, navigator.userAgent)) {
@@ -88,6 +107,18 @@
 			case 'ask':
 				ask = e.data;
 				break;
+			case 'broadcast_offer':
+				offer = true;
+				break;
+			case 'broadcast_ended':
+				toast('The teacher took the broadcast back');
+				break;
+			case 'broadcast_answer':
+				toast(e.data.accepted ? `${e.data.name} is broadcasting` : `${e.data.name} declined to broadcast`, e.data.accepted ? 'info' : 'error');
+				break;
+			case 'ask_answer':
+				toast(e.data.accepted ? `${e.data.name} is turning it on` : `${e.data.name} declined`, e.data.accepted ? 'info' : 'error');
+				break;
 			case 'closed':
 				closed = e.data?.reason ?? 'closed';
 				media.disconnect();
@@ -113,14 +144,27 @@
 	async function connectMedia() {
 		if (!view) return;
 		try {
-			const t = await client.post<{ token: string; url: string }>(`/api/sessions/${view.session.id}/media-token`);
-			const teachers = (view.participants ?? []).filter((p) => p.role === 'teacher').map((p) => p.user_id);
-			await media.connect(t.url, t.token, { student: !teacher, teacherIds: teachers.length ? teachers : [view.session.teacher_id] });
+			const t = await client.post<Tokens>(`/api/sessions/${view.session.id}/media-token`);
+			await media.connect(t, publishTarget(view));
+			routed = routeKey(view);
 		} catch (e) {
 			media.state = 'error';
 			media.error = e instanceof ApiError ? e.message : 'Could not join the video';
 		}
 	}
+
+	// When the broadcaster changes, or a student is first allowed to share,
+	// media moves: new tokens, publishing to the other room (D-60).
+	let routed = '';
+	const routeKey = (v: TutoringView) => `${publishTarget(v)}|${v.me.allow_mic || v.me.allow_camera || v.me.allow_screen}`;
+	$effect(() => {
+		if (!view || media.state !== 'connected') return;
+		const key = routeKey(view);
+		if (!routed || key === routed) return;
+		routed = key;
+		const v = view;
+		client.post<Tokens>(`/api/sessions/${v.session.id}/media-token`).then((t) => media.update(t, publishTarget(v)), () => {});
+	});
 
 	onDestroy(() => {
 		socket?.close();
@@ -144,9 +188,15 @@
 	const settings = (s: Record<string, unknown>) => act(() => client.put(`/api/sessions/${sid()}/settings`, s));
 	const hand = (raised: boolean) => act(() => client.put(`/api/sessions/${sid()}/hand`, { raised }));
 
-	// Devices: only ever after the person's own click (PO-3).
+	// Devices: only ever after the person's own click (PO-3). A student just
+	// allowed may not have joined backstage yet; join it first.
 	async function deviceAct(f: () => Promise<unknown>) {
 		try {
+			if (view && !media.joined(publishTarget(view))) {
+				const t = await client.post<Tokens>(`/api/sessions/${view.session.id}/media-token`);
+				await media.update(t, publishTarget(view));
+				routed = routeKey(view);
+			}
 			await f();
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
@@ -161,9 +211,20 @@
 	async function acceptAsk() {
 		const a = ask;
 		ask = null;
+		answer(true);
 		if (a?.mic) await deviceAct(() => media.setMic(true));
 		if (a?.camera) await deviceAct(() => media.addCamera());
 		if (a?.screen) await deviceAct(() => media.addScreen());
+	}
+	// The teachers see whether a request was accepted or declined (TS-FR-22).
+	const answer = (accepted: boolean) => client.post(`/api/sessions/${sid()}/ask-answer`, { accepted }).catch(() => {});
+	function declineAsk() {
+		ask = null;
+		answer(false);
+	}
+	async function answerOffer(accept: boolean) {
+		offer = false;
+		await act(() => client.post(`/api/sessions/${sid()}/broadcast-answer`, { accept }), accept ? 'You are broadcasting: share your screen or camera' : undefined);
 	}
 	async function showAttendance() {
 		side = 'attendance';
@@ -196,13 +257,17 @@
 		<header class="row">
 			<div class="min-w-0">
 				<h1 class="m-0 text-xl truncate">{view.session.title}</h1>
-				<p class="small muted m-0">{view.session.classroom_name} · {view.session.teacher_name} · {view.online} here{#if teacher && view.waiting} · {view.waiting} waiting{/if}</p>
+				<p class="small muted m-0">{view.session.classroom_name} · {view.teachers.map((t) => t.name + (t.role === 'coteacher' ? ' (co-teacher)' : '')).join(', ')} · {view.online} here{#if teacher && view.waiting} · {view.waiting} waiting{/if}{#if view.session.broadcaster_id} · {broadcasterName(view)} is broadcasting{/if}</p>
 			</div>
 			<span class="spacer"></span>
 			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
 			{#if media.state === 'reconnecting' || media.state === 'error'}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
 			{#if live}<span class="badge badge-soft danger">● Live</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">Not started</span>{/if}
-			{#if teacher}
+			<label class="sr-only" for="layout">Layout</label>
+			<select id="layout" class="select select-sm w-auto" value={layout} onchange={(e) => (lead ? settings({ layout: e.currentTarget.value }) : (myLayout = e.currentTarget.value as TutoringSession['layout']))} title={lead ? 'What students see' : 'Your own view, until the teacher changes it'}>
+				{#each LAYOUTS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+			</select>
+			{#if lead}
 				{#if view.session.status === 'open'}<button class="btn btn-primary btn-sm" onclick={start}>Start session</button>{/if}
 				<button class="btn btn-error btn-outline btn-sm" onclick={end}>End</button>
 			{/if}
@@ -216,27 +281,35 @@
 			<div class="layout">
 				<div class="stage vstack">
 					{#if media.needsClick}<button class="btn btn-primary" onclick={() => media.startAudio()}>Click to hear the session</button>{/if}
-					{#if main}
+					{#if !main}
+						<div class="empty">{isBroadcaster(view) ? 'Share a screen or camera; everyone will see it here.' : `${broadcasterName(view)} isn’t sharing anything yet.`}{media.state === 'error' ? ' ' + media.error : ''}</div>
+					{:else if layout === 'spotlight'}
 						<TrackView tile={main} big onstop={main.local ? () => media.stop(main) : undefined} />
+						{#if others.length}<div class="thumbs">{#each others as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>{/if}
 					{:else}
-						<div class="empty">{teacher ? 'Share a screen or camera; students will see it here.' : 'The teacher isn’t sharing anything yet.'}{media.state === 'error' ? ' ' + media.error : ''}</div>
+						<div class={layout === 'side' ? 'side-by-side' : 'grid-view'}>{#each broadcast as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
-					{#if others.length}
-						<div class="thumbs">{#each others as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
+					{#if stageTiles.length}
+						<h2 class="m-0 text-sm">{teacher ? 'Shared with the teachers only' : 'What you share: only your teachers see it'}</h2>
+						<div class="thumbs">{#each stageTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
 
 					<div class="controls row">
-						{#if teacher || media.canMic}
+						{#if media.canMic}
 							<button class="btn btn-sm" class:btn-primary={media.micOn} onclick={() => deviceAct(() => media.setMic(!media.micOn))} disabled={media.state !== 'connected'}>{media.micOn ? 'Mute mic' : 'Turn mic on'}</button>
 						{:else}
 							<button class="btn btn-sm" disabled title="Your teacher hasn't allowed this">Mic</button>
 						{/if}
-						{#if teacher || media.canScreen}
+						{#if sidelined}
+							<span class="small muted">{broadcasterName(view)} is broadcasting; your microphone still reaches everyone.</span>
+						{:else if media.canScreen}
 							<button class="btn btn-sm" onclick={() => deviceAct(() => media.addScreen())} disabled={media.state !== 'connected'}>{teacher ? 'Share a screen' : 'Share my screen'}</button>
 						{:else}
 							<button class="btn btn-sm" disabled title="Your teacher hasn't allowed this">Screen</button>
 						{/if}
-						{#if teacher || media.canCamera}
+						{#if sidelined}
+							<span></span>
+						{:else if media.canCamera}
 							<details class="dropdown" ontoggle={(e) => e.currentTarget.open && loadCameras()}>
 								<summary class="btn btn-sm" class:btn-disabled={media.state !== 'connected'}>Add a camera</summary>
 								<ul class="menu dropdown-content z-40 w-64 rounded-box border border-base-300 bg-base-100 p-1 shadow">
@@ -250,7 +323,7 @@
 						{#if !teacher}
 							<button class="btn btn-sm" class:btn-warning={!!view.me.hand_at} onclick={() => hand(!view?.me.hand_at)}>{view.me.hand_at ? 'Lower hand' : 'Raise hand'}</button>
 							{#if !media.canMic && !media.canCamera && !media.canScreen}<span class="small muted">Your teacher hasn't allowed you to share anything.</span>{/if}
-							{#if media.tiles.some((t) => t.local)}<span class="badge badge-soft">Your teacher can see what you share</span>{/if}
+							{#if media.tiles.some((t) => t.local && t.backstage)}<span class="badge badge-soft">Your teachers can see what you share</span>{/if}
 						{/if}
 					</div>
 					<div bind:this={audioHost} hidden></div>
@@ -307,7 +380,17 @@
 		<div class="modal-box vstack">
 			<h2 id="ask-h" class="m-0 text-lg">Your teacher asks you to turn on your {[ask.mic && 'microphone', ask.camera && 'camera', ask.screen && 'screen'].filter(Boolean).join(' and ')}</h2>
 			<p class="m-0 small muted">Nothing turns on unless you choose it. Your browser will ask for permission.</p>
-			<div class="modal-action"><button class="btn" onclick={() => (ask = null)}>Not now</button><button class="btn btn-primary" onclick={acceptAsk}>Turn on</button></div>
+			<div class="modal-action"><button class="btn" onclick={declineAsk}>Not now</button><button class="btn btn-primary" onclick={acceptAsk}>Turn on</button></div>
+		</div>
+	{/if}
+</dialog>
+
+<dialog class="modal" open={offer} aria-labelledby="offer-h">
+	{#if offer}
+		<div class="modal-box vstack">
+			<h2 id="offer-h" class="m-0 text-lg">The teacher asks you to present to the class</h2>
+			<p class="m-0 small muted">Everyone will see and hear what you share until the teacher takes the broadcast back. Nothing turns on until you choose it.</p>
+			<div class="modal-action"><button class="btn" onclick={() => answerOffer(false)}>Not now</button><button class="btn btn-primary" onclick={() => answerOffer(true)}>Present</button></div>
 		</div>
 	{/if}
 </dialog>
@@ -319,6 +402,8 @@
 	.stage { min-width: 0; }
 	.empty { aspect-ratio: 16 / 9; display: grid; place-items: center; text-align: center; padding: 1rem; border-radius: 0.75rem; background: var(--color-base-200); color: var(--color-muted); }
 	.thumbs { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
+	.side-by-side { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.grid-view { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); }
 	.controls { flex-wrap: wrap; gap: 0.5rem; }
 	.side { position: sticky; top: 4.5rem; max-height: calc(100vh - 6rem); overflow-y: auto; }
 	.settings { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }

@@ -53,20 +53,26 @@ type Classrooms interface {
 	ClassroomAccess(ctx context.Context, classroomID, userID string) (content.Classroom, string, error)
 }
 
+// Teachers finds teacher accounts, for co-teachers (TS-FR-70).
+type Teachers interface {
+	ActiveTeacher(ctx context.Context, email string) (auth.User, error)
+}
+
 type Service struct {
 	secret     []byte
 	url        string // the tutoring service's public address
 	classrooms Classrooms
+	teachers   Teachers
 	now        func() time.Time
 }
 
 // New returns nil when tutoring isn't configured: the platform then shows no
 // tutoring features (TS-NFR-55).
-func New(secret []byte, url string, classrooms Classrooms) *Service {
+func New(secret []byte, url string, classrooms Classrooms, teachers Teachers) *Service {
 	if len(secret) == 0 || url == "" {
 		return nil
 	}
-	return &Service{secret: secret, url: strings.TrimRight(url, "/"), classrooms: classrooms, now: time.Now}
+	return &Service{secret: secret, url: strings.TrimRight(url, "/"), classrooms: classrooms, teachers: teachers, now: time.Now}
 }
 
 func jti() string {
@@ -152,6 +158,7 @@ func InternalRoutes(s *Service) func(chi.Router) {
 			})
 		})
 		r.Method("POST", "/access", httpx.Handler(s.handleAccess))
+		r.Method("POST", "/teacher", httpx.Handler(s.handleTeacher))
 	}
 }
 
@@ -163,6 +170,22 @@ type AccessResult struct {
 	TeacherID     string `json:"teacher_id"`
 	Archived      bool   `json:"archived"`
 	Role          string `json:"role"`
+}
+
+// handleTeacher finds an active teacher by email: their id and name only.
+func (s *Service) handleTeacher(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Email string `json:"email"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	u, err := s.teachers.ActiveTeacher(r.Context(), in.Email)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, map[string]string{"id": u.ID, "name": u.Name})
+	return nil
 }
 
 func (s *Service) handleAccess(w http.ResponseWriter, r *http.Request) error {

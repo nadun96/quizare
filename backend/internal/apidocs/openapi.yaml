@@ -405,6 +405,16 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [classroom_id, user_id], properties: { classroom_id: { type: string, format: uuid }, user_id: { type: string, format: uuid } } } } } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classroom_id: { type: string }, classroom_name: { type: string }, teacher_id: { type: string }, archived: { type: boolean }, role: { type: string, enum: [teacher, student] } } } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } }
 
+  /internal/tutoring/teacher:
+    post:
+      operationId: postInternalTutoringTeacher
+      tags: [tutoring]
+      summary: 'For the tutoring service only: an active teacher by email, for co-teachers (TS-FR-70)'
+      description: Same protection as /internal/tutoring/access. Returns only the id and name; anyone else is 404.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+
   # ---------------- teacher settings ----------------
   /api/teacher/settings:
     get:
