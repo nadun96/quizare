@@ -83,7 +83,7 @@
 				</details>
 			{/if}
 			<a class="brand flex min-w-0 items-center gap-2 whitespace-nowrap text-base font-bold no-underline sm:text-lg" href={auth.user ? auth.home() : '/'}>
-				<span class="brand-mark grid size-8 place-items-center rounded-lg bg-primary text-primary-content" aria-hidden="true"><Icon name="qr" size={18} /></span>
+				<img class="brand-mark size-8" src="/favicon-64.png" width="32" height="32" alt="" aria-hidden="true" />
 				<span class="brand-name">Classroom Quiz</span>
 			</a>
 			<nav class="ml-4 hidden gap-1 sm:flex" aria-label="Main">
