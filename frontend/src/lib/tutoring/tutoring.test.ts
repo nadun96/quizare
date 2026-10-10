@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../api';
-import { looksLikeComputer, TutorClient } from './client';
+import { api, ApiError } from '../api';
+import { looksLikeComputer, TutorClient, tutoringConfig } from './client';
+import { rejoinDelay } from './media.svelte';
 import { audienceLabel, broadcasterName, handQueue, isBroadcaster, linkParts, publishTarget, type ChatMessage, type TutoringParticipant, type TutoringView } from './types';
 
 // Tutoring in the browser (D-59).
@@ -106,5 +107,23 @@ describe('where devices go (D-60)', () => {
 		expect(broadcasterName(v({ id: 's2', role: 'student' }))).toBe('Ms Perera');
 		expect(broadcasterName(v({ id: 's2', role: 'student' }, 's1'))).toBe('Ann');
 		expect(broadcasterName(v({ id: 's2', role: 'student' }, 'c1'))).toBe('Mr Silva');
+	});
+});
+
+describe('tutoring config', () => {
+	it('asks again after a failure, such as before signing in', async () => {
+		const get = vi.spyOn(api, 'get').mockRejectedValueOnce(new ApiError(401, 'unauthorized', 'login required')).mockResolvedValue({ enabled: true, url: 'https://tutor.example.edu' });
+		expect(await tutoringConfig()).toEqual({ enabled: false });
+		expect(await tutoringConfig()).toEqual({ enabled: true, url: 'https://tutor.example.edu' });
+		expect(await tutoringConfig()).toEqual({ enabled: true, url: 'https://tutor.example.edu' });
+		expect(get).toHaveBeenCalledTimes(2);
+		get.mockRestore();
+	});
+});
+
+describe('rejoining the video', () => {
+	it('waits 2 s, doubling, at most 30 s', () => {
+		expect([0, 1, 2, 3, 4, 5, 9].map(rejoinDelay)).toEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000]);
+		expect(rejoinDelay(-1)).toBe(2000);
 	});
 });
