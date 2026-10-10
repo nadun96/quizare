@@ -1,3 +1,5 @@
+<p align="center"><img src="frontend/static/logo-192.png" width="96" height="96" alt="Classroom Quiz logo"></p>
+
 # QR Classroom Quiz Platform
 
 Timed, proctored in-class quizzes that students join by scanning a QR code, with
