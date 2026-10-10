@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 	"github.com/nadun96/quizplatform/internal/storage"
+	"github.com/nadun96/quizplatform/internal/tutorlink"
 	"github.com/nadun96/quizplatform/migrations"
 )
 
@@ -56,6 +58,7 @@ type App struct {
 	Admin     *admin.Service
 	Poll      *poll.Service
 	Storage   *storage.Service
+	Tutor     *tutorlink.Service // nil when tutoring is off
 }
 
 // Options let tests swap infrastructure.
@@ -68,6 +71,9 @@ type Options struct {
 	KEK []byte
 	// Providers overrides the LLM adapters (tests point them at fakes).
 	Providers map[string]llm.Provider
+	// TutoringSecret is the key shared with the tutoring service; New loads
+	// it from cfg.TutoringSecretFile.
+	TutoringSecret []byte
 }
 
 // New opens the database, applies migrations and builds the app.
@@ -99,7 +105,15 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		pool.Close()
 		return nil, err
 	}
-	a, err := Build(cfg, log, pool, Options{RunJobs: true, KEK: kek})
+	var tutorSecret []byte
+	if cfg.TutoringSecretFile != "" {
+		// Same file format and permission rules as the master key.
+		if tutorSecret, err = llm.LoadKEK(cfg.TutoringSecretFile); err != nil {
+			pool.Close()
+			return nil, fmt.Errorf("tutoring secret: %w", err)
+		}
+	}
+	a, err := Build(cfg, log, pool, Options{RunJobs: true, KEK: kek, TutoringSecret: tutorSecret})
 	if err != nil {
 		pool.Close()
 		return nil, err
@@ -181,6 +195,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Storage = storage.NewService(pool, a.Auth, log, cfg.BackupDir, cfg.NightlyBackupDir, opt.KEK)
 	snapshotWorker.Service = a.Storage
+	a.Tutor = tutorlink.New(opt.TutoringSecret, cfg.TutoringURL, a.Content)
 	a.Storage.AddArea(storage.Area{ID: "poll_files", Label: "Uploaded files of polls closed before the date",
 		Preview: func(ctx context.Context, before time.Time) (storage.Freed, error) {
 			n, b, err := a.Poll.PreviewOldFiles(ctx, before)
@@ -237,6 +252,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			s.Use(auth.RequireRole())
 			a.Content.StudentRoutes(s)
 			a.Admin.UserRoutes(s)
+			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole(auth.RoleStudent))
@@ -250,6 +266,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		a.Live.WSRoutes(ws)
 		a.Poll.WSRoutes(ws)
 	})
+	// The tutoring service's calls (D-59); not under /api, so not public.
+	r.Route("/internal/tutoring", tutorlink.InternalRoutes(a.Tutor))
 	r.Route("/beacon", func(b chi.Router) {
 		b.Use(a.Auth.Middleware)
 		a.Live.BeaconRoutes(b)
