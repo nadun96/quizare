@@ -39,6 +39,12 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("DELETE", "/chat/{msg}", h(s.hDeleteMessage))
 			r.Method("PUT", "/pin", h(s.hPin))
 			r.Method("GET", "/attendance", h(s.hAttendance))
+			r.Method("GET", "/coteachers", h(s.hCoteachers))
+			r.Method("POST", "/coteachers", h(s.hAddCoteacher))
+			r.Method("DELETE", "/coteachers/{user}", h(s.hRemoveCoteacher))
+			r.Method("PUT", "/broadcaster", h(s.hBroadcaster))
+			r.Method("POST", "/broadcast-answer", h(s.hBroadcastAnswer))
+			r.Method("POST", "/ask-answer", h(s.hAskAnswer))
 		})
 	}
 }
@@ -105,7 +111,7 @@ func (s *Service) hMediaToken(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	web.JSON(w, http.StatusOK, map[string]string{"token": t, "url": s.mediaURL})
+	web.JSON(w, http.StatusOK, t)
 	return nil
 }
 
@@ -258,7 +264,7 @@ func (s *Service) hPin(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Service) hAttendance(w http.ResponseWriter, r *http.Request) error {
 	if strings.Contains(r.Header.Get("Accept"), "text/csv") || r.URL.Query().Get("format") == "csv" {
-		sess, err := s.owned(r.Context(), me(r), id(r))
+		sess, err := s.staffed(r.Context(), me(r), id(r))
 		if err != nil {
 			return err
 		}

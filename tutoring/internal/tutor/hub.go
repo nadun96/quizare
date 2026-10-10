@@ -268,7 +268,8 @@ func (s *Service) snapshot(ctx context.Context, id string) (snap, error) {
 		return sn, err
 	}
 	online := s.hub.online(id)
-	rows, _ := s.pool.Query(ctx, `SELECT `+participantCols+` FROM tutoring.participants WHERE session_id=$1 ORDER BY role DESC, hand_at NULLS LAST, lower(name)`, id)
+	rows, _ := s.pool.Query(ctx, `SELECT `+participantCols+` FROM tutoring.participants WHERE session_id=$1
+		ORDER BY CASE role WHEN 'teacher' THEN 0 WHEN 'coteacher' THEN 1 ELSE 2 END, hand_at NULLS LAST, lower(name)`, id)
 	if sn.all, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (Participant, error) { return scanParticipant(r) }); err != nil {
 		return sn, err
 	}
@@ -300,10 +301,20 @@ func (sn snap) viewFor(userID, mediaURL string) (View, bool) {
 	if !found {
 		return v, false
 	}
-	if v.Me.Role == "teacher" {
+	// The lead teacher always, whether or not they have joined yet; then co-teachers who joined.
+	v.Teachers = []Person{{ID: sn.sess.TeacherID, Name: sn.sess.TeacherName, Role: "teacher"}}
+	for _, p := range sn.all {
+		if p.Role == "coteacher" && p.State == "admitted" {
+			v.Teachers = append(v.Teachers, Person{ID: p.UserID, Name: p.Name, Role: p.Role})
+		}
+	}
+	if v.Me.Staff() {
 		v.Participants = sn.all
 	} else {
 		v.Session.JoinCode = "" // teachers share the code
+		if o := sn.sess.BroadcastOffer; o == nil || *o != userID {
+			v.Session.BroadcastOffer = nil // only the person asked sees an offer
+		}
 	}
 	if v.Me.State != "admitted" {
 		v.Pinned = nil

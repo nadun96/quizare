@@ -6,7 +6,7 @@
 	import { confirmDialog } from '../ui/dialog.svelte';
 	import { toast } from '../ui/toast.svelte';
 	import type { TutorClient } from './client';
-	import { handQueue, type TutoringParticipant, type TutoringView } from './types';
+	import { broadcasterName, handQueue, type TutoringParticipant, type TutoringView } from './types';
 
 	let { client, view }: { client: TutorClient; view: TutoringView } = $props();
 	const path = $derived('/api/sessions/' + view.session.id);
@@ -15,6 +15,27 @@
 	const hands = $derived(handQueue(people));
 	const students = $derived(people.filter((p) => p.role === 'student' && p.state === 'admitted'));
 	const online = $derived(students.filter((p) => p.online).length);
+	// Choosing the broadcaster and co-teachers is the lead teacher's (TS-FR-71).
+	const lead = $derived(view.me.role === 'teacher');
+	const coteachers = $derived(people.filter((p) => p.role === 'coteacher' && p.state === 'admitted'));
+	const someoneElse = $derived(!!view.session.broadcaster_id);
+	let email = $state('');
+	let emailError = $state('');
+	async function addCoteacher(e: SubmitEvent) {
+		e.preventDefault();
+		emailError = '';
+		try {
+			await client.post(path + '/coteachers', { email });
+			toast('Co-teacher added: send them the session link');
+			email = '';
+		} catch (err) {
+			emailError = err instanceof ApiError ? (err.fields.email ?? err.message) : 'That didn’t work';
+		}
+	}
+	const broadcast = (p: TutoringParticipant | null) =>
+		act(() => client.put(path + '/broadcaster', { user_id: p?.user_id ?? '' }), p ? `Asked ${p.name} to broadcast` : 'You broadcast again');
+	const offered = (p: TutoringParticipant) => view.session.broadcast_offer === p.user_id;
+	const live = (p: TutoringParticipant) => view.session.broadcaster_id === p.user_id;
 
 	async function act(f: () => Promise<unknown>, ok?: string) {
 		try {
@@ -43,6 +64,12 @@
 </script>
 
 <section class="vstack" aria-label="People">
+	{#if someoneElse}
+		<div class="alert alert-soft alert-info small py-2">
+			<span><strong>{broadcasterName(view)}</strong> is broadcasting. Your microphone still reaches everyone.</span>
+			{#if lead}<button class="btn btn-xs btn-primary" onclick={() => broadcast(null)}>Take the broadcast back</button>{/if}
+		</div>
+	{/if}
 	{#if waiting.length}
 		<div class="vstack gap-1">
 			<div class="row"><h3 class="m-0 text-sm">Waiting ({waiting.length})</h3><span class="spacer"></span><button class="btn btn-xs btn-primary" onclick={() => admit(waiting.map((p) => p.user_id), true)}>Admit all</button></div>
@@ -72,6 +99,34 @@
 	{/if}
 
 	<div class="vstack gap-1">
+		<h3 class="m-0 text-sm">Co-teachers</h3>
+		<ul class="list">
+			{#each coteachers as c (c.user_id)}
+				<li>
+					<span class="dot" class:on={c.online}></span><span class="truncate name">{c.name}</span>{#if live(c)} <span class="badge badge-soft badge-xs">broadcasting</span>{/if}
+					<span class="spacer"></span>
+					{#if lead}
+						{#if live(c)}<button class="btn btn-xs" onclick={() => broadcast(null)}>Take back</button>
+						{:else}<button class="btn btn-xs" onclick={() => broadcast(c)} disabled={!c.online}>{offered(c) ? 'Asked…' : 'Make broadcaster'}</button>{/if}
+						<button class="btn btn-xs btn-ghost" onclick={() => act(() => client.del(path + '/coteachers/' + c.user_id))}>Remove</button>
+					{/if}
+				</li>
+			{:else}
+				<li class="small muted">None yet.</li>
+			{/each}
+		</ul>
+		{#if lead}
+			<form class="flex gap-2" onsubmit={addCoteacher}>
+				<label class="sr-only" for="co-email">Co-teacher's email</label>
+				<input id="co-email" class="input input-sm w-full" type="email" placeholder="Another teacher's email" bind:value={email} required aria-invalid={!!emailError} />
+				<button class="btn btn-sm">Add</button>
+			</form>
+			{#if emailError}<p class="field-error m-0">{emailError}</p>{/if}
+			<p class="small muted m-0">Co-teachers admit, allow, mute and moderate. Only you choose the broadcaster, remove students and end the session.</p>
+		{/if}
+	</div>
+
+	<div class="vstack gap-1">
 		<div class="row"><h3 class="m-0 text-sm">Students ({online} here of {students.length})</h3></div>
 		<div class="row small gap-1">
 			<span class="muted">Everyone:</span>
@@ -83,7 +138,7 @@
 			{#each students as p (p.user_id)}
 				<li>
 					<span class="dot" class:on={p.online} title={p.online ? 'Here' : 'Not connected'} aria-label={p.online ? 'Here' : 'Not connected'}></span>
-					<span class="truncate name">{p.name}{#if p.chat_muted} <span class="badge badge-soft badge-xs">chat muted</span>{/if}</span>
+					<span class="truncate name">{p.name}{#if live(p)} <span class="badge badge-soft badge-xs">broadcasting</span>{/if}{#if p.chat_muted} <span class="badge badge-soft badge-xs">chat muted</span>{/if}</span>
 					<span class="spacer"></span>
 					<label class="tog" title="Microphone"><input type="checkbox" class="toggle toggle-xs" checked={p.allow_mic} onchange={(e) => allow([p.user_id], { mic: e.currentTarget.checked })} /> Mic</label>
 					<label class="tog" title="Camera"><input type="checkbox" class="toggle toggle-xs" checked={p.allow_camera} onchange={(e) => allow([p.user_id], { camera: e.currentTarget.checked })} /> Cam</label>
@@ -91,10 +146,14 @@
 					<details class="dropdown dropdown-end">
 						<summary class="btn btn-xs btn-ghost" aria-label="More for {p.name}">⋯</summary>
 						<ul class="menu dropdown-content z-40 w-48 rounded-box border border-base-300 bg-base-100 p-1 shadow">
+							{#if lead}
+								{#if live(p)}<li><button onclick={() => broadcast(null)}>Take the broadcast back</button></li>
+								{:else}<li><button onclick={() => broadcast(p)} disabled={!p.online}>{offered(p) ? 'Asked to broadcast…' : 'Make broadcaster'}</button></li>{/if}
+							{/if}
 							<li><button onclick={() => mute(p.user_id, { mic: true, camera: true, screen: true })}>Mute and stop sharing</button></li>
 							<li><button onclick={() => allow([p.user_id], { mic: p.allow_mic, camera: p.allow_camera, screen: p.allow_screen }, true)}>Ask to turn on</button></li>
 							<li><button onclick={() => act(() => client.put(path + '/participants/' + p.user_id + '/chat-muted', { muted: !p.chat_muted }))}>{p.chat_muted ? 'Let write in chat' : 'Mute in chat'}</button></li>
-							<li><button class="text-error" onclick={() => remove(p)}>Remove from session</button></li>
+							{#if lead}<li><button class="text-error" onclick={() => remove(p)}>Remove from session</button></li>{/if}
 						</ul>
 					</details>
 				</li>

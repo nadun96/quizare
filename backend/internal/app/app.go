@@ -201,7 +201,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Storage = storage.NewService(pool, a.Auth, log, cfg.BackupDir, cfg.NightlyBackupDir, opt.KEK)
 	snapshotWorker.Service = a.Storage
-	a.Tutor = tutorlink.New(opt.TutoringSecret, cfg.TutoringURL, a.Content)
+	a.Tutor = tutorlink.New(opt.TutoringSecret, cfg.TutoringURL, a.Content, a.Auth)
 	a.Storage.AddArea(storage.Area{ID: "poll_files", Label: "Uploaded files of polls closed before the date",
 		Preview: func(ctx context.Context, before time.Time) (storage.Freed, error) {
 			n, b, err := a.Poll.PreviewOldFiles(ctx, before)

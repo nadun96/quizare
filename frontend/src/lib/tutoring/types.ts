@@ -14,6 +14,11 @@ export type TutoringSession = {
 	chat_mode: 'off' | 'to_teacher' | 'everyone' | 'announcements';
 	slow_seconds: number;
 	pinned_id?: number;
+	/** Who broadcasts instead of the lead teacher (TS-FR-17); unset = the lead teacher. */
+	broadcaster_id?: string;
+	/** Shown only to the person asked to broadcast. */
+	broadcast_offer?: string;
+	layout: 'spotlight' | 'side' | 'grid';
 	scheduled_at?: string;
 	created_at: string;
 	started_at?: string;
@@ -23,7 +28,7 @@ export type TutoringSession = {
 export type TutoringParticipant = {
 	user_id: string;
 	name: string;
-	role: 'teacher' | 'student';
+	role: 'teacher' | 'coteacher' | 'student';
 	state: 'waiting' | 'admitted' | 'refused' | 'removed';
 	allow_mic: boolean;
 	allow_camera: boolean;
@@ -53,7 +58,38 @@ export type TutoringView = {
 	waiting: number;
 	pinned?: ChatMessage;
 	media_url: string;
+	/** The lead teacher and co-teachers (TS-FR-73). */
+	teachers: { id: string; name: string; role: 'teacher' | 'coteacher' }[];
 };
+
+export const isStaffRole = (r?: string) => r === 'teacher' || r === 'coteacher';
+
+/** Whether this person is the one broadcasting now. */
+export function isBroadcaster(v: TutoringView): boolean {
+	return v.session.broadcaster_id ? v.session.broadcaster_id === v.me.user_id : v.me.role === 'teacher';
+}
+
+/**
+ * Where this person's devices go (D-60): the broadcast, or backstage for the
+ * teachers. The lead teacher's microphone stays in the broadcast while
+ * someone else broadcasts.
+ */
+export function publishTarget(v: TutoringView): 'main' | 'stage' {
+	return isBroadcaster(v) || v.me.role === 'teacher' ? 'main' : 'stage';
+}
+
+/** The broadcaster's name, for "Ann is broadcasting". */
+export function broadcasterName(v: TutoringView): string {
+	const id = v.session.broadcaster_id;
+	if (!id) return v.session.teacher_name;
+	return v.participants?.find((p) => p.user_id === id)?.name ?? v.teachers.find((t) => t.id === id)?.name ?? 'A student';
+}
+
+export const LAYOUTS: { id: TutoringSession['layout']; label: string }[] = [
+	{ id: 'spotlight', label: 'Spotlight' },
+	{ id: 'side', label: 'Side by side' },
+	{ id: 'grid', label: 'Grid' }
+];
 
 export type Attendee = { user_id: string; name: string; role: string; first_at: string; last_left_at?: string; visits: number; seconds: number; online: boolean };
 

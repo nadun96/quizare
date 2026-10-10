@@ -1,6 +1,6 @@
 # Tutoring sessions
 
-Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design).
+Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design), D-60 (backstage, the broadcaster, co-teachers).
 
 A tutoring session is a live online class in a desktop browser: the teacher broadcasts screens, cameras and voice to the class, students watch, chat and raise their hand, and speak or share only when the teacher allows it. It runs as its **own service** beside the quiz platform, so a busy or failing tutoring session can't slow down or stop a live quiz (ADR-18, PO-5).
 
@@ -46,15 +46,45 @@ Both kinds are signed with **one shared secret file**: `QP_TUTORING_SECRET_FILE`
 
 One socket per person and session: a second tab replaces the first, which shows "You opened this session in another tab".
 
+## Two media rooms: the broadcast and backstage
+
+Every session has two LiveKit rooms (D-60):
+
+| Room | Who publishes | Who watches |
+|---|---|---|
+| The broadcast (the session's id) | the broadcaster: the lead teacher, or the person they handed it to; and the lead teacher's microphone while someone else broadcasts | everyone |
+| Backstage (`<id>-stage`) | students the teacher allowed to share, and co-teachers | the lead teacher and co-teachers only |
+
+The tokens say so: a student's backstage token has `canSubscribe: false`, so no browser, however modified, receives another student's camera or screen (TS-FR-37, TS-NFR-22). The page shows backstage tracks to teachers under "Shared with the teachers only", and a student's own under "What you share: only your teachers see it".
+
+## Handing over the broadcast
+
+The lead teacher can make a student or a co-teacher the broadcaster (TS-FR-17):
+
+1. "Make broadcaster" sends them an offer; nothing changes until they answer.
+2. If they accept, they may publish everything in the broadcast, the previous broadcaster stops, and the lead teacher keeps only the microphone there, so they can still speak to everyone. The person starts sharing with their own click (PO-3).
+3. If they decline, the teacher is told.
+4. "Take the broadcast back" ends it in one step; the person's broadcast tracks stop.
+
+LiveKit carries each change out at once: taking a source's permission away removes the participant's published tracks of that source.
+
+## Co-teachers
+
+The lead teacher adds other teachers by their email (the platform confirms an active teacher account) (TS-FR-70). Co-teachers join with the link without being in the classroom, see the people panel and backstage, and admit, allow, mute, lower hands, moderate the chat and read attendance (TS-FR-71). Only the lead teacher starts and ends, locks, changes how students are admitted and the layout, removes students, chooses the broadcaster and adds or removes co-teachers. Co-teachers share backstage, where the teachers see them, and to the class only as the broadcaster (TS-FR-72). Students see who teaches: the lead teacher and co-teachers are named in the session's header (TS-FR-73).
+
+## Layout
+
+The lead teacher chooses what students see: spotlight (the main track large, the others small), side by side, or a grid; the choice reaches students at once. A student can pick another layout for themself until the teacher changes it again (TS-FR-13).
+
 ## What students may share
 
 Nothing, by default (TS-FR-20). The teacher allows the microphone, camera and screen separately, per student or for everyone, from the People tab or the hand queue:
 
-- **The server decides.** Each LiveKit token lists exactly the sources its holder may publish, and a change is sent to LiveKit at once (`UpdateParticipant`), which unpublishes a track whose permission was taken back. A modified browser can't publish more than it was allowed (TS-NFR-22).
-- **Allowing isn't switching on** (PO-3). The student turns their own device on, after their own click and the browser's prompt. "Ask to turn on" shows the student a request they can accept or decline; nothing turns on by itself.
+- **The server decides.** Each LiveKit token lists exactly the sources its holder may publish in each room, and a change is sent to LiveKit at once (`UpdateParticipant`, both rooms), which removes a track whose permission was taken back. A modified browser can't publish more than it was allowed (TS-NFR-22).
+- **Allowing isn't switching on** (PO-3). The student turns their own device on, after their own click and the browser's prompt. "Ask to turn on" shows the student a request they can accept or decline, and the teachers see the answer (TS-FR-22); nothing turns on by itself.
 - **Raised hands** queue in order. "Allow mic" in the queue grants the microphone, asks the student and lowers the hand in one step.
 - **Mute** mutes a student's published tracks of the chosen kind, or everyone's microphones at once.
-- A student's own camera and screen go to the teachers only, not to other students (TS-FR-37). In this first version the student's browser sets that restriction when it joins, before it can publish anything.
+- What students share goes backstage, to the teachers only, unless they are the broadcaster (above).
 
 ## Chat
 
@@ -112,10 +142,10 @@ Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 s
 
 ## Tests
 
-- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources in each LiveKit token; permission changes reaching LiveKit; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance.
+- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout.
 - `backend/internal/tutorlink`: tokens, the internal API and every way a service token is refused.
 - `loadtest/tutoring-media.mjs`: LiveKit's capacity on this machine (D-58). Run it with nothing else busy: the simulated viewers share the machine's cores.
 
 ## Not yet
 
-Later phases add: handing the broadcast to a student, co-teachers, groups, recording, the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
+Later phases add: groups, recording, the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.

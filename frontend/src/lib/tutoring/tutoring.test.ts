@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
 import { looksLikeComputer, TutorClient } from './client';
-import { audienceLabel, handQueue, linkParts, type ChatMessage, type TutoringParticipant } from './types';
+import { audienceLabel, broadcasterName, handQueue, isBroadcaster, linkParts, publishTarget, type ChatMessage, type TutoringParticipant, type TutoringView } from './types';
 
 // Tutoring in the browser (D-59).
 
@@ -79,5 +79,32 @@ describe('computers only (TS-FR-09)', () => {
 		expect(looksLikeComputer(w(1024, true, false), 'Mozilla/5.0 (iPad)')).toBe(false);
 		// A touch laptop has a fine pointer too.
 		expect(looksLikeComputer(w(1366, true, true), 'Mozilla/5.0 (Windows NT 10.0)')).toBe(true);
+	});
+});
+
+describe('where devices go (D-60)', () => {
+	const v = (me: { id: string; role: string }, broadcaster?: string) =>
+		({
+			session: { teacher_name: 'Ms Perera', broadcaster_id: broadcaster },
+			me: { user_id: me.id, role: me.role },
+			participants: [{ user_id: 's1', name: 'Ann' }],
+			teachers: [{ id: 'c1', name: 'Mr Silva', role: 'coteacher' }]
+		}) as unknown as TutoringView;
+	it('the lead teacher broadcasts unless someone else does, and keeps the microphone in the broadcast', () => {
+		expect(isBroadcaster(v({ id: 't', role: 'teacher' }))).toBe(true);
+		expect(publishTarget(v({ id: 't', role: 'teacher' }))).toBe('main');
+		expect(isBroadcaster(v({ id: 't', role: 'teacher' }, 's1'))).toBe(false);
+		expect(publishTarget(v({ id: 't', role: 'teacher' }, 's1'))).toBe('main');
+	});
+	it('students and co-teachers share backstage, unless they broadcast', () => {
+		expect(publishTarget(v({ id: 's1', role: 'student' }))).toBe('stage');
+		expect(publishTarget(v({ id: 's1', role: 'student' }, 's1'))).toBe('main');
+		expect(publishTarget(v({ id: 'c1', role: 'coteacher' }))).toBe('stage');
+		expect(publishTarget(v({ id: 'c1', role: 'coteacher' }, 'c1'))).toBe('main');
+	});
+	it('names the broadcaster', () => {
+		expect(broadcasterName(v({ id: 's2', role: 'student' }))).toBe('Ms Perera');
+		expect(broadcasterName(v({ id: 's2', role: 'student' }, 's1'))).toBe('Ann');
+		expect(broadcasterName(v({ id: 's2', role: 'student' }, 'c1'))).toBe('Mr Silva');
 	});
 });

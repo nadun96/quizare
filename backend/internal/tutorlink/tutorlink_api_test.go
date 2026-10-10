@@ -136,3 +136,32 @@ func TestInternalAccessAPI(t *testing.T) {
 		t.Fatal("internal API under /api")
 	}
 }
+
+// Co-teachers are found by email; only active teachers, and only id and name (TS-FR-70).
+func TestInternalTeacherLookup(t *testing.T) {
+	e := apptest.New(t, apptest.WithTutoring("http://localhost:8090", secret))
+	teacher := e.NewUser(auth.RoleTeacher)
+	student := e.NewUser(auth.RoleStudent)
+	c := e.Client()
+	find := func(token, email string) (int, string) {
+		c.Headers = map[string]string{"Authorization": "Bearer " + token}
+		body, _ := json.Marshal(map[string]string{"email": email})
+		code, out := c.Raw("POST", "/internal/tutoring/teacher", "application/json", body)
+		c.Headers = nil
+		return code, string(out)
+	}
+	good := serviceToken(t, secret, time.Minute, "tutoring", "quiz-platform")
+	code, out := find(good, strings.ToUpper(teacher.User.Email))
+	if code != 200 || !strings.Contains(out, teacher.User.ID) || strings.Contains(out, "email") {
+		t.Fatalf("teacher: %d %s", code, out)
+	}
+	if code, _ := find(good, student.User.Email); code != 404 {
+		t.Fatalf("student found: %d", code)
+	}
+	if code, _ := find(good, "nobody@example.com"); code != 404 {
+		t.Fatalf("unknown found: %d", code)
+	}
+	if code, _ := find("", teacher.User.Email); code != 404 {
+		t.Fatalf("no token: %d", code)
+	}
+}
