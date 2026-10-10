@@ -24,7 +24,8 @@ export const NAV: { section: string; pages: [slug: string, title: string][] }[] 
 			['proctoring', 'Proctoring'],
 			['marking', 'Marking & feedback'],
 			['analytics', 'Results & analytics'],
-			['polls', 'Live polls']
+			['polls', 'Live polls'],
+			['tutoring', 'Tutoring sessions']
 		]
 	},
 	{ section: 'Frontend', pages: [['frontend', 'Frontend app'], ['ux-research', 'UX research & design rules']] },

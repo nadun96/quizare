@@ -73,6 +73,8 @@ Open <http://localhost:5173>, register a teacher and a student (use two browsers
 | `QP_DB_WAIT_SECONDS` | 60 | How long startup keeps retrying an unreachable database |
 | `QP_BACKUP_DIR` | `data/backups` | Where backups made from the admin console are written (D-57) |
 | `QP_NIGHTLY_BACKUP_DIR` | none | `deploy/backup.sh`'s folder, so the console can show the nightly job |
+| `QP_TUTORING_URL` | none | The tutoring service's public address (D-59); tutoring is off without it |
+| `QP_TUTORING_SECRET_FILE` | none | The secret file shared with the tutoring service; `QP_TUTORING_SECRET_GENERATE=1` creates it on first start (containers) |
 | `QP_SMTP_ADDR`, `QP_SMTP_FROM`, `QP_SMTP_USER`, `QP_SMTP_PASSWORD_FILE` | | SMTP relay; the password is read from a file |
 | `QP_DEV` | | `1` for development conveniences |
 

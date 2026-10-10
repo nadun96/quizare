@@ -314,3 +314,25 @@ func (s *Service) MyClassrooms(ctx context.Context, userID string, p page.Reques
 	})
 	return list, total, err
 }
+
+// ClassroomAccess says how a user may take part in a classroom's tutoring
+// sessions (TS-FR-02, D-59): "teacher" for its teacher, "student" for an
+// active enrolment. Joining may enrol the student, as joining a quiz does
+// (BR-02); otherwise the error says why not.
+func (s *Service) ClassroomAccess(ctx context.Context, classroomID, userID string) (Classroom, string, error) {
+	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+` FROM content.classrooms WHERE id=$1`, classroomID))
+	if err != nil {
+		return c, "", err
+	}
+	if c.TeacherID == userID {
+		return c, "teacher", nil
+	}
+	e, err := s.EnsureEnrolled(ctx, classroomID, userID, "")
+	if err != nil {
+		return c, "", err
+	}
+	if e.Status != "active" {
+		return c, "", httpx.NewError(http.StatusForbidden, "enrolment_pending", "your teacher has not approved your enrolment yet")
+	}
+	return c, "student", nil
+}

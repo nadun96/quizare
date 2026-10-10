@@ -477,6 +477,18 @@ func (s *Service) GetUser(ctx context.Context, id string) (User, error) {
 	return u, err
 }
 
+// ActiveTeacher finds an active teacher account by email, for adding a
+// co-teacher to a tutoring session (TS-FR-70). Others are "not found".
+func (s *Service) ActiveTeacher(ctx context.Context, email string) (User, error) {
+	var u User
+	err := s.pool.QueryRow(ctx, `SELECT id, email, name, role, status FROM auth.users WHERE email=$1 AND role='teacher' AND status='active'`,
+		strings.ToLower(strings.TrimSpace(email))).Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return u, httpx.ErrNotFound
+	}
+	return u, err
+}
+
 // UsersByID returns users keyed by id; unknown ids are omitted.
 func (s *Service) UsersByID(ctx context.Context, ids []string) (map[string]User, error) {
 	rows, err := s.pool.Query(ctx, `SELECT id, email, name, role, status, email_verified_at IS NOT NULL, coalesce(avatar_version, '')

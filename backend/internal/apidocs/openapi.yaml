@@ -31,6 +31,8 @@ tags:
     description: Accounts and sessions (FR-ACC)
   - name: admin
     description: Platform administration (admins, and managers with the route's feature, D-56)
+  - name: tutoring
+    description: Single sign-on to the separate tutoring service (D-59); the service has its own API
   - name: storage
     description: Storage overview, limits, clean-up and encrypted backups (PL-FR-04 to PL-FR-09, D-57)
   - name: settings
@@ -379,6 +381,39 @@ paths:
       summary: Download a backup; the link works once, for the person who asked for it
       parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
       responses: { '200': { description: 'The encrypted backup', content: { application/octet-stream: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+
+  /api/tutoring/config:
+    get:
+      operationId: getTutoringConfig
+      tags: [tutoring]
+      summary: Whether tutoring is on, and the tutoring service's address (D-59)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { enabled: { type: boolean }, url: { type: string, format: uri } } } } } } }
+  /api/tutoring/token:
+    post:
+      operationId: postTutoringToken
+      tags: [tutoring]
+      summary: A 5-minute signed token naming the logged-in person, for the tutoring service (ADR-23, TS-NFR-52)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { token: { type: string }, expires_at: { type: string, format: date-time }, url: { type: string, format: uri } } } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '404': { description: 'Tutoring is off' } }
+
+  /internal/tutoring/access:
+    post:
+      operationId: postInternalTutoringAccess
+      tags: [tutoring]
+      summary: 'For the tutoring service only: how a person may take part in a classroom (TS-NFR-51)'
+      description: Not under /api, so the public proxy never forwards it; it also needs a one-minute HS256 service token (issuer tutoring, audience quiz-platform) signed with the shared secret. Anything else gets 404. Joining may enrol a student, as joining a quiz does (BR-02); refusals keep the platform's codes (not_enrolled, enrolment_pending, enrolment_rejected).
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [classroom_id, user_id], properties: { classroom_id: { type: string, format: uuid }, user_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classroom_id: { type: string }, classroom_name: { type: string }, teacher_id: { type: string }, archived: { type: boolean }, role: { type: string, enum: [teacher, student] } } } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } }
+
+  /internal/tutoring/teacher:
+    post:
+      operationId: postInternalTutoringTeacher
+      tags: [tutoring]
+      summary: 'For the tutoring service only: an active teacher by email, for co-teachers (TS-FR-70)'
+      description: Same protection as /internal/tutoring/access. Returns only the id and name; anyone else is 404.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
 
   # ---------------- teacher settings ----------------
   /api/teacher/settings:
