@@ -23,6 +23,11 @@ export type Tokens = { url: string; main: string; stage?: string };
 type LK = typeof import('livekit-client');
 type Which = 'main' | 'stage';
 
+/** How long to wait before joining the video again after the connection is lost for good: 2 s, doubling, at most 30 s. */
+export function rejoinDelay(attempt: number): number {
+	return Math.min(30_000, 2_000 * 2 ** Math.max(0, attempt));
+}
+
 export class SessionMedia {
 	state = $state<MediaState>('idle');
 	error = $state('');
@@ -87,6 +92,11 @@ export class SessionMedia {
 
 	/** Joins the broadcast, and backstage when the tokens include it. */
 	async connect(t: Tokens, publishTo: Which) {
+		// A rejoin: leave whatever is left of the last connection first.
+		const old = Object.values(this.rooms);
+		this.rooms = {};
+		this.hasStage = false;
+		for (const r of old) await r?.disconnect();
 		this.state = 'connecting';
 		this.error = '';
 		this.target = publishTo;
