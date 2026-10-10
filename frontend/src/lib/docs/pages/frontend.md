@@ -16,6 +16,8 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `/t/polls`, `/t/polls/[id]`, `/t/polls/[id]/present` | teacher | Polls: questions, settings, live results, share; full-screen presenter |
 | `/p/[code]` | anyone | Taking part in a poll (login only if the poll asks) |
 | `/t/settings` | teacher | Teacher defaults, LLM keys |
+| `/t/tutoring` | teacher | Tutoring sessions: create one for a classroom, and the paginated list (D-59); shown only when tutoring is on |
+| `/tutor/[code]` | logged in | A tutoring session's room: waiting room, broadcast, people, hands, chat, attendance. Talks to the tutoring service with a bearer token; `livekit-client` loads only here |
 | `/admin` | admin, manager | Users, usage, platform settings, audit, storage and clean-up, backups, managers (admins only); a manager sees only the tabs and actions for their features (`lib/staff.ts`) |
 | `/r/[token]` | public | Shared results |
 | `/live/[token]` | public | Live leaderboards (polls and sessions), full screen (D-45) |

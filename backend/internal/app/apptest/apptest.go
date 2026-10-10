@@ -350,3 +350,8 @@ func (c *Client) CheckPages(path, key, idField string, want, size int) []map[str
 func WithNightlyDir(dir string) Option {
 	return func(c *config.Config, _ *app.Options) { c.NightlyBackupDir = dir }
 }
+
+// WithTutoring turns tutoring on with the given shared secret (D-59).
+func WithTutoring(url string, secret []byte) Option {
+	return func(c *config.Config, o *app.Options) { c.TutoringURL, o.TutoringSecret = url, secret }
+}

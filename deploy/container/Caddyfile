@@ -13,9 +13,25 @@
 		# Add Strict-Transport-Security once a real domain is in use (not for localhost or an IP).
 		X-Content-Type-Options nosniff
 		Referrer-Policy same-origin
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' wss:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' wss: {$QP_TUTORING_URL}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 		-Server
 	}
 
 	reverse_proxy app:8080
 }
+
+# Tutoring (compose "tutoring" profile, D-59): its API and sockets go to the
+# tutoring service, LiveKit's signalling (/rtc) to LiveKit. Media itself goes
+# straight to LiveKit on UDP 7882.
+{$QP_TUTOR_DOMAIN:tutor.localhost} {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+	@rtc path /rtc /rtc/*
+	reverse_proxy @rtc livekit:7880
+	reverse_proxy tutoring:8090
+}
+
