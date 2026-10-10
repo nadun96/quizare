@@ -10,9 +10,15 @@ export type TutoringConfig = { enabled: boolean; url?: string };
 
 let config: Promise<TutoringConfig> | null = null;
 
-/** Whether tutoring is on, and where; asked once per page load. */
+/**
+ * Whether tutoring is on, and where; asked once per page load. A failure
+ * (signed out, offline) is not kept, so the next call asks again.
+ */
 export function tutoringConfig(): Promise<TutoringConfig> {
-	config ??= api.get<TutoringConfig>('/api/tutoring/config').catch(() => ({ enabled: false }));
+	config ??= api.get<TutoringConfig>('/api/tutoring/config').catch(() => {
+		config = null;
+		return { enabled: false };
+	});
 	return config;
 }
 

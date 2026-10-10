@@ -11,7 +11,7 @@
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { looksLikeComputer, TutorClient, TutorSocket, tutoringConfig, type SocketEvent } from '$lib/tutoring/client';
-	import { SessionMedia, type Tile, type Tokens } from '$lib/tutoring/media.svelte';
+	import { rejoinDelay, SessionMedia, type Tile, type Tokens } from '$lib/tutoring/media.svelte';
 	import TrackView from '$lib/tutoring/TrackView.svelte';
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
@@ -62,12 +62,6 @@
 	onMount(async () => {
 		if (!looksLikeComputer(window, navigator.userAgent)) {
 			problem = 'Tutoring sessions need a computer. Open this link on a laptop or desktop.';
-			return;
-		}
-		const cfg = await tutoringConfig();
-		if (!cfg.enabled) {
-			problem = 'Tutoring is unavailable on this platform.';
-			return;
 		}
 	});
 
@@ -80,7 +74,13 @@
 		join();
 	});
 
+	// Asked once signed in: the platform answers only signed-in people, so a
+	// student opening the link in a fresh browser goes to the login first.
 	async function join() {
+		if (!(await tutoringConfig()).enabled) {
+			problem = 'Tutoring is unavailable on this platform.';
+			return;
+		}
 		try {
 			view = await client.post<TutoringView>('/api/join/' + encodeURIComponent(code));
 			socket = new TutorSocket(client, view.session.id, onEvent, (s, reason) => {
@@ -152,6 +152,18 @@
 			media.error = e instanceof ApiError ? e.message : 'Could not join the video';
 		}
 	}
+
+	// The video connection never came up, or LiveKit gave up reconnecting:
+	// join again, waiting longer each time (2 s doubling to 30 s).
+	let rejoins = 0;
+	$effect(() => {
+		if (media.state === 'connected') rejoins = 0;
+		if (closed || (media.state !== 'error' && media.state !== 'disconnected')) return;
+		const t = setTimeout(() => {
+			if (!closed) media.state = 'idle';
+		}, rejoinDelay(rejoins++));
+		return () => clearTimeout(t);
+	});
 
 	// When the broadcaster changes, or a student is first allowed to share,
 	// media moves: new tokens, publishing to the other room (D-60).
@@ -261,7 +273,7 @@
 			</div>
 			<span class="spacer"></span>
 			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
-			{#if media.state === 'reconnecting' || media.state === 'error'}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
+			{#if !closed && (media.state === 'reconnecting' || media.state === 'error' || media.state === 'disconnected')}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
 			{#if live}<span class="badge badge-soft danger">● Live</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">Not started</span>{/if}
 			<label class="sr-only" for="layout">Layout</label>
 			<select id="layout" class="select select-sm w-auto" value={layout} onchange={(e) => (lead ? settings({ layout: e.currentTarget.value }) : (myLayout = e.currentTarget.value as TutoringSession['layout']))} title={lead ? 'What students see' : 'Your own view, until the teacher changes it'}>
