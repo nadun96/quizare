@@ -1,0 +1,14 @@
+# LiveKit, the tutoring media server (D-58), for the compose "tutoring" profile.
+# Browsers reach its signalling through Caddy (wss://<tutor domain>/rtc), and
+# its media directly on UDP 7882 (TCP 7881 as a fallback). Open both in the
+# server's firewall.
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  # Finds the server's public address, so students' browsers can reach it.
+  use_external_ip: true
+# Written by the tutoring service on first start ("tutoring: <secret>").
+key_file: /var/lib/tutoring/livekit-keys.yaml
+logging:
+  level: info

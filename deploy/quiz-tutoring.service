@@ -1,0 +1,50 @@
+# systemd unit for the tutoring service (ADR-18, D-59), beside quiz.service.
+# Install: cp quiz-tutoring.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now quiz-tutoring
+# Needs LiveKit running (deploy/livekit.yaml) and the platform with QP_TUTORING_URL set.
+[Unit]
+Description=QR Classroom Quiz Platform: tutoring service
+After=network-online.target postgresql.service quiz.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=quiz-tutoring
+Group=quiz-tutoring
+WorkingDirectory=/srv/quiz-tutoring
+ExecStart=/srv/quiz-tutoring/tutor
+Restart=always
+RestartSec=2
+
+Environment=TUTOR_LISTEN=127.0.0.1:8090
+Environment=TUTOR_DATABASE_URL=postgres://quiz-tutoring@/quiz?host=/var/run/postgresql
+Environment=TUTOR_PLATFORM_URL=http://127.0.0.1:8080
+Environment=TUTOR_PLATFORM_ORIGIN=https://quiz.example.edu
+Environment=LIVEKIT_URL=http://127.0.0.1:7880
+Environment=LIVEKIT_PUBLIC_URL=wss://tutor.example.edu
+Environment=LIVEKIT_API_KEY=tutoring
+# Secrets as files exposed only to this service; the same tutoring secret is
+# the platform's QP_TUTORING_SECRET_FILE (load it there with LoadCredential too).
+LoadCredential=tutoring_secret:/etc/quiz/tutoring.secret
+LoadCredential=livekit_keys:/etc/livekit/keys.yaml
+Environment=TUTOR_SECRET_FILE=%d/tutoring_secret
+Environment=LIVEKIT_API_SECRET_FILE=%d/livekit_keys
+
+# Its own limits, apart from the platform's (TS-NFR-54).
+Environment=GOMEMLIMIT=300MiB
+MemoryMax=400M
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
