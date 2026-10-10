@@ -47,12 +47,19 @@ export class SessionMedia {
 	private audio = new Map<string, HTMLMediaElement>();
 	private labels = new Map<string, string>(); // track sid → label
 
-	constructor(private audioHost: () => HTMLElement | undefined) {}
+	constructor(
+		private audioHost: () => HTMLElement | undefined,
+		/** Tells the person something they didn't do themselves happened to their devices. */
+		private notify: (message: string) => void = () => {}
+	) {}
 
 	private async room(which: Which, url: string, token: string) {
 		const lk = (this.lk ??= await import('livekit-client'));
 		const room = new lk.Room({ adaptiveStream: true, dynacast: true, disconnectOnPageLeave: true });
 		const E = lk.RoomEvent;
+		// Events from a room this person has since left (a rejoin, or LiveKit
+		// closing an older connection) must not touch the current one.
+		const current = () => this.rooms[which] === room;
 		room
 			.on(E.TrackSubscribed, (t) => this.attach(t))
 			.on(E.TrackUnsubscribed, (t) => this.detach(t))
@@ -71,14 +78,16 @@ export class SessionMedia {
 			.on(E.AudioPlaybackStatusChanged, () => (this.needsClick = !room.canPlaybackAudio));
 		if (which === 'main') {
 			room
-				.on(E.Reconnecting, () => (this.state = 'reconnecting'))
-				.on(E.Reconnected, () => (this.state = 'connected'))
+				.on(E.Reconnecting, () => current() && (this.state = 'reconnecting'))
+				.on(E.Reconnected, () => current() && (this.state = 'connected'))
 				.on(E.Disconnected, () => {
+					if (!current()) return;
 					this.state = 'disconnected';
 					this.clear();
 				});
 		} else {
 			room.on(E.Disconnected, () => {
+				if (!current()) return;
 				delete this.rooms.stage;
 				this.hasStage = false;
 				this.refresh();
@@ -245,6 +254,14 @@ export class SessionMedia {
 		const name = label || (n === 1 ? 'Camera' : `Camera ${n}`);
 		const pub = await lp.publishTrack(t, { name, simulcast: true });
 		this.labels.set(pub.trackSid, name);
+		// The camera stopped on its own (unplugged, taken by another app, the
+		// browser's or the system's privacy switch): take it out rather than
+		// leave a frozen tile, and say so.
+		t.mediaStreamTrack.addEventListener('ended', () => {
+			if (![...lp.trackPublications.values()].some((p) => p.track === t)) return;
+			lp.unpublishTrack(t).finally(() => this.refresh());
+			this.notify(`${name} stopped. Add it again from "Add a camera".`);
+		});
 		this.refresh();
 	}
 
