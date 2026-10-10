@@ -8,6 +8,12 @@
 #   set QP_DOMAIN and QP_BASE_URL in .env, then
 #   docker compose --profile tls up -d --build
 #
+# Tutoring sessions (D-59): the tutoring service and LiveKit, beside the app.
+# Set QP_TUTORING_URL (the tutoring service's public address, e.g.
+# https://tutor.example.edu) and QP_TUTORING_MEDIA_URL (wss://tutor.example.edu)
+# in .env, open UDP 7882 and TCP 7881 in the firewall, then
+#   docker compose --profile tls --profile tutoring up -d --build
+#
 # Create the first admin (the password is read from stdin):
 #   echo 'a-strong-password' | docker compose exec -T app /app/server create-admin admin@example.edu "Admin"
 
@@ -80,6 +86,12 @@ services:
       # Backups made from the admin console (D-57). Keep a copy off this host:
       # a backup is only as safe as the disk it's on.
       QP_BACKUP_DIR: /var/lib/quiz/backups
+      # Tutoring (D-59): on when QP_TUTORING_URL is set. The shared secret is
+      # created on first start in the tutorsecrets volume, which the tutoring
+      # service reads too.
+      QP_TUTORING_URL: ${QP_TUTORING_URL:-}
+      QP_TUTORING_SECRET_FILE: /var/lib/tutoring/tutoring.secret
+      QP_TUTORING_SECRET_GENERATE: "1"
       QP_API_DOCS: ${QP_API_DOCS:-1}
       QP_SMTP_ADDR: ${QP_SMTP_ADDR:-}
       QP_SMTP_FROM: ${QP_SMTP_FROM:-no-reply@localhost}
@@ -88,8 +100,58 @@ services:
     mem_limit: 900m
     volumes:
       - appdata:/var/lib/quiz
+      - tutorsecrets:/var/lib/tutoring
     ports:
       - "${QP_HTTP_BIND:-127.0.0.1:8080}:8080"
+    networks:
+      - quiz
+
+  tutoring:
+    profiles: ["tutoring"]
+    build:
+      context: tutoring
+    image: localhost/quiz-tutoring:latest
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      TUTOR_DATABASE_URL: postgres://quiz:${POSTGRES_PASSWORD}@db:5432/quiz?sslmode=disable
+      TUTOR_SECRET_FILE: /var/lib/tutoring/tutoring.secret
+      TUTOR_PLATFORM_URL: http://app:8080
+      TUTOR_PLATFORM_ORIGIN: ${QP_BASE_URL:-http://localhost:8080}
+      LIVEKIT_URL: http://livekit:7880
+      LIVEKIT_PUBLIC_URL: ${QP_TUTORING_MEDIA_URL:-ws://localhost:7880}
+      LIVEKIT_API_KEY: tutoring
+      LIVEKIT_API_SECRET_FILE: /var/lib/tutoring/livekit-keys.yaml
+      TUTOR_GENERATE_LIVEKIT_KEYS: "1"
+      GOMEMLIMIT: 300MiB
+    mem_limit: 400m
+    volumes:
+      - tutorsecrets:/var/lib/tutoring
+    ports:
+      - "${QP_TUTORING_BIND:-127.0.0.1:8090}:8090"
+    networks:
+      - quiz
+
+  livekit:
+    profiles: ["tutoring"]
+    image: docker.io/livekit/livekit-server:v1.13.7
+    restart: unless-stopped
+    depends_on:
+      tutoring:
+        condition: service_healthy # it writes the key file
+    command: ["--config", "/etc/livekit.yaml"]
+    # Its own limits, so a full class can't take the quiz platform's share (TS-NFR-54).
+    mem_limit: 2g
+    cpus: 2
+    volumes:
+      - ./deploy/container/livekit.yaml:/etc/livekit.yaml:ro,Z
+      - tutorsecrets:/var/lib/tutoring:ro
+    ports:
+      - "${QP_LIVEKIT_BIND:-127.0.0.1:7880}:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
     networks:
       - quiz
 
@@ -101,6 +163,8 @@ services:
       - app
     environment:
       QP_DOMAIN: ${QP_DOMAIN:-localhost}
+      QP_TUTOR_DOMAIN: ${QP_TUTOR_DOMAIN:-tutor.localhost}
+      QP_TUTORING_URL: ${QP_TUTORING_URL:-}
     ports:
       # Rootless Podman cannot bind ports below 1024 by default; set
       # CADDY_HTTP_PORT=8081 / CADDY_HTTPS_PORT=8443 (or lower
@@ -127,5 +191,6 @@ networks:
 volumes:
   pgdata:
   appdata:
+  tutorsecrets:
   caddydata:
   caddyconfig:

@@ -3,11 +3,13 @@
 package config
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -31,6 +33,35 @@ type Config struct {
 	LiveKitPublicURL string
 	LiveKitKey       string
 	LiveKitSecret    []byte
+}
+
+// generateKeys writes a LiveKit key file ("key: secret", LiveKit's key_file
+// format) if there is none (containers; TUTOR_GENERATE_LIVEKIT_KEYS=1). An
+// existing file is never overwritten.
+func generateKeys(path, key string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+	if errors.Is(err, os.ErrExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "%s: %s\n", key, hex.EncodeToString(b)); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func env(k, def string) string {
@@ -63,10 +94,15 @@ func FromEnv() (Config, error) {
 		return c, fmt.Errorf("set %s", strings.Join(missing, ", "))
 	}
 	var err error
+	if os.Getenv("TUTOR_GENERATE_LIVEKIT_KEYS") == "1" {
+		if err := generateKeys(os.Getenv("LIVEKIT_API_SECRET_FILE"), c.LiveKitKey); err != nil {
+			return c, fmt.Errorf("LIVEKIT_API_SECRET_FILE: %w", err)
+		}
+	}
 	if c.Secret, err = LoadKey(os.Getenv("TUTOR_SECRET_FILE")); err != nil {
 		return c, fmt.Errorf("TUTOR_SECRET_FILE: %w", err)
 	}
-	if c.LiveKitSecret, err = loadText(os.Getenv("LIVEKIT_API_SECRET_FILE")); err != nil {
+	if c.LiveKitSecret, err = loadText(os.Getenv("LIVEKIT_API_SECRET_FILE"), c.LiveKitKey); err != nil {
 		return c, fmt.Errorf("LIVEKIT_API_SECRET_FILE: %w", err)
 	}
 	return c, nil
@@ -106,8 +142,9 @@ func LoadKey(path string) ([]byte, error) {
 	return nil, errors.New("the file must hold 32 raw bytes, 64 hex characters or base64 of 32 bytes")
 }
 
-// loadText reads a secret as text (LiveKit's API secret is a string).
-func loadText(path string) ([]byte, error) {
+// loadText reads LiveKit's API secret: the file holds just the secret, or
+// LiveKit's own key file ("key: secret" lines), so one file serves both.
+func loadText(path, key string) ([]byte, error) {
 	if err := checkPerm(path); err != nil {
 		return nil, err
 	}
@@ -116,6 +153,12 @@ func loadText(path string) ([]byte, error) {
 		return nil, err
 	}
 	s := strings.TrimSpace(string(raw))
+	for _, line := range strings.Split(s, "\n") {
+		if k, v, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(k) == key {
+			s = strings.TrimSpace(v)
+			break
+		}
+	}
 	if len(s) < 32 {
 		return nil, errors.New("use a secret of at least 32 characters")
 	}

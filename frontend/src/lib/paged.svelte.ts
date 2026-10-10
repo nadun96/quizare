@@ -21,6 +21,8 @@ export type PagedOptions = {
 	desc?: boolean;
 	/** Extra filters sent with every request (status, role…); a change resets to page 1. */
 	filters?: () => Record<string, string | undefined>;
+	/** Fetches a page; the platform's API by default (the tutoring service has its own). */
+	get?: (url: string) => Promise<Record<string, unknown>>;
 };
 
 function storedSize(): number {
@@ -112,7 +114,8 @@ export class Paged<T> {
 		this.loading = true;
 		try {
 			const path = this.path();
-			const res = await api.get<Record<string, unknown>>(path + (path.includes('?') ? '&' : '?') + this.query());
+			const url = path + (path.includes('?') ? '&' : '?') + this.query();
+			const res = await (this.opts.get ? this.opts.get(url) : api.get<Record<string, unknown>>(url));
 			if (mine !== this.seq) return; // a newer request is on its way
 			this.rows = ((res[this.key] as T[]) ?? []) as T[];
 			this.total = Number(res.total ?? this.rows.length);

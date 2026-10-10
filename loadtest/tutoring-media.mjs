@@ -9,6 +9,7 @@
 //
 //   node loadtest/tutoring-media.mjs                 # both scenarios, 60 s each
 //   SCENARIO=200 DURATION=120s node loadtest/tutoring-media.mjs
+//   LIVEKIT_PORT=7980 node loadtest/tutoring-media.mjs   # if 7880 is taken
 //
 // The pinned LiveKit builds are downloaded once into loadtest/.bin and
 // checked against their published SHA-256 checksums (or set LIVEKIT_BIN to
@@ -54,6 +55,9 @@ const DURATION = env.DURATION || '60s';
 const MAX_LOSS = Number(env.MAX_LOSS || 2);
 const CPU_MAX = Number(env.CPU_MAX || 2.5);
 const BUDGET_MBPS = Number(env.BUDGET_MBPS || 240);
+// LiveKit's ports: PORT for HTTP, PORT+1 TCP and PORT+2 UDP for media. Windows
+// sometimes reserves 7880's range (netsh interface ipv4 show excludedportrange).
+const PORT = Number(env.LIVEKIT_PORT || 7880);
 const SCENARIOS = {
 	200: { requirement: 'TS-NFR-01', video: 1, audio: 1, viewers: 200 },
 	'75x4': { requirement: 'TS-NFR-02', video: 4, audio: 1, viewers: 75 }
@@ -184,7 +188,7 @@ function parseTotals(out) {
 
 async function scenario(dir, key, name) {
 	const s = SCENARIOS[name];
-	const args = ['--url', 'ws://127.0.0.1:7880', '--api-key', 'loadtest', '--api-secret', key, 'load-test', '--room', `lt-${name}-${Date.now()}`,
+	const args = ['--url', `ws://127.0.0.1:${PORT}`, '--api-key', 'loadtest', '--api-secret', key, 'load-test', '--room', `lt-${name}-${Date.now()}`,
 		'--video-publishers', String(s.video), '--audio-publishers', String(s.audio), '--subscribers', String(s.viewers),
 		'--duration', DURATION, '--num-per-second', '5'];
 	console.log(`\n${name}: ${s.video} video + ${s.audio} audio to ${s.viewers} viewers for ${DURATION} (${s.requirement})`);
@@ -204,12 +208,12 @@ async function main() {
 	mkdirSync(dirname(cfg), { recursive: true });
 	// Loopback only. node_ip must match, or viewers get a candidate address
 	// the server doesn't listen on and fail to connect (seen in the spike).
-	writeFileSync(cfg, `port: 7880\nbind_addresses: ["127.0.0.1"]\nrtc:\n  udp_port: 7882\n  tcp_port: 7881\n  node_ip: 127.0.0.1\n  use_external_ip: false\nkeys:\n  loadtest: ${key}\nlogging:\n  level: warn\n`);
+	writeFileSync(cfg, `port: ${PORT}\nbind_addresses: ["127.0.0.1"]\nrtc:\n  udp_port: ${PORT + 2}\n  tcp_port: ${PORT + 1}\n  node_ip: 127.0.0.1\n  use_external_ip: false\nkeys:\n  loadtest: ${key}\nlogging:\n  level: warn\n`);
 	const server = spawn(join(dir, exe('livekit-server')), ['--config', cfg], { stdio: 'ignore' });
 	const results = [];
 	try {
 		for (let i = 0; i < 40; i++) {
-			if (await fetch('http://127.0.0.1:7880').then(() => true, () => false)) break;
+			if (await fetch(`http://127.0.0.1:${PORT}`).then(() => true, () => false)) break;
 			await new Promise((r) => setTimeout(r, 500));
 		}
 		for (const name of chosen) {

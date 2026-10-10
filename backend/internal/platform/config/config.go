@@ -29,11 +29,14 @@ type Config struct {
 	// (QP_TUTORING_SECRET_FILE). Without both, tutoring is off.
 	TutoringURL        string
 	TutoringSecretFile string
-	DBMaxConns         int32 // pgx pool size; architecture budget is 15
-	Argon2Workers      int   // bounded hashing pool; architecture budget is 2
-	DevMode            bool  // relaxes nothing security-critical; enables verbose logs and console email
-	ShutdownWait       time.Duration
-	StaticDir          string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
+	// TutoringSecretGenerate creates the shared secret file on first start
+	// (containers; QP_TUTORING_SECRET_GENERATE=1), as QP_KEK_GENERATE does.
+	TutoringSecretGenerate bool
+	DBMaxConns             int32 // pgx pool size; architecture budget is 15
+	Argon2Workers          int   // bounded hashing pool; architecture budget is 2
+	DevMode                bool  // relaxes nothing security-critical; enables verbose logs and console email
+	ShutdownWait           time.Duration
+	StaticDir              string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
 
 	// TrustedProxies are proxy IPs or CIDRs, besides loopback, whose
 	// X-Forwarded-For is believed (QP_TRUSTED_PROXIES, comma-separated), e.g.
@@ -51,19 +54,20 @@ type Config struct {
 
 func FromEnv() (Config, error) {
 	c := Config{
-		ListenAddr:         env("QP_LISTEN", "127.0.0.1:8080"),
-		DatabaseURL:        os.Getenv("QP_DATABASE_URL"),
-		BaseURL:            env("QP_BASE_URL", "http://localhost:8080"),
-		KEKFile:            os.Getenv("QP_KEK_FILE"),
-		BackupDir:          env("QP_BACKUP_DIR", "data/backups"),
-		NightlyBackupDir:   os.Getenv("QP_NIGHTLY_BACKUP_DIR"),
-		TutoringURL:        os.Getenv("QP_TUTORING_URL"),
-		TutoringSecretFile: os.Getenv("QP_TUTORING_SECRET_FILE"),
-		DBMaxConns:         int32(envInt("QP_DB_MAX_CONNS", 15)),
-		Argon2Workers:      envInt("QP_ARGON2_WORKERS", 2),
-		DevMode:            os.Getenv("QP_DEV") == "1",
-		ShutdownWait:       10 * time.Second,
-		StaticDir:          os.Getenv("QP_STATIC_DIR"),
+		ListenAddr:             env("QP_LISTEN", "127.0.0.1:8080"),
+		DatabaseURL:            os.Getenv("QP_DATABASE_URL"),
+		BaseURL:                env("QP_BASE_URL", "http://localhost:8080"),
+		KEKFile:                os.Getenv("QP_KEK_FILE"),
+		BackupDir:              env("QP_BACKUP_DIR", "data/backups"),
+		NightlyBackupDir:       os.Getenv("QP_NIGHTLY_BACKUP_DIR"),
+		TutoringURL:            os.Getenv("QP_TUTORING_URL"),
+		TutoringSecretFile:     os.Getenv("QP_TUTORING_SECRET_FILE"),
+		TutoringSecretGenerate: os.Getenv("QP_TUTORING_SECRET_GENERATE") == "1",
+		DBMaxConns:             int32(envInt("QP_DB_MAX_CONNS", 15)),
+		Argon2Workers:          envInt("QP_ARGON2_WORKERS", 2),
+		DevMode:                os.Getenv("QP_DEV") == "1",
+		ShutdownWait:           10 * time.Second,
+		StaticDir:              os.Getenv("QP_STATIC_DIR"),
 
 		TrustedProxies: list(os.Getenv("QP_TRUSTED_PROXIES")),
 

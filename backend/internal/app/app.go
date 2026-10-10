@@ -107,6 +107,12 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	}
 	var tutorSecret []byte
 	if cfg.TutoringSecretFile != "" {
+		if cfg.TutoringSecretGenerate {
+			if _, err := llm.EnsureKEK(cfg.TutoringSecretFile); err != nil {
+				pool.Close()
+				return nil, fmt.Errorf("tutoring secret: %w", err)
+			}
+		}
 		// Same file format and permission rules as the master key.
 		if tutorSecret, err = llm.LoadKEK(cfg.TutoringSecretFile); err != nil {
 			pool.Close()

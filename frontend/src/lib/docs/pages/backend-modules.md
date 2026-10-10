@@ -103,6 +103,10 @@ Live polls (D-40). `model.go` defines the 20 question types, their validation an
 
 Storage and backups (D-57, PL-FR-04 to PL-FR-09). `service.go` measures the database by area from PostgreSQL's catalogues (hourly, as a River periodic job, and on refresh), keeps the limits, runs clean-ups through areas other modules register (`AddArea`; polls offer their old uploaded files), makes console backups in the background, prunes them to the backup space, issues single-use download links and records the nightly job's files from `QP_NIGHTLY_BACKUP_DIR`. `archive.go` is the backup format: one `REPEATABLE READ, READ ONLY` snapshot written as COPY text per table, gzipped and encrypted with age under the admin's passphrase, plus `Check` and `Restore` (used by `server check-backup` and `server restore-backup`). `disk_*.go` reads free disk space.
 
+## tutorlink (no schema)
+
+The platform's side of tutoring (D-59, ADR-23). `tutorlink.go` signs 5-minute tokens naming the logged-in person for the separate tutoring service (`POST /api/tutoring/token`), says whether tutoring is on (`GET /api/tutoring/config`), and answers the tutoring service's `POST /internal/tutoring/access` (not under `/api`; it needs the service's own one-minute token) from `content.ClassroomAccess`. Off unless `QP_TUTORING_URL` and `QP_TUTORING_SECRET_FILE` are set. The tutoring service itself is a separate Go module in `tutoring/`; see [Tutoring sessions](tutoring.md).
+
 ## admin (no schema)
 
 Usage counts and the audit log for admins and managers given those features (filterable by person and by role acted in), plus `/api/my/data` (own-data export) for every user.

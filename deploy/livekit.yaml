@@ -1,0 +1,17 @@
+# LiveKit for a host install (D-58): run livekit-server 1.13.7 with
+#   livekit-server --config /etc/livekit/livekit.yaml
+# (its own systemd unit, or the docker.io/livekit/livekit-server:v1.13.7 image
+# with --network host). Caddy forwards wss://tutor.example.edu/rtc to port
+# 7880 on loopback; media goes to UDP 7882 (TCP 7881 as a fallback), which
+# the firewall must allow.
+# Keep 7880 closed in the firewall: only Caddy, on this host, talks to it.
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: true
+# "tutoring: <secret>" (openssl rand -hex 24), mode 0400; the tutoring
+# service reads the same file (LIVEKIT_API_SECRET_FILE).
+key_file: /etc/livekit/keys.yaml
+logging:
+  level: info
