@@ -25,7 +25,7 @@
 	let closed = $state(''); // why the service closed our connection
 	let socketStatus = $state<'open' | 'reconnecting' | 'closed'>('reconnecting');
 	let audioHost = $state<HTMLDivElement>();
-	const media = new SessionMedia(() => audioHost);
+	const media = new SessionMedia(() => audioHost, (m) => toast(m, 'error'));
 	let socket: TutorSocket | null = null;
 	let side = $state<'chat' | 'people' | 'attendance'>('chat');
 	let ask = $state<{ mic: boolean; camera: boolean; screen: boolean } | null>(null);
@@ -143,6 +143,10 @@
 
 	async function connectMedia() {
 		if (!view) return;
+		// At once, before the token arrives: a state update in the meantime
+		// would otherwise join a second time, and LiveKit closes the first
+		// connection for the same person (DUPLICATE_IDENTITY).
+		media.state = 'connecting';
 		try {
 			const t = await client.post<Tokens>(`/api/sessions/${view.session.id}/media-token`);
 			await media.connect(t, publishTarget(view));
