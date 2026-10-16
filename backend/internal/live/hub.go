@@ -205,6 +205,7 @@ type StudentState struct {
 	Index               int                   `json:"index"`
 	Total               int                   `json:"total"`
 	Answered            []bool                `json:"answered"`
+	Flagged             []bool                `json:"flagged,omitempty"` // D-61: free navigation only
 	OneWay              bool                  `json:"one_way"`
 	Question            *quiz.StudentQuestion `json:"question"`
 	Answer              *quiz.Response        `json:"answer"`
@@ -269,7 +270,24 @@ func (s *Service) studentState(ctx context.Context, sess *Session, a *Attempt) (
 	for i := range a.Order {
 		_, st.Answered[i] = saved[v.question(a, i).ID]
 	}
-	return st, rows.Err()
+	if err := rows.Err(); err != nil {
+		return st, err
+	}
+	if !st.OneWay {
+		var flagged []string
+		if err := s.pool.QueryRow(ctx, `SELECT flagged FROM live.attempts WHERE id=$1`, a.ID).Scan(&flagged); err != nil {
+			return st, err
+		}
+		set := map[string]bool{}
+		for _, id := range flagged {
+			set[id] = true
+		}
+		st.Flagged = make([]bool, len(a.Order))
+		for i := range a.Order {
+			st.Flagged[i] = set[v.question(a, i).ID]
+		}
+	}
+	return st, nil
 }
 
 // StudentState returns the current state for the REST fallback.

@@ -50,7 +50,7 @@ When a session is created, defaults, platform, teacher and the classroom-to-quiz
 | `disconnect_grace_sec` | classroom, quiz, session | 10 | heartbeat rule |
 | `question_order` | quiz, session | `fixed` | `fixed`, `shuffled` |
 | `option_order` | quiz, question | `fixed` | `fixed`, `shuffled` |
-| `one_way_navigation` | quiz | true | BR-09 |
+| `one_way_navigation` | quiz | true | BR-09; when false, students can go back and flag questions to come back to (D-61) |
 | `results_visibility` | quiz, session | `private` | `private`, `public` |
 | `results_view` | quiz, session | `individual` | `individual`, `question_pct`, `pass_rate` |
 | `results_release` | quiz, session | `on_session_end` | `immediate`, `on_session_end`, `manual` |
