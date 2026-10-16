@@ -95,6 +95,7 @@ The server owns all time. Deadlines are `timestamptz`; the browser only renders 
 | Session-wide extension | `sessions.extension_sec += x` and shifts every running attempt; later starters get it at `start()` |
 | No quiz limit | No deadline; the attempt ends at the last question or when the session ends (D-20) |
 | Free navigation | If `one_way_navigation` is false, `Goto` is allowed and per-question limits are ignored (D-17) |
+| Flags | With free navigation, `Flag` marks a question to come back to (`live.attempts.flagged`); refused in one-way quizzes and once the attempt is over. Only the student sees them (D-61) |
 
 ## The ticker
 

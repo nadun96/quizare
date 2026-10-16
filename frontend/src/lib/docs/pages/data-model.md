@@ -17,6 +17,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0016_account.sql` | Profile pictures: `auth.avatars`, `avatar_version` on `auth.users` |
 | `0017_board_gesture_idx.sql` | Index on `poll.board_strokes (poll_id, gesture)`: erasing takes a stroke's whole gesture (D-52) |
 | `0020_storage.sql` | Storage and backups (D-57): `storage.snapshots` (hourly sizes), `storage.limits`, `storage.backups` (history), `storage.download_links` (single-use, hashed) |
+| `0021_flags.sql` | `live.attempts.flagged`: question ids a student flagged to come back to (D-61) |
 | `0019_managers.sql` | Managers (D-56): `auth.managers` (features, who made them a manager and when, last activity), the `manager` role, `audit.events.actor_role` |
 | `0018_session_start.sql` | `live.sessions.started_at`: when the teacher started the quiz for everyone (`start_mode = teacher`, D-53) |
 | `0015_poll_board.sql` | Whiteboard: `poll.board_strokes`, board access columns on `poll.polls` |
@@ -77,6 +78,7 @@ One row per `(session_id, user_id)`.
 | `current_index`, `question_order int[]`, `option_orders jsonb` | Position and this student's shuffles |
 | `overrides`, `extension_sec` | Student-level settings and extra time |
 | `warnings`, `violations`, `disconnected_at`, `invalid_reason` | Proctoring state |
+| `flagged` | Question ids the student flagged to come back to; free navigation only, never shown to teachers (D-61) |
 
 The partial index `attempts_due_idx` covers `admitted` and `in_progress` rows for the ticker.
 

@@ -1097,6 +1097,14 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [index], properties: { index: { type: integer, minimum: 0 } } } } } }
       responses: { '200': { $ref: '#/components/responses/State' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/attempts/{id}/flags/{qid}:
+    put:
+      operationId: putAttemptsFlag
+      tags: [student]
+      summary: Flag a question to come back to, or clear the flag (D-61; only when navigation is not one-way)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: qid, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [flagged], properties: { flagged: { type: boolean } } } } } }
+      responses: { '200': { $ref: '#/components/responses/State' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/attempts/{id}/submit:
     post:
       operationId: postAttemptsSubmit
@@ -1965,6 +1973,7 @@ components:
         index: { type: integer }
         total: { type: integer }
         answered: { type: [array, 'null'], items: { type: boolean } }
+        flagged: { type: array, items: { type: boolean }, description: 'Questions the student flagged to come back to, by position (D-61); only with free navigation' }
         one_way: { type: boolean }
         question: { oneOf: [{ $ref: '#/components/schemas/StudentQuestion' }, { type: 'null' }], description: 'Only while in progress' }
         answer: { oneOf: [{ $ref: '#/components/schemas/Response' }, { type: 'null' }], description: 'Saved answer for the current question' }

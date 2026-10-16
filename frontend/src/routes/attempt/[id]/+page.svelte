@@ -8,6 +8,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { AnswerQueue } from '$lib/answerQueue';
+	import { flaggedList, submitWarning } from '$lib/flags';
 	import { formatDuration } from '$lib/clock';
 	import { Proctor, enterFullscreen, type ViolationKind } from '$lib/proctor';
 	import { LiveSocket } from '$lib/socket';
@@ -31,6 +32,8 @@
 	let fullscreenOffer = $state(false);
 	let savedAt = $state(0); // last time the queue drained, for the "Saved" confirmation
 	let announcement = $state(''); // time-left notices for screen readers
+	let panelOpen = $state(false); // the flagged-questions side panel (D-61)
+	let flagging = $state(false);
 
 	let socket: LiveSocket;
 	let queue: AnswerQueue;
@@ -159,11 +162,34 @@
 		}
 	}
 
+	// Flags (D-61): a note to self, kept with the attempt; free navigation only.
+	const flagged = $derived(flaggedList(st?.answered, st?.flagged));
+	const curFlagged = $derived(!!st?.flagged?.[st.index]);
+	async function toggleFlag() {
+		if (!st?.question) return;
+		flagging = true;
+		try {
+			apply(await api.put<StudentState>('/api/attempts/' + id + '/flags/' + st.question.id, { flagged: !curFlagged }));
+		} catch (e) {
+			notice = e instanceof ApiError ? e.message : 'Could not flag the question';
+		} finally {
+			flagging = false;
+		}
+	}
+	// From the panel: go back to a flagged question. The panel stays open
+	// beside the quiz on wide screens and closes where it covers it.
+	async function openFlagged(i: number) {
+		if (!window.matchMedia('(min-width: 72rem)').matches) panelOpen = false;
+		if (i !== st?.index) await goTo(i);
+	}
+	$effect(() => {
+		if (st && (st.state !== 'in_progress' || st.one_way)) panelOpen = false;
+	});
+
 	async function submitNow() {
-		const unanswered = st?.answered?.filter((a) => !a).length ?? 0;
 		const ok = await confirmDialog({
 			title: 'Submit your answers?',
-			body: (unanswered ? `${unanswered} question${unanswered === 1 ? ' is' : 's are'} still unanswered. ` : '') + "You can't change your answers afterwards.",
+			body: submitWarning(st?.answered, st?.flagged),
 			confirm: 'Submit quiz',
 			cancel: 'Keep working'
 		});
@@ -191,14 +217,18 @@
 	const answeredCount = $derived(st?.answered?.filter(Boolean).length ?? null);
 	const countdownPct = $derived(countdown == null ? 0 : Math.max(0, Math.min(100, (countdown / 10_000) * 100)));
 
+	function onKey(e: KeyboardEvent) {
+		if (e.key === 'Escape' && panelOpen) panelOpen = false;
+	}
+
 	function beforeUnload(e: BeforeUnloadEvent) {
 		if (running()) e.preventDefault();
 	}
 </script>
 
-<svelte:window onbeforeunload={beforeUnload} />
+<svelte:window onbeforeunload={beforeUnload} onkeydown={onKey} />
 
-<div class="quiz">
+<div class="quiz" class:with-panel={panelOpen && st?.state === 'in_progress'}>
 	<header class="quiz-bar">
 		<div class="quiz-bar-inner">
 			<strong class="title">{st?.quiz_title ?? 'Quiz'}</strong>
@@ -287,6 +317,11 @@
 				<span class="font-semibold">Question {st.index + 1} <span class="muted font-normal">of {st.total}</span></span>
 				<span class="muted">· {st.question.marks} mark{st.question.marks === 1 ? '' : 's'}</span>
 				{#if answeredCount != null}<span class="muted">· {answeredCount} answered</span>{/if}
+				{#if !st.one_way && st.flagged}
+					<button class="btn btn-sm btn-ghost flag-btn gap-1" class:on={curFlagged} aria-pressed={curFlagged} disabled={flagging} onclick={toggleFlag}>
+						<Icon name="flag" size={14} />{curFlagged ? 'Flagged' : 'Flag for review'}
+					</button>
+				{/if}
 				<span class="spacer"></span>
 				{#if questionLeft != null}
 					<span class="badge badge-soft tabular gap-1 {urgency(questionLeft, 30_000, 10_000)}"><Icon name="clock" size={13} />This question: {formatDuration(questionLeft)}</span>
@@ -299,11 +334,18 @@
 							class="q-dot"
 							class:cur={i === st.index}
 							class:done
+							class:flagged={st.flagged?.[i]}
 							aria-current={i === st.index ? 'step' : undefined}
-							aria-label={`Question ${i + 1}, ${done ? 'answered' : 'not answered'}`}
-							onclick={() => goTo(i)}>{#if done && i !== st.index}<Icon name="check" size={12} />{:else}{i + 1}{/if}</button
+							aria-label={`Question ${i + 1}, ${done ? 'answered' : 'not answered'}${st.flagged?.[i] ? ', flagged' : ''}`}
+							onclick={() => goTo(i)}
+							>{#if done && i !== st.index}<Icon name="check" size={12} />{:else}{i + 1}{/if}{#if st.flagged?.[i]}<span class="q-flag" aria-hidden="true"><Icon name="flag" size={10} /></span>{/if}</button
 						>
 					{/each}
+					{#if st.flagged}
+						<button class="btn btn-sm btn-soft flagged-toggle gap-1" aria-expanded={panelOpen} aria-controls="flag-panel" onclick={() => (panelOpen = !panelOpen)}>
+							<Icon name="flag" size={14} />Flagged · {flagged.length}
+						</button>
+					{/if}
 				</nav>
 			{/if}
 			{#key st.question.id}
@@ -348,6 +390,32 @@
 			</div>
 		{/if}
 	</section>
+
+	{#if panelOpen && st?.state === 'in_progress'}
+		<button class="flag-backdrop" aria-label="Close the flagged questions" onclick={() => (panelOpen = false)}></button>
+		<aside id="flag-panel" class="flag-panel" aria-label="Flagged questions" in:flyIn={{ x: 24, y: 0, duration: 200 }}>
+			<div class="flag-head">
+				<h2 class="m-0 text-base"><Icon name="flag" size={16} /> Flagged questions</h2>
+				<button class="btn btn-sm btn-ghost btn-square" aria-label="Close" onclick={() => (panelOpen = false)}><Icon name="x" size={16} /></button>
+			</div>
+			{#if flagged.length}
+				<ul class="flag-list">
+					{#each flagged as f (f.index)}
+						<li>
+							<button class="flag-item" class:cur={f.index === st.index} aria-current={f.index === st.index ? 'step' : undefined} onclick={() => openFlagged(f.index)}>
+								<span class="font-semibold">Question {f.index + 1}</span>
+								<span class="badge badge-sm badge-soft" class:badge-success={f.answered}>{f.answered ? 'Answered' : 'Not answered'}</span>
+								{#if f.index === st.index}<span class="small muted">You’re here</span>{:else}<Icon name="arrow-right" size={14} />{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+				<p class="small muted m-0">Open a question and press <strong>Flagged</strong> to clear its flag.</p>
+			{:else}
+				<p class="small muted m-0">No flagged questions. Press <strong>Flag for review</strong> on a question to find it here later.</p>
+			{/if}
+		</aside>
+	{/if}
 </div>
 
 <style>
@@ -378,6 +446,26 @@
 	.q-dot { width: 2.25rem; height: 2.25rem; border-radius: 999px; display: grid; place-items: center; font-size: 0.85rem; font-weight: 600; border: 1px solid var(--color-field); background: var(--color-base-100); color: var(--color-base-content); cursor: pointer; transition: transform var(--motion-fast), background-color var(--motion-fast); }
 	.q-dot:hover { transform: translateY(-1px); }
 	.q-dot.done { background: color-mix(in oklab, var(--color-success) 14%, var(--color-base-100)); color: var(--color-success); border-color: color-mix(in oklab, var(--color-success) 40%, transparent); }
+	.q-dot { position: relative; }
+	.q-flag { position: absolute; top: -0.3rem; right: -0.3rem; width: 1rem; height: 1rem; border-radius: 999px; display: grid; place-items: center; background: var(--color-warning); color: var(--color-warning-content); }
+	.flagged-toggle { min-height: 2.25rem; }
+	.flag-btn.on { color: var(--color-warning); background: color-mix(in oklab, var(--color-warning) 14%, transparent); }
+
+	/* Flagged questions: beside the quiz on wide screens, over it (with a backdrop) elsewhere. */
+	.flag-panel { position: fixed; z-index: 20; top: 0; right: 0; bottom: 0; width: min(20rem, 88vw); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; background: var(--color-base-100); border-left: 1px solid var(--color-base-300); box-shadow: -8px 0 24px rgb(0 0 0 / 0.12); }
+	.flag-backdrop { position: fixed; inset: 0; z-index: 19; background: rgb(0 0 0 / 0.3); border: 0; }
+	@media (min-width: 72rem) {
+		.flag-panel { top: 4rem; bottom: 1rem; right: 1rem; border: 1px solid var(--color-base-300); border-radius: var(--radius-box); box-shadow: none; }
+		.flag-backdrop { display: none; }
+		/* Room for the panel: the quiz moves left instead of sitting under it. */
+		.quiz.with-panel { padding-right: 22rem; }
+	}
+	.flag-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+	.flag-head h2 { display: flex; align-items: center; gap: 0.4rem; }
+	.flag-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+	.flag-item { width: 100%; min-height: 2.75rem; display: flex; align-items: center; gap: 0.5rem; justify-content: space-between; padding: 0.5rem 0.75rem; border-radius: var(--radius-field); border: 1px solid var(--color-base-300); background: var(--color-base-100); color: var(--color-base-content); cursor: pointer; text-align: left; }
+	.flag-item:hover { background: var(--color-base-200); }
+	.flag-item.cur { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 25%, transparent); }
 	.q-dot.cur { background: var(--color-primary); color: var(--color-primary-content); border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 25%, transparent); }
 
 	/* Waiting room: a gentle "live" pulse. */
