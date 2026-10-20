@@ -93,9 +93,18 @@ paths:
       responses:
         '200': { description: 'Logged in; sets the `__Host-sid` cookie', content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
         '401': { $ref: '#/components/responses/Error' }
-        '403': { description: 'Suspended or awaiting approval (`account_suspended`, `pending_approval`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: 'Suspended or awaiting approval (`account_suspended`, `pending_approval`); with school sign-in, not in an allowed group (`directory_not_allowed`) or no email in the directory (`directory_no_email`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'A school account whose email belongs to an account that can''t be moved to school sign-in (`directory_conflict`, D-64)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/Busy' }
+        '503': { description: 'Busy, or the school directory can''t be reached (`directory_unavailable`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/auth/options:
+    get:
+      operationId: getAuthOptions
+      tags: [auth]
+      summary: What the login page offers
+      description: '`directory` is true when students and teachers can sign in with their school account (LDAP or Active Directory, D-64).'
+      security: []
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { directory: { type: boolean } } } } } } }
   /api/auth/logout:
     post:
       operationId: postAuthLogout
@@ -219,6 +228,42 @@ paths:
       description: Same rules as changing the status (PL-FR-13, PL-FR-17).
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '204': { description: 'Deleted' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/admin/directory:
+    get:
+      operationId: getAdminDirectory
+      tags: [admin]
+      summary: School sign-in settings (LDAP, Active Directory; admins only, D-64)
+      description: The service account's password is never returned; `bind_password_set` says whether one is stored. `defaults` gives the filter and attributes for each kind.
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { config: { $ref: '#/components/schemas/DirectoryConfig' }, defaults: { type: object, additionalProperties: { $ref: '#/components/schemas/DirectoryConfig' } } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putAdminDirectory
+      tags: [admin]
+      summary: Change the school sign-in settings
+      description: An empty `bind_password` keeps the stored one. Only `ldaps://`, or `ldap://` with StartTLS, is accepted.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DirectoryConfig' } } } }
+      responses:
+        '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DirectoryConfig' } } } }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /api/admin/directory/test:
+    post:
+      operationId: postAdminDirectoryTest
+      tags: [admin]
+      summary: Try unsaved settings, and optionally a sign-in, step by step
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { config: { $ref: '#/components/schemas/DirectoryConfig' }, login: { type: string }, password: { type: string, format: password } } } } } }
+      responses:
+        '200':
+          description: The steps and what the account would get
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  steps: { type: array, items: { type: object, properties: { name: { type: string }, ok: { type: boolean }, detail: { type: string } } } }
+                  account: { type: object, properties: { email: { type: string }, name: { type: string }, role: { type: string, enum: [student, teacher] }, dn: { type: string } } }
+        '422': { $ref: '#/components/responses/Invalid' }
   /api/admin/auth-policy:
     get:
       operationId: getAdminAuthPolicy
@@ -1534,6 +1579,27 @@ components:
         code: { type: string, example: validation_failed }
         message: { type: string }
         fields: { type: object, additionalProperties: { type: string } }
+    DirectoryConfig:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        kind: { type: string, enum: [ad, ldap], description: '`ad`: Windows Active Directory; `ldap`: OpenLDAP and others' }
+        url: { type: string, example: 'ldaps://dc1.school.local' }
+        start_tls: { type: boolean }
+        ca_pem: { type: string, description: 'Extra CA certificate (PEM) to trust' }
+        bind_dn: { type: string, description: 'The service account that searches' }
+        bind_password: { type: string, format: password, writeOnly: true }
+        bind_password_set: { type: boolean, readOnly: true }
+        base_dn: { type: string }
+        user_filter: { type: string, description: '`{login}` is replaced by the escaped sign-in name' }
+        id_attr: { type: string }
+        email_attr: { type: string }
+        name_attr: { type: string }
+        teacher_group: { type: string, description: 'DN; members sign in as teachers' }
+        student_group: { type: string, description: 'DN; empty = everyone else found signs in as a student' }
+        nested_groups: { type: boolean }
+        link_by_email: { type: boolean }
+        updated_at: { type: string, format: date-time }
     User:
       type: object
       properties:
@@ -1544,6 +1610,7 @@ components:
         status: { type: string, enum: [active, pending_approval, suspended, deleted] }
         email_verified: { type: boolean }
         avatar: { type: string, description: 'Profile picture version; absent when there is none (D-49)' }
+        directory: { type: boolean, description: 'Signs in with the school directory, not a password of its own (D-64)' }
         created_at: { type: string, format: date-time, description: 'Only in admin lists' }
         manager:
           type: object

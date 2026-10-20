@@ -33,7 +33,7 @@ func (s *Service) ListUsers(ctx context.Context, f UserFilter, p page.Request) (
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at IS NOT NULL, u.created_at, `+managerSelect+where+
+	rows, err := s.pool.Query(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at IS NOT NULL, u.created_at, u.auth_source = 'directory', `+managerSelect+where+
 		p.OrderBy(UserSorts, "u.id")+p.Limit(), args...)
 	if err != nil {
 		return nil, 0, err
@@ -41,7 +41,7 @@ func (s *Service) ListUsers(ctx context.Context, f UserFilter, p page.Request) (
 	users, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (User, error) {
 		var u User
 		var mgr managerCols
-		err := r.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified, &u.CreatedAt, &mgr.is, &mgr.features)
+		err := r.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &u.EmailVerified, &u.CreatedAt, &u.Directory, &mgr.is, &mgr.features)
 		u.Manager = mgr.manager()
 		return u, err
 	})
@@ -105,16 +105,22 @@ func (s *Service) DeleteOwnAccount(ctx context.Context, u User, password string)
 	if u.Role == RoleManager {
 		return httpx.BadRequest("ask an admin to remove a manager account")
 	}
-	var hash string
-	if err := s.pool.QueryRow(ctx, `SELECT password_hash FROM auth.users WHERE id=$1`, u.ID).Scan(&hash); err != nil {
+	var hash, source string
+	if err := s.pool.QueryRow(ctx, `SELECT password_hash, auth_source FROM auth.users WHERE id=$1`, u.ID).Scan(&hash, &source); err != nil {
 		return err
 	}
-	ok, err := s.hasher.Verify(ctx, password, hash)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return errInvalidCredentials
+	if source == "directory" {
+		if err := s.verifyDirectoryPassword(ctx, u, password); err != nil {
+			return err
+		}
+	} else {
+		ok, err := s.hasher.Verify(ctx, password, hash)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errInvalidCredentials
+		}
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		return s.anonymiseTx(ctx, tx, u.ID, u.ID)
@@ -123,7 +129,7 @@ func (s *Service) DeleteOwnAccount(ctx context.Context, u User, password string)
 
 func (s *Service) anonymiseTx(ctx context.Context, tx pgx.Tx, actorID, userID string) error {
 	tag, err := tx.Exec(ctx, `UPDATE auth.users
-			SET status='deleted', email=$2, name='Deleted user', password_hash='!', email_verified_at=NULL, avatar_version=NULL, updated_at=now()
+			SET status='deleted', email=$2, name='Deleted user', password_hash='!', email_verified_at=NULL, avatar_version=NULL, directory_id=NULL, directory_dn=NULL, updated_at=now()
 			WHERE id=$1 AND status <> 'deleted'`, userID, fmt.Sprintf("deleted+%s@invalid", userID))
 	if err != nil {
 		return err

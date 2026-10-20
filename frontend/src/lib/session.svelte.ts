@@ -4,7 +4,7 @@ import type { Feature } from './staff';
 
 export type Role = 'student' | 'teacher' | 'manager' | 'admin';
 /** manager is set for managers, teacher-managers included (D-56). */
-export type User = { id: string; email: string; name: string; role: Role; status: string; email_verified: boolean; avatar?: string; manager?: { features: Feature[] } };
+export type User = { id: string; email: string; name: string; role: Role; status: string; email_verified: boolean; avatar?: string; manager?: { features: Feature[] }; directory?: boolean };
 
 class Auth {
 	user = $state<User | null>(null);

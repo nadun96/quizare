@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DirectoryPanel from '$lib/admin/DirectoryPanel.svelte';
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -21,11 +22,11 @@
 	// The admin console, for admins and managers (D-56). A manager sees only
 	// the tabs and actions for the features they were given; the server
 	// checks each one again (PL-NFR-06).
-	type U = { id: string; email: string; name: string; role: string; status: string; email_verified: boolean; created_at?: string; manager?: { features: string[] } };
+	type U = { id: string; email: string; name: string; role: string; status: string; email_verified: boolean; created_at?: string; manager?: { features: string[] }; directory?: boolean };
 	type Ev = { id: number; actor_name: string; actor_role?: string; action: string; target_type: string; target_id: string; details: unknown; created_at: string };
 	const ready = requireStaff();
 	const tabs = $derived(consoleTabs(auth.user));
-	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', audit: 'Audit log', storage: 'Storage', backups: 'Backups', managers: 'Managers' };
+	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', signin: 'School sign-in', audit: 'Audit log', storage: 'Storage', backups: 'Backups', managers: 'Managers' };
 	let tab = $state<ConsoleTab | null>(null);
 	let role = $state(Paged.fromUrl(urlState, 'role'));
 	let status = $state(Paged.fromUrl(urlState, 'status'));
@@ -129,7 +130,7 @@
 			<table class="table"><thead><tr><th><SortHeader list={users} key="name" label="Name" /></th><th><SortHeader list={users} key="role" label="Role" /></th><th><SortHeader list={users} key="status" label="Status" /></th><th><SortHeader list={users} key="created" label="Joined" desc /></th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
 				{#each users.rows as u (u.id)}
 					<tr>
-						<td>{u.name}<br /><span class="small muted">{u.email}{u.email_verified ? '' : ' · unverified'}</span></td>
+						<td>{u.name}{#if u.directory}{' '}<span class="badge badge-soft badge-sm">School account</span>{/if}<br /><span class="small muted">{u.email}{u.email_verified ? '' : ' · unverified'}</span></td>
 						<td>{roleLabel(u)}</td>
 						<td><span class="badge badge-soft {u.status === 'active' ? 'ok' : u.status === 'suspended' ? 'danger' : 'warn'}">{u.status.replace('_', ' ')}</span></td>
 						<td class="small tabular">{u.created_at ? new Date(u.created_at).toLocaleDateString() : ''}</td>
@@ -196,6 +197,8 @@
 		<StoragePanel canStorage={can(auth.user, 'storage')} canCleanup={can(auth.user, 'cleanup')} />
 	{:else if tab === 'backups'}
 		<BackupsPanel />
+	{:else if tab === 'signin'}
+		<DirectoryPanel />
 	{:else if tab === 'managers'}
 		<ManagerList onactivity={activity} />
 	{/if}
