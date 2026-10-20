@@ -3,7 +3,7 @@
 	import { toPlain } from './richtext/render';
 	import type { TextFormat } from './types';
 	type Class = { joined: number; finished: number; marked: number; mean_pct: number; median_pct: number; pass_rate: number; pass_mark_pct: number; completion_rate: number; invalidation_rate: number; distribution: number[]; pending: number };
-	type QRow = { question_id: string; code: string; text: string; format?: TextFormat; type: string; answered: number; pct_correct: number; avg_score: number; max_score: number; option_counts?: Record<string, number>; option_labels?: Record<string, string>; common_wrong?: { answer: string; count: number }[]; discrimination: number | null };
+	type QRow = { question_id: string; code: string; text: string; format?: TextFormat; type: string; answered: number; shown?: number; pct_correct: number; avg_score: number; max_score: number; option_counts?: Record<string, number>; option_labels?: Record<string, string>; common_wrong?: { answer: string; count: number }[]; discrimination: number | null };
 	type SRow = { attempt_id: string; name: string; student_number: string | null; state: string; score: number; max_score: number; pct: number; passed: boolean; complete: boolean; time_taken_sec: number | null; violations: number; extension_sec: number; pauses: number };
 	let { cls, questions, students }: { cls: Class; questions: QRow[]; students: SRow[] } = $props();
 	let view = $state<'class' | 'questions' | 'students'>('class');
@@ -42,7 +42,7 @@
 						<td><strong>{q.code}</strong> <span class="small muted">{q.type}</span><br /><span class="small">{toPlain(q.text, q.format).slice(0, 90)}</span></td>
 						<td><div class="pbar"><div style="width:{q.pct_correct}%"></div></div>{q.pct_correct}%</td>
 						<td>{q.avg_score} / {q.max_score}</td>
-						<td>{q.answered}</td>
+						<td>{q.answered}{#if q.shown != null && q.shown < cls.marked}{' '}<span class="small muted block">of {q.shown} who got it</span>{/if}</td>
 						<td><span class="tooltip" data-tip="Correct rate of the top 27% minus the bottom 27%">{q.discrimination ?? '—'}</span></td>
 						<td class="small">
 							{#if q.option_counts}{Object.entries(q.option_counts).map(([k, n]) => `${q.option_labels?.[k]}: ${n}`).join(' · ')}<br />{/if}

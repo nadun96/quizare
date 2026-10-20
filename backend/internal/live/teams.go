@@ -616,6 +616,66 @@ func (s *Service) teamsChanged(ctx context.Context, sessionID string) {
 }
 
 // SessionMaxScore is the most one student can score in the session.
+// TeamMaxScores gives each team's highest possible score when students drew
+// their own questions (D-65). With "every member's marks, totalled" it is
+// the sum of the members' own maximums; otherwise each question counts once,
+// so it is the marks of the questions anyone in the team drew (only the
+// captain's under "captain"). drawn is false when everyone got the whole
+// quiz; the caller then keeps its usual formula.
+func (s *Service) TeamMaxScores(ctx context.Context, sessionID, acceptance, calc string) (map[string]float64, bool, error) {
+	sess, err := s.session(ctx, sessionID)
+	if err != nil {
+		return nil, false, err
+	}
+	qs := s.sessionView(sess).Snapshot.Questions
+	rows, err := s.pool.Query(ctx, `SELECT team_id, captain, question_order FROM live.attempts
+		WHERE session_id=$1 AND team_id IS NOT NULL AND state <> 'invalidated'`, sessionID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	total := map[string]float64{}
+	union := map[string]map[int]bool{}
+	drawn := false
+	for rows.Next() {
+		var team string
+		var captain bool
+		var order []int32
+		if err := rows.Scan(&team, &captain, &order); err != nil {
+			return nil, false, err
+		}
+		if len(order) < len(qs) {
+			drawn = true
+		}
+		if acceptance == "captain" && !captain {
+			continue
+		}
+		if union[team] == nil {
+			union[team] = map[int]bool{}
+		}
+		for _, i := range order {
+			if int(i) < len(qs) {
+				total[team] += qs[i].Marks
+				union[team][int(i)] = true
+			}
+		}
+	}
+	if err := rows.Err(); err != nil || !drawn {
+		return nil, false, err
+	}
+	out := map[string]float64{}
+	for team, set := range union {
+		if acceptance == "all" && calc == "sum" {
+			out[team] = total[team]
+			continue
+		}
+		for i := range set {
+			out[team] += qs[i].Marks
+		}
+	}
+	return out, true, nil
+}
+
 func (s *Service) SessionMaxScore(ctx context.Context, sessionID string) (float64, error) {
 	sess, err := s.session(ctx, sessionID)
 	if err != nil {

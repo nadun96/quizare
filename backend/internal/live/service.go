@@ -540,7 +540,7 @@ func (s *Service) Join(ctx context.Context, userID, code, studentNumber, teamID 
 		return nil, err
 	}
 	rng := mrand.New(mrand.NewPCG(mrand.Uint64(), mrand.Uint64()))
-	order, opts := newOrders(v.Snapshot.Questions, eff.QuestionOrder == "shuffled", func(q quiz.Question) bool {
+	order, opts := newOrders(v.Snapshot.Questions, eff.QuestionOrder == "shuffled", eff.QuestionDraw, func(q quiz.Question) bool {
 		return v.Effective(&q, settings.Overrides{}).OptionOrder == "shuffled"
 	}, rng)
 	order32 := make([]int32, len(order))

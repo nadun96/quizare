@@ -1,7 +1,9 @@
 package live
 
 import (
+	"fmt"
 	"math/rand/v2"
+	"slices"
 	"testing"
 	"time"
 
@@ -139,7 +141,7 @@ func TestOrdersNeverRevealAnswers(t *testing.T) {
 	}
 	for seed := uint64(0); seed < 200; seed++ {
 		rng := rand.New(rand.NewPCG(seed, seed))
-		order, opts := newOrders(qs, true, func(quiz.Question) bool { return false }, rng)
+		order, opts := newOrders(qs, true, 0, func(quiz.Question) bool { return false }, rng)
 		if len(order) != len(qs) {
 			t.Fatal("order length")
 		}
@@ -166,5 +168,44 @@ func TestOrdersNeverRevealAnswers(t *testing.T) {
 	v := applyOrder(single, []string{"o3", "o1", "o2"})
 	if v.Body.Options[0].ID != "o3" || len(v.Body.Options) != 3 {
 		t.Fatalf("applyOrder = %+v", v.Body.Options)
+	}
+}
+
+// D-65: a draw picks that many different questions, in the quiz's order
+// unless questions are shuffled; over many students every question comes up.
+func TestDrawPicksASubset(t *testing.T) {
+	qs := make([]quiz.Question, 10)
+	for i := range qs {
+		qs[i] = quiz.Question{ID: string(rune('a' + i)), Type: quiz.Essay}
+	}
+	none := func(quiz.Question) bool { return false }
+	seenAll := map[int]bool{}
+	orders := map[string]bool{}
+	for seed := uint64(0); seed < 300; seed++ {
+		rng := rand.New(rand.NewPCG(seed, seed+1))
+		order, _ := newOrders(qs, false, 4, none, rng)
+		if len(order) != 4 || !slices.IsSorted(order) {
+			t.Fatalf("draw of 4, fixed order: %v", order)
+		}
+		if len(slices.Compact(slices.Clone(order))) != 4 {
+			t.Fatalf("a question drawn twice: %v", order)
+		}
+		for _, i := range order {
+			seenAll[i] = true
+		}
+		orders[fmt.Sprint(order)] = true
+		shuffled, _ := newOrders(qs, true, 4, none, rng)
+		if len(shuffled) != 4 {
+			t.Fatalf("draw of 4, shuffled: %v", shuffled)
+		}
+	}
+	if len(seenAll) != 10 || len(orders) < 50 {
+		t.Fatalf("draws aren't random enough: %d questions seen, %d different sets", len(seenAll), len(orders))
+	}
+	// Drawing all of them, or more, is the whole quiz.
+	for _, n := range []int{0, 10, 25} {
+		if order, _ := newOrders(qs, false, n, none, rand.New(rand.NewPCG(1, 2))); len(order) != 10 {
+			t.Fatalf("draw %d gave %d questions", n, len(order))
+		}
 	}
 }

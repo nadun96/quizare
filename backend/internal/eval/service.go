@@ -40,6 +40,7 @@ type Attempts interface {
 	SessionTeamRules(ctx context.Context, sessionID string) (settings.Effective, error)
 	TeamInfos(ctx context.Context, sessionID string) ([]live.TeamInfo, error)
 	SessionMaxScore(ctx context.Context, sessionID string) (float64, error)
+	TeamMaxScores(ctx context.Context, sessionID, acceptance, calc string) (map[string]float64, bool, error)
 }
 
 // LLMQueue schedules LLM marking or feedback in the caller's transaction.
