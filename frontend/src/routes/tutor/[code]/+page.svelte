@@ -273,7 +273,7 @@
 		<header class="row">
 			<div class="min-w-0">
 				<h1 class="m-0 text-xl truncate">{view.session.title}</h1>
-				<p class="small muted m-0">{view.session.classroom_name} · {view.teachers.map((t) => t.name + (t.role === 'coteacher' ? ' (co-teacher)' : '')).join(', ')} · {view.online} here{#if teacher && view.waiting} · {view.waiting} waiting{/if}{#if view.session.broadcaster_id} · {broadcasterName(view)} is broadcasting{/if}</p>
+				<p class="small muted m-0">{view.session.classroom_name} · {view.teachers.map((t) => t.name + (t.role === 'coteacher' ? ' (co-teacher)' : '')).join(', ')} · {view.online} here{#if teacher && view.waiting}{' · '}{view.waiting} waiting{/if}{#if view.session.broadcaster_id}{' · '}{broadcasterName(view)} is broadcasting{/if}</p>
 			</div>
 			<span class="spacer"></span>
 			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
@@ -349,7 +349,7 @@
 					<div class="tabs tabs-border" role="tablist">
 						<button class="tab" role="tab" aria-selected={side === 'chat'} class:tab-active={side === 'chat'} onclick={() => (side = 'chat')}>Chat</button>
 						{#if teacher}
-							<button class="tab" role="tab" aria-selected={side === 'people'} class:tab-active={side === 'people'} onclick={() => (side = 'people')}>People{#if view.waiting} ({view.waiting}){/if}</button>
+							<button class="tab" role="tab" aria-selected={side === 'people'} class:tab-active={side === 'people'} onclick={() => (side = 'people')}>People{#if view.waiting}{' '}({view.waiting}){/if}</button>
 							<button class="tab" role="tab" aria-selected={side === 'attendance'} class:tab-active={side === 'attendance'} onclick={showAttendance}>Attendance</button>
 						{/if}
 					</div>
@@ -361,7 +361,7 @@
 						<div class="vstack">
 							<button class="btn btn-sm" onclick={() => act(() => client.download(`/api/sessions/${sid()}/attendance?format=csv`, `attendance-${code}.csv`))}>Download CSV</button>
 							<table class="table table-sm"><thead><tr><th>Name</th><th>Visits</th><th>Minutes</th></tr></thead><tbody>
-								{#each attendance as a (a.user_id)}<tr><td>{a.name}{#if a.online} <span class="badge badge-soft ok badge-xs">here</span>{/if}</td><td class="tabular">{a.visits}</td><td class="tabular">{minutes(a.seconds)}</td></tr>{:else}<tr><td colspan="3" class="muted">Attendance starts when the session does.</td></tr>{/each}
+								{#each attendance as a (a.user_id)}<tr><td>{a.name}{#if a.online}{' '}<span class="badge badge-soft ok badge-xs">here</span>{/if}</td><td class="tabular">{a.visits}</td><td class="tabular">{minutes(a.seconds)}</td></tr>{:else}<tr><td colspan="3" class="muted">Attendance starts when the session does.</td></tr>{/each}
 							</tbody></table>
 						</div>
 					{/if}

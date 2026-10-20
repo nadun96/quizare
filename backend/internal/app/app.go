@@ -22,6 +22,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/apidocs"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
+	"github.com/nadun96/quizplatform/internal/directory"
 	"github.com/nadun96/quizplatform/internal/eval"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/live"
@@ -58,6 +59,7 @@ type App struct {
 	Admin     *admin.Service
 	Poll      *poll.Service
 	Storage   *storage.Service
+	Directory *directory.Service // school sign-in (D-64)
 	Tutor     *tutorlink.Service // nil when tutoring is off
 }
 
@@ -163,9 +165,12 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	}
 	snapshotWorker := &storage.SnapshotWorker{}
 	river.AddWorker(workers, snapshotWorker)
+	directoryWorker := &directory.CheckWorker{}
+	river.AddWorker(workers, directoryWorker)
 	var periodic []*river.PeriodicJob
 	if opt.RunJobs {
-		periodic = append(periodic, storage.Periodic()) // hourly storage figures (PL-FR-04)
+		periodic = append(periodic, storage.Periodic())   // hourly storage figures (PL-FR-04)
+		periodic = append(periodic, directory.Periodic()) // sign out accounts the directory disabled (D-64)
 	}
 	rc, err := jobs.NewClient(pool, w, log, periodic...)
 	if err != nil {
@@ -193,6 +198,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		providers = llm.DefaultProviders()
 	}
 	a.LLM = llm.NewService(pool, vault, providers, rc, a.Live, a.Eval, log)
+	a.Directory = directory.NewService(pool, vault, a.Auth, log)
+	directoryWorker.Service = a.Directory
 	llmWorker.Service = a.LLM
 	a.Eval.SetLLM(a.LLM)
 	a.Analytics = analytics.NewService(pool, a.Live, a.Eval, a.Auth, rc)
@@ -242,6 +249,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			ad.With(a.Auth.RequireFeature(auth.FeatSettings)).Route("/settings", a.Settings.AdminRoutes)
 			a.Admin.AdminRoutes(ad)
 			a.Storage.AdminRoutes(ad, a.Auth)
+			a.Directory.AdminRoutes(ad)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))

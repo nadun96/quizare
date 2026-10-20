@@ -49,6 +49,7 @@ type QuestionRow struct {
 	Type           quiz.Type         `json:"type"`
 	MaxScore       float64           `json:"max_score"`
 	Answered       int               `json:"answered"`
+	Shown          int               `json:"shown"` // students who got the question; fewer than all when they drew a subset (D-65)
 	PctCorrect     float64           `json:"pct_correct"`
 	AvgScore       float64           `json:"avg_score"`
 	OptionCounts   map[string]int    `json:"option_counts,omitempty"` // option id → times chosen
@@ -205,6 +206,9 @@ func questionStats(questions []quiz.Question, results []eval.AttemptResult) []Qu
 		}
 		for _, r := range ranked {
 			for _, m := range r.Marks {
+				if m.QuestionID == q.ID {
+					row.Shown++
+				}
 				if m.QuestionID != q.ID || !eval.Answered(m.Response) {
 					continue
 				}

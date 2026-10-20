@@ -281,7 +281,7 @@
 			<div class="poll-bar-inner">
 				<strong class="truncate">{v.title}</strong>
 				{#if v.scoring && (v.me || myPoints > 0)}
-					<span class="badge badge-soft badge-primary gap-1 tabular" aria-live="polite"><Icon name="trophy" size={13} />{fmtPoints(v.me?.score ?? myPoints)} pts{#if v.me} · {ordinal(v.me.rank)}{/if}</span>
+					<span class="badge badge-soft badge-primary gap-1 tabular" aria-live="polite"><Icon name="trophy" size={13} />{fmtPoints(v.me?.score ?? myPoints)} pts{#if v.me}{' · '}{ordinal(v.me.rank)}{/if}</span>
 				{/if}
 				{#if myGroup}
 					<span class="badge badge-soft gap-1 max-w-40"><span class="gdot sm" style:background="var(--cat-{myGroup.color})" aria-hidden="true"></span><span class="truncate">{myGroup.name}</span>{#if v.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>

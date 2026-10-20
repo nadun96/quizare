@@ -25,6 +25,7 @@ Answers are **not** sent over the socket; they use `PUT /api/attempts/{id}/answe
   "countdown_deadline": null, "quiz_deadline": 1791035844679, "question_deadline": 1791035274679,
   "quiz_remaining_ms": null, "question_remaining_ms": null,
   "index": 0, "total": 8, "answered": [false, false, …], "one_way": true,
+  "flagged": [false, true, …],   // free navigation only (D-61)
   "question": { "id": "…", "type": "SINGLE", "text": "…", "body": { "options": [ … ] }, "marks": 1, "resources": [] },
   "answer": null,
   "violation_policy": "invalidate", "warnings": 0, "allowed_warnings": 1, "blur_grace_ms": 2000

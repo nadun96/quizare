@@ -540,7 +540,7 @@ func (s *Service) Join(ctx context.Context, userID, code, studentNumber, teamID 
 		return nil, err
 	}
 	rng := mrand.New(mrand.NewPCG(mrand.Uint64(), mrand.Uint64()))
-	order, opts := newOrders(v.Snapshot.Questions, eff.QuestionOrder == "shuffled", func(q quiz.Question) bool {
+	order, opts := newOrders(v.Snapshot.Questions, eff.QuestionOrder == "shuffled", eff.QuestionDraw, func(q quiz.Question) bool {
 		return v.Effective(&q, settings.Overrides{}).OptionOrder == "shuffled"
 	}, rng)
 	order32 := make([]int32, len(order))
@@ -1025,6 +1025,38 @@ func (s *Service) Goto(ctx context.Context, userID, attemptID string, index int)
 		}
 		a.Current = index
 		return nil
+	})
+}
+
+// Flag marks a question to come back to, or clears the mark (D-61). Only
+// with free navigation: in a one-way quiz there is no going back to it.
+func (s *Service) Flag(ctx context.Context, userID, attemptID, questionID string, flagged bool) (*Attempt, error) {
+	return s.change(ctx, attemptID, func(tx pgx.Tx, sess *Session, a *Attempt) error {
+		if err := s.ownAttempt(userID, a); err != nil {
+			return err
+		}
+		if a.State != StateInProgress {
+			return errWrongState("the quiz is not running")
+		}
+		if sess.Effective(nil, a.Overrides).OneWayNavigation {
+			return errWrongState("this quiz does not allow going back")
+		}
+		found := false
+		for i := range a.Order {
+			if sess.question(a, i).ID == questionID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return httpx.BadRequest("no such question")
+		}
+		q := `UPDATE live.attempts SET flagged = array_remove(flagged, $2) WHERE id=$1`
+		if flagged {
+			q = `UPDATE live.attempts SET flagged = array_append(array_remove(flagged, $2), $2) WHERE id=$1`
+		}
+		_, err := tx.Exec(ctx, q, a.ID, questionID)
+		return err
 	})
 }
 

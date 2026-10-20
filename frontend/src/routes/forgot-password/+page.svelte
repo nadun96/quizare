@@ -3,6 +3,10 @@
 	let email = $state('');
 	let done = $state(false);
 	let error = $state('');
+	let school = $state(false);
+	$effect(() => {
+		api.get<{ directory: boolean }>('/api/auth/options').then((o) => (school = o.directory), () => {});
+	});
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		try {
@@ -17,6 +21,7 @@
 <div class="narrow">
 	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={submit}>
 		<h1>Reset your password</h1>
+		{#if school}<p class="alert alert-soft alert-info small m-0">Sign in with your school account? This page can't change that password: reset it the way your school does. It's for accounts with their own password here.</p>{/if}
 		{#if done}
 			<p class="alert alert-soft alert-success">If an account exists for {email}, we have emailed a reset link. It expires in 1 hour.</p>
 		{:else}

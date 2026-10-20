@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { SETTINGS } from '$lib/settingsMeta';
+	import OptionGroup from '$lib/ui/OptionGroup.svelte';
+	import { count } from '$lib/words';
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
@@ -149,11 +152,11 @@
 		<p class="small"><a href={'/t/quizzes/' + d.session.quiz_id}>← Quiz</a></p>
 			<div class="row">
 				<h1 class="m-0">{d.session.title}</h1>
-				<span class="badge badge-soft gap-1 {d.session.status === 'live' ? 'ok' : ''}">{#if d.session.status === 'live'}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{d.session.status}</span>
+				<span class="badge badge-soft gap-1 {d.session.status === 'live' ? 'ok' : ''}">{#if d.session.status === 'live'}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{d.session.status === 'live' ? 'Live' : d.session.status === 'ended' ? 'Ended' : d.session.status}</span>
 				{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={13} />reconnecting…</span>{/if}
 				<span class="spacer"></span>
-				<a class="btn" href={'/t/sessions/' + id + '/projector'} target="_blank"><Icon name="qr" size={16} />Show QR full screen</a>
-				<a class="btn" href={'/t/sessions/' + id + '/results'}><Icon name="chart" size={16} />Results</a>
+				{#if !ended}<a class="btn" href={'/t/sessions/' + id + '/projector'} target="_blank"><Icon name="qr" size={16} />Show QR full screen</a>{/if}
+				<a class="btn" class:btn-primary={ended} href={'/t/sessions/' + id + '/results'}><Icon name="chart" size={16} />Results</a>
 				{#if !ended}<button class="btn btn-error btn-outline" onclick={end}>End session</button>{/if}
 			</div>
 
@@ -167,23 +170,38 @@
 
 		<div class="layout">
 			<aside class="vstack">
-				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" style="text-align:center">
-					<QrCode text={d.session.join_url} size={220} />
-					<p style="font-size:1.6rem;font-weight:700;letter-spacing:0.1em;margin:0">{d.session.join_code}</p>
-					<p class="small" style="word-break:break-all">{d.session.join_url}</p>
-				</div>
+				{#if ended}
+					<!-- After the end the QR code would only invite students to a closed session. -->
+					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
+						<strong class="flex items-center gap-2"><Icon name="check-circle" size={16} />Session ended</strong>
+						<p class="small muted m-0">Joining is closed. {finished} of {count(total, 'student')} finished.</p>
+						<a class="btn btn-primary btn-sm" href={'/t/sessions/' + id + '/results'}>Mark and release results</a>
+					</div>
+				{:else}
+					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" style="text-align:center">
+						<QrCode text={d.session.join_url} size={220} />
+						<p style="font-size:1.6rem;font-weight:700;letter-spacing:0.1em;margin:0">{d.session.join_code}</p>
+						<p class="small" style="word-break:break-all">{d.session.join_url}</p>
+					</div>
+				{/if}
 				{#if !ended}
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 						<strong>Session settings</strong>
-						<div><label for="cd">Countdown (seconds)</label><input class="input w-full" id="cd" type="number" min="0" bind:value={countdown} placeholder="inherit" /></div>
-						<div><label for="adm">Admission</label><select class="select w-full" id="adm" bind:value={admission}><option value="">Inherit</option><option value="manual">I admit students</option><option value="auto">Admit automatically</option></select></div>
-						<div><label for="sm">Quiz start</label><select class="select w-full" id="sm" bind:value={startMode}><option value="">Inherit</option><option value="countdown">Countdown starts when admitted</option><option value="teacher">I press Start</option></select>
-							<p class="small muted m-0 mt-1">{(startMode || d.start_mode) === 'teacher' ? 'Admitted students wait until you press Start, then the countdown runs.' : 'Each student’s countdown starts as soon as they’re admitted.'}</p></div>
-						<div><label for="tm">Teams</label><select class="select w-full" id="tm" bind:value={teamMode}><option value="">Inherit</option><option value="off">No teams</option><option value="manual">I put students in teams</option><option value="random">At random as they join</option><option value="categories">From classroom categories</option><option value="self">Students choose</option></select></div>
+						<div><label for="cd">Countdown before the first question</label><label class="input input-sm w-36"><input id="cd" type="number" min="0" bind:value={countdown} placeholder="Default" /><span class="muted">s</span></label></div>
+						{#snippet pick(key: string, label: string, val: string, setv: (v: string) => void, fallback?: string)}
+							<div class="grid gap-1">
+								<span class="small font-semibold">{label}</span>
+								<OptionGroup {label} options={SETTINGS.find((m) => m.key === key)?.options ?? []} value={val || undefined} {fallback} onchange={setv} />
+								{#if val}<button type="button" class="link link-hover small justify-self-start" onclick={() => setv('')}>Use the default</button>{/if}
+							</div>
+						{/snippet}
+						{@render pick('admission_mode', 'Letting students in', admission, (v) => (admission = v))}
+						{@render pick('start_mode', 'Starting the quiz', startMode, (v) => (startMode = v), d.start_mode)}
+						{@render pick('team_mode', 'Teams', teamMode, (v) => (teamMode = v))}
 						{#if (teamMode || teamsOn) && teamMode !== 'off'}
-							<div><label for="ta">Team marks count</label><select class="select w-full" id="ta" bind:value={teamAcceptance}><option value="">Inherit</option><option value="all">Every member's marks</option><option value="first">First answer per question</option><option value="captain">Captain's marks</option><option value="best">Best mark per question</option></select></div>
+							{@render pick('team_acceptance', 'Which marks count', teamAcceptance, (v) => (teamAcceptance = v))}
 							{#if (teamAcceptance || 'all') === 'all'}
-								<div><label for="tc">Combine members by</label><select class="select w-full" id="tc" bind:value={teamCalc}><option value="">Inherit</option><option value="sum">Total</option><option value="average">Average (skips count as 0)</option><option value="max">Highest</option><option value="min">Lowest</option></select></div>
+								{@render pick('team_calc', 'Combine marks by', teamCalc, (v) => (teamCalc = v))}
 							{/if}
 						{/if}
 						<button class="btn btn-sm" onclick={saveSessionSettings}>Save</button>
@@ -196,7 +214,7 @@
 							<strong>{a.student_name}</strong>{a.student_number ? ` (${a.student_number})` : ''}: {a.kind.replace('_', ' ')} → {a.action}
 							<br /><span class="muted">{new Date(a.at).toLocaleTimeString()}</span>
 						</div>
-					{:else}<p class="small muted">No violations so far.</p>{/each}
+					{:else}<p class="small muted m-0">{flagged ? `${count(flagged, 'student')} flagged. The Flags column shows what happened.` : ended ? 'No violations in this session.' : 'No violations so far.'}</p>{/each}
 				</div>
 			</aside>
 
@@ -230,11 +248,11 @@
 					{#if selected.size}<p class="small m-0" in:fadeIn><strong>{selected.size}</strong> selected · commands apply to them</p>{/if}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
-						<thead><tr><th></th><th>Student</th>{#if teamsOn}<th>Team</th>{/if}<th>Status</th><th>Progress</th><th>Time left</th><th>Flags</th><th></th></tr></thead>
+						<thead><tr>{#if !ended}<th><span class="sr-only">Select</span></th>{/if}<th>Student</th>{#if teamsOn}<th>Team</th>{/if}<th>Status</th><th>Progress</th><th>Time left</th><th>Flags</th><th></th></tr></thead>
 						<tbody>
 							{#each rows as r (r.attempt_id)}
 									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
-									<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>
+									{#if !ended}<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>{/if}
 									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
 									{#if teamsOn}
 										{@const team = d.teams?.find((t) => t.id === r.team_id)}
@@ -245,11 +263,11 @@
 										<div class="flex items-center gap-2"><progress class="progress progress-primary w-20" value={r.answered} max={r.total || 1} aria-hidden="true"></progress><span class="tabular">{r.answered}/{r.total}</span></div>
 										{#if r.state === 'in_progress'}<span class="muted">on Q{r.index + 1}</span>{/if}
 									</td>
-									<td class="small tabular" class:text-error={(left(r) ?? Infinity) < 60_000 && r.state === 'in_progress'}>{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">+{Math.round(r.extension_sec / 60)} min</span>{/if}</td>
+									<td class="small tabular" class:text-error={(left(r) ?? Infinity) < 60_000 && r.state === 'in_progress'}>{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">+{Math.round(r.extension_sec / 60)} min extra</span>{/if}</td>
 									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1"><Icon name="flag" size={12} />{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
 									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="8"><div class="muted py-6 text-center"><span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…</div></td></tr>{/each}
+							{:else}<tr><td colspan="8"><div class="muted py-6 text-center">{#if ended}Nobody joined this session.{:else}<span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…{/if}</div></td></tr>{/each}
 						</tbody>
 					</table>
 				</div>

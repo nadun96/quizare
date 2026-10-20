@@ -1,4 +1,6 @@
 <script lang="ts">
+	import RowMenu from '$lib/ui/RowMenu.svelte';
+	import { count } from '$lib/words';
 	import Icon from '$lib/ui/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -160,7 +162,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 				<button class="btn btn-primary" onclick={() => setStatus('ready')} disabled={readiness.blocking.length > 0}>Mark Ready</button>
 			{/if}
 		</div>
-		<p class="muted small">{quiz.question_count} questions · {quiz.total_marks} marks{#if quiz.effective?.quiz_time_limit_sec} · {Math.round(Number(quiz.effective.quiz_time_limit_sec) / 60)} min limit{/if}</p>
+		<p class="muted small">{count(quiz.question_count, 'question')} · {count(quiz.total_marks, 'mark')}{#if quiz.effective?.quiz_time_limit_sec}{' · '}{Math.round(Number(quiz.effective.quiz_time_limit_sec) / 60)} min limit{/if}{#if Number(quiz.effective?.question_draw) > 0 && Number(quiz.effective?.question_draw) < quiz.question_count}{' · '}each student gets {quiz.effective?.question_draw} at random{/if}</p>
 		{#each readiness.blocking as b (b)}<p class="alert alert-soft alert-error small">{b}</p>{/each}
 		{#each readiness.warnings as w (w)}<p class="alert alert-soft alert-warning small">{w}</p>{/each}
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
@@ -188,12 +190,14 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" data-id={q.id}>
 						<div class="row">
 							<span class="tooltip handle" data-tip="Drag to reorder" style="cursor:grab"><Icon name="menu" size={16} /></span>
-							<strong>{q.code}</strong><span class="badge badge-soft">{QTYPE_LABEL[q.type]}</span><span class="small muted">{q.marks} marks</span>
+							<strong>{q.code}</strong><span class="badge badge-soft">{QTYPE_LABEL[q.type]}</span><span class="small muted">{count(q.marks, 'mark')}</span>
 							{#if q.settings?.question_time_limit_sec}<span class="small muted">· {q.settings.question_time_limit_sec}s</span>{/if}
 							<span class="spacer"></span>
-							<button class="btn btn-sm" onclick={() => (editing = q)}>Edit</button>
-							<button class="btn btn-sm" onclick={() => dup(q)}>Duplicate</button>
-							<button class="btn btn-sm btn-error btn-outline" onclick={() => delQ(q)}>Delete</button>
+							<button class="btn btn-sm" onclick={() => (editing = q)}><Icon name="pencil" size={14} />Edit</button>
+							<RowMenu hint="More actions for {q.code}" actions={[
+								{ label: 'Duplicate', icon: 'copy', onclick: () => dup(q) },
+								{ label: 'Delete question', icon: 'trash', danger: true, onclick: () => delQ(q) }
+							]} />
 						</div>
 						<RichText text={q.text} format={q.body.format} blanks="chip" />
 						<p class="small muted" style="margin:0">Answer: {describeKey(q.type, q.body, q.key) || '(marked by LLM or manually)'}</p>

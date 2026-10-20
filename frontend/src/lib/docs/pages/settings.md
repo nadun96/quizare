@@ -49,8 +49,9 @@ When a session is created, defaults, platform, teacher and the classroom-to-quiz
 | `blur_grace_ms` | classroom, quiz, session | 2000 | ignore shorter focus losses (R-01) |
 | `disconnect_grace_sec` | classroom, quiz, session | 10 | heartbeat rule |
 | `question_order` | quiz, session | `fixed` | `fixed`, `shuffled` |
+| `question_draw` | quiz, session | `0` | Questions each student gets, drawn at random from the quiz when they join (0 = all). Kept in the quiz's order unless `question_order` is `shuffled`; marks, percentages and team maximums count only the questions each student got (D-65) |
 | `option_order` | quiz, question | `fixed` | `fixed`, `shuffled` |
-| `one_way_navigation` | quiz | true | BR-09 |
+| `one_way_navigation` | quiz | true | BR-09; when false, students can go back and flag questions to come back to (D-61) |
 | `results_visibility` | quiz, session | `private` | `private`, `public` |
 | `results_view` | quiz, session | `individual` | `individual`, `question_pct`, `pass_rate` |
 | `results_release` | quiz, session | `on_session_end` | `immediate`, `on_session_end`, `manual` |

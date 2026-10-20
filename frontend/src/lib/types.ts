@@ -63,6 +63,8 @@ export type StudentState = {
 	index: number;
 	total: number;
 	answered: boolean[] | null;
+	/** Questions flagged to come back to (D-61); only with free navigation. */
+	flagged?: boolean[];
 	one_way: boolean;
 	question: StudentQuestion | null;
 	answer: Response | null;
