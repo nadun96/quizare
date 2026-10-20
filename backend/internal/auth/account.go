@@ -36,9 +36,12 @@ func (s *Service) ChangePassword(ctx context.Context, u User, current, next, kee
 	if !s.emailLimiter.Allow("pwchange:" + u.ID) {
 		return errRateLimited // guessing the current password is throttled like logins
 	}
-	var hash string
-	if err := s.pool.QueryRow(ctx, `SELECT password_hash FROM auth.users WHERE id=$1`, u.ID).Scan(&hash); err != nil {
+	var hash, source string
+	if err := s.pool.QueryRow(ctx, `SELECT password_hash, auth_source FROM auth.users WHERE id=$1`, u.ID).Scan(&hash, &source); err != nil {
 		return err
+	}
+	if source == "directory" {
+		return errDirectoryAccount
 	}
 	ok, err := s.hasher.Verify(ctx, current, hash)
 	if err != nil {

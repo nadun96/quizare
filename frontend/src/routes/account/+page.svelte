@@ -41,7 +41,7 @@
 					<button class="btn btn-error btn-outline" onclick={() => (confirming = true)}>Delete my account…</button>
 				{:else}
 					<form class="vstack" onsubmit={del}>
-						<div><label for="pw">Enter your password to confirm</label><input class="input w-full" id="pw" type="password" bind:value={password} required /></div>
+						<div><label for="pw">{auth.user?.directory ? 'Enter your school password to confirm' : 'Enter your password to confirm'}</label><input class="input w-full" id="pw" type="password" bind:value={password} required /></div>
 						{#if error}<p class="alert alert-soft alert-error">{error}</p>{/if}
 						<button class="btn btn-error btn-outline">Delete permanently</button>
 					</form>

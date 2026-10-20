@@ -98,31 +98,35 @@
 	</section>
 
 	<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6" aria-labelledby="pw-h">
-		<h2 id="pw-h" class="mt-0">Change password</h2>
-		<form class="vstack" onsubmit={changePassword} novalidate>
-			<div>
-				<label for="pw-cur">Current password</label>
-				<input id="pw-cur" class="input w-full" class:input-error={!!errors.current_password} type={show ? 'text' : 'password'} autocomplete="current-password" bind:value={current} required aria-invalid={!!errors.current_password} aria-describedby={errors.current_password ? 'pw-cur-e' : undefined} />
-				{#if errors.current_password}<p id="pw-cur-e" class="field-error">{cap(errors.current_password)}</p>{/if}
-			</div>
-			<div>
-				<label for="pw-new">New password</label>
-				<input id="pw-new" class="input w-full" class:input-error={!!errors.new_password} type={show ? 'text' : 'password'} autocomplete="new-password" minlength="8" maxlength="128" bind:value={next} required aria-describedby="pw-new-h{errors.new_password ? ' pw-new-e' : ''}" aria-invalid={!!errors.new_password} />
-				<p id="pw-new-h" class="small muted m-0 mt-1">At least 8 characters. A short sentence is easy to remember and hard to guess.</p>
-				{#if errors.new_password}<p id="pw-new-e" class="field-error">{cap(errors.new_password)}</p>{/if}
-			</div>
-			<div>
-				<label for="pw-again">New password again</label>
-				<input id="pw-again" class="input w-full" class:input-error={mismatch || !!errors.again} type={show ? 'text' : 'password'} autocomplete="new-password" bind:value={again} required aria-invalid={mismatch} aria-describedby={mismatch || errors.again ? 'pw-again-e' : undefined} />
-				{#if mismatch || errors.again}<p id="pw-again-e" class="field-error">{errors.again ?? "The two new passwords don't match."}</p>{/if}
-			</div>
-			<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={show} />Show passwords</label>
-			{#if errors._}<p class="alert alert-soft alert-error small m-0" role="alert"><Icon name="alert" size={15} />{errors._}</p>{/if}
-			<div class="flex flex-wrap items-center gap-3">
-				<button class="btn btn-primary" disabled={saving || !current || next.length < 8 || mismatch}>{#if saving}<span class="loading loading-spinner loading-sm"></span>{/if}Change password</button>
-				<span class="small muted">Your other devices will be signed out.</span>
-			</div>
-			<p class="small m-0"><a href="/forgot-password">Forgot your current password?</a></p>
-		</form>
+		<h2 id="pw-h" class="mt-0">{auth.user?.directory ? 'Password' : 'Change password'}</h2>
+		{#if auth.user?.directory}
+			<p class="m-0">You sign in with your school account, so your password belongs to your school. Change it the way your school does, for example on a school computer.</p>
+		{:else}
+			<form class="vstack" onsubmit={changePassword} novalidate>
+				<div>
+					<label for="pw-cur">Current password</label>
+					<input id="pw-cur" class="input w-full" class:input-error={!!errors.current_password} type={show ? 'text' : 'password'} autocomplete="current-password" bind:value={current} required aria-invalid={!!errors.current_password} aria-describedby={errors.current_password ? 'pw-cur-e' : undefined} />
+					{#if errors.current_password}<p id="pw-cur-e" class="field-error">{cap(errors.current_password)}</p>{/if}
+				</div>
+				<div>
+					<label for="pw-new">New password</label>
+					<input id="pw-new" class="input w-full" class:input-error={!!errors.new_password} type={show ? 'text' : 'password'} autocomplete="new-password" minlength="8" maxlength="128" bind:value={next} required aria-describedby="pw-new-h{errors.new_password ? ' pw-new-e' : ''}" aria-invalid={!!errors.new_password} />
+					<p id="pw-new-h" class="small muted m-0 mt-1">At least 8 characters. A short sentence is easy to remember and hard to guess.</p>
+					{#if errors.new_password}<p id="pw-new-e" class="field-error">{cap(errors.new_password)}</p>{/if}
+				</div>
+				<div>
+					<label for="pw-again">New password again</label>
+					<input id="pw-again" class="input w-full" class:input-error={mismatch || !!errors.again} type={show ? 'text' : 'password'} autocomplete="new-password" bind:value={again} required aria-invalid={mismatch} aria-describedby={mismatch || errors.again ? 'pw-again-e' : undefined} />
+					{#if mismatch || errors.again}<p id="pw-again-e" class="field-error">{errors.again ?? "The two new passwords don't match."}</p>{/if}
+				</div>
+				<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={show} />Show passwords</label>
+				{#if errors._}<p class="alert alert-soft alert-error small m-0" role="alert"><Icon name="alert" size={15} />{errors._}</p>{/if}
+				<div class="flex flex-wrap items-center gap-3">
+					<button class="btn btn-primary" disabled={saving || !current || next.length < 8 || mismatch}>{#if saving}<span class="loading loading-spinner loading-sm"></span>{/if}Change password</button>
+					<span class="small muted">Your other devices will be signed out.</span>
+				</div>
+				<p class="small m-0"><a href="/forgot-password">Forgot your current password?</a></p>
+			</form>
+		{/if}
 	</section>
 {/if}

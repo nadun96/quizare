@@ -57,6 +57,8 @@ type User struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	// Manager is set for managers (PL-FR-10): the admin features they have.
 	Manager *Manager `json:"manager,omitempty"`
+	// Directory: signs in with the school's directory, not a password of its own (D-64).
+	Directory bool `json:"directory,omitempty"`
 }
 
 // Timeouts per role (ADR-13): students get long-lived sessions so most are
@@ -97,6 +99,7 @@ type Service struct {
 	ipLimiter    *Limiter
 	emailLimiter *Limiter
 	relations    Relations // who may see whose profile picture (D-49)
+	dir          Directory // school sign-in (D-64); nil = off
 
 	cacheMu sync.Mutex
 	cache   map[string]cachedSession // key: token hash
@@ -243,27 +246,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput, ip, userAgent string
 	if !s.ipLimiter.Allow("ip:"+ip) || !s.emailLimiter.Allow("email:"+email) {
 		return User{}, "", time.Time{}, errRateLimited
 	}
-	var u User
-	var hash string
-	var verified *time.Time
-	var mgr managerCols
-	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.password_hash, u.email_verified_at, coalesce(u.avatar_version, ''), `+managerSelect+`
-		FROM auth.users u `+managerJoin+` WHERE u.email=$1 AND u.status <> 'deleted'`, email).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified, &u.Avatar, &mgr.is, &mgr.features)
-	if errors.Is(err, pgx.ErrNoRows) || hash == "!" { // '!': a manager account with no password yet
-		// Spend the same work as a real check so timing does not reveal accounts.
-		_, _ = s.hasher.Verify(ctx, in.Password, s.dummyHash(ctx))
-		return User{}, "", time.Time{}, errInvalidCredentials
-	}
+	u, err := s.checkCredentials(ctx, strings.TrimSpace(in.Email), in.Password)
 	if err != nil {
 		return User{}, "", time.Time{}, err
-	}
-	ok, err := s.hasher.Verify(ctx, in.Password, hash)
-	if err != nil {
-		return User{}, "", time.Time{}, err
-	}
-	if !ok {
-		return User{}, "", time.Time{}, errInvalidCredentials
 	}
 	switch u.Status {
 	case StatusSuspended:
@@ -271,10 +256,48 @@ func (s *Service) Login(ctx context.Context, in LoginInput, ip, userAgent string
 	case StatusPendingApproval:
 		return User{}, "", time.Time{}, errPendingApproval
 	}
-	u.EmailVerified = verified != nil
-	u.Manager = mgr.manager()
 	token, expires, err := s.CreateSession(ctx, u, userAgent)
 	return u, token, expires, err
+}
+
+// checkCredentials returns the account a sign-in name and password belong
+// to. An account with its own password is checked here; otherwise, with
+// school sign-in on, the directory decides (D-64), and may link a student
+// or teacher account that has the same email. Admins and managers never go
+// through the directory.
+func (s *Service) checkCredentials(ctx context.Context, login, password string) (User, error) {
+	var u User
+	var hash, source string
+	var verified *time.Time
+	var mgr managerCols
+	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.password_hash, u.email_verified_at, coalesce(u.avatar_version, ''), u.auth_source, `+managerSelect+`
+		FROM auth.users u `+managerJoin+` WHERE u.email=$1 AND u.status <> 'deleted'`, strings.ToLower(login)).
+		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified, &u.Avatar, &source, &mgr.is, &mgr.features)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return User{}, err
+	}
+	found := err == nil
+	privileged := found && (u.Role == RoleAdmin || u.Role == RoleManager || mgr.is)
+	school := !privileged && s.DirectoryEnabled(ctx)
+	if found && source == "local" && hash != "!" { // '!': a manager account with no password yet
+		ok, err := s.hasher.Verify(ctx, password, hash)
+		if err != nil {
+			return User{}, err
+		}
+		if ok {
+			u.EmailVerified = verified != nil
+			u.Manager = mgr.manager()
+			return u, nil
+		}
+		if !school {
+			return User{}, errInvalidCredentials
+		}
+	} else if !school {
+		// Spend the same work as a real check so timing does not reveal accounts.
+		_, _ = s.hasher.Verify(ctx, password, s.dummyHash(ctx))
+		return User{}, errInvalidCredentials
+	}
+	return s.directoryLogin(ctx, login, password)
 }
 
 // CreateSession issues a fresh session token for an already-authenticated user.
@@ -319,9 +342,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, bool, e
 	if !ok || now.Sub(c.fetched) > sessionCacheTTL {
 		var verified *time.Time
 		var mgr managerCols
-		err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, s.expires_at, s.created_at, s.last_seen_at, coalesce(u.avatar_version, ''), `+managerSelect+`
+		err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, s.expires_at, s.created_at, s.last_seen_at, coalesce(u.avatar_version, ''), u.auth_source = 'directory', `+managerSelect+`
 			FROM auth.sessions s JOIN auth.users u ON u.id = s.user_id `+managerJoin+` WHERE s.token_hash=$1`, []byte(key)).
-			Scan(&c.user.ID, &c.user.Email, &c.user.Name, &c.user.Role, &c.user.Status, &verified, &c.expiresAt, &c.created, &c.lastSeen, &c.user.Avatar, &mgr.is, &mgr.features)
+			Scan(&c.user.ID, &c.user.Email, &c.user.Name, &c.user.Role, &c.user.Status, &verified, &c.expiresAt, &c.created, &c.lastSeen, &c.user.Avatar, &c.user.Directory, &mgr.is, &mgr.features)
 		if errors.Is(err, pgx.ErrNoRows) {
 			s.dropCache(key)
 			return User{}, false, nil
@@ -420,7 +443,8 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, ip string) er
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var u User
-		err := tx.QueryRow(ctx, `SELECT id, email, name FROM auth.users WHERE email=$1 AND status IN ('active','pending_approval')`, email).
+		// School accounts reset their password at school (D-64).
+		err := tx.QueryRow(ctx, `SELECT id, email, name FROM auth.users WHERE email=$1 AND status IN ('active','pending_approval') AND auth_source='local'`, email).
 			Scan(&u.ID, &u.Email, &u.Name)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
@@ -466,9 +490,9 @@ func (s *Service) GetUser(ctx context.Context, id string) (User, error) {
 	var u User
 	var verified *time.Time
 	var mgr managerCols
-	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, coalesce(u.avatar_version, ''), `+managerSelect+`
+	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.email_verified_at, coalesce(u.avatar_version, ''), u.auth_source = 'directory', `+managerSelect+`
 		FROM auth.users u `+managerJoin+` WHERE u.id=$1`, id).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &verified, &u.Avatar, &mgr.is, &mgr.features)
+		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &verified, &u.Avatar, &u.Directory, &mgr.is, &mgr.features)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, httpx.ErrNotFound
 	}
