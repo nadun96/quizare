@@ -118,7 +118,7 @@ func areaOf(table string) string {
 		return "ai_marking"
 	case "public":
 		return "jobs"
-	case "settings":
+	case "settings", "directory":
 		return "settings"
 	case "storage":
 		return "storage"

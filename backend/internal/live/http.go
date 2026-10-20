@@ -294,6 +294,16 @@ func (s *Service) StudentRoutes(r chi.Router) {
 		_, err := s.Goto(r.Context(), uid(r), pid(r), in.Index)
 		return state(w, r, err)
 	}))
+	r.Method("PUT", "/attempts/{id}/flags/{qid}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Flagged bool `json:"flagged"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		_, err := s.Flag(r.Context(), uid(r), pid(r), chi.URLParam(r, "qid"), in.Flagged)
+		return state(w, r, err)
+	}))
 	r.Method("POST", "/attempts/{id}/submit", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		_, err := s.Submit(r.Context(), uid(r), pid(r))
 		return state(w, r, err)

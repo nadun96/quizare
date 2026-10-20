@@ -74,7 +74,7 @@
 			<tbody>
 				{#each list.rows as m (m.id)}
 					<tr>
-						<td>{m.name}<br /><span class="small muted">{m.email}</span>{#if m.status !== 'active'} <span class="badge badge-soft danger">{m.status.replace('_', ' ')}</span>{/if}</td>
+						<td>{m.name}<br /><span class="small muted">{m.email}</span>{#if m.status !== 'active'}{' '}<span class="badge badge-soft danger">{m.status.replace('_', ' ')}</span>{/if}</td>
 						<td class="small">{m.role === 'manager' ? 'Manager only' : 'Teacher'}</td>
 						<td class="small">{m.manager?.features.length ? m.manager.features.map(featureLabel).join(', ') : 'None yet'}</td>
 						<td class="small tabular">{when(m.granted_at)}{#if m.granted_by}<br /><span class="muted">by {m.granted_by}</span>{/if}</td>

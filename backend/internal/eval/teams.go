@@ -77,6 +77,11 @@ func (s *Service) teamStandings(ctx context.Context, sessionID string, eff setti
 	if err != nil {
 		return nil, err
 	}
+	// Students who drew their own questions (D-65) make each team's maximum its own.
+	drawnMax, drawn, err := s.attempts.TeamMaxScores(ctx, sessionID, eff.TeamAcceptance, eff.TeamCalc)
+	if err != nil {
+		return nil, err
+	}
 	// Marks in answer order, so "first" takes the team's earliest answer.
 	rows, err = s.pool.Query(ctx, `SELECT a.team_id, m.question_id, coalesce(m.score, 0)::float8, m.status, a.captain
 		FROM eval.marks m JOIN live.attempts a ON a.id=m.attempt_id
@@ -124,6 +129,9 @@ func (s *Service) teamStandings(ctx context.Context, sessionID string, eff setti
 	for i := range out {
 		out[i].Score = groupscore.Round(out[i].Score)
 		out[i].MaxScore = quizMax * float64(groupscore.MaxFactor(eff.TeamAcceptance, eff.TeamCalc, out[i].Members))
+		if drawn {
+			out[i].MaxScore = groupscore.Round(drawnMax[out[i].ID])
+		}
 		if out[i].MaxScore > 0 {
 			out[i].Pct = groupscore.Round(out[i].Score / out[i].MaxScore * 100)
 		}

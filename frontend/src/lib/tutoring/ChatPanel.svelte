@@ -50,7 +50,7 @@
 </script>
 
 <section class="chat vstack" aria-label="Chat">
-	<p class="small muted m-0">{teacher ? `Chat: ${mode?.label}` : mode?.student}{#if view.session.slow_seconds} · slow mode, one message every {view.session.slow_seconds} s{/if}{#if view.me.chat_muted} · the teacher has muted you in the chat{/if}</p>
+	<p class="small muted m-0">{teacher ? `Chat: ${mode?.label}` : mode?.student}{#if view.session.slow_seconds}{' · '}slow mode, one message every {view.session.slow_seconds} s{/if}{#if view.me.chat_muted}{' · '}the teacher has muted you in the chat{/if}</p>
 	{#if view.pinned}
 		<div class="alert alert-soft alert-info small py-2" role="note">
 			<span><strong>Pinned:</strong> {#each linkParts(view.pinned.text) as p, i (i)}{#if p.href}<a href={p.href} target="_blank" rel="noopener noreferrer nofollow">{p.text}</a>{:else}{p.text}{/if}{/each}</span>
@@ -60,7 +60,7 @@
 	<ol class="msgs" bind:this={list} aria-live="polite">
 		{#each messages as m (m.id)}
 			<li class:mine={m.user_id === view.me.user_id} class:teacher={m.from_teacher}>
-				<div class="small"><strong>{m.name}</strong>{#if m.from_teacher} <span class="badge badge-soft badge-xs">teacher</span>{/if} <span class="muted">{time(m.created_at)}{#if audienceLabel(m, view.me.user_id)} · {audienceLabel(m, view.me.user_id)}{/if}{#if teacher && m.audience === 'one'} to {nameOf(m.to_user)}{/if}</span></div>
+				<div class="small"><strong>{m.name}</strong>{#if m.from_teacher}{' '}<span class="badge badge-soft badge-xs">teacher</span>{/if} <span class="muted">{time(m.created_at)}{#if audienceLabel(m, view.me.user_id)}{' · '}{audienceLabel(m, view.me.user_id)}{/if}{#if teacher && m.audience === 'one'}{' '}to {nameOf(m.to_user)}{/if}</span></div>
 				<p class="m-0 text">{#each linkParts(m.text) as p, i (i)}{#if p.href}<a href={p.href} target="_blank" rel="noopener noreferrer nofollow">{p.text}</a>{:else}{p.text}{/if}{/each}</p>
 				{#if teacher}
 					<div class="acts">

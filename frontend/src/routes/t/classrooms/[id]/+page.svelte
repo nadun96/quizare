@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { goto } from '$app/navigation';
@@ -114,8 +115,10 @@ if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules,
 			{#each modules.rows as m (m.id)}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 					<div class="row"><h3 style="margin:0">{m.name}</h3><span class="spacer"></span>
-						<button class="btn btn-sm" onclick={() => rename('modules', m.id, m.name)}>Rename</button>
-						<button class="btn btn-sm btn-error btn-outline" onclick={() => remove('modules', m.id)}>Delete</button></div>
+						<RowMenu hint="More actions for {m.name}" actions={[
+							{ label: 'Rename', icon: 'pencil', onclick: () => rename('modules', m.id, m.name) },
+							{ label: 'Delete module', icon: 'trash', danger: true, onclick: () => remove('modules', m.id) }
+						]} /></div>
 					<TopicList moduleId={m.id} />
 				</div>
 			{/each}

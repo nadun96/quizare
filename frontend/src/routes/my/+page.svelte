@@ -27,6 +27,8 @@
 		classes.load();
 	});
 	const live = (s: string) => ['waiting', 'admitted', 'in_progress', 'paused'].includes(s);
+	// "16 Oct, 3:55 PM": short enough to sit on one line on a phone.
+	const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 	$effect(() => {
 		if (attempts.loaded && attempts.page === 1 && !attempts.q) liveNow = attempts.rows.filter((a) => live(a.state));
 	});
@@ -53,33 +55,52 @@
 			<EmptyState icon="qr" title="No quizzes yet">Scan the QR code your teacher shows, or <a href="/join">enter the join code</a>.</EmptyState>
 		{:else}
 			<div class="mb-3"><ListSearch list={attempts} placeholder="Search quizzes" label="Search my quizzes" /></div>
-			<div class="table-wrap"><table class="table">
-				<thead><tr><th>Quiz</th><th>Status</th><th></th></tr></thead>
-				<tbody>
-					{#each attempts.rows as a (a.attempt_id)}
-						<tr>
-							<td><strong>{a.session_title}</strong><br /><span class="small muted">{new Date(a.created_at).toLocaleString()}</span></td>
-							<td><span class="badge badge-soft {STATE_BADGE[a.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[a.state] ?? ''}</span> {STATE_LABEL[a.state] ?? a.state}</span></td>
-							<td>
-								{#if live(a.state)}<a class="btn btn-sm btn-primary" href={'/attempt/' + a.attempt_id}>Continue</a>
-								{:else if a.released}<a class="btn btn-sm" href={'/my/results/' + a.attempt_id}>Results</a>
-								{:else}<span class="small muted">Results not released</span>{/if}
-							</td>
-						</tr>
-					{:else}<tr><td colspan="3" class="muted">No quizzes match.</td></tr>
-					{/each}
-				</tbody>
-			</table></div>
+			<!-- A list, not a table: three columns don't fit a phone, where students use this page. -->
+			<ul class="attempts" aria-label="My quizzes">
+				{#each attempts.rows as a (a.attempt_id)}
+					<li>
+						<div class="min-w-0">
+							<p class="m-0 truncate font-semibold">{a.session_title}</p>
+							<p class="small muted m-0"><time datetime={a.created_at}>{when(a.created_at)}</time></p>
+						</div>
+						<div class="end">
+							<span class="badge badge-soft whitespace-nowrap {STATE_BADGE[a.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[a.state] ?? ''}</span> {STATE_LABEL[a.state] ?? a.state}</span>
+							{#if live(a.state)}<a class="btn btn-sm btn-primary" href={'/attempt/' + a.attempt_id}>Continue</a>
+							{:else if a.released}<a class="btn btn-sm" href={'/my/results/' + a.attempt_id}>Results</a>
+							{:else}<span class="small muted whitespace-nowrap">Results not out yet</span>{/if}
+						</div>
+					</li>
+				{:else}<li class="muted">No quizzes match.</li>
+				{/each}
+			</ul>
 			<div class="mt-3"><Pager list={attempts} label="My quizzes" /></div>
 		{/if}
 	</div>
 	<h2>My classrooms</h2>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
-		{#each classes.rows as c (c.classroom_id)}
-			<p>{c.name} {#if c.student_number}<span class="muted small">· ID {c.student_number}</span>{/if} {#if c.status === 'pending'}<span class="badge badge-soft badge-warning">awaiting approval</span>{/if}</p>
+		{#if classes.rows.length}
+			<ul class="attempts" aria-label="My classrooms">
+				{#each classes.rows as c (c.classroom_id)}
+					<li>
+						<div class="min-w-0">
+							<p class="m-0 truncate font-semibold">{c.name}</p>
+							{#if c.student_number}<p class="small muted m-0">Your student ID: {c.student_number}</p>{/if}
+						</div>
+						{#if c.status === 'pending'}<div class="end"><span class="badge badge-soft badge-warning whitespace-nowrap">Waiting for approval</span></div>{/if}
+					</li>
+				{/each}
+			</ul>
 		{:else}
-			<p class="muted">{classes.loaded ? "You're not enrolled in any classroom yet." : 'Loading…'}</p>
-		{/each}
+			<p class="muted m-0">{classes.loaded ? 'You haven’t joined a classroom yet. Your teacher can give you a classroom code.' : 'Loading…'}</p>
+		{/if}
 		<Pager list={classes} label="My classrooms" />
 	</div>
 </div>
+
+<style>
+	.attempts { list-style: none; margin: 0; padding: 0; }
+	.attempts li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--color-base-300); }
+	.attempts li:last-child { border-bottom: 0; }
+	.attempts li > .min-w-0 { flex: 1 1 12rem; }
+	.end { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
+</style>

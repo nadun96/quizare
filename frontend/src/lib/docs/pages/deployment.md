@@ -52,7 +52,7 @@ flowchart LR
 
 ## Containers
 
-The alternative to the host install is `Dockerfile` with `compose.yaml` at the repository root. Both work with Docker and Podman.
+The alternative to the host install is `Dockerfile` with `compose.yaml` at the repository root. Both work with Docker and Podman; [Podman with HTTPS](/docs/deploy-podman) walks through a Podman server step by step.
 
 ```mermaid
 flowchart LR

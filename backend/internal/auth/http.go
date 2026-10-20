@@ -95,6 +95,11 @@ func clearSessionCookie(w http.ResponseWriter) {
 func (s *Service) Routes(r chi.Router) {
 	r.Method("POST", "/register", httpx.Handler(s.handleRegister))
 	r.Method("POST", "/login", httpx.Handler(s.handleLogin))
+	// What the login page offers: school sign-in (D-64).
+	r.Method("GET", "/options", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		httpx.JSON(w, http.StatusOK, map[string]bool{"directory": s.DirectoryEnabled(r.Context())})
+		return nil
+	}))
 	r.Method("POST", "/logout", httpx.Handler(s.handleLogout))
 	r.Method("GET", "/me", httpx.Handler(s.handleMe))
 	r.Method("DELETE", "/me", httpx.Handler(s.handleDeleteMe))

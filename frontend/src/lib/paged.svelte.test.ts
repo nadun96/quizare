@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 
-// A fake server: 53 rows, paged as the Go page package does.
+// A fake server: 53 rows (3 under /api/few), paged as the Go page package does.
 const calls: string[] = [];
 vi.mock('./api', () => ({
 	api: {
@@ -12,7 +12,7 @@ vi.mock('./api', () => ({
 			const page = Number(u.searchParams.get('page'));
 			const size = Number(u.searchParams.get('size'));
 			const q = u.searchParams.get('q') ?? '';
-			const all = Array.from({ length: 53 }, (_, i) => ({ id: i + 1, name: `Row ${i + 1}` })).filter((r) => r.name.includes(q));
+			const all = Array.from({ length: path.startsWith('/api/few') ? 3 : 53 }, (_, i) => ({ id: i + 1, name: `Row ${i + 1}` })).filter((r) => r.name.includes(q));
 			if (u.searchParams.get('dir') === 'desc') all.reverse();
 			return { rows: all.slice((page - 1) * size, page * size), total: all.length, page, size };
 		}
@@ -121,6 +121,22 @@ describe('Pager', () => {
 		expect(target.textContent).toContain('51–53 of 53');
 		expect(target.querySelector<HTMLButtonElement>('[aria-label="Next page"]')!.disabled).toBe(true);
 		expect(target.querySelector('nav')!.getAttribute('aria-label')).toBe('Rows pages');
+		unmount(c);
+		target.remove();
+	});
+
+	test('says nothing under a list that fits on one page, unless it was searched', async () => {
+		const few = new Paged<{ id: number }>(() => '/api/few', 'rows');
+		await few.load();
+		const target = document.createElement('div');
+		document.body.append(target);
+		const c = mount(Pager, { target, props: { list: few, label: 'Rows' } });
+		flushSync();
+		expect(target.textContent?.trim()).toBe('');
+		few.q = 'Row';
+		await few.load();
+		flushSync();
+		expect(target.textContent).toContain('1–3 of 3');
 		unmount(c);
 		target.remove();
 	});
