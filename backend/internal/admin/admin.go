@@ -69,7 +69,7 @@ func (s *Service) Usage(ctx context.Context) (Usage, error) {
 	since := time.Now().Add(-30 * 24 * time.Hour)
 	err := s.pool.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM content.classrooms),
-		(SELECT count(*) FROM quiz.quizzes),
+		(SELECT count(*) FROM quiz.quizzes WHERE kind = 'quiz'),
 		(SELECT count(*) FROM live.sessions),
 		(SELECT count(*) FROM live.sessions WHERE created_at >= $1),
 		(SELECT count(*) FROM live.sessions WHERE status <> 'ended'),

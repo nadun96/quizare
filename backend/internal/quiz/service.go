@@ -41,8 +41,12 @@ type Quiz struct {
 	Effective        *settings.Effective `json:"effective,omitempty"`
 	QuestionCount    int                 `json:"question_count"`
 	TotalMarks       float64             `json:"total_marks"`
-	CreatedAt        time.Time           `json:"created_at"`
-	UpdatedAt        time.Time           `json:"updated_at"`
+	// Kind is "quiz", or "bank" for a teacher's question bank (no topic, D-66).
+	Kind string `json:"kind"`
+	// Pools: how many questions each student draws from each category (D-66).
+	Pools     []PoolRule `json:"pools"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // Topics is the slice of the content module the quiz module needs.
@@ -134,18 +138,22 @@ func (s *Service) CreateQuiz(ctx context.Context, teacherID, topicID string, in 
 	return s.GetQuiz(ctx, teacherID, id)
 }
 
-const quizCols = `q.id, q.topic_id, q.teacher_id, q.title, q.description, q.status, q.warnings_accepted, q.settings, q.created_at, q.updated_at,
-	(SELECT count(*) FROM quiz.questions x WHERE x.quiz_id=q.id), (SELECT coalesce(sum(marks),0) FROM quiz.questions x WHERE x.quiz_id=q.id)`
+const quizCols = `q.id, coalesce(q.topic_id::text, ''), q.teacher_id, q.title, q.description, q.status, q.warnings_accepted, q.settings, q.created_at, q.updated_at,
+	(SELECT count(*) FROM quiz.questions x WHERE x.quiz_id=q.id), (SELECT coalesce(sum(marks),0) FROM quiz.questions x WHERE x.quiz_id=q.id), q.kind, q.pools`
 
 func scanQuiz(r pgx.Row) (Quiz, error) {
 	var q Quiz
-	var raw []byte
+	var raw, pools []byte
 	err := r.Scan(&q.ID, &q.TopicID, &q.TeacherID, &q.Title, &q.Description, &q.Status, &q.WarningsAccepted, &raw,
-		&q.CreatedAt, &q.UpdatedAt, &q.QuestionCount, &q.TotalMarks)
+		&q.CreatedAt, &q.UpdatedAt, &q.QuestionCount, &q.TotalMarks, &q.Kind, &pools)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return q, httpx.ErrNotFound
 	}
 	if err != nil {
+		return q, err
+	}
+	q.Pools = []PoolRule{}
+	if err := json.Unmarshal(pools, &q.Pools); err != nil {
 		return q, err
 	}
 	q.Settings, err = settings.Parse(raw)
@@ -170,6 +178,10 @@ func (s *Service) GetQuiz(ctx context.Context, teacherID, id string) (Quiz, erro
 // QuizLayers returns the settings layers down to quiz level, in merge order,
 // on top of the teacher base.
 func (s *Service) QuizLayers(ctx context.Context, q Quiz) (settings.Effective, []settings.Overrides, error) {
+	if q.Kind == KindBank {
+		base, err := s.settings.Base(ctx, q.TeacherID)
+		return base, []settings.Overrides{q.Settings}, err
+	}
 	tc, err := s.topics.TopicContext(ctx, q.TeacherID, q.TopicID)
 	if err != nil {
 		return settings.Effective{}, nil, err
@@ -241,6 +253,9 @@ func (s *Service) UpdateQuiz(ctx context.Context, teacherID, id string, in QuizI
 // DeleteQuiz deletes a quiz, or archives it when sessions have results (BR-16).
 // It reports whether the quiz was archived instead.
 func (s *Service) DeleteQuiz(ctx context.Context, teacherID, id string) (archived bool, err error) {
+	if s.isBank(ctx, id) {
+		return false, errBankNotAQuiz
+	}
 	if _, err := s.GetQuiz(ctx, teacherID, id); err != nil {
 		return false, err
 	}
@@ -265,8 +280,21 @@ func (s *Service) Readiness(ctx context.Context, teacherID, id string) (blocking
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(qs) == 0 {
+	qz, err := s.GetQuiz(ctx, teacherID, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	fromBank := false
+	for _, r := range qz.Pools {
+		fromBank = fromBank || r.Source == SourceBank
+	}
+	if len(qs) == 0 && !fromBank {
 		blocking = append(blocking, "add at least one question")
+	}
+	if problems, err := s.poolProblems(ctx, teacherID, qz); err != nil {
+		return nil, nil, err
+	} else {
+		blocking = append(blocking, problems...)
 	}
 	for _, q := range qs {
 		if errs := q.Validate(); len(errs) > 0 {
@@ -283,6 +311,9 @@ func (s *Service) Readiness(ctx context.Context, teacherID, id string) (blocking
 
 // SetStatus moves a quiz between draft and ready.
 func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string, acceptWarnings bool) (Quiz, error) {
+	if s.isBank(ctx, id) {
+		return Quiz{}, errBankNotAQuiz
+	}
 	switch status {
 	case StatusReady:
 		blocking, warnings, err := s.Readiness(ctx, teacherID, id)
@@ -312,12 +343,12 @@ func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string, a
 
 // ---------- questions ----------
 
-const questionCols = `id, quiz_id, code, position, type, text, body, answer_key, feedback, marks, negative_marks, partial_credit, settings`
+const questionCols = `id, quiz_id, code, position, type, text, body, answer_key, feedback, marks, negative_marks, partial_credit, settings, category`
 
 func scanQuestion(r pgx.Row) (Question, error) {
 	var q Question
 	var body, key, fb, st []byte
-	err := r.Scan(&q.ID, &q.QuizID, &q.Code, &q.Position, &q.Type, &q.Text, &body, &key, &fb, &q.Marks, &q.NegativeMarks, &q.PartialCredit, &st)
+	err := r.Scan(&q.ID, &q.QuizID, &q.Code, &q.Position, &q.Type, &q.Text, &body, &key, &fb, &q.Marks, &q.NegativeMarks, &q.PartialCredit, &st, &q.Category)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return q, httpx.ErrNotFound
 	}
@@ -429,10 +460,10 @@ func validated(q *Question) error {
 }
 
 func insertQuestion(ctx context.Context, tx pgx.Tx, quizID string, q *Question) error {
-	err := tx.QueryRow(ctx, `INSERT INTO quiz.questions(quiz_id, code, position, type, text, body, answer_key, feedback, marks, negative_marks, partial_credit, settings)
-		VALUES ($1,$2,(SELECT coalesce(max(position)+1,0) FROM quiz.questions WHERE quiz_id=$1),$3,$4,$5,$6,$7,$8,$9,$10,$11)
+	err := tx.QueryRow(ctx, `INSERT INTO quiz.questions(quiz_id, code, position, type, text, body, answer_key, feedback, marks, negative_marks, partial_credit, settings, category)
+		VALUES ($1,$2,(SELECT coalesce(max(position)+1,0) FROM quiz.questions WHERE quiz_id=$1),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		RETURNING id, position`, quizID, q.Code, q.Type, q.Text, mustJSON(q.Body), mustJSON(q.Key), mustJSON(q.Feedback),
-		q.Marks, q.NegativeMarks, q.PartialCredit, q.Settings.JSON()).Scan(&q.ID, &q.Position)
+		q.Marks, q.NegativeMarks, q.PartialCredit, q.Settings.JSON(), q.Category).Scan(&q.ID, &q.Position)
 	if isUnique(err) {
 		return httpx.Invalid(map[string]string{"code": "question code " + q.Code + " already exists in this quiz"})
 	}
@@ -478,8 +509,8 @@ func (s *Service) UpdateQuestion(ctx context.Context, teacherID, id string, q Qu
 		return q, err
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE quiz.questions SET code=$2, type=$3, text=$4, body=$5, answer_key=$6, feedback=$7,
-		marks=$8, negative_marks=$9, partial_credit=$10, settings=$11, updated_at=now() WHERE id=$1`,
-		id, q.Code, q.Type, q.Text, mustJSON(q.Body), mustJSON(q.Key), mustJSON(q.Feedback), q.Marks, q.NegativeMarks, q.PartialCredit, q.Settings.JSON())
+		marks=$8, negative_marks=$9, partial_credit=$10, settings=$11, category=$12, updated_at=now() WHERE id=$1`,
+		id, q.Code, q.Type, q.Text, mustJSON(q.Body), mustJSON(q.Key), mustJSON(q.Feedback), q.Marks, q.NegativeMarks, q.PartialCredit, q.Settings.JSON(), q.Category)
 	if isUnique(err) {
 		return q, httpx.Invalid(map[string]string{"code": "question code " + q.Code + " already exists in this quiz"})
 	}

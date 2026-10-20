@@ -141,7 +141,7 @@ func TestOrdersNeverRevealAnswers(t *testing.T) {
 	}
 	for seed := uint64(0); seed < 200; seed++ {
 		rng := rand.New(rand.NewPCG(seed, seed))
-		order, opts := newOrders(qs, true, 0, func(quiz.Question) bool { return false }, rng)
+		order, opts := newOrders(qs, true, 0, nil, func(quiz.Question) bool { return false }, rng)
 		if len(order) != len(qs) {
 			t.Fatal("order length")
 		}
@@ -183,7 +183,7 @@ func TestDrawPicksASubset(t *testing.T) {
 	orders := map[string]bool{}
 	for seed := uint64(0); seed < 300; seed++ {
 		rng := rand.New(rand.NewPCG(seed, seed+1))
-		order, _ := newOrders(qs, false, 4, none, rng)
+		order, _ := newOrders(qs, false, 4, nil, none, rng)
 		if len(order) != 4 || !slices.IsSorted(order) {
 			t.Fatalf("draw of 4, fixed order: %v", order)
 		}
@@ -194,7 +194,7 @@ func TestDrawPicksASubset(t *testing.T) {
 			seenAll[i] = true
 		}
 		orders[fmt.Sprint(order)] = true
-		shuffled, _ := newOrders(qs, true, 4, none, rng)
+		shuffled, _ := newOrders(qs, true, 4, nil, none, rng)
 		if len(shuffled) != 4 {
 			t.Fatalf("draw of 4, shuffled: %v", shuffled)
 		}
@@ -204,8 +204,36 @@ func TestDrawPicksASubset(t *testing.T) {
 	}
 	// Drawing all of them, or more, is the whole quiz.
 	for _, n := range []int{0, 10, 25} {
-		if order, _ := newOrders(qs, false, n, none, rand.New(rand.NewPCG(1, 2))); len(order) != 10 {
+		if order, _ := newOrders(qs, false, n, nil, none, rand.New(rand.NewPCG(1, 2))); len(order) != 10 {
 			t.Fatalf("draw %d gave %d questions", n, len(order))
+		}
+	}
+}
+
+// D-66: pools draw their counts, keep categories without a rule, and leave
+// bank questions out unless a rule asks for them.
+func TestPoolOrder(t *testing.T) {
+	qs := []quiz.Question{
+		{ID: "e1", Category: "Easy"}, {ID: "e2", Category: "Easy"}, {ID: "e3", Category: "Easy"},
+		{ID: "x", Category: ""}, {ID: "h1", Category: "Hard"},
+		{ID: "b1", Category: "Plants", FromBank: true}, {ID: "b2", Category: "Plants", FromBank: true}, {ID: "b3", Category: "Other", FromBank: true},
+	}
+	rules := []quiz.PoolRule{{Source: "quiz", Category: "EASY", Count: 2}, {Source: "bank", Category: "plants", Count: 1}}
+	for seed := uint64(0); seed < 100; seed++ {
+		order := poolOrder(qs, rules, rand.New(rand.NewPCG(seed, 9)))
+		var easy, bank int
+		ids := map[string]bool{}
+		for _, i := range order {
+			ids[qs[i].ID] = true
+			if qs[i].Category == "Easy" {
+				easy++
+			}
+			if qs[i].FromBank {
+				bank++
+			}
+		}
+		if easy != 2 || bank != 1 || !ids["x"] || !ids["h1"] || ids["b3"] || !slices.IsSorted(order) {
+			t.Fatalf("seed %d: %v", seed, order)
 		}
 	}
 }
