@@ -2,6 +2,7 @@ package live
 
 import (
 	"math/rand/v2"
+	"slices"
 	"time"
 
 	"github.com/nadun96/quizplatform/internal/quiz"
@@ -165,12 +166,20 @@ func decide(policy string, allowedWarnings, warningsSoFar int) string {
 // newOrders builds a per-attempt question order and choice orders.
 // MATCH right-hand items and DRAG items are always shuffled, because their
 // authored order reveals the answer.
-func newOrders(questions []quiz.Question, shuffleQuestions bool, shuffleOptions func(q quiz.Question) bool, rng *rand.Rand) ([]int, map[string][]string) {
+// draw > 0 gives the student that many questions picked at random (D-65):
+// in the quiz's order, or shuffled when shuffleQuestions is set.
+func newOrders(questions []quiz.Question, shuffleQuestions bool, draw int, shuffleOptions func(q quiz.Question) bool, rng *rand.Rand) ([]int, map[string][]string) {
 	order := make([]int, len(questions))
 	for i := range order {
 		order[i] = i
 	}
-	if shuffleQuestions {
+	if draw > 0 && draw < len(order) {
+		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
+		order = order[:draw]
+		if !shuffleQuestions {
+			slices.Sort(order)
+		}
+	} else if shuffleQuestions {
 		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 	}
 	opts := map[string][]string{}

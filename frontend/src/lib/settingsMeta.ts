@@ -22,6 +22,8 @@ export type Meta = {
 	unit?: string;
 	/** int: 0 means "no limit". */
 	zeroIsNone?: boolean;
+	/** int: what 0 means instead, in a summary ("all"). */
+	zeroLabel?: string;
 	help?: string;
 };
 
@@ -63,6 +65,7 @@ export const SETTINGS: Meta[] = [
 	{ key: 'blur_grace_ms', short: 'Ignore under', label: 'Ignore leaving for less than', kind: 'int', unit: 'ms', section: 'integrity', levels: ['classroom', 'quiz', 'session'], help: 'Covers notifications and accidental taps.' },
 	{ key: 'disconnect_grace_sec', short: 'Reconnect', label: 'Time to reconnect', kind: 'int', unit: 's', section: 'integrity', levels: ['classroom', 'quiz', 'session'], help: 'A lost connection counts as leaving after this long.' },
 	{ key: 'question_order', short: 'Questions', label: 'Question order', kind: 'enum', section: 'questions', levels: ['quiz', 'session'], options: ORDER },
+	{ key: 'question_draw', short: 'Per student', label: 'Questions per student', kind: 'int', zeroLabel: 'all', section: 'questions', levels: ['quiz', 'session'], help: 'Each student gets this many, drawn at random from the quiz, so neighbours see different questions. 0 for all of them.' },
 	{ key: 'option_order', short: 'Options', label: 'Answer option order', kind: 'enum', section: 'questions', levels: ['quiz', 'question'], options: ORDER },
 	{ key: 'one_way_navigation', short: 'Going back', label: 'Going back to earlier questions', kind: 'bool', section: 'questions', levels: ['quiz'], on: 'Not allowed', off: 'Allowed', help: 'When allowed, students can also flag questions to come back to.' },
 	{ key: 'evaluation_method', short: 'Marking', label: 'Marking', kind: 'enum', section: 'marking', levels: ['teacher', 'quiz', 'question'], options: [
@@ -134,6 +137,7 @@ export function describe(m: Meta, v: Val): string {
 	if (v === undefined || v === '') return '';
 	if (m.kind === 'enum') return lower(m.options?.find((o) => o.v === v)?.label ?? String(v));
 	if (m.kind === 'bool') return lower((v ? m.on : m.off) ?? (v ? 'On' : 'Off'));
-	if (m.kind === 'int') return m.zeroIsNone && Number(v) === 0 ? 'no limit' : amount(Number(v), m.unit);
+	if (m.kind === 'int' && Number(v) === 0 && (m.zeroIsNone || m.zeroLabel)) return m.zeroLabel ?? 'no limit';
+	if (m.kind === 'int') return amount(Number(v), m.unit);
 	return String(v);
 }

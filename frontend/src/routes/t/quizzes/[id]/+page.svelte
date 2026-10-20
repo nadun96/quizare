@@ -162,7 +162,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 				<button class="btn btn-primary" onclick={() => setStatus('ready')} disabled={readiness.blocking.length > 0}>Mark Ready</button>
 			{/if}
 		</div>
-		<p class="muted small">{count(quiz.question_count, 'question')} · {count(quiz.total_marks, 'mark')}{#if quiz.effective?.quiz_time_limit_sec}{' · '}{Math.round(Number(quiz.effective.quiz_time_limit_sec) / 60)} min limit{/if}</p>
+		<p class="muted small">{count(quiz.question_count, 'question')} · {count(quiz.total_marks, 'mark')}{#if quiz.effective?.quiz_time_limit_sec}{' · '}{Math.round(Number(quiz.effective.quiz_time_limit_sec) / 60)} min limit{/if}{#if Number(quiz.effective?.question_draw) > 0 && Number(quiz.effective?.question_draw) < quiz.question_count}{' · '}each student gets {quiz.effective?.question_draw} at random{/if}</p>
 		{#each readiness.blocking as b (b)}<p class="alert alert-soft alert-error small">{b}</p>{/each}
 		{#each readiness.warnings as w (w)}<p class="alert alert-soft alert-warning small">{w}</p>{/each}
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}

@@ -1750,6 +1750,7 @@ components:
         blur_grace_ms: { type: integer, minimum: 0, description: 'classroom, quiz, session' }
         disconnect_grace_sec: { type: integer, minimum: 0, description: 'classroom, quiz, session' }
         question_order: { type: string, enum: [fixed, shuffled], description: 'quiz, session' }
+        question_draw: { type: integer, minimum: 0, maximum: 1000, description: 'quiz, session: questions each student gets, drawn at random (0 = all; D-65)' }
         option_order: { type: string, enum: [fixed, shuffled], description: 'quiz, question' }
         one_way_navigation: { type: boolean, description: 'quiz' }
         results_visibility: { type: string, enum: [private, public], description: 'quiz, session' }
@@ -2291,6 +2292,7 @@ components:
         type: { $ref: '#/components/schemas/QuestionType' }
         max_score: { type: number }
         answered: { type: integer }
+        shown: { type: integer, description: 'Students who got the question; fewer than all when they drew a subset (question_draw, D-65)' }
         pct_correct: { type: number }
         avg_score: { type: number }
         option_counts: { type: object, additionalProperties: { type: integer } }

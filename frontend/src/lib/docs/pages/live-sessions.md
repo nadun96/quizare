@@ -94,6 +94,7 @@ The server owns all time. Deadlines are `timestamptz`; the browser only renders 
 | Extension for one student (AC-08) | adds to `extension_sec` and shifts the deadline (or the remaining ms while paused) |
 | Session-wide extension | `sessions.extension_sec += x` and shifts every running attempt; later starters get it at `start()` |
 | No quiz limit | No deadline; the attempt ends at the last question or when the session ends (D-20) |
+| Random subset | With `question_draw` = N, each student's question order holds N questions drawn at random when they join (in the quiz's order unless `question_order` is `shuffled`). Everything per attempt follows that order: progress (`total`), marks, the attempt's maximum and percentage. Team maximums use the members' own questions (`TeamMaxScores`), and analytics count per question the students who got it (`shown`). Changing the setting during a session affects only students who join afterwards (D-65) |
 | Free navigation | If `one_way_navigation` is false, `Goto` is allowed and per-question limits are ignored (D-17) |
 | Flags | With free navigation, `Flag` marks a question to come back to (`live.attempts.flagged`); refused in one-way quizzes and once the attempt is over. Only the student sees them (D-61) |
 
