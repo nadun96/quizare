@@ -41,6 +41,8 @@ export type Question = StudentQuestion & {
 	negative_marks: number;
 	partial_credit: boolean;
 	settings: Overrides;
+	/** Puts the question in a pool (D-66); "" = none. */
+	category: string;
 };
 
 export type StudentState = {
@@ -90,7 +92,13 @@ export type Quiz = {
 	total_marks: number;
 	warnings_accepted: boolean;
 	created_at?: string;
+	/** "bank": the teacher's question bank (D-66). */
+	kind: 'quiz' | 'bank';
+	pools: PoolRule[];
 };
+export type PoolRule = { source: 'quiz' | 'bank'; category: string; count: number };
+export type PoolCount = { category: string; count: number; marks: number };
+export type PoolInfo = { pools: PoolRule[]; quiz: PoolCount[]; bank: PoolCount[]; bank_id: string };
 export type Session = { id: string; quiz_id: string; title: string; join_code: string; join_url: string; status: string; settings: Overrides; extension_sec: number; created_at: string; results_released_at?: string; started_at?: string };
 export type DashboardRow = {
 	attempt_id: string;

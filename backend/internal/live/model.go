@@ -40,6 +40,9 @@ type Snapshot struct {
 	Base      settings.Effective   `json:"base"`   // defaults → platform → teacher
 	Layers    []settings.Overrides `json:"layers"` // classroom, module, topic, quiz
 	Questions []quiz.Question      `json:"questions"`
+	// Pools: how many each student draws from each category (D-66); the
+	// bank questions they need are in Questions, marked FromBank.
+	Pools []quiz.PoolRule `json:"pools,omitempty"`
 }
 
 type Session struct {

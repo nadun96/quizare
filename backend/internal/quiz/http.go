@@ -37,6 +37,38 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("PUT", "/questions/{id}/resources", httpx.Handler(s.hSetResource))
 	r.Method("DELETE", "/resources/{id}", httpx.Handler(s.hDeleteResource))
 
+	// Question pools and the question bank (D-66).
+	r.Method("GET", "/bank", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		b, err := s.Bank(r.Context(), uid(r))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, b)
+		return nil
+	}))
+	r.Method("GET", "/quizzes/{id}/pools", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		info, err := s.Pools(r.Context(), uid(r), id(r))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, info)
+		return nil
+	}))
+	r.Method("PUT", "/quizzes/{id}/pools", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Pools []PoolRule `json:"pools"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		info, err := s.SetPools(r.Context(), uid(r), id(r), in.Pools)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, info)
+		return nil
+	}))
+
 	r.Get("/quiz-template.csv", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="quiz-template.csv"`)
@@ -161,6 +193,7 @@ type questionInput struct {
 	Marks         float64  `json:"marks"`
 	NegativeMarks float64  `json:"negative_marks"`
 	PartialCredit *bool    `json:"partial_credit"`
+	Category      string   `json:"category"` // D-66
 	Settings      struct {
 		QuestionTimeLimitSec *int    `json:"question_time_limit_sec"`
 		EvaluationMethod     *string `json:"evaluation_method"`
@@ -173,7 +206,7 @@ type questionInput struct {
 
 func (in questionInput) toQuestion() Question {
 	q := Question{Code: in.Code, Type: in.Type, Text: in.Text, Body: in.Body, Key: in.Key, Feedback: in.Feedback,
-		Marks: in.Marks, NegativeMarks: in.NegativeMarks}
+		Marks: in.Marks, NegativeMarks: in.NegativeMarks, Category: in.Category}
 	q.PartialCredit = DefaultPartialCredit(Type(strings.ToUpper(string(in.Type))))
 	if in.PartialCredit != nil {
 		q.PartialCredit = *in.PartialCredit

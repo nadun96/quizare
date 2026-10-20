@@ -31,7 +31,7 @@
 	type Link = { href: string; label: string };
 	const links = $derived<Link[]>(
 		auth.user?.role === 'teacher'
-			? [{ href: '/t', label: 'Classrooms' }, { href: '/t/polls', label: 'Polls' }, ...(tutoring ? [{ href: '/t/tutoring', label: 'Tutoring' }] : []), { href: '/t/settings', label: 'Settings' }, ...(auth.user.manager ? [{ href: '/admin', label: 'Manage' }] : [])]
+			? [{ href: '/t', label: 'Classrooms' }, { href: '/t/bank', label: 'Question bank' }, { href: '/t/polls', label: 'Polls' }, ...(tutoring ? [{ href: '/t/tutoring', label: 'Tutoring' }] : []), { href: '/t/settings', label: 'Settings' }, ...(auth.user.manager ? [{ href: '/admin', label: 'Manage' }] : [])]
 			: auth.user?.role === 'student'
 				? [{ href: '/my', label: 'My quizzes' }, { href: '/join', label: 'Join' }]
 				: auth.user?.role === 'admin'
@@ -40,7 +40,7 @@
 						? [{ href: '/admin', label: 'Manage' }]
 						: []
 	);
-	const current = (href: string) => page.url.pathname === href || (href !== '/t' && page.url.pathname.startsWith(href + '/')) || (href === '/t' && page.url.pathname.startsWith('/t/') && !page.url.pathname.startsWith('/t/settings') && !page.url.pathname.startsWith('/t/polls') && !page.url.pathname.startsWith('/t/tutoring'));
+	const current = (href: string) => page.url.pathname === href || (href !== '/t' && page.url.pathname.startsWith(href + '/')) || (href === '/t' && page.url.pathname.startsWith('/t/') && !page.url.pathname.startsWith('/t/settings') && !page.url.pathname.startsWith('/t/polls') && !page.url.pathname.startsWith('/t/bank') && !page.url.pathname.startsWith('/t/tutoring'));
 
 	// <details> menus are CSS-only; close them after a choice or navigation.
 	let menus: HTMLDetailsElement[] = $state([]);
