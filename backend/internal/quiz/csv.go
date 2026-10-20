@@ -21,7 +21,7 @@ const (
 var TemplateColumns = []string{
 	"question_code", "type", "question_text", "options", "correct_answer", "marks",
 	"time_limit_sec", "evaluation", "rubric", "feedback_correct", "feedback_incorrect",
-	"negative_marks", "partial_credit", "word_limit", "case_sensitive", "tolerance",
+	"negative_marks", "partial_credit", "word_limit", "case_sensitive", "tolerance", "category",
 }
 
 // Template is the downloadable CSV template, with one example per type.
@@ -198,7 +198,7 @@ func parseBool(s string) (bool, bool) {
 
 func questionFromRow(get func(string) string) (Question, map[string]string) {
 	f := map[string]string{}
-	q := Question{Code: get("question_code"), Type: Type(strings.ToUpper(get("type"))), Text: get("question_text")}
+	q := Question{Code: get("question_code"), Type: Type(strings.ToUpper(get("type"))), Text: get("question_text"), Category: get("category")}
 	q.PartialCredit = DefaultPartialCredit(q.Type)
 
 	num := func(col string, dst *float64) {

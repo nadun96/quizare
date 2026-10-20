@@ -104,6 +104,11 @@ type Question struct {
 	PartialCredit bool               `json:"partial_credit"`
 	Settings      settings.Overrides `json:"settings"` // question level: time limit, evaluation, LLM, feedback mode, option order
 	Resources     []Resource         `json:"resources"`
+	// Category groups questions into pools ("Easy", "Plants"); "" = none (D-66).
+	Category string `json:"category"`
+	// FromBank marks, in a session's snapshot, a question drawn in from the
+	// teacher's question bank by a pool (D-66).
+	FromBank bool `json:"from_bank,omitempty"`
 }
 
 // StudentQuestion is what the student's browser receives.
@@ -159,6 +164,7 @@ func BlankIDs(text string) []string {
 // Normalise trims text, assigns missing choice ids and derives blanks.
 func (q *Question) Normalise() {
 	q.Code = strings.TrimSpace(q.Code)
+	q.Category = strings.Join(strings.Fields(q.Category), " ")
 	q.Text = strings.TrimSpace(q.Text)
 	q.Type = Type(strings.ToUpper(strings.TrimSpace(string(q.Type))))
 	q.Body.Format = strings.ToLower(strings.TrimSpace(q.Body.Format))
@@ -206,6 +212,9 @@ func (q Question) Validate() map[string]string {
 	f := map[string]string{}
 	if !codeRe.MatchString(q.Code) {
 		f["code"] = "code must be 1-32 letters, digits, '_', '.', or '-'"
+	}
+	if len([]rune(q.Category)) > 60 {
+		f["category"] = "a category is at most 60 characters"
 	}
 	if !q.Type.Valid() {
 		f["type"] = "type must be one of SINGLE, MULTI, MATCH, BLANK_OPT, BLANK_TEXT, DRAG, ESSAY"

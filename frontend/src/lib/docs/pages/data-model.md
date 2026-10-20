@@ -19,6 +19,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0020_storage.sql` | Storage and backups (D-57): `storage.snapshots` (hourly sizes), `storage.limits`, `storage.backups` (history), `storage.download_links` (single-use, hashed) |
 | `0021_flags.sql` | `live.attempts.flagged`: question ids a student flagged to come back to (D-61) |
 | `0022_directory.sql` | School sign-in (D-64): `auth.users.auth_source` (`local` or `directory`), `directory_id` (the entry's objectGUID or entryUUID, unique) and `directory_dn`; the `directory` schema with one row of settings, the service account's password sealed like LLM keys |
+| `0023_pools.sql` | Question pools (D-66): `quiz.questions.category`; `quiz.quizzes.kind` (`quiz` or `bank`, one bank per teacher, a bank has no topic) and `pools` (rules: source, category, count) |
 | `0019_managers.sql` | Managers (D-56): `auth.managers` (features, who made them a manager and when, last activity), the `manager` role, `audit.events.actor_role` |
 | `0018_session_start.sql` | `live.sessions.started_at`: when the teacher started the quiz for everyone (`start_mode = teacher`, D-53) |
 | `0015_poll_board.sql` | Whiteboard: `poll.board_strokes`, board access columns on `poll.polls` |
