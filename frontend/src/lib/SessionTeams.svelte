@@ -102,7 +102,7 @@
 					</span>
 					<span class="text-right tabular">
 						<strong>{fmt(s.pct)}%</strong>
-						<span class="small muted block">{fmt(s.score)}/{fmt(s.max_score)} · {s.finished}/{s.members} done{#if !s.complete} · <span class="text-warning">marking</span>{/if}</span>
+						<span class="small muted block">{fmt(s.score)}/{fmt(s.max_score)} · {s.finished}/{s.members} done{#if !s.complete}{' · '}<span class="text-warning">marking</span>{/if}</span>
 					</span>
 				</li>
 			{/each}

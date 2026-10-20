@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { api, ApiError } from '$lib/api';
@@ -132,16 +133,23 @@
 						<td>{roleLabel(u)}</td>
 						<td><span class="badge badge-soft {u.status === 'active' ? 'ok' : u.status === 'suspended' ? 'danger' : 'warn'}">{u.status.replace('_', ' ')}</span></td>
 						<td class="small tabular">{u.created_at ? new Date(u.created_at).toLocaleDateString() : ''}</td>
-						<td class="row">
-							{#if canActOn(auth.user, u)}
-								{#if u.status === 'pending_approval'}<button class="btn btn-sm btn-primary" onclick={() => setStatus(u, 'active')}>Approve</button>
-								{:else if u.status === 'suspended'}<button class="btn btn-sm" onclick={() => setStatus(u, 'active')}>Activate</button>
-								{:else}<button class="btn btn-sm" onclick={() => setStatus(u, 'suspended')}>Suspend</button>{/if}
-								<button class="btn btn-sm btn-error btn-outline" onclick={() => del(u)}>Delete</button>
-							{/if}
-							{#if isAdmin(auth.user) && u.role === 'teacher' && u.status === 'active' && !u.manager}
-								<button class="btn btn-sm btn-ghost" onclick={() => makeManager(u)}>Make manager</button>
-							{/if}
+						<td>
+							<div class="flex items-center justify-end gap-1">
+								{#if canActOn(auth.user, u) && u.status === 'pending_approval'}<button class="btn btn-sm btn-primary" onclick={() => setStatus(u, 'active')}>Approve</button>{/if}
+								{#if canActOn(auth.user, u) || (isAdmin(auth.user) && u.role === 'teacher' && u.status === 'active' && !u.manager)}
+									<RowMenu hint="More actions for {u.name}" actions={[
+										...(isAdmin(auth.user) && u.role === 'teacher' && u.status === 'active' && !u.manager ? [{ label: 'Make manager', icon: 'users' as const, onclick: () => makeManager(u) }] : []),
+										...(canActOn(auth.user, u)
+											? [
+													u.status === 'suspended'
+														? { label: 'Activate', icon: 'check' as const, onclick: () => setStatus(u, 'active') }
+														: { label: 'Suspend', icon: 'pause' as const, onclick: () => setStatus(u, 'suspended') },
+													{ label: 'Delete account', icon: 'trash' as const, danger: true, onclick: () => del(u) }
+												]
+											: [])
+									]} />
+								{/if}
+							</div>
 						</td>
 					</tr>
 				{:else}<tr><td colspan="5" class="muted">{users.loaded ? (users.q ? `No users match “${users.q}”.` : 'No users.') : 'Loading…'}</td></tr>
@@ -178,7 +186,7 @@
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 			<table class="table"><thead><tr><th><SortHeader list={events} key="time" label="When" desc /></th><th>Who</th><th>Action</th><th>Target</th></tr></thead><tbody>
 				{#each events.rows as e (e.id)}
-					<tr><td class="small">{new Date(e.created_at).toLocaleString()}</td><td>{e.actor_name || 'system'}{#if e.actor_role === 'manager'} <span class="badge badge-soft badge-sm">manager</span>{/if}</td><td>{e.action.replaceAll('_', ' ')}</td><td class="small">{e.target_type} {e.target_id}</td></tr>
+					<tr><td class="small">{new Date(e.created_at).toLocaleString()}</td><td>{e.actor_name || 'system'}{#if e.actor_role === 'manager'}{' '}<span class="badge badge-soft badge-sm">manager</span>{/if}</td><td>{e.action.replaceAll('_', ' ')}</td><td class="small">{e.target_type} {e.target_id}</td></tr>
 				{:else}<tr><td colspan="4" class="muted">{events.loaded ? 'No events.' : 'Loading…'}</td></tr>
 				{/each}
 			</tbody></table>

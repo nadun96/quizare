@@ -103,7 +103,7 @@
 		<ul class="list">
 			{#each coteachers as c (c.user_id)}
 				<li>
-					<span class="dot" class:on={c.online}></span><span class="truncate name">{c.name}</span>{#if live(c)} <span class="badge badge-soft badge-xs">broadcasting</span>{/if}
+					<span class="dot" class:on={c.online}></span><span class="truncate name">{c.name}</span>{#if live(c)}{' '}<span class="badge badge-soft badge-xs">broadcasting</span>{/if}
 					<span class="spacer"></span>
 					{#if lead}
 						{#if live(c)}<button class="btn btn-xs" onclick={() => broadcast(null)}>Take back</button>
@@ -138,7 +138,7 @@
 			{#each students as p (p.user_id)}
 				<li>
 					<span class="dot" class:on={p.online} title={p.online ? 'Here' : 'Not connected'} aria-label={p.online ? 'Here' : 'Not connected'}></span>
-					<span class="truncate name">{p.name}{#if live(p)} <span class="badge badge-soft badge-xs">broadcasting</span>{/if}{#if p.chat_muted} <span class="badge badge-soft badge-xs">chat muted</span>{/if}</span>
+					<span class="truncate name">{p.name}{#if live(p)}{' '}<span class="badge badge-soft badge-xs">broadcasting</span>{/if}{#if p.chat_muted}{' '}<span class="badge badge-soft badge-xs">chat muted</span>{/if}</span>
 					<span class="spacer"></span>
 					<label class="tog" title="Microphone"><input type="checkbox" class="toggle toggle-xs" checked={p.allow_mic} onchange={(e) => allow([p.user_id], { mic: e.currentTarget.checked })} /> Mic</label>
 					<label class="tog" title="Camera"><input type="checkbox" class="toggle toggle-xs" checked={p.allow_camera} onchange={(e) => allow([p.user_id], { camera: e.currentTarget.checked })} /> Cam</label>
