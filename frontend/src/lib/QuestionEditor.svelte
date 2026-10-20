@@ -4,7 +4,7 @@
 	import { QTYPES, QTYPE_LABEL, type QType, type Question } from './types';
 	import RichTextEditor from './richtext/RichTextEditor.svelte';
 
-	let { quizId, question = null, onsaved, oncancel }: { quizId: string; question?: Question | null; onsaved: (q: Question) => void; oncancel: () => void } = $props();
+	let { quizId, question = null, onsaved, oncancel, categories = [] }: { quizId: string; question?: Question | null; onsaved: (q: Question) => void; oncancel: () => void; categories?: string[] } = $props();
 
 	type Row = { text: string; correct: boolean; zone: string };
 	// The form is seeded once; the parent re-keys this component per question.
@@ -14,6 +14,7 @@
 	let type = $state<QType>(q?.type ?? 'SINGLE');
 	let text = $state(q?.text ?? '');
 	let marks = $state(q?.marks ?? 1);
+	let category = $state(q?.category ?? '');
 	let negative = $state(q?.negative_marks ?? 0);
 	let partial = $state<boolean | null>(q ? q.partial_credit : null);
 	let timeLimit = $state<number | ''>((q?.settings?.question_time_limit_sec as number) ?? '');
@@ -98,7 +99,7 @@
 		if (timeLimit !== '' && Number(timeLimit) > 0) settings.question_time_limit_sec = Number(timeLimit);
 		if (evaluation) settings.evaluation_method = evaluation;
 		return {
-			code, type, text, body, key, marks: Number(marks), negative_marks: Number(negative) || 0,
+			code, type, text, body, key, category: category.trim(), marks: Number(marks), negative_marks: Number(negative) || 0,
 			...(partial === null ? {} : { partial_credit: partial }),
 			feedback: { correct: fbCorrect, incorrect: fbIncorrect, options: q?.feedback?.options, bands: q?.feedback?.bands },
 			settings
@@ -134,6 +135,9 @@
 		<div style="flex:1;min-width:12rem"><label for="type">Type</label>
 			<select class="select w-full" id="type" bind:value={type} disabled={!!q}>{#each QTYPES as t (t)}<option value={t}>{QTYPE_LABEL[t]}</option>{/each}</select></div>
 		<div style="width:7rem"><label for="marks">Marks</label><input class="input w-full" id="marks" type="number" min="0.25" step="0.25" bind:value={marks} /></div>
+		<div style="width:12rem"><label for="category">Category</label><input class="input w-full" id="category" list="category-list" maxlength="60" bind:value={category} placeholder="e.g. Easy, Plants" aria-describedby="category-hint" />
+			<datalist id="category-list">{#each categories as c (c)}<option value={c}></option>{/each}</datalist>
+			<span class="small muted" id="category-hint">Optional. Pools draw by category.</span></div>
 	</div>
 	<div>
 		<label for="text">Question text</label>

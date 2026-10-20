@@ -30,6 +30,7 @@ type Quizzes interface {
 	GetQuiz(ctx context.Context, teacherID, id string) (quiz.Quiz, error)
 	QuizLayers(ctx context.Context, q quiz.Quiz) (settings.Effective, []settings.Overrides, error)
 	ListQuestions(ctx context.Context, teacherID, quizID string) ([]quiz.Question, error)
+	SessionQuestions(ctx context.Context, teacherID string, q quiz.Quiz) ([]quiz.Question, error)
 }
 
 // Classrooms is the slice of the content module this module needs.
@@ -122,6 +123,9 @@ func (s *Service) CreateSession(ctx context.Context, teacherID, quizID string, i
 	if err != nil {
 		return nil, err
 	}
+	if qz.Kind == quiz.KindBank {
+		return nil, httpx.NewError(http.StatusConflict, "question_bank", "the question bank isn't a quiz: draw from it through a quiz's pools")
+	}
 	if qz.Status != quiz.StatusReady {
 		return nil, httpx.NewError(http.StatusConflict, "quiz_not_ready", "mark the quiz as Ready before starting a session")
 	}
@@ -136,14 +140,14 @@ func (s *Service) CreateSession(ctx context.Context, teacherID, quizID string, i
 	if err != nil {
 		return nil, err
 	}
-	qs, err := s.quizzes.ListQuestions(ctx, teacherID, quizID)
+	qs, err := s.quizzes.SessionQuestions(ctx, teacherID, qz)
 	if err != nil {
 		return nil, err
 	}
 	if len(qs) == 0 {
 		return nil, httpx.NewError(http.StatusConflict, "quiz_not_ready", "the quiz has no questions")
 	}
-	snap := &Snapshot{QuizTitle: qz.Title, Base: base, Layers: layers, Questions: qs}
+	snap := &Snapshot{QuizTitle: qz.Title, Base: base, Layers: layers, Questions: qs, Pools: qz.Pools}
 	sess := &Session{QuizID: quizID, TeacherID: teacherID, ClassroomID: tc.ClassroomID, Status: SessionOpen, Snapshot: snap}
 	sess.Title = strings.TrimSpace(in.Title)
 	if sess.Title == "" {
@@ -540,7 +544,7 @@ func (s *Service) Join(ctx context.Context, userID, code, studentNumber, teamID 
 		return nil, err
 	}
 	rng := mrand.New(mrand.NewPCG(mrand.Uint64(), mrand.Uint64()))
-	order, opts := newOrders(v.Snapshot.Questions, eff.QuestionOrder == "shuffled", eff.QuestionDraw, func(q quiz.Question) bool {
+	order, opts := newOrders(v.Snapshot.Questions, eff.QuestionOrder == "shuffled", eff.QuestionDraw, v.Snapshot.Pools, func(q quiz.Question) bool {
 		return v.Effective(&q, settings.Overrides{}).OptionOrder == "shuffled"
 	}, rng)
 	order32 := make([]int32, len(order))

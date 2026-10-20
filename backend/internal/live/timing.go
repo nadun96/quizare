@@ -3,6 +3,7 @@ package live
 import (
 	"math/rand/v2"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/nadun96/quizplatform/internal/quiz"
@@ -167,13 +168,20 @@ func decide(policy string, allowedWarnings, warningsSoFar int) string {
 // MATCH right-hand items and DRAG items are always shuffled, because their
 // authored order reveals the answer.
 // draw > 0 gives the student that many questions picked at random (D-65):
-// in the quiz's order, or shuffled when shuffleQuestions is set.
-func newOrders(questions []quiz.Question, shuffleQuestions bool, draw int, shuffleOptions func(q quiz.Question) bool, rng *rand.Rand) ([]int, map[string][]string) {
+// in the quiz's order, or shuffled when shuffleQuestions is set. Pools, when
+// the quiz has any, decide instead (D-66): every quiz question whose category
+// has no rule, plus each rule's count drawn from its category.
+func newOrders(questions []quiz.Question, shuffleQuestions bool, draw int, pools []quiz.PoolRule, shuffleOptions func(q quiz.Question) bool, rng *rand.Rand) ([]int, map[string][]string) {
 	order := make([]int, len(questions))
 	for i := range order {
 		order[i] = i
 	}
-	if draw > 0 && draw < len(order) {
+	if len(pools) > 0 {
+		order = poolOrder(questions, pools, rng)
+		if shuffleQuestions {
+			rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
+		}
+	} else if draw > 0 && draw < len(order) {
 		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 		order = order[:draw]
 		if !shuffleQuestions {
@@ -248,4 +256,40 @@ func applyOrder(q quiz.Question, ids []string) quiz.StudentQuestion {
 		v.Body.Options = reorder(v.Body.Options)
 	}
 	return v
+}
+
+// poolOrder picks a student's questions from the pools, in snapshot order
+// (the quiz's questions, then the bank's).
+func poolOrder(questions []quiz.Question, pools []quiz.PoolRule, rng *rand.Rand) []int {
+	key := func(fromBank bool, category string) string {
+		src := quiz.SourceQuiz
+		if fromBank {
+			src = quiz.SourceBank
+		}
+		return src + "|" + strings.ToLower(category)
+	}
+	groups := map[string][]int{}
+	for i, q := range questions {
+		k := key(q.FromBank, q.Category)
+		groups[k] = append(groups[k], i)
+	}
+	ruled := map[string]bool{}
+	var picked []int
+	for _, r := range pools {
+		k := r.Source + "|" + strings.ToLower(r.Category)
+		ruled[k] = true
+		g := append([]int(nil), groups[k]...)
+		if r.Count > 0 && r.Count < len(g) {
+			rng.Shuffle(len(g), func(i, j int) { g[i], g[j] = g[j], g[i] })
+			g = g[:r.Count]
+		}
+		picked = append(picked, g...)
+	}
+	for i, q := range questions {
+		if !q.FromBank && !ruled[key(false, q.Category)] {
+			picked = append(picked, i) // a category without a rule: always asked
+		}
+	}
+	slices.Sort(picked)
+	return slices.Compact(picked)
 }

@@ -48,7 +48,7 @@ Classrooms, modules, topics and enrolments (FR-CLS).
 `categories.go` holds student categories (V2-03, D-41): CRUD, bulk assignment limited to the classroom's own enrolments, and `CategoryMembers` for forming groups.
 ## quiz (schema `quiz`)
 
-Quizzes, questions, resources and CSV formats (FR-QZ, BA §10).
+Quizzes, questions, resources and CSV formats (FR-QZ, BA §10). `pools.go` holds question categories, pool rules and each teacher's question bank (D-66): the bank is a quiz of kind `bank` with no topic, so it reuses questions, import, resources and preview; it can't be marked ready, run or deleted. `SessionQuestions` gives a new session the quiz's questions plus the bank questions its pools need (`FromBank`, codes prefixed `B-`).
 
 - `question.go`: the type model (`Body`, `Key`, `Feedback`), `Normalise` (assigns choice ids, derives blanks from `[[n]]`), `Validate` (per-type rules) and `StudentView` (drops key, feedback and rubric).
 - `csv.go`: `ParseQuestionsCSV` (row-level errors with real line numbers; 2 MB / 1000-row limit), `ParseResourcesCSV`, `ParseResourceName`, and the downloadable `Template`.

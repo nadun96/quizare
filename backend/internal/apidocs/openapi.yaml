@@ -661,6 +661,33 @@ paths:
       responses:
         '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } }
         '409': { description: '`quiz_not_ready` or `quiz_has_warnings`', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/teacher/bank:
+    get:
+      operationId: getTeacherBank
+      tags: [quizzes]
+      summary: Your question bank (created on first use, D-66)
+      description: A quiz of kind `bank` with no topic. Add, edit and import its questions with the quiz question routes; quizzes draw from it through pools. It can't be marked ready, run as a session or deleted.
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } } }
+  /api/teacher/quizzes/{id}/pools:
+    get:
+      operationId: getTeacherQuizPools
+      tags: [quizzes]
+      summary: A quiz's pool rules and the categories it can draw from (D-66)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PoolInfo' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+    put:
+      operationId: putTeacherQuizPools
+      tags: [quizzes]
+      summary: Replace a quiz's pool rules
+      description: Each rule draws `count` questions (0 = all) from one category of the quiz or of your bank. Quiz questions in a category without a rule are always asked. Rules are checked against what the quiz and bank hold when the quiz is marked ready and when a session starts.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { pools: { type: array, items: { $ref: '#/components/schemas/PoolRule' } } } } } } }
+      responses:
+        '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/PoolInfo' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
   /api/teacher/quizzes/{id}/readiness:
     get:
       operationId: getTeacherQuizzesReadiness
@@ -1835,11 +1862,29 @@ components:
         student_id_required: { type: boolean }
         enrolment: { oneOf: [{ $ref: '#/components/schemas/Enrolment' }, { type: 'null' }] }
 
+    PoolRule:
+      type: object
+      properties:
+        source: { type: string, enum: [quiz, bank] }
+        category: { type: string, description: 'Empty = questions without a category' }
+        count: { type: integer, minimum: 0, maximum: 1000, description: '0 = all of them' }
+    PoolInfo:
+      type: object
+      properties:
+        pools: { type: array, items: { $ref: '#/components/schemas/PoolRule' } }
+        quiz: { type: array, items: { $ref: '#/components/schemas/PoolCount' } }
+        bank: { type: array, items: { $ref: '#/components/schemas/PoolCount' } }
+        bank_id: { type: string, format: uuid }
+    PoolCount:
+      type: object
+      properties: { category: { type: string }, count: { type: integer }, marks: { type: number } }
     Quiz:
       type: object
       properties:
         id: { type: string, format: uuid }
-        topic_id: { type: string, format: uuid }
+        kind: { type: string, enum: [quiz, bank], description: '`bank`: a teacher''s question bank (D-66)' }
+        pools: { type: array, items: { $ref: '#/components/schemas/PoolRule' } }
+        topic_id: { type: string, description: 'Empty for a question bank' }
         teacher_id: { type: string, format: uuid }
         title: { type: string }
         description: { type: string }
@@ -1943,6 +1988,8 @@ components:
         id: { type: string, format: uuid }
         quiz_id: { type: string, format: uuid }
         code: { type: string }
+        category: { type: string, maxLength: 60, description: 'Puts the question in a pool (D-66); empty = none' }
+        from_bank: { type: boolean, description: 'In a session snapshot: drawn from the question bank' }
         position: { type: integer }
         type: { $ref: '#/components/schemas/QuestionType' }
         text: { type: string }
