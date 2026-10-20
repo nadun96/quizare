@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { count } from '$lib/words';
 	// The student's live quiz (UC-03). The server owns all state and timers;
 	// this page renders whatever state it is sent and reports changes back.
 	// Layout and feedback follow the UX research (D-39): progress, visible
@@ -315,7 +316,7 @@
 			{/if}
 			<div class="q-meta">
 				<span class="font-semibold">Question {st.index + 1} <span class="muted font-normal">of {st.total}</span></span>
-				<span class="muted">· {st.question.marks} mark{st.question.marks === 1 ? '' : 's'}</span>
+				<span class="muted">· {count(st.question.marks, 'mark')}</span>
 				{#if answeredCount != null}<span class="muted">· {answeredCount} answered</span>{/if}
 				{#if !st.one_way && st.flagged}
 					<button class="btn btn-sm btn-ghost flag-btn gap-1" class:on={curFlagged} aria-pressed={curFlagged} disabled={flagging} onclick={toggleFlag}>

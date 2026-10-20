@@ -28,7 +28,8 @@
 			<IconBtn icon="chevrons-right" label="Last page" class="btn-sm btn-ghost" disabled={last || list.loading} onclick={() => list.goTo(list.pages)} />
 		</span>
 	</nav>
-{:else if list.loaded && list.total > 0}
+{:else if list.loaded && list.total > 0 && list.q}
+	<!-- One page: the count only says something after a search ("3 of 3" under three rows doesn't). -->
 	<p class="small muted tabular m-0" aria-live="polite">{list.range}</p>
 {/if}
 

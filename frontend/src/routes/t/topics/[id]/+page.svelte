@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { count } from '$lib/words';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
@@ -60,7 +61,7 @@
 					{#each quizzes.rows as q (q.id)}
 						<tr>
 							<td><a href={'/t/quizzes/' + q.id}>{q.title}</a></td>
-							<td>{q.question_count} ({q.total_marks} marks)</td>
+							<td>{q.question_count} ({count(q.total_marks, 'mark')})</td>
 							<td><span class="badge badge-soft {q.status === 'ready' ? 'ok' : ''}">{q.status}</span></td>
 							<td class="small tabular">{q.created_at ? new Date(q.created_at).toLocaleDateString() : ''}</td>
 						</tr>
