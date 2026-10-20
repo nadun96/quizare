@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { SETTINGS } from '$lib/settingsMeta';
+	import OptionGroup from '$lib/ui/OptionGroup.svelte';
 	import { count } from '$lib/words';
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -185,15 +187,21 @@
 				{#if !ended}
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 						<strong>Session settings</strong>
-						<div><label for="cd">Countdown (seconds)</label><input class="input w-full" id="cd" type="number" min="0" bind:value={countdown} placeholder="inherit" /></div>
-						<div><label for="adm">Admission</label><select class="select w-full" id="adm" bind:value={admission}><option value="">Inherit</option><option value="manual">I admit students</option><option value="auto">Admit automatically</option></select></div>
-						<div><label for="sm">Quiz start</label><select class="select w-full" id="sm" bind:value={startMode}><option value="">Inherit</option><option value="countdown">Countdown starts when admitted</option><option value="teacher">I press Start</option></select>
-							<p class="small muted m-0 mt-1">{(startMode || d.start_mode) === 'teacher' ? 'Admitted students wait until you press Start, then the countdown runs.' : 'Each student’s countdown starts as soon as they’re admitted.'}</p></div>
-						<div><label for="tm">Teams</label><select class="select w-full" id="tm" bind:value={teamMode}><option value="">Inherit</option><option value="off">No teams</option><option value="manual">I put students in teams</option><option value="random">At random as they join</option><option value="categories">From classroom categories</option><option value="self">Students choose</option></select></div>
+						<div><label for="cd">Countdown before the first question</label><label class="input input-sm w-36"><input id="cd" type="number" min="0" bind:value={countdown} placeholder="Default" /><span class="muted">s</span></label></div>
+						{#snippet pick(key: string, label: string, val: string, setv: (v: string) => void, fallback?: string)}
+							<div class="grid gap-1">
+								<span class="small font-semibold">{label}</span>
+								<OptionGroup {label} options={SETTINGS.find((m) => m.key === key)?.options ?? []} value={val || undefined} {fallback} onchange={setv} />
+								{#if val}<button type="button" class="link link-hover small justify-self-start" onclick={() => setv('')}>Use the default</button>{/if}
+							</div>
+						{/snippet}
+						{@render pick('admission_mode', 'Letting students in', admission, (v) => (admission = v))}
+						{@render pick('start_mode', 'Starting the quiz', startMode, (v) => (startMode = v), d.start_mode)}
+						{@render pick('team_mode', 'Teams', teamMode, (v) => (teamMode = v))}
 						{#if (teamMode || teamsOn) && teamMode !== 'off'}
-							<div><label for="ta">Team marks count</label><select class="select w-full" id="ta" bind:value={teamAcceptance}><option value="">Inherit</option><option value="all">Every member's marks</option><option value="first">First answer per question</option><option value="captain">Captain's marks</option><option value="best">Best mark per question</option></select></div>
+							{@render pick('team_acceptance', 'Which marks count', teamAcceptance, (v) => (teamAcceptance = v))}
 							{#if (teamAcceptance || 'all') === 'all'}
-								<div><label for="tc">Combine members by</label><select class="select w-full" id="tc" bind:value={teamCalc}><option value="">Inherit</option><option value="sum">Total</option><option value="average">Average (skips count as 0)</option><option value="max">Highest</option><option value="min">Lowest</option></select></div>
+								{@render pick('team_calc', 'Combine marks by', teamCalc, (v) => (teamCalc = v))}
 							{/if}
 						{/if}
 						<button class="btn btn-sm" onclick={saveSessionSettings}>Save</button>
