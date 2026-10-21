@@ -43,7 +43,7 @@ All seven quiz types plus thirteen poll inputs (20 in all). The participant UI r
 |-------|-------|-------|---------|
 | Choice | `SINGLE` (radios or dropdown), `MULTI` (optional max) | Letter tiles, dropdown | Bars with shares |
 | Scale | `RATING` (3–10 stars), `SLIDER`, `LIKERT` (5 or 7 points, many statements), `MATRIX` (radios, checkboxes or text boxes) | Accessible radio groups, a range that only counts once moved, tables that become cards on phones | Histogram with mean and median; diverging stacked bars; heat grid |
-| Text | `WORD_CLOUD` (1–5 entries), `SHORT_TEXT`, `ESSAY`, `CODE` | Chips, inputs, a code editor (Tab indents; Esc then Tab leaves) | Live word cloud (size by count, each word in its own colour from the categorical palette, made readable on the current theme: 3:1 for large words, 4.5:1 for small ones; D-67); answer cards |
+| Text | `WORD_CLOUD` (1–5 entries), `SHORT_TEXT`, `ESSAY`, `CODE` | Chips, inputs, a code editor (Tab indents; Esc then Tab leaves) | Live word cloud (size by count, each word in its own colour from the categorical palette, made readable on the current theme: 3:1 for words of 24 px and up, 4.5:1 for smaller ones; D-67; set in a condensed face so more words fit, D-68); answer cards |
 | Number & time | `NUMBER` (range, step, unit), `DATE`, `TIME` | Native pickers | Histogram; values in order |
 | Quiz-style | `MATCH`, `BLANK_OPT`, `BLANK_TEXT`, `DRAG` (rank or sort into boxes) | As in quizzes | Heat grid; word list per blank; average rank |
 | Media | `FILE`, `AUDIO`, `VIDEO` | Drop zone; in-browser recording (MediaRecorder) | Teacher-only players and downloads |
