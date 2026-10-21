@@ -1,12 +1,13 @@
 // Colours for the word cloud (D-67): the categorical palette (validated for
 // colour-blind separation), with each colour's lightness nudged until it
-// reads on the current theme's background. Large bold words need 3:1, small
+// reads on the current theme's background. Large words need 3:1, smaller
 // ones 4.5:1 (WCAG 1.4.3). A word's colour comes from the word itself, so it
 // keeps its colour while counts change and words move.
 import { readableOn } from '../ui/colors.js';
 
-/** Bold text at or above this size counts as large text (14 pt). */
-export const LARGE_TEXT_PX = 19;
+/** Large text for WCAG: 18 pt (24 px). The cloud's semibold (600) isn't
+ * "bold", so the 14 pt bold threshold doesn't apply (D-68). */
+export const LARGE_TEXT_PX = 24;
 
 export type CloudPalette = { large: string[]; small: string[] };
 
