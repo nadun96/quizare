@@ -13,6 +13,8 @@ export class LiveSocket {
 	connected = false;
 	onMessage: (m: Message) => void = () => {};
 	onStatus: (connected: boolean) => void = () => {};
+	/** Asked when the server closes the connection: false stops reconnecting (a code the server means as final). */
+	shouldReconnect: (code: number) => boolean = () => true;
 
 	constructor(
 		private path: string,
@@ -48,10 +50,10 @@ export class LiveSocket {
 			if (typeof m.server_time === 'number') this.clock.hint(m.server_time);
 			this.onMessage(m);
 		};
-		ws.onclose = () => {
+		ws.onclose = (ev) => {
 			this.stopPing();
 			this.setConnected(false);
-			if (!this.closed) this.scheduleReconnect();
+			if (!this.closed && this.shouldReconnect(ev.code)) this.scheduleReconnect();
 		};
 		ws.onerror = () => ws.close();
 	}

@@ -57,6 +57,8 @@ tags:
     description: WebSockets and beacons
   - name: polls
     description: Live polls, anonymous or identified (D-40)
+  - name: meetings
+    description: Peer-to-peer video meetings (D-69); the server only passes the set-up messages
 
 paths:
   /healthz:
@@ -439,6 +441,52 @@ paths:
       tags: [tutoring]
       summary: A 5-minute signed token naming the logged-in person, for the tutoring service (ADR-23, TS-NFR-52)
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { token: { type: string }, expires_at: { type: string, format: date-time }, url: { type: string, format: uri } } } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '404': { description: 'Tutoring is off' } }
+
+  /api/teacher/meetings:
+    get:
+      operationId: getTeacherMeetings
+      tags: [meetings]
+      summary: Your meetings, newest first, with how many people are in each now (D-69)
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: sort, in: query, schema: { type: string, enum: [created, title, status] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer }, page: { type: integer }, size: { type: integer }, meetings: { type: array, items: { $ref: '#/components/schemas/Meeting' } } } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    post:
+      operationId: postTeacherMeetings
+      tags: [meetings]
+      summary: Open a meeting (D-69)
+      description: With a classroom, only you and its enrolled students may join; without one, anyone signed in who has the code.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [title], properties: { title: { type: string, maxLength: 120 }, classroom_id: { type: string, format: uuid, nullable: true }, max_people: { type: integer, minimum: 2, maximum: 8, default: 6, description: 'Everyone sends to everyone, so meetings stay small' } } } } } }
+      responses: { '201': { description: 'Opened', content: { application/json: { schema: { $ref: '#/components/schemas/Meeting' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/meetings/{id}/end:
+    post:
+      operationId: postTeacherMeetingsEnd
+      tags: [meetings]
+      summary: End a meeting for everyone (D-69)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Ended' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/meetings/{id}/attendance:
+    get:
+      operationId: getTeacherMeetingsAttendance
+      tags: [meetings]
+      summary: Who came to a meeting, when, how often, and who is in it now (D-69)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { attendance: { type: array, items: { $ref: '#/components/schemas/MeetingAttendance' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/meetings/{code}:
+    get:
+      operationId: getMeetingsByCode
+      tags: [meetings]
+      summary: Check you may join a meeting, and get its ICE servers (D-69)
+      parameters: [{ $ref: '#/components/parameters/code' }]
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/MeetingAccess' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: 'The meeting is for one classroom (`not_in_classroom`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { description: 'The meeting has ended (`meeting_ended`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /internal/tutoring/access:
     post:
@@ -1540,6 +1588,18 @@ paths:
       description: Server → client `results` (a `PollTeacherResults`) on connect and at most every 500 ms while changing; `deleted`; `pong`.
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '101': { description: 'Switching protocols' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /ws/meet/{code}:
+    get:
+      operationId: getWsMeetByCode
+      tags: [realtime, meetings]
+      summary: Meeting signalling WebSocket (upgrade; D-69)
+      description: |
+        Same checks as `GET /api/meetings/{code}`; a full meeting closes with code 4009. Media goes browser to browser, never here.
+        Server → client: `welcome` (`you`, `peers`, `ice_servers`, `meeting`), `joined` (`peer`), `left` (`peer_id`),
+        `signal` (`from`, `data`), `state` (`peer_id`, `mic`, `cam`, `screen`, `hand`), `removed`, `replaced` (you joined from another tab), `ended`, `pong`.
+        Client → server: `ping`, `signal` (`to`, `data`: an SDP description or ICE candidate), `state`, and for the host `remove` (`peer_id`) and `end`.
+      parameters: [{ $ref: '#/components/parameters/code' }]
+      responses: { '101': { description: 'Switching protocols' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '410': { $ref: '#/components/responses/Gone' } }
   /beacon/attempts/{id}/violations:
     post:
       operationId: postBeaconAttemptsViolations
@@ -1599,6 +1659,35 @@ components:
       content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
 
   schemas:
+    Meeting:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        host_id: { type: string, format: uuid }
+        host_name: { type: string }
+        title: { type: string }
+        code: { type: string, example: K7Q2XM3P }
+        classroom_id: { type: string, format: uuid, nullable: true }
+        max_people: { type: integer }
+        status: { type: string, enum: [open, ended] }
+        created_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        online: { type: integer, description: 'People in the meeting now' }
+    MeetingAccess:
+      type: object
+      properties:
+        meeting: { $ref: '#/components/schemas/Meeting' }
+        host: { type: boolean }
+        ice_servers: { type: array, description: 'For RTCPeerConnection; TURN credentials expire after 6 hours', items: { type: object, properties: { urls: { type: array, items: { type: string } }, username: { type: string }, credential: { type: string } } } }
+    MeetingAttendance:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        name: { type: string }
+        first_joined: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        joins: { type: integer }
+        online: { type: boolean }
     Error:
       type: object
       required: [code, message]
