@@ -4,11 +4,12 @@
 	import { flyIn } from '$lib/ui/motion';
 
 	let code = $state('');
-	let kind = $state<'session' | 'classroom' | 'poll'>('session');
+	let kind = $state<'session' | 'classroom' | 'poll' | 'meeting'>('session');
+	const PREFIX = { session: '/j/', poll: '/p/', classroom: '/c/', meeting: '/m/' };
 	function submit(e: SubmitEvent) {
 		e.preventDefault();
 		const c = code.trim().toUpperCase();
-		if (c) goto((kind === 'session' ? '/j/' : kind === 'poll' ? '/p/' : '/c/') + encodeURIComponent(c));
+		if (c) goto(PREFIX[kind] + encodeURIComponent(c));
 	}
 </script>
 
@@ -20,6 +21,7 @@
 			<button type="button" role="radio" aria-checked={kind === 'session'} class="btn join-item flex-1" class:btn-primary={kind === 'session'} onclick={() => (kind = 'session')}>A quiz</button>
 			<button type="button" role="radio" aria-checked={kind === 'poll'} class="btn join-item flex-1" class:btn-primary={kind === 'poll'} onclick={() => (kind = 'poll')}>A poll</button>
 			<button type="button" role="radio" aria-checked={kind === 'classroom'} class="btn join-item flex-1" class:btn-primary={kind === 'classroom'} onclick={() => (kind = 'classroom')}>A classroom</button>
+			<button type="button" role="radio" aria-checked={kind === 'meeting'} class="btn join-item flex-1" class:btn-primary={kind === 'meeting'} onclick={() => (kind = 'meeting')}>A meeting</button>
 		</div>
 		<div>
 			<label for="code">Code from your teacher</label>
