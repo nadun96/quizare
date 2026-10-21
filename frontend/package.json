@@ -2,7 +2,7 @@
   "name": "quizplatform-frontend",
   "private": true,
   "license": "MIT",
-  "version": "2.7.1",
+  "version": "2.7.2",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -28,6 +28,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@fontsource/fira-sans-extra-condensed": "5.3.0",
     "@tiptap/core": "^3.31.4",
     "@tiptap/extension-mathematics": "^3.31.4",
     "@tiptap/extension-table": "^3.31.4",

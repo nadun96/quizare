@@ -10,7 +10,7 @@ These are requirements, not preferences:
 |--------|-------------|--------------------------|
 | NFR-13 | Student flow works on mobile browsers without an app | Design for a phone first; the teacher console must still work on a tablet |
 | NFR-14 | WCAG 2.1 AA for teacher and student screens | Contrast of at least 4.5:1 for text and 3:1 for UI parts, visible focus, information never shown by colour alone |
-| NFR-09 | Question load under 1.5 s on 4G | No web fonts or icon fonts, no JavaScript UI framework on the student path, and CSS kept small |
+| NFR-09 | Question load under 1.5 s on 4G | No web fonts or icon fonts, no JavaScript UI framework on the student path, and CSS kept small. One exception: poll word clouds use a condensed face (Fira Sans Extra Condensed, Latin semibold, 25 KB), loaded only on pages that show a cloud (D-68) |
 | FR-PR-01, UC-03 | Full screen, one question at a time, with its timer | The quiz screen has no site navigation; the timer is always available |
 | NFR-11 | Answers saved on every change | Saving must be visible, so students trust it |
 
