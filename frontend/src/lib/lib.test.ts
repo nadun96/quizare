@@ -187,4 +187,24 @@ describe('LiveSocket', () => {
 		expect(Math.abs(s.clock.serverNow() - Date.now() - 60_000)).toBeLessThan(1000);
 		s.close();
 	});
+
+	it('stops reconnecting when the server closes for good', () => {
+		vi.useFakeTimers();
+		const made: any[] = [];
+		const s = new LiveSocket('/ws/x', undefined, () => {
+			const f: any = { readyState: 1, send: vi.fn(), close: vi.fn() };
+			made.push(f);
+			return f;
+		});
+		s.shouldReconnect = (code) => code < 4000;
+		s.open();
+		made[0].onclose({ code: 1006 });
+		vi.advanceTimersByTime(1000);
+		expect(made.length).toBe(2);
+		made[1].onclose({ code: 4009 });
+		vi.advanceTimersByTime(20_000);
+		expect(made.length).toBe(2);
+		s.close();
+		vi.useRealTimers();
+	});
 });
