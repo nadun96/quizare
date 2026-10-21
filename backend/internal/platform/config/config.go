@@ -32,6 +32,13 @@ type Config struct {
 	// TutoringSecretGenerate creates the shared secret file on first start
 	// (containers; QP_TUTORING_SECRET_GENERATE=1), as QP_KEK_GENERATE does.
 	TutoringSecretGenerate bool
+	// Peer-to-peer meetings (D-69): STUN servers browsers use to find each
+	// other across networks (QP_MEET_STUN, comma-separated; "none" for none),
+	// and an optional TURN relay for networks where direct connections fail
+	// (QP_MEET_TURN_URLS, with the coturn shared secret in QP_MEET_TURN_SECRET_FILE).
+	MeetSTUN           []string
+	MeetTURNURLs       []string
+	MeetTURNSecretFile string
 	DBMaxConns             int32 // pgx pool size; architecture budget is 15
 	Argon2Workers          int   // bounded hashing pool; architecture budget is 2
 	DevMode                bool  // relaxes nothing security-critical; enables verbose logs and console email
@@ -63,6 +70,9 @@ func FromEnv() (Config, error) {
 		TutoringURL:            os.Getenv("QP_TUTORING_URL"),
 		TutoringSecretFile:     os.Getenv("QP_TUTORING_SECRET_FILE"),
 		TutoringSecretGenerate: os.Getenv("QP_TUTORING_SECRET_GENERATE") == "1",
+		MeetSTUN:               meetSTUN(os.Getenv("QP_MEET_STUN")),
+		MeetTURNURLs:           splitList(os.Getenv("QP_MEET_TURN_URLS")),
+		MeetTURNSecretFile:     os.Getenv("QP_MEET_TURN_SECRET_FILE"),
 		DBMaxConns:             int32(envInt("QP_DB_MAX_CONNS", 15)),
 		Argon2Workers:          envInt("QP_ARGON2_WORKERS", 2),
 		DevMode:                os.Getenv("QP_DEV") == "1",
@@ -115,6 +125,28 @@ func list(v string) []string {
 	for _, s := range strings.Split(v, ",") {
 		if s = strings.TrimSpace(s); s != "" {
 			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// meetSTUN: a public STUN server unless set; "none" turns STUN off (calls
+// then connect only on the same network, or through TURN).
+func meetSTUN(v string) []string {
+	switch strings.TrimSpace(v) {
+	case "":
+		return []string{"stun:stun.l.google.com:19302"}
+	case "none":
+		return nil
+	}
+	return splitList(v)
+}
+
+func splitList(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
 		}
 	}
 	return out

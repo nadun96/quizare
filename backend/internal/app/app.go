@@ -28,6 +28,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
+	"github.com/nadun96/quizplatform/internal/meet"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
@@ -60,6 +61,7 @@ type App struct {
 	Poll      *poll.Service
 	Storage   *storage.Service
 	Directory *directory.Service // school sign-in (D-64)
+	Meet      *meet.Service      // peer-to-peer meetings (D-69)
 	Tutor     *tutorlink.Service // nil when tutoring is off
 }
 
@@ -199,6 +201,9 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	}
 	a.LLM = llm.NewService(pool, vault, providers, rc, a.Live, a.Eval, log)
 	a.Directory = directory.NewService(pool, vault, a.Auth, log)
+	if a.Meet, err = meet.NewService(pool, a.Content, a.Auth, cfg.BaseURL, meet.Options{STUN: cfg.MeetSTUN, TURNURLs: cfg.MeetTURNURLs, TURNSecretFile: cfg.MeetTURNSecretFile}, log); err != nil {
+		return nil, err
+	}
 	directoryWorker.Service = a.Directory
 	llmWorker.Service = a.LLM
 	a.Eval.SetLLM(a.LLM)
@@ -261,12 +266,14 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.LLM.TeacherRoutes(t)
 			a.Analytics.TeacherRoutes(t)
 			a.Poll.TeacherRoutes(t)
+			a.Meet.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
 			a.Content.StudentRoutes(s)
 			a.Admin.UserRoutes(s)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
+			a.Meet.UserRoutes(s)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole(auth.RoleStudent))
@@ -279,6 +286,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		ws.Use(a.Auth.Middleware)
 		a.Live.WSRoutes(ws)
 		a.Poll.WSRoutes(ws)
+		a.Meet.WSRoutes(ws)
 	})
 	// The tutoring service's calls (D-59); not under /api, so not public.
 	r.Route("/internal/tutoring", tutorlink.InternalRoutes(a.Tutor))
