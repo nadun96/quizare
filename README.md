@@ -90,7 +90,18 @@ npm run check && npm test
 npm run dev            # http://localhost:5173, proxies /api, /ws and /beacon to :8080
 ```
 
-Run the server locally. Everything below runs from `backend/`, the Go module. The master key is read from a 32-byte file, never from an environment variable (ADR-09); `QP_KEK_GENERATE=1` creates it on first start and never overwrites it.
+**Quick start on Windows:** two scripts do all of this in the background, with logs in `local\logs`:
+
+```powershell
+.\scripts\start-local.ps1              # database, build, server: http://localhost:8080
+.\scripts\start-local.ps1 -Build       # also rebuild the frontend
+.\scripts\start-local.ps1 -Tutoring    # also LiveKit and the tutoring service (needs local\ set up)
+.\scripts\stop-local.ps1               # stop everything; -KeepDatabase leaves PostgreSQL running
+```
+
+The app uses the `qp_demo` database by default (`-Database qp_dev` for another); it's created if missing. Running the start script again restarts the server on the new build. If PowerShell refuses to run scripts, use `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1`.
+
+To do it by hand: everything below runs from `backend/`, the Go module. The master key is read from a 32-byte file, never from an environment variable (ADR-09); `QP_KEK_GENERATE=1` creates it on first start and never overwrites it.
 
 ```sh
 # Terminal 1: a local PostgreSQL on port 54329 with a qp_dev database (or use your own PostgreSQL)
