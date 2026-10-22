@@ -25,6 +25,19 @@ Without `QP_TEST_DATABASE_URL`, each test package starts its own embedded server
 
 ## Run the app locally
 
+**Quick start on Windows:** two scripts do all of this in the background, with logs in `local\logs`:
+
+```powershell
+.\scripts\start-local.ps1              # database, build, server: http://localhost:8080
+.\scripts\start-local.ps1 -Build       # also rebuild the frontend
+.\scripts\start-local.ps1 -Tutoring    # also LiveKit and the tutoring service (needs local\ set up)
+.\scripts\stop-local.ps1               # stop everything; -KeepDatabase leaves PostgreSQL running
+```
+
+The app uses the `qp_demo` database by default (`-Database qp_dev` for another); it's created if missing. Running the start script again restarts the server on the new build. If PowerShell refuses to run scripts, use `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1`.
+
+Or step by step:
+
 1. Start PostgreSQL. `go run ./cmd/testdb` (from `backend/`, left running) starts an embedded PostgreSQL 16 on port 54329 and creates a `qp_dev` database for the app; the test databases are separate. Or point `QP_DATABASE_URL` at your own server.
 
 2. Start the backend from `backend/`. It migrates the database on start. The master key is read from a file, never from an environment variable (ADR-09); `QP_KEK_GENERATE=1` creates it on first start and never overwrites it:
