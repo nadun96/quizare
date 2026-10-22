@@ -129,6 +129,10 @@ Copy the new binary and `systemctl restart quiz`. Migrations run on start; each 
 - **Host:** `free` and `vmstat`. Watch for swap-in; the architecture's pass criteria are a Go heap under 400 MB and fewer than 25 Postgres connections.
 - **Admin console:** usage counts and job-queue states.
 
+## CI/CD
+
+To build, test and deploy every push with Jenkins and other open-source tools, see [CI/CD with Jenkins](ci-jenkins.md).
+
 ## Configuration reference
 
 See [Getting started](getting-started.md#configuration). For a deployment that shouldn't expose the API description, set `QP_API_DOCS=0`.
