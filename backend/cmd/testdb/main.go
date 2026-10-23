@@ -3,6 +3,7 @@
 // and it also provides a qp_dev database for running the app.
 //
 //	go run ./cmd/testdb            # leave running in a terminal
+//	go run ./cmd/testdb qp_demo    # also create (if missing) the databases named
 //	QP_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:54329/postgres?sslmode=disable go test ./...
 //	QP_DATABASE_URL=postgres://postgres:postgres@localhost:54329/qp_dev?sslmode=disable go run ./cmd/server
 //
@@ -59,8 +60,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "start:", err)
 		os.Exit(1)
 	}
-	if err := ensureDatabase(context.Background(), adminURL, devDB); err != nil {
-		fmt.Fprintln(os.Stderr, "create "+devDB+":", err)
+	for _, name := range append([]string{devDB}, os.Args[1:]...) {
+		if err := ensureDatabase(context.Background(), adminURL, name); err != nil {
+			fmt.Fprintln(os.Stderr, "create "+name+":", err)
+		}
 	}
 	fmt.Println("QP_TEST_DATABASE_URL=" + adminURL)
 	fmt.Println("QP_DATABASE_URL=postgres://postgres:postgres@localhost:54329/" + devDB + "?sslmode=disable")
