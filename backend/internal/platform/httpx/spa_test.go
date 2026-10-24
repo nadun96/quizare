@@ -13,12 +13,19 @@ func TestSPA(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>app</html>"), 0o644)
 	os.MkdirAll(filepath.Join(dir, "_app", "immutable"), 0o755)
 	os.WriteFile(filepath.Join(dir, "_app", "immutable", "x.js"), []byte("js"), 0o644)
+	os.WriteFile(filepath.Join(dir, "_app", "immutable", "pdf.worker.mjs"), []byte("worker"), 0o644)
 	h := SPA(dir)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/_app/immutable/x.js", nil))
 	if rec.Body.String() != "js" || !strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
 		t.Fatalf("asset: %q %v", rec.Body, rec.Header())
+	}
+	// Module scripts are JavaScript, or browsers won't run them (pdf.js's worker).
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/_app/immutable/pdf.worker.mjs", nil))
+	if rec.Body.String() != "worker" || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/javascript") {
+		t.Fatalf("module script: %q %v", rec.Body, rec.Header())
 	}
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/t/quizzes/123", nil))

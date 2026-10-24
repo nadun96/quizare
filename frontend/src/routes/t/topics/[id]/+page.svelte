@@ -12,6 +12,7 @@
 	import Pager from '$lib/ui/Pager.svelte';
 	import SortHeader from '$lib/ui/SortHeader.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
+	import type { Presentation } from '$lib/presentation/presentation';
 	import type { Tutorial } from '$lib/tutorial/tutorial';
 
 	type Detail = Topic & { classroom_id: string; classroom_name: string; module_name: string };
@@ -31,6 +32,15 @@
 		topic = await api.get<Detail>('/api/teacher/topics/' + id);
 		await quizzes.load();
 		tutorials = (await api.get<{ tutorials: Tutorial[] }>('/api/teacher/topics/' + id + '/tutorials')).tutorials;
+		presentations = (await api.get<{ presentations: Presentation[] }>('/api/teacher/topics/' + id + '/presentations')).presentations;
+	}
+	// Presentations (D-76).
+	let presentations = $state<Presentation[]>([]);
+	let presentationTitle = $state('');
+	async function createPresentation(e: SubmitEvent) {
+		e.preventDefault();
+		const p = await api.post<Presentation>('/api/teacher/topics/' + id + '/presentations', { title: presentationTitle });
+		goto('/t/presentations/' + p.id);
 	}
 	async function createTutorial(e: SubmitEvent) {
 		e.preventDefault();
@@ -107,6 +117,28 @@
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={createTutorial}>
 			<input class="input w-full" style="flex:1" bind:value={tutorialTitle} placeholder="New tutorial title" required maxlength="200" aria-label="Tutorial title" />
 			<button class="btn btn-primary">Create tutorial</button>
+		</form>
+		<h2 class="mb-0 flex items-center gap-2"><Icon name="monitor" size={20} />Presentations</h2>
+		<p class="small muted m-0">Slides from a PDF that students go through at their own pace. You see who saw which slides, and for how long.</p>
+		{#if presentations.length}
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+				<table class="table">
+					<thead><tr><th>Presentation</th><th>Slides</th><th>Status</th></tr></thead>
+					<tbody>
+						{#each presentations as p (p.id)}
+							<tr>
+								<td><a href={'/t/presentations/' + p.id}>{p.title}</a></td>
+								<td class="tabular">{p.slide_count || '—'}</td>
+								<td><span class="badge badge-soft" class:ok={p.status === 'published'}>{p.status === 'published' ? 'Published' : 'Draft'}</span></td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={createPresentation}>
+			<input class="input w-full" style="flex:1" bind:value={presentationTitle} placeholder="New presentation title" required maxlength="200" aria-label="Presentation title" />
+			<button class="btn btn-primary">Create presentation</button>
 		</form>
 		<details class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
 			<summary><strong>Topic settings</strong></summary>
