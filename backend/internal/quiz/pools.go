@@ -17,8 +17,9 @@ import (
 // question bank. A quiz question whose category has no rule is always asked.
 
 const (
-	KindQuiz = "quiz"
-	KindBank = "bank"
+	KindQuiz     = "quiz"
+	KindBank     = "bank"
+	KindTutorial = "tutorial" // a tutorial's questions (D-74)
 
 	SourceQuiz = "quiz"
 	SourceBank = "bank"
@@ -31,12 +32,23 @@ type PoolRule struct {
 	Count    int    `json:"count"`
 }
 
-var errBankNotAQuiz = httpx.NewError(http.StatusConflict, "question_bank", "the question bank isn't a quiz: draw from it through a quiz's pools")
+var (
+	errBankNotAQuiz     = httpx.NewError(http.StatusConflict, "question_bank", "the question bank isn't a quiz: draw from it through a quiz's pools")
+	errTutorialNotAQuiz = httpx.NewError(http.StatusConflict, "tutorial_questions", "these are a tutorial's questions: change the tutorial instead")
+)
 
-func (s *Service) isBank(ctx context.Context, id string) bool {
+// notAQuiz refuses what only a quiz can do (pools, status, deleting) for the
+// question bank and for a tutorial's questions.
+func (s *Service) notAQuiz(ctx context.Context, id string) error {
 	var kind string
 	_ = s.pool.QueryRow(ctx, `SELECT kind FROM quiz.quizzes WHERE id=$1`, id).Scan(&kind)
-	return kind == KindBank
+	switch kind {
+	case KindBank:
+		return errBankNotAQuiz
+	case KindTutorial:
+		return errTutorialNotAQuiz
+	}
+	return nil
 }
 
 // Bank returns the teacher's question bank, creating it on first use.
@@ -141,8 +153,8 @@ func (s *Service) SetPools(ctx context.Context, teacherID, quizID string, rules 
 	if err != nil {
 		return PoolInfo{}, err
 	}
-	if s.isBank(ctx, quizID) {
-		return PoolInfo{}, errBankNotAQuiz
+	if err := s.notAQuiz(ctx, quizID); err != nil {
+		return PoolInfo{}, err
 	}
 	tag, err := s.pool.Exec(ctx, `UPDATE quiz.quizzes SET pools=$3, updated_at=now() WHERE id=$1 AND teacher_id=$2`, quizID, teacherID, mustJSON(rules))
 	if err != nil {

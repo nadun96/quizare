@@ -39,6 +39,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 	"github.com/nadun96/quizplatform/internal/storage"
+	"github.com/nadun96/quizplatform/internal/tutorial"
 	"github.com/nadun96/quizplatform/internal/tutorlink"
 	"github.com/nadun96/quizplatform/migrations"
 )
@@ -66,6 +67,7 @@ type App struct {
 	Meet      *meet.Service      // peer-to-peer meetings (D-69)
 	OIDC      *oidc.Service      // sign-in with OpenID Connect providers (D-70)
 	Drive     *drive.Service     // teachers' Google Drive (D-71)
+	Tutorial  *tutorial.Service  // interactive tutorials (D-74)
 	Tutor     *tutorlink.Service // nil when tutoring is off
 }
 
@@ -240,6 +242,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Analytics.SetPolls(a.Poll)
 	a.Drive = drive.NewService(pool, vault, a.Auth, a.Content, a.Quiz, driveResults{a}, rc, cfg.BaseURL, opt.Google, opt.HTTPClient, log)
 	driveBackup.Service, driveSync.Service = a.Drive, a.Drive
+	a.Tutorial = tutorial.NewService(pool, a.Content, a.Quiz, a.Auth)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -293,6 +296,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Poll.TeacherRoutes(t)
 			a.Meet.TeacherRoutes(t)
 			a.Drive.TeacherRoutes(t)
+			a.Tutorial.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
@@ -305,6 +309,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole(auth.RoleStudent))
 			a.Live.StudentRoutes(s)
+			a.Tutorial.StudentRoutes(s)
 			a.Eval.StudentRoutes(s)
 		})
 	})
