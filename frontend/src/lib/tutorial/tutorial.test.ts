@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, changed, checkpointNote, CHECKPOINTS, emptyBlock, FEEDBACK, fromLocalInput, move, progressText, toLocalInput, type QuestionView } from './tutorial';
+import { BLOCKS, changed, checkpointNote, CHECKPOINTS, duration, emptyBlock, FEEDBACK, fromLocalInput, LEAVING, leavingNote, move, progressText, toLocalInput, type QuestionView } from './tutorial';
 
 const q = (id: string, more: Partial<QuestionView> = {}): QuestionView => ({ id, code: id, type: 'SINGLE', text: '', body: {}, marks: 1, resources: [], checked: false, locked: false, tries: 0, ...more });
 
@@ -50,5 +50,23 @@ describe('tutorials', () => {
 		expect(FEEDBACK.map((f) => f.v)).toEqual(['page', 'end', 'release']);
 		expect(emptyBlock('text')).toEqual({ type: 'text', text: '' });
 		expect(emptyBlock('video').url).toBe('');
+	});
+
+	it('tells students about leaving the app before they do', () => {
+		const p = { leaving: 'allowed' as const, lock_after: 0, leaves: 0, locked: false };
+		expect(leavingNote(p)).toBe('');
+		expect(leavingNote({ ...p, leaving: 'recorded' })).toMatch(/recorded for your teacher/);
+		expect(leavingNote({ ...p, leaving: 'blocked' })).not.toMatch(/locks/);
+		expect(leavingNote({ ...p, leaving: 'blocked', lock_after: 3 })).toMatch(/After 3 times, the page locks\./);
+		expect(leavingNote({ ...p, leaving: 'blocked', lock_after: 3, leaves: 2 })).toMatch(/\(1 left\)/);
+		expect(leavingNote({ ...p, leaving: 'blocked', lock_after: 1, locked: true })).toMatch(/^This page is locked/);
+		expect(LEAVING.map((l) => l.v)).toEqual(['allowed', 'recorded', 'blocked']);
+	});
+
+	it('writes durations briefly', () => {
+		expect(duration(undefined)).toBe('—');
+		expect(duration(45)).toBe('45 s');
+		expect(duration(185)).toBe('3 min 05 s');
+		expect(duration(4800)).toBe('1 h 20 min');
 	});
 });

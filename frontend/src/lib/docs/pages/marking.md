@@ -90,6 +90,8 @@ Without partial credit, anything short of fully correct scores 0. With `negative
 
 Jobs are unique by `(teacher, attempt, question, mode, key, model)` while queued or running, so a re-enqueue cannot bill twice. The worker overrides River's 1-minute default with a 120 s `Timeout`.
 
+**Tutorials** (D-75) use the same keys, prompt, checks and retries through their own job, `llm_tutorial_mark`. A written answer waits while the AI marks it, and the student's page looks again every few seconds. The mark is stored only if the answer is still the one marked. Without a usable key, or when marking fails, the answer waits for the teacher, flagged with the reason.
+
 ## Review and overrides
 
 `GET /api/teacher/sessions/{id}/results` lists every finished attempt with its marks, responses and keys. `PUT /api/teacher/marks/{attempt}/{question} {score?, feedback?}` sets status `overridden`, is audited, and recomputes totals. Re-evaluation and late AI results never replace an override; the teacher is the final authority. `POST …/remark` re-queues LLM marking (FR-EV-09).

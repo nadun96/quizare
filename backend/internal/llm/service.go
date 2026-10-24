@@ -45,6 +45,7 @@ type Service struct {
 	attempts  Attempts
 	marks     Marks
 	log       *slog.Logger
+	tutorials Tutorials
 	// NFR-16 / R6: per-teacher call rate limit, a simple circuit breaker
 	// that protects teachers' quotas during bulk marking.
 	limiter *auth.Limiter
@@ -396,7 +397,11 @@ func answerText(q quiz.Question, r *quiz.Response) string {
 }
 
 func buildRequest(d *live.MarkingData, it live.MarkingItem, feedbackOnly bool) GradeRequest {
-	q := it.Question
+	return gradeRequest(pseudonym(d.AttemptID), it.Question, it.Response, feedbackOnly)
+}
+
+// gradeRequest is what the provider reads about one answer.
+func gradeRequest(who string, q quiz.Question, resp *quiz.Response, feedbackOnly bool) GradeRequest {
 	model := q.Key.ModelAnswer
 	if model == "" && q.Type == quiz.BlankText {
 		var parts []string
@@ -406,8 +411,8 @@ func buildRequest(d *live.MarkingData, it live.MarkingItem, feedbackOnly bool) G
 		model = strings.Join(parts, "\n")
 	}
 	// Scrub here, at the boundary, so no adapter ever holds personal data (ADR-16).
-	return GradeRequest{Pseudonym: pseudonym(d.AttemptID), QuestionType: q.Type, Question: q.Text, ModelAnswer: model,
-		Rubric: q.Key.Rubric, Answer: Scrub(answerText(q, it.Response)), MaxScore: q.Marks, FeedbackOnly: feedbackOnly, WantsFeedback: true}
+	return GradeRequest{Pseudonym: who, QuestionType: q.Type, Question: q.Text, ModelAnswer: model,
+		Rubric: q.Key.Rubric, Answer: Scrub(answerText(q, resp)), MaxScore: q.Marks, FeedbackOnly: feedbackOnly, WantsFeedback: true}
 }
 
 type Worker struct {
@@ -419,21 +424,29 @@ type Worker struct {
 func (w *Worker) Timeout(*river.Job[MarkArgs]) time.Duration { return 120 * time.Second }
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[MarkArgs]) error {
-	err := w.Service.Process(ctx, job.Args.LLMRequest)
+	return settle(w.Service.Process(ctx, job.Args.LLMRequest), job.Attempt >= job.MaxAttempts, func(reason string) error {
+		return w.Service.marks.LLMFailed(ctx, job.Args.AttemptID, job.Args.QuestionID, job.Args.Mode, reason)
+	})
+}
+
+// settle turns a provider call's outcome into the job's: done, cancelled
+// (failing the answer over to the teacher), snoozed, or retried; the last
+// try fails it over too.
+func settle(err error, lastTry bool, fail func(reason string) error) error {
 	var perm *PermanentError
 	switch {
 	case err == nil:
 		return nil
 	case errors.As(err, &perm):
-		if ferr := w.Service.marks.LLMFailed(ctx, job.Args.AttemptID, job.Args.QuestionID, job.Args.Mode, perm.Reason); ferr != nil {
+		if ferr := fail(perm.Reason); ferr != nil {
 			return ferr
 		}
 		return river.JobCancel(err)
 	case errors.Is(err, errRateLimited):
 		return river.JobSnooze(15 * time.Second)
 	default:
-		if job.Attempt >= job.MaxAttempts {
-			if ferr := w.Service.marks.LLMFailed(ctx, job.Args.AttemptID, job.Args.QuestionID, job.Args.Mode, truncate(err.Error(), 200)); ferr != nil {
+		if lastTry {
+			if ferr := fail(truncate(err.Error(), 200)); ferr != nil {
 				return ferr
 			}
 		}

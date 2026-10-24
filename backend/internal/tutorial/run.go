@@ -28,16 +28,33 @@ var (
 	errFinished    = httpx.NewError(http.StatusConflict, "tutorial_finished", "you've finished this tutorial")
 	errPastDue     = httpx.NewError(http.StatusConflict, "tutorial_past_due", "this tutorial is past its due date: you can read it, but not answer")
 	errNotHere     = httpx.NewError(http.StatusConflict, "not_this_page", "answer the page you're on")
+	errPageLocked  = httpx.NewError(http.StatusConflict, "page_locked", "this page is locked because you left the app too often: ask your teacher to unlock it")
 )
 
 type answer struct {
-	Response quiz.Response
-	Score    float64
-	Max      float64
-	Correct  bool
-	Status   string
-	Tries    int
-	Comment  string
+	Response   quiz.Response
+	Score      float64
+	Max        float64
+	Correct    bool
+	Status     string
+	Tries      int
+	Comment    string
+	Method     string // key, llm or manual
+	AIFeedback string
+	AIMarked   bool
+	Flagged    bool
+	FlagReason string
+	AnsweredAt time.Time
+}
+
+// visit is a student's time on a page and the times they left the app from it.
+type visit struct {
+	Seconds  int
+	Leaves   int // where recorded or not allowed
+	Allowed  int // where allowed, or through the page's links
+	Away     int // seconds away, in all
+	Forgiven int // leaves before the teacher last unlocked it
+	LockedAt *time.Time
 }
 
 // run is everything a student's view is built from.
@@ -51,7 +68,11 @@ type run struct {
 	qs       map[string]quiz.Question
 	effs     map[string]settings.Effective
 	answers  map[string]answer
+	visits   map[string]visit // by page id
 }
+
+// isLocked: the page is locked for leaving the app too often.
+func (r *run) isLocked(p Page) bool { return r.visits[p.ID].LockedAt != nil }
 
 func (r *run) pastDue(now time.Time) bool { return r.t.DueAt != nil && now.After(*r.t.DueAt) }
 
@@ -136,7 +157,8 @@ func (s *Service) loadRun(ctx context.Context, t Tutorial, userID string, start 
 		r.qs[q.ID] = q
 	}
 	r.answers = map[string]answer{}
-	rows, err := s.pool.Query(ctx, `SELECT question_id, response, score, max_score, correct, status, tries, comment FROM tutorial.answers WHERE run_id=$1`, r.id)
+	rows, err := s.pool.Query(ctx, `SELECT question_id, response, score, max_score, correct, status, tries, comment, method, ai_feedback, ai_marked, flagged, flag_reason, answered_at
+		FROM tutorial.answers WHERE run_id=$1`, r.id)
 	if err != nil {
 		return nil, err
 	}
@@ -145,18 +167,52 @@ func (s *Service) loadRun(ctx context.Context, t Tutorial, userID string, start 
 		var qid string
 		var raw []byte
 		var a answer
-		if err := rows.Scan(&qid, &raw, &a.Score, &a.Max, &a.Correct, &a.Status, &a.Tries, &a.Comment); err != nil {
+		if err := rows.Scan(&qid, &raw, &a.Score, &a.Max, &a.Correct, &a.Status, &a.Tries, &a.Comment, &a.Method, &a.AIFeedback, &a.AIMarked,
+			&a.Flagged, &a.FlagReason, &a.AnsweredAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(raw, &a.Response)
 		r.answers[qid] = a
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
 	// Pages may have been removed since: stay within the tutorial.
 	if n := len(r.pages); n > 0 {
 		r.current = min(r.current, n-1)
 		r.reached = min(max(r.reached, r.current), n-1)
 	}
-	return r, rows.Err()
+	return r, s.loadVisits(ctx, r)
+}
+
+func (s *Service) loadVisits(ctx context.Context, r *run) error {
+	r.visits = map[string]visit{}
+	rows, err := s.pool.Query(ctx, `SELECT page_id, seconds, leaves, allowed_leaves, away_seconds, forgiven, locked_at FROM tutorial.visits WHERE run_id=$1`, r.id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pid string
+		var v visit
+		if err := rows.Scan(&pid, &v.Seconds, &v.Leaves, &v.Allowed, &v.Away, &v.Forgiven, &v.LockedAt); err != nil {
+			return err
+		}
+		r.visits[pid] = v
+	}
+	return rows.Err()
+}
+
+// arrive records that a student has opened the page they're on, so the
+// teacher sees who reached it.
+func (s *Service) arrive(ctx context.Context, r *run) error {
+	if len(r.pages) == 0 || r.readOnly(s.now()) {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO tutorial.visits(run_id, page_id, first_at, last_at) VALUES ($1,$2,$3,$3)
+		ON CONFLICT (run_id, page_id) DO UPDATE SET last_at=$3`, r.id, r.pages[r.current].ID, s.now())
+	return err
 }
 
 // student finds a published tutorial a student may open: they're actively
@@ -190,7 +246,8 @@ type Mark struct {
 	Score    float64   `json:"score"`
 	Max      float64   `json:"max"`
 	Correct  bool      `json:"correct"`
-	Pending  bool      `json:"pending"` // the teacher marks it
+	Pending  bool      `json:"pending"` // the teacher (or the AI) marks it
+	Marking  bool      `json:"marking"` // the AI is marking it now
 	Feedback string    `json:"feedback,omitempty"`
 	Comment  string    `json:"comment,omitempty"`
 	Key      *quiz.Key `json:"key,omitempty"` // the right answer, once theirs is final
@@ -215,6 +272,10 @@ type PageView struct {
 	Checkpoint string         `json:"checkpoint"`
 	MaxTries   int            `json:"max_tries"`
 	Passed     bool           `json:"passed"` // the checkpoint lets them go on
+	Leaving    string         `json:"leaving"`
+	LockAfter  int            `json:"lock_after"`
+	Leaves     int            `json:"leaves"` // counted toward the lock
+	Locked     bool           `json:"locked"`
 }
 
 // PageSummary is a page in the tutorial's map.
@@ -261,7 +322,9 @@ func feedbackText(q quiz.Question, a answer) string {
 
 func (s *Service) pageView(r *run, i int) *PageView {
 	p := r.pages[i]
-	v := &PageView{Index: i, Title: p.Title, Blocks: p.Blocks, Checkpoint: p.Checkpoint, MaxTries: p.MaxTries, Passed: r.passed(p), Questions: []QuestionView{}}
+	vis := r.visits[p.ID]
+	v := &PageView{Index: i, Title: p.Title, Blocks: p.Blocks, Checkpoint: p.Checkpoint, MaxTries: p.MaxTries, Passed: r.passed(p) && vis.LockedAt == nil,
+		Leaving: p.Leaving, LockAfter: p.LockAfter, Leaves: vis.Leaves - vis.Forgiven, Locked: vis.LockedAt != nil, Questions: []QuestionView{}}
 	if v.Blocks == nil {
 		v.Blocks = []Block{}
 	}
@@ -272,14 +335,18 @@ func (s *Service) pageView(r *run, i int) *PageView {
 		if !ok {
 			continue
 		}
-		qv := QuestionView{StudentQuestion: q.StudentView(), Locked: ro || r.locked(p, qid)}
+		qv := QuestionView{StudentQuestion: q.StudentView(), Locked: ro || r.locked(p, qid) || v.Locked}
 		if a, ok := r.answers[qid]; ok {
 			resp := a.Response
 			qv.Response, qv.Checked, qv.Tries = &resp, true, a.Tries
 			if shown {
-				m := &Mark{Score: a.Score, Max: a.Max, Correct: a.Correct, Pending: a.Status == "pending", Comment: a.Comment}
+				m := &Mark{Score: a.Score, Max: a.Max, Correct: a.Correct, Pending: a.Status == "pending", Comment: a.Comment,
+					Marking: a.Status == "pending" && a.Method == "llm" && !a.Flagged}
 				if a.Status == "marked" {
-					m.Feedback = feedbackText(q, a)
+					m.Feedback = a.AIFeedback
+					if m.Feedback == "" {
+						m.Feedback = feedbackText(q, a)
+					}
 				}
 				// The right answer, once theirs can't change.
 				if (qv.Locked || ro) && q.Type.KeyAllowed() {
@@ -371,6 +438,9 @@ func (s *Service) Open(ctx context.Context, userID, id string) (RunView, error) 
 	if err != nil {
 		return RunView{}, err
 	}
+	if err := s.arrive(ctx, r); err != nil {
+		return RunView{}, err
+	}
 	return s.view(r, r.current), nil
 }
 
@@ -409,6 +479,8 @@ func (s *Service) Go(ctx context.Context, userID, id string, to int) (RunView, e
 		return s.view(r, to), nil // reading only: nothing to record
 	case to < r.current && !t.AllowBack:
 		return RunView{}, errForwardOnly
+	case to > r.current && r.isLocked(r.pages[r.current]):
+		return RunView{}, errPageLocked
 	}
 	for i := r.current; i < to; i++ {
 		if !r.passed(r.pages[i]) {
@@ -418,6 +490,9 @@ func (s *Service) Go(ctx context.Context, userID, id string, to int) (RunView, e
 	r.current = to
 	r.reached = max(r.reached, to)
 	if _, err := s.pool.Exec(ctx, `UPDATE tutorial.runs SET current=$2, reached=$3, updated_at=now() WHERE id=$1`, r.id, r.current, r.reached); err != nil {
+		return RunView{}, err
+	}
+	if err := s.arrive(ctx, r); err != nil {
 		return RunView{}, err
 	}
 	return s.view(r, to), nil
@@ -449,6 +524,8 @@ func (s *Service) Answer(ctx context.Context, userID, id string, in AnswerInput)
 		return RunView{}, errNotHere
 	case len(in.Responses) == 0:
 		return RunView{}, httpx.Invalid(map[string]string{"responses": "answer at least one question"})
+	case r.isLocked(r.pages[in.Page]):
+		return RunView{}, errPageLocked
 	}
 	p := r.pages[in.Page]
 	onPage := map[string]bool{}
@@ -476,20 +553,34 @@ func (s *Service) Answer(ctx context.Context, userID, id string, in AnswerInput)
 	}
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		for qid, resp := range in.Responses {
-			q := r.qs[qid]
-			a := answer{Response: resp, Max: q.Marks, Status: "marked", Tries: r.answers[qid].Tries + 1}
-			if m := eval.Method(q, r.effs[qid].EvaluationMethod); m == "key" {
+			q, eff := r.qs[qid], r.effs[qid]
+			a := answer{Response: resp, Max: q.Marks, Status: "marked", Tries: r.answers[qid].Tries + 1, AnsweredAt: now}
+			switch a.Method = eval.Method(q, eff.EvaluationMethod); a.Method {
+			case "key":
 				res := eval.MarkByKey(q, &resp)
 				a.Score, a.Correct = res.Score, res.Correct
-			} else {
-				a.Status = "pending" // written answers: the teacher marks them (LLM marking comes later)
+			case "llm":
+				// The teacher's AI marks it (D-75); without a usable key, the teacher does.
+				a.Status, a.Method = "pending", "manual"
+				if s.llm != nil {
+					ok, err := s.llm.EnqueueTutorialTx(ctx, tx, LLMRequest{TeacherID: r.t.TeacherID, RunID: r.id, QuestionID: qid, KeyID: eff.LLMKeyID, Model: eff.LLMModel})
+					if err != nil {
+						return err
+					}
+					if ok {
+						a.Method = "llm"
+					}
+				}
+			default:
+				a.Status = "pending"
 			}
 			raw, _ := json.Marshal(resp)
-			if _, err := tx.Exec(ctx, `INSERT INTO tutorial.answers(run_id, question_id, response, score, max_score, correct, status, tries, answered_at)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			if _, err := tx.Exec(ctx, `INSERT INTO tutorial.answers(run_id, question_id, response, score, max_score, correct, status, tries, answered_at, method)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 				ON CONFLICT (run_id, question_id) DO UPDATE SET response=EXCLUDED.response, score=EXCLUDED.score, max_score=EXCLUDED.max_score,
-					correct=EXCLUDED.correct, status=EXCLUDED.status, tries=EXCLUDED.tries, comment='', answered_at=EXCLUDED.answered_at`,
-				r.id, qid, raw, a.Score, a.Max, a.Correct, a.Status, a.Tries, now); err != nil {
+					correct=EXCLUDED.correct, status=EXCLUDED.status, tries=EXCLUDED.tries, comment='', answered_at=EXCLUDED.answered_at,
+					method=EXCLUDED.method, ai_feedback='', ai_marked=false, flagged=false, flag_reason=''`,
+				r.id, qid, raw, a.Score, a.Max, a.Correct, a.Status, a.Tries, now, a.Method); err != nil {
 				return err
 			}
 			r.answers[qid] = a
@@ -519,6 +610,9 @@ func (s *Service) Finish(ctx context.Context, userID, id string) (RunView, error
 	last := len(r.pages) - 1
 	if last < 0 || r.current != last {
 		return RunView{}, httpx.NewError(http.StatusConflict, "not_last_page", "go to the last page to finish")
+	}
+	if r.isLocked(r.pages[last]) && !r.pastDue(s.now()) {
+		return RunView{}, errPageLocked
 	}
 	if !r.passed(r.pages[last]) && !r.pastDue(s.now()) {
 		return RunView{}, errCheckpoint

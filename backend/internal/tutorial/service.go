@@ -32,6 +32,7 @@ type Questions interface {
 	CreateTutorialQuestions(ctx context.Context, teacherID, topicID, title string) (quiz.Quiz, error)
 	DeleteTutorialQuestions(ctx context.Context, teacherID, quizID string) error
 	TutorialQuestions(ctx context.Context, quizID string) ([]quiz.Question, map[string]settings.Effective, error)
+	CopyQuestions(ctx context.Context, teacherID, quizID string, ids []string) ([]quiz.Question, error)
 }
 
 // Users names the students (auth).
@@ -44,6 +45,7 @@ type Service struct {
 	topics    Topics
 	questions Questions
 	users     Users
+	llm       LLMQueue
 	now       func() time.Time
 }
 
@@ -58,12 +60,12 @@ var (
 	errFeedbackX = httpx.Invalid(map[string]string{"feedback": "some pages need correct answers, which shows whether answers are right: keep feedback as students go, or change those pages"})
 )
 
-const tutorialCols = `t.id, t.topic_id, t.quiz_id, t.title, t.description, t.status, t.allow_back, t.lock_answers, t.feedback,
+const tutorialCols = `t.id, t.teacher_id, t.topic_id, t.quiz_id, t.title, t.description, t.status, t.allow_back, t.lock_answers, t.feedback,
 	t.released_at, t.opens_at, t.due_at, t.published_at, t.created_at, t.updated_at, (SELECT count(*) FROM tutorial.pages p WHERE p.tutorial_id=t.id)`
 
 func scanTutorial(r pgx.Row) (Tutorial, error) {
 	var t Tutorial
-	err := r.Scan(&t.ID, &t.TopicID, &t.QuizID, &t.Title, &t.Description, &t.Status, &t.AllowBack, &t.LockAnswers, &t.Feedback,
+	err := r.Scan(&t.ID, &t.TeacherID, &t.TopicID, &t.QuizID, &t.Title, &t.Description, &t.Status, &t.AllowBack, &t.LockAnswers, &t.Feedback,
 		&t.ReleasedAt, &t.OpensAt, &t.DueAt, &t.PublishedAt, &t.CreatedAt, &t.UpdatedAt, &t.Pages)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, httpx.ErrNotFound
@@ -260,14 +262,14 @@ func (s *Service) Delete(ctx context.Context, teacherID, id string) error {
 // ---------- pages ----------
 
 func (s *Service) pages(ctx context.Context, tutorialID string) ([]Page, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, position, title, blocks, question_ids::text[], checkpoint, max_tries FROM tutorial.pages WHERE tutorial_id=$1 ORDER BY position, created_at`, tutorialID)
+	rows, err := s.pool.Query(ctx, `SELECT id, position, title, blocks, question_ids::text[], checkpoint, max_tries, leaving, lock_after FROM tutorial.pages WHERE tutorial_id=$1 ORDER BY position, created_at`, tutorialID)
 	if err != nil {
 		return nil, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Page, error) {
 		var p Page
 		var raw []byte
-		err := r.Scan(&p.ID, &p.Position, &p.Title, &raw, &p.QuestionIDs, &p.Checkpoint, &p.MaxTries)
+		err := r.Scan(&p.ID, &p.Position, &p.Title, &raw, &p.QuestionIDs, &p.Checkpoint, &p.MaxTries, &p.Leaving, &p.LockAfter)
 		if err == nil {
 			err = json.Unmarshal(raw, &p.Blocks)
 		}
@@ -361,9 +363,9 @@ func (s *Service) AddPage(ctx context.Context, teacherID, tutorialID string, in 
 	}
 	blocks, _ := json.Marshal(in.Blocks)
 	var id string
-	err = s.pool.QueryRow(ctx, `INSERT INTO tutorial.pages(tutorial_id, position, title, blocks, question_ids, checkpoint, max_tries)
-		VALUES ($1, (SELECT coalesce(max(position), 0) + 1 FROM tutorial.pages WHERE tutorial_id=$1), $2, $3, $4::uuid[], $5, $6) RETURNING id`,
-		tutorialID, in.Title, blocks, in.QuestionIDs, in.Checkpoint, in.MaxTries).Scan(&id)
+	err = s.pool.QueryRow(ctx, `INSERT INTO tutorial.pages(tutorial_id, position, title, blocks, question_ids, checkpoint, max_tries, leaving, lock_after)
+		VALUES ($1, (SELECT coalesce(max(position), 0) + 1 FROM tutorial.pages WHERE tutorial_id=$1), $2, $3, $4::uuid[], $5, $6, $7, $8) RETURNING id`,
+		tutorialID, in.Title, blocks, in.QuestionIDs, in.Checkpoint, in.MaxTries, in.Leaving, in.LockAfter).Scan(&id)
 	if err != nil {
 		return Page{}, err
 	}
@@ -384,8 +386,8 @@ func (s *Service) UpdatePage(ctx context.Context, teacherID, tutorialID, pageID 
 		return Page{}, err
 	}
 	blocks, _ := json.Marshal(in.Blocks)
-	tag, err := s.pool.Exec(ctx, `UPDATE tutorial.pages SET title=$3, blocks=$4, question_ids=$5::uuid[], checkpoint=$6, max_tries=$7, updated_at=now()
-		WHERE id=$1 AND tutorial_id=$2`, pageID, tutorialID, in.Title, blocks, in.QuestionIDs, in.Checkpoint, in.MaxTries)
+	tag, err := s.pool.Exec(ctx, `UPDATE tutorial.pages SET title=$3, blocks=$4, question_ids=$5::uuid[], checkpoint=$6, max_tries=$7, leaving=$8, lock_after=$9, updated_at=now()
+		WHERE id=$1 AND tutorial_id=$2`, pageID, tutorialID, in.Title, blocks, in.QuestionIDs, in.Checkpoint, in.MaxTries, in.Leaving, in.LockAfter)
 	if err != nil {
 		return Page{}, err
 	}
@@ -461,4 +463,72 @@ func (s *Service) Reorder(ctx context.Context, teacherID, tutorialID string, ids
 	}
 	s.touch(ctx, tutorialID)
 	return s.pages(ctx, tutorialID)
+}
+
+// CopyQuestions copies some of the teacher's own questions, from the
+// question bank say, into the tutorial (TU-FR-04), ready to place on a page.
+func (s *Service) CopyQuestions(ctx context.Context, teacherID, tutorialID string, ids []string) ([]quiz.Question, error) {
+	t, err := s.owned(ctx, teacherID, tutorialID)
+	if err != nil {
+		return nil, err
+	}
+	qs, err := s.questions.CopyQuestions(ctx, teacherID, t.QuizID, ids)
+	if err == nil {
+		s.touch(ctx, tutorialID)
+	}
+	return qs, err
+}
+
+// DuplicatePage copies a page, with copies of its questions (a question is
+// on one page at most), and puts it straight after the original (TU-FR-02).
+func (s *Service) DuplicatePage(ctx context.Context, teacherID, tutorialID, pageID string) (Page, error) {
+	t, err := s.owned(ctx, teacherID, tutorialID)
+	if err != nil {
+		return Page{}, err
+	}
+	if t.Pages >= maxPages {
+		return Page{}, httpx.Invalid(map[string]string{"pages": "a tutorial has at most 100 pages"})
+	}
+	src, err := s.page(ctx, tutorialID, pageID)
+	if err != nil {
+		return Page{}, err
+	}
+	ed, err := s.Get(ctx, teacherID, tutorialID) // drops deleted questions from the page
+	if err != nil {
+		return Page{}, err
+	}
+	for _, p := range ed.Pages {
+		if p.ID == pageID {
+			src.QuestionIDs = p.QuestionIDs
+		}
+	}
+	ids := []string{}
+	if len(src.QuestionIDs) > 0 {
+		copies, err := s.questions.CopyQuestions(ctx, teacherID, t.QuizID, src.QuestionIDs)
+		if err != nil {
+			return Page{}, err
+		}
+		for _, q := range copies {
+			ids = append(ids, q.ID)
+		}
+	}
+	title := src.Title
+	if title != "" && runes(title) <= 193 {
+		title += " (copy)"
+	}
+	blocks, _ := json.Marshal(src.Blocks)
+	var id string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE tutorial.pages SET position=position+1 WHERE tutorial_id=$1 AND position > $2`, tutorialID, src.Position); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `INSERT INTO tutorial.pages(tutorial_id, position, title, blocks, question_ids, checkpoint, max_tries, leaving, lock_after)
+			VALUES ($1,$2,$3,$4,$5::uuid[],$6,$7,$8,$9) RETURNING id`,
+			tutorialID, src.Position+1, title, blocks, ids, src.Checkpoint, src.MaxTries, src.Leaving, src.LockAfter).Scan(&id)
+	})
+	if err != nil {
+		return Page{}, err
+	}
+	s.touch(ctx, tutorialID)
+	return s.page(ctx, tutorialID, id)
 }
