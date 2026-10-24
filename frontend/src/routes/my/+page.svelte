@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
+	import MyFiles from '$lib/drive/MyFiles.svelte';
 	import { auth, loginUrl } from '$lib/session.svelte';
 	import { STATE_BADGE, STATE_ICON, STATE_LABEL } from '$lib/types';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
@@ -85,6 +86,7 @@
 						<div class="min-w-0">
 							<p class="m-0 truncate font-semibold">{c.name}</p>
 							{#if c.student_number}<p class="small muted m-0">Your student ID: {c.student_number}</p>{/if}
+							{#if c.status === 'active'}<MyFiles classroomId={c.classroom_id} />{/if}
 						</div>
 						{#if c.status === 'pending'}<div class="end"><span class="badge badge-soft badge-warning whitespace-nowrap">Waiting for approval</span></div>{/if}
 					</li>

@@ -18,7 +18,8 @@
 		placeholder = '',
 		blanks = false,
 		compact = false,
-		required = false
+		required = false,
+		onlink
 	}: {
 		value?: string;
 		format?: TextFormat;
@@ -28,7 +29,22 @@
 		blanks?: boolean;
 		compact?: boolean;
 		required?: boolean;
+		/** Picks a file to link to (Google Drive, D-71); its name becomes the link text. */
+		onlink?: () => Promise<{ text: string; href: string } | null>;
 	} = $props();
+	let linking = $state(false);
+	async function linkFile() {
+		if (!onlink || !editor) return;
+		linking = true;
+		try {
+			const l = await onlink();
+			if (!l) return;
+			const text = editor.state.selection.empty ? l.text : editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to);
+			run((c) => c.insertContent({ type: 'text', text, marks: [{ type: 'link', attrs: { href: l.href } }] }).unsetMark('link'));
+		} finally {
+			linking = false;
+		}
+	}
 
 	let host = $state<HTMLElement>();
 	let editor = $state<Editor | null>(null);
@@ -158,6 +174,7 @@
 			<IconBtn icon="strike" label="Strikethrough" hint="Strikethrough (Ctrl+Shift+S)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())} />
 			<IconBtn icon="code" label="Inline code" hint="Inline code (Ctrl+E)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())} />
 			<IconBtn icon="link" label="Link" hint="Link (Ctrl+K)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('link')} onclick={openLink} />
+			{#if onlink}<IconBtn icon="cloud" label="Drive file" hint="Link a Google Drive file (shared by link)" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={linking} onclick={linkFile} />{/if}
 			<span class="sep"></span>
 			<IconBtn icon="list" label="Bulleted list" hint="Bulleted list" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())} />
 			<IconBtn icon="list-ordered" label="Numbered list" hint="Numbered list" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('orderedList')} onclick={() => run((c) => c.toggleOrderedList())} />

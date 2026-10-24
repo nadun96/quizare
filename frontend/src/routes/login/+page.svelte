@@ -3,6 +3,8 @@
 	import { page } from '$app/state';
 	import { api, ApiError, safeNext, withBusyRetry } from '$lib/api';
 	import { auth, type User } from '$lib/session.svelte';
+	import { ssoError, startUrl, type SSOOption } from '$lib/sso';
+	import Icon from '$lib/ui/Icon.svelte';
 
 	let email = $state('');
 	let password = $state('');
@@ -11,8 +13,14 @@
 	const next = $derived(page.url.searchParams.get('next'));
 	// With school sign-in (D-64) the first field also takes a Windows/school username.
 	let school = $state(false);
+	// Sign-in with other accounts (D-70), and why one just came back.
+	let sso = $state<SSOOption[]>([]);
+	const ssoProblem = $derived(ssoError(page.url.searchParams.get('sso_error')));
 	$effect(() => {
-		api.get<{ directory: boolean }>('/api/auth/options').then((o) => (school = o.directory), () => {});
+		api.get<{ directory: boolean; sso: SSOOption[] }>('/api/auth/options').then((o) => {
+			school = o.directory;
+			sso = o.sso ?? [];
+		}, () => {});
 	});
 
 	async function submit(e: SubmitEvent) {
@@ -34,6 +42,15 @@
 <div class="narrow">
 	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={submit}>
 		<h1>Log in</h1>
+		{#if ssoProblem}<p class="alert alert-soft alert-error" role="alert">{ssoProblem}</p>{/if}
+		{#if sso.length}
+			<div class="vstack gap-2">
+				{#each sso as o (o.id)}
+					<a class="btn w-full" href={startUrl(o.id, next)} data-sveltekit-reload><Icon name="arrow-right" size={16} />Sign in with {o.name}</a>
+				{/each}
+			</div>
+			<div class="divider my-0 small muted">or with a password</div>
+		{/if}
 		{#if school}
 			<div>
 				<label for="email">Email or school username</label>

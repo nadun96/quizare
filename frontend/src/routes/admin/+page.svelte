@@ -1,5 +1,7 @@
 <script lang="ts">
 	import DirectoryPanel from '$lib/admin/DirectoryPanel.svelte';
+	import SsoPanel from '$lib/admin/SsoPanel.svelte';
+	import DrivePanel from '$lib/admin/DrivePanel.svelte';
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -26,7 +28,7 @@
 	type Ev = { id: number; actor_name: string; actor_role?: string; action: string; target_type: string; target_id: string; details: unknown; created_at: string };
 	const ready = requireStaff();
 	const tabs = $derived(consoleTabs(auth.user));
-	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', signin: 'School sign-in', audit: 'Audit log', storage: 'Storage', backups: 'Backups', managers: 'Managers' };
+	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', signin: 'Sign-in', drive: 'Google Drive', audit: 'Audit log', storage: 'Storage', backups: 'Backups', managers: 'Managers' };
 	let tab = $state<ConsoleTab | null>(null);
 	let role = $state(Paged.fromUrl(urlState, 'role'));
 	let status = $state(Paged.fromUrl(urlState, 'status'));
@@ -198,7 +200,12 @@
 	{:else if tab === 'backups'}
 		<BackupsPanel />
 	{:else if tab === 'signin'}
-		<DirectoryPanel />
+		<div class="vstack">
+			<section class="vstack" aria-labelledby="sso-h"><h2 id="sso-h" class="m-0 text-lg">Other accounts (OpenID Connect)</h2><SsoPanel /></section>
+			<section class="vstack" aria-labelledby="dir-h"><h2 id="dir-h" class="m-0 mt-4 text-lg">School directory (Active Directory, LDAP)</h2><DirectoryPanel /></section>
+		</div>
+	{:else if tab === 'drive'}
+		<DrivePanel />
 	{:else if tab === 'managers'}
 		<ManagerList onactivity={activity} />
 	{/if}

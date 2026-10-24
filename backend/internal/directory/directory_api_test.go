@@ -88,9 +88,11 @@ func signIn(t *testing.T, startTLS bool) {
 	d := school(t, startTLS)
 	admin := e.NewUser(auth.RoleAdmin)
 
-	var opts map[string]bool
+	var opts struct {
+		Directory bool `json:"directory"`
+	}
 	e.Client().Call("GET", "/api/auth/options", nil, 200, &opts)
-	if opts["directory"] {
+	if opts.Directory {
 		t.Fatal("directory sign-in is on before it's set up")
 	}
 	// A student registered before the school switched over, with the same email as bob.
@@ -103,7 +105,7 @@ func signIn(t *testing.T, startTLS bool) {
 		t.Fatalf("saved = %v (the password must never come back)", saved)
 	}
 	e.Client().Call("GET", "/api/auth/options", nil, 200, &opts)
-	if !opts["directory"] {
+	if !opts.Directory {
 		t.Fatal("options don't say directory sign-in is on")
 	}
 

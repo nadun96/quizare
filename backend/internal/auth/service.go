@@ -98,8 +98,9 @@ type Service struct {
 
 	ipLimiter    *Limiter
 	emailLimiter *Limiter
-	relations    Relations // who may see whose profile picture (D-49)
-	dir          Directory // school sign-in (D-64); nil = off
+	relations    Relations                         // who may see whose profile picture (D-49)
+	dir          Directory                         // school sign-in (D-64); nil = off
+	sso          func(context.Context) []SSOOption // outside sign-in buttons (D-70); nil = none
 
 	cacheMu sync.Mutex
 	cache   map[string]cachedSession // key: token hash

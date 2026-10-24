@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/app"
 	"github.com/nadun96/quizplatform/internal/auth"
+	"github.com/nadun96/quizplatform/internal/drive"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
@@ -169,6 +171,43 @@ func (c *Client) Get(path string, header map[string]string) (int, http.Header, [
 	defer resp.Body.Close()
 	out, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, resp.Header, out
+}
+
+// Follow opens path as a browser would follow links and redirects, across
+// sites, until it lands on one of the app's pages (not under /api), and
+// returns that page's path and query: where a sign-in sends the browser.
+func (c *Client) Follow(path string) string {
+	c.e.T.Helper()
+	hc := *c.http
+	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) > 10 {
+			return errors.New("too many redirects")
+		}
+		if req.URL.Host == strings.TrimPrefix(c.e.Server.URL, "https://") && !strings.HasPrefix(req.URL.Path, "/api/") {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}
+	resp, err := hc.Get(c.e.Server.URL + path)
+	if err != nil {
+		c.e.T.Fatalf("follow %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 3 {
+		body, _ := io.ReadAll(resp.Body)
+		c.e.T.Fatalf("follow %s: ended at %s with %d: %s", path, resp.Request.URL, resp.StatusCode, body)
+	}
+	return resp.Header.Get("Location")
+}
+
+// WithGoogle points the Google Drive integration at a fake (D-71).
+func WithGoogle(ep drive.Endpoints) Option {
+	return func(_ *config.Config, o *app.Options) { o.Google = ep }
+}
+
+// WithHTTPClient sets the client the app uses for outside services (D-70).
+func WithHTTPClient(hc *http.Client) Option {
+	return func(_ *config.Config, o *app.Options) { o.HTTPClient = hc }
 }
 
 // Dial opens a WebSocket to path with this client's cookies and our Origin.

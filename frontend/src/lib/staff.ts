@@ -60,7 +60,7 @@ export function roleLabel(u: Person): string {
 	return u.manager && u.role !== 'manager' ? r + ' · manager' : r;
 }
 
-export type ConsoleTab = 'users' | 'usage' | 'settings' | 'signin' | 'audit' | 'storage' | 'backups' | 'managers';
+export type ConsoleTab = 'users' | 'usage' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'managers';
 
 /** The admin console's tabs this person can open, in order. */
 export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
@@ -70,6 +70,8 @@ export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
 	if (can(u, 'approval_policy') || can(u, 'settings')) tabs.push('settings');
 	// School sign-in decides who becomes a teacher: admins only (D-64).
 	if (isAdmin(u)) tabs.push('signin');
+	// The Google app teachers connect Drive through (D-71): admins only.
+	if (isAdmin(u)) tabs.push('drive');
 	if (can(u, 'audit')) tabs.push('audit');
 	if (can(u, 'storage') || can(u, 'cleanup')) tabs.push('storage');
 	if (can(u, 'backups')) tabs.push('backups');
