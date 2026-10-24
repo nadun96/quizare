@@ -6,7 +6,8 @@
 	import Icon from '../ui/Icon.svelte';
 	import type { Block } from './tutorial';
 
-	let { blocks }: { blocks: Block[] } = $props();
+	// onlink: a link on the page was opened (leaving through it is allowed, D-75).
+	let { blocks, onlink }: { blocks: Block[]; onlink?: () => void } = $props();
 </script>
 
 <div class="blocks">
@@ -27,7 +28,7 @@
 				{#if b.text}<figcaption>{b.text}</figcaption>{/if}
 			</figure>
 		{:else if b.type === 'link'}
-			<a class="link-card" href={b.url} target="_blank" rel="noopener noreferrer">
+			<a class="link-card" href={b.url} target="_blank" rel="noopener noreferrer" onclick={() => onlink?.()} onauxclick={() => onlink?.()}>
 				<Icon name="link" size={18} />
 				<span class="min-w-0"><strong class="block truncate">{b.text}</strong><span class="small muted block truncate">{b.url}</span></span>
 				<span class="small muted ml-auto whitespace-nowrap newtab">Opens in a new tab</span>

@@ -169,6 +169,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, evalWorker)
 	llmWorker := &llm.Worker{}
 	river.AddWorker(workers, llmWorker)
+	llmTutorialWorker := &llm.TutorialWorker{}
+	river.AddWorker(workers, llmTutorialWorker)
 	analyticsWorker := &analytics.Worker{}
 	river.AddWorker(workers, analyticsWorker)
 
@@ -221,7 +223,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		return nil, err
 	}
 	directoryWorker.Service = a.Directory
-	llmWorker.Service = a.LLM
+	llmWorker.Service, llmTutorialWorker.Service = a.LLM, a.LLM
 	a.Eval.SetLLM(a.LLM)
 	a.Analytics = analytics.NewService(pool, a.Live, a.Eval, a.Auth, rc)
 	analyticsWorker.Service = a.Analytics
@@ -243,6 +245,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Drive = drive.NewService(pool, vault, a.Auth, a.Content, a.Quiz, driveResults{a}, rc, cfg.BaseURL, opt.Google, opt.HTTPClient, log)
 	driveBackup.Service, driveSync.Service = a.Drive, a.Drive
 	a.Tutorial = tutorial.NewService(pool, a.Content, a.Quiz, a.Auth)
+	a.Tutorial.SetLLM(a.LLM) // AI marking of written answers (D-75)
+	a.LLM.SetTutorials(a.Tutorial)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,

@@ -534,37 +534,49 @@ func (s *Service) DuplicateQuestion(ctx context.Context, teacherID, id string) (
 	if err != nil {
 		return q, err
 	}
-	src := q
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		for i := 1; ; i++ {
-			suffix := "-copy"
-			if i > 1 {
-				suffix = fmt.Sprintf("-copy%d", i)
-			}
-			base := src.Code
-			if len(base)+len(suffix) > 32 {
-				base = base[:32-len(suffix)]
-			}
-			q.Code = base + suffix
-			var exists bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM quiz.questions WHERE quiz_id=$1 AND code=$2)`, src.QuizID, q.Code).Scan(&exists); err != nil {
-				return err
-			}
-			if !exists {
-				break
-			}
-		}
-		if err := insertQuestion(ctx, tx, src.QuizID, &q); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO quiz.resources(question_id, role, n, source_url, url, alt_text, status, message, checked_at)
-			SELECT $2, role, n, source_url, url, alt_text, status, message, checked_at FROM quiz.resources WHERE question_id=$1`, src.ID, q.ID)
-		return err
+		return copyQuestion(ctx, tx, &q, q.QuizID, false)
 	})
 	if err != nil {
 		return q, err
 	}
 	return s.GetQuestion(ctx, teacherID, q.ID)
+}
+
+// copyQuestion inserts a copy of q, with its resources, into a quiz under a
+// code free there: its own (when keepCode and it's free), else with -copy,
+// -copy2, … added. q becomes the copy.
+func copyQuestion(ctx context.Context, tx pgx.Tx, q *Question, quizID string, keepCode bool) error {
+	srcID, base := q.ID, q.Code
+	for i := 0; ; i++ {
+		suffix := ""
+		switch {
+		case i == 0 && !keepCode:
+			continue
+		case i == 1:
+			suffix = "-copy"
+		case i > 1:
+			suffix = fmt.Sprintf("-copy%d", i)
+		}
+		b := base
+		if len(b)+len(suffix) > 32 {
+			b = b[:32-len(suffix)]
+		}
+		q.Code = b + suffix
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM quiz.questions WHERE quiz_id=$1 AND code=$2)`, quizID, q.Code).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			break
+		}
+	}
+	if err := insertQuestion(ctx, tx, quizID, q); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO quiz.resources(question_id, role, n, source_url, url, alt_text, status, message, checked_at)
+		SELECT $2, role, n, source_url, url, alt_text, status, message, checked_at FROM quiz.resources WHERE question_id=$1`, srcID, q.ID)
+	return err
 }
 
 // Reorder sets question order; ids must list every question exactly once.
