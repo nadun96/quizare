@@ -71,7 +71,7 @@ Only one program can listen on port 443, so the apps share one Caddy installed d
    	header {
    		X-Content-Type-Options nosniff
    		Referrer-Policy same-origin
-   		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' wss:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+   		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; frame-src https://docs.google.com https://drive.google.com https://content.googleapis.com; connect-src 'self' wss: https://content.googleapis.com https://www.googleapis.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
    		-Server
    	}
    	reverse_proxy 127.0.0.1:8080

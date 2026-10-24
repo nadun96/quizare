@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The account's sign-ins with other providers (D-70): connect one, so it
 	// opens this account whatever its email, or disconnect it.
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '../api';
 	import { ssoError, type Identity, type SSOOption } from '../sso';
@@ -20,8 +21,8 @@
 		load();
 	});
 
-	// Coming back from the provider.
-	$effect(() => {
+	// Coming back from the provider: once, not as an effect (a toast changes state an effect would track).
+	onMount(() => {
 		const q = page.url.searchParams;
 		if (q.get('sso') === 'linked') toast('Sign-in connected');
 		else if (q.get('sso_error')) toast(ssoError(q.get('sso_error')), 'error');

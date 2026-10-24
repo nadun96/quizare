@@ -57,6 +57,8 @@ tags:
     description: WebSockets and beacons
   - name: polls
     description: Live polls, anonymous or identified (D-40)
+  - name: drive
+    description: Teachers' Google Drive (D-71); only files they pick or the platform makes (drive.file)
   - name: meetings
     description: Peer-to-peer video meetings (D-69); the server only passes the set-up messages
 
@@ -274,6 +276,18 @@ paths:
       description: Same rules as changing the status (PL-FR-13, PL-FR-17).
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '204': { description: 'Deleted' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/admin/drive:
+    get:
+      operationId: getAdminDrive
+      tags: [admin, drive]
+      summary: The platform's Google Cloud app for Drive, and the redirect URI and origin to register (admins only, D-71)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { config: { $ref: '#/components/schemas/DriveConfig' }, redirect_url: { type: string }, origin: { type: string } } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    put:
+      operationId: putAdminDrive
+      tags: [admin, drive]
+      summary: Save the Google app (admins only, D-71)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/admin/sso:
     get:
       operationId: getAdminSso
@@ -527,6 +541,116 @@ paths:
       summary: A 5-minute signed token naming the logged-in person, for the tutoring service (ADR-23, TS-NFR-52)
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { token: { type: string }, expires_at: { type: string, format: date-time }, url: { type: string, format: uri } } } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '404': { description: 'Tutoring is off' } }
 
+  /api/teacher/drive:
+    get:
+      operationId: getTeacherDrive
+      tags: [drive]
+      summary: Whether Drive is available and connected, and its settings (D-71)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/DriveStatus' } } } } }
+    put:
+      operationId: putTeacherDrive
+      tags: [drive]
+      summary: Save each session's results to Drive when it ends, or not
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { auto_backup: { type: boolean } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/DriveStatus' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+    delete:
+      operationId: deleteTeacherDrive
+      tags: [drive]
+      summary: Disconnect Drive; the platform revokes its token with Google
+      responses: { '204': { description: 'Disconnected' } }
+  /api/teacher/drive/connect:
+    get:
+      operationId: getTeacherDriveConnect
+      tags: [drive]
+      summary: Connect Drive (browser navigation to Google's consent, with PKCE)
+      parameters: [{ name: next, in: query, schema: { type: string, example: /t/settings } }]
+      responses: { '302': { description: 'To Google' }, '404': { description: 'Drive isn''t set up (`drive_off`)' } }
+  /api/teacher/drive/callback:
+    get:
+      operationId: getTeacherDriveCallback
+      tags: [drive]
+      summary: Where Google sends the teacher back; register it as the OAuth redirect URI
+      description: 'Redirects to `next` with `drive=connected`, or `drive_error=`: `drive_expired`, `drive_cancelled`, `drive_scope` (Drive was unticked), `drive_off`, `drive_failed`.'
+      responses: { '302': { description: 'Back to the page' } }
+  /api/teacher/drive/picker:
+    post:
+      operationId: postTeacherDrivePicker
+      tags: [drive]
+      summary: A short-lived access token and the app's ids, for Google's file picker in the browser
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { access_token: { type: string }, expires_at: { type: string, format: date-time }, api_key: { type: string }, app_id: { type: string } } } } } }, '409': { description: '`drive_not_connected` or `drive_reconnect`' } }
+  /api/teacher/drive/share:
+    post:
+      operationId: postTeacherDriveShare
+      tags: [drive]
+      summary: Let anyone with the link view a picked file, for a question's image or a link in its text
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [file_id], properties: { file_id: { type: string, description: 'A Drive file id from the picker' } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { id: { type: string }, name: { type: string }, mime_type: { type: string }, web_link: { type: string }, image: { type: boolean }, image_url: { type: string, description: 'For POST questions/{id}/resources' } } } } } }, '403': { description: 'Not a file the platform may open (`drive_no_access`)' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/drive/exports:
+    get:
+      operationId: getTeacherDriveExports
+      tags: [drive]
+      summary: Recent results saved to Drive, or those of one session or poll
+      parameters: [{ name: target_id, in: query, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { exports: { type: array, items: { $ref: '#/components/schemas/DriveExport' } } } } } } } }
+  /api/teacher/quizzes/{id}/questions/import-drive:
+    post:
+      operationId: postTeacherQuizQuestionsImportDrive
+      tags: [drive, quizzes]
+      summary: Import questions from a CSV file or a Google Sheet (its first sheet) in Drive
+      description: Same columns and checks as the CSV upload; 2 MB at most.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [file_id], properties: { file_id: { type: string, description: 'A Drive file id from the picker' } } } } } }
+      responses: { '200': { description: 'Imported and rejected rows', content: { application/json: { schema: { type: object, properties: { imported: { type: integer }, rejected: { type: array, items: { type: object } } } } } } }, '403': { description: '`drive_no_access`' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/drive-files:
+    get:
+      operationId: getTeacherClassroomDriveFiles
+      tags: [drive, classrooms]
+      summary: A classroom's Drive files, with how each is shared
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { files: { type: array, items: { $ref: '#/components/schemas/ClassroomDriveFile' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postTeacherClassroomDriveFiles
+      tags: [drive, classrooms]
+      summary: Attach picked files to a classroom and share them
+      description: '`students` shares with each actively enrolled student''s email (kept in step as students join and leave, every 15 minutes); `link` with anyone who has the link; `none` leaves sharing to the teacher.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [file_ids], properties: { file_ids: { type: array, maxItems: 20, items: { type: string } }, sharing: { type: string, enum: [students, link, none], default: students } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { files: { type: array, items: { $ref: '#/components/schemas/ClassroomDriveFile' } } } } } } }, '403': { description: '`drive_no_access`' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/drive-files/{file}:
+    patch:
+      operationId: patchTeacherClassroomDriveFile
+      tags: [drive, classrooms]
+      summary: Change how a file is shared
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: file, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { sharing: { type: string, enum: [students, link, none] } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { files: { type: array, items: { $ref: '#/components/schemas/ClassroomDriveFile' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteTeacherClassroomDriveFile
+      tags: [drive, classrooms]
+      summary: Remove a file from the classroom, taking back what the platform shared; it stays in Drive
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: file, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '204': { description: 'Removed' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/sessions/{id}/drive-export:
+    post:
+      operationId: postTeacherSessionDriveExport
+      tags: [drive, analytics]
+      summary: Save a session's results to Drive, as a Google Sheet in the results folder
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveExport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { description: '`drive_not_connected` or `drive_reconnect`' }, '502': { description: '`drive_unavailable`' } }
+  /api/teacher/polls/{id}/drive-export:
+    post:
+      operationId: postTeacherPollDriveExport
+      tags: [drive, polls]
+      summary: Save a poll's answers to Drive, as a Google Sheet in the results folder
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveExport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { description: '`drive_not_connected` or `drive_reconnect`' } }
+  /api/my/classrooms/{id}/drive-files:
+    get:
+      operationId: getMyClassroomDriveFiles
+      tags: [drive, classrooms]
+      summary: A classroom's Drive files, for its actively enrolled students
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { files: { type: array, items: { $ref: '#/components/schemas/ClassroomDriveFile' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/meetings:
     get:
       operationId: getTeacherMeetings
@@ -1744,6 +1868,52 @@ components:
       content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
 
   schemas:
+    DriveConfig:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        client_id: { type: string }
+        client_secret: { type: string, writeOnly: true, description: 'Sealed with the master key; empty keeps the stored one' }
+        client_secret_set: { type: boolean, readOnly: true }
+        api_key: { type: string, description: "For Google's file picker; restrict it to your site in Google's console" }
+        app_id: { type: string, description: 'The Cloud project number' }
+        updated_at: { type: string, format: date-time, readOnly: true }
+    DriveStatus:
+      type: object
+      properties:
+        available: { type: boolean, description: 'Drive is set up on this platform' }
+        connected: { type: boolean }
+        email: { type: string }
+        reconnect: { type: boolean, description: 'Google no longer accepts the token' }
+        auto_backup: { type: boolean }
+        folder_link: { type: string, description: 'The results folder' }
+        connected_at: { type: string, format: date-time }
+    DriveExport:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [session, poll] }
+        target_id: { type: string, format: uuid }
+        name: { type: string }
+        web_link: { type: string }
+        automatic: { type: boolean }
+        status: { type: string, enum: [done, failed] }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+    ClassroomDriveFile:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        file_id: { type: string, description: 'Teachers only' }
+        name: { type: string }
+        mime_type: { type: string }
+        web_link: { type: string }
+        icon_link: { type: string }
+        sharing: { type: string, enum: [students, link, none], description: 'Teachers only' }
+        shared_with: { type: integer, description: 'Students it is shared with (teachers only)' }
+        synced_at: { type: string, format: date-time }
+        sync_error: { type: string, description: 'Why some sharing failed (teachers only)' }
+        created_at: { type: string, format: date-time }
     SSOOption:
       type: object
       properties: { id: { type: string, format: uuid }, name: { type: string, example: Google } }

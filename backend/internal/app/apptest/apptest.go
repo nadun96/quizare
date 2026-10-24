@@ -25,6 +25,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/app"
 	"github.com/nadun96/quizplatform/internal/auth"
+	"github.com/nadun96/quizplatform/internal/drive"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
@@ -197,6 +198,11 @@ func (c *Client) Follow(path string) string {
 		c.e.T.Fatalf("follow %s: ended at %s with %d: %s", path, resp.Request.URL, resp.StatusCode, body)
 	}
 	return resp.Header.Get("Location")
+}
+
+// WithGoogle points the Google Drive integration at a fake (D-71).
+func WithGoogle(ep drive.Endpoints) Option {
+	return func(_ *config.Config, o *app.Options) { o.Google = ep }
 }
 
 // WithHTTPClient sets the client the app uses for outside services (D-70).

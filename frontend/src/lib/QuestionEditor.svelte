@@ -3,8 +3,28 @@
 	import { api, ApiError } from './api';
 	import { QTYPES, QTYPE_LABEL, type QType, type Question } from './types';
 	import RichTextEditor from './richtext/RichTextEditor.svelte';
+	import { driveStatus, pickFiles, shareByLink } from './drive';
+	import { toast } from './ui/toast.svelte';
 
 	let { quizId, question = null, onsaved, oncancel, categories = [] }: { quizId: string; question?: Question | null; onsaved: (q: Question) => void; oncancel: () => void; categories?: string[] } = $props();
+
+	// Links to Google Drive files in the text (D-71), for teachers who connected Drive.
+	let drive = $state(false);
+	$effect(() => {
+		driveStatus().then((s) => (drive = s.connected && !s.reconnect));
+	});
+	async function driveLink() {
+		try {
+			const [f] = await pickFiles({ kind: 'any', title: 'Choose a file to link' });
+			if (!f) return null;
+			const shared = await shareByLink(f.id);
+			toast('Shared by link: students can open it without a Google account', 'info');
+			return { text: shared.name, href: shared.web_link };
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Google Drive didn’t answer', 'error');
+			return null;
+		}
+	}
 
 	type Row = { text: string; correct: boolean; zone: string };
 	// The form is seeded once; the parent re-keys this component per question.
@@ -141,7 +161,7 @@
 	</div>
 	<div>
 		<label for="text">Question text</label>
-		<RichTextEditor id="text" label="Question text" bind:value={text} {format} required blanks={type === 'BLANK_OPT' || type === 'BLANK_TEXT'} placeholder="Write the question…" />
+		<RichTextEditor id="text" label="Question text" bind:value={text} {format} required blanks={type === 'BLANK_OPT' || type === 'BLANK_TEXT'} placeholder="Write the question…" onlink={drive ? driveLink : undefined} />
 		{#if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}<p class="small muted">Add blanks with <strong>+ Blank</strong> or by typing [[1]], [[2]] …</p>{/if}
 	</div>
 

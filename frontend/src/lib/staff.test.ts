@@ -26,7 +26,7 @@ describe('managers', () => {
 	});
 
 	it('shows each person only their tabs; managers never get the managers page', () => {
-		expect(consoleTabs(admin)).toEqual(['users', 'usage', 'settings', 'signin', 'audit', 'storage', 'backups', 'managers']);
+		expect(consoleTabs(admin)).toEqual(['users', 'usage', 'settings', 'signin', 'drive', 'audit', 'storage', 'backups', 'managers']);
 		expect(consoleTabs(mgr(['cleanup']))).toEqual(['storage']);
 		expect(consoleTabs(mgr(['backups']))).toEqual(['backups']);
 		expect(consoleTabs(mgr([]))).toEqual([]);
