@@ -59,6 +59,8 @@ tags:
     description: Live polls, anonymous or identified (D-40)
   - name: tutorials
     description: Interactive tutorials, lessons in pages of content and questions (D-74)
+  - name: presentations
+    description: Slide decks from a PDF, seen at each student's own pace, with time on each slide (D-76)
   - name: drive
     description: Teachers' Google Drive (D-71); only files they pick or the platform makes (drive.file)
   - name: meetings
@@ -857,6 +859,157 @@ paths:
       summary: Finish, from the last page once it's passed
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '409': { description: 'Not allowed now (`forward_only`, `checkpoint`, `answer_locked`, `tutorial_finished`, `tutorial_past_due`, `not_this_page`, `page_locked`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+  /api/teacher/topics/{id}/presentations:
+    get:
+      operationId: getTeacherTopicPresentations
+      tags: [presentations]
+      summary: A topic's presentations
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { presentations: { type: array, items: { $ref: '#/components/schemas/Presentation' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postTeacherTopicPresentation
+      tags: [presentations]
+      summary: Create a draft presentation; upload its PDF next
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PresentationInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Presentation' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/presentations/{id}:
+    get:
+      operationId: getTeacherPresentation
+      tags: [presentations]
+      summary: A presentation
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Presentation' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putTeacherPresentation
+      tags: [presentations]
+      summary: Change its details and settings
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PresentationInput' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/Presentation' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteTeacherPresentation
+      tags: [presentations]
+      summary: Delete it, with its file, slides and viewing records
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/status:
+    post:
+      operationId: postTeacherPresentationStatus
+      tags: [presentations]
+      summary: Publish it to the classroom, or take it back to a draft
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [draft, published] } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Presentation' } } } }, '409': { description: '`presentation_empty`: upload a PDF first' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/uploads:
+    post:
+      operationId: postTeacherPresentationUpload
+      tags: [presentations]
+      summary: Start uploading a PDF (or a replacement), rendered to slides in the teacher's browser
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string, description: 'Ends in .pdf' }, slides: { type: integer, minimum: 1, maximum: 300 } } } } } }
+      responses: { '201': { description: 'Started', content: { application/json: { schema: { type: object, properties: { version: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/presentations/{id}/uploads/{version}/pdf:
+    put:
+      operationId: putTeacherPresentationUploadPdf
+      tags: [presentations]
+      summary: The upload's PDF, as the raw body (at most 50 MB)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: version, in: path, required: true, schema: { type: integer } }]
+      requestBody: { required: true, content: { application/pdf: { schema: { type: string, format: binary } } } }
+      responses: { '204': { description: 'Stored' }, '409': { description: '`upload_gone`' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/presentations/{id}/uploads/{version}/slides/{n}:
+    put:
+      operationId: putTeacherPresentationUploadSlide
+      tags: [presentations]
+      summary: One slide, a JPEG (at most 3 MB) with its text
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: version, in: path, required: true, schema: { type: integer } }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, properties: { image: { type: string, format: binary }, text: { type: string } } } } } }
+      responses: { '204': { description: 'Stored' }, '409': { description: '`upload_gone`' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/presentations/{id}/uploads/{version}/finish:
+    post:
+      operationId: postTeacherPresentationUploadFinish
+      tags: [presentations]
+      summary: Swap the upload in once the PDF and every slide are there
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: version, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'In use', content: { application/json: { schema: { $ref: '#/components/schemas/Presentation' } } } }, '409': { description: '`upload_incomplete` or `upload_gone`' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/slides:
+    get:
+      operationId: getTeacherPresentationSlides
+      tags: [presentations]
+      summary: The slides in use
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { slides: { type: array, items: { $ref: '#/components/schemas/Slide' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/slides/{n}:
+    get:
+      operationId: getTeacherPresentationSlide
+      tags: [presentations]
+      summary: A slide's image, of the file in use or an upload
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }, { name: v, in: query, schema: { type: integer }, description: 'The file version; with it the image may be kept a day' }]
+      responses: { '200': { description: 'JPEG', content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/pdf:
+    get:
+      operationId: getTeacherPresentationPdf
+      tags: [presentations]
+      summary: The PDF in use
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'PDF', content: { application/pdf: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/report:
+    get:
+      operationId: getTeacherPresentationReport
+      tags: [presentations]
+      summary: Who saw which slides and for how long, per student and per slide
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { slides: { type: array, items: { type: object } }, students: { type: array, items: { type: object } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/viewers/{viewer}:
+    get:
+      operationId: getTeacherPresentationViewer
+      tags: [presentations]
+      summary: One student's time on each slide
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: viewer, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/presentations:
+    get:
+      operationId: getMyPresentations
+      tags: [presentations, student]
+      summary: Published presentations of the classrooms you're in, with how far you are
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { presentations: { type: array, items: { type: object } } } } } } } }
+  /api/presentations/{id}/open:
+    post:
+      operationId: postPresentationOpen
+      tags: [presentations, student]
+      summary: Start or resume, on the slide you were on
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PresentationView' } } } }, '403': { description: '`presentation_not_open` yet' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/presentations/{id}/go:
+    post:
+      operationId: postPresentationGo
+      tags: [presentations, student]
+      summary: Go to a slide (any, or in order up to the next unseen one)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { to: { type: integer, minimum: 1 } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PresentationView' } } } }, '409': { description: '`in_order`' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/presentations/{id}/time:
+    post:
+      operationId: postPresentationTime
+      tags: [presentations, student]
+      summary: Add seconds on the slide you're on (at most 60 a report, and no more than has passed)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { slide: { type: integer }, seconds: { type: integer, minimum: 0, maximum: 60 } } } } } }
+      responses: { '204': { description: 'Recorded' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/presentations/{id}/slides/{n}:
+    get:
+      operationId: getPresentationSlide
+      tags: [presentations, student]
+      summary: A slide you may see now (and the next one, to load ahead)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }, { name: v, in: query, schema: { type: integer }, description: 'The file version; with it the image may be kept a day' }]
+      responses: { '200': { description: 'JPEG', content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/presentations/{id}/pdf:
+    get:
+      operationId: getPresentationPdf
+      tags: [presentations, student]
+      summary: The PDF, when the teacher allows downloading
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'PDF', content: { application/pdf: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/meeting-limits:
     get:
       operationId: getTeacherMeetingLimits
@@ -2166,6 +2319,48 @@ components:
               questions: { type: array, items: { type: object } }
               then: { type: object, description: 'Reading pages: score on the questions after it, for students above and below the median time here' }
         students: { type: array, items: { type: object, properties: { run_id: { type: string }, seconds: { type: integer }, reading_seconds: { type: integer }, score_pct: { type: number }, finished: { type: boolean } } } }
+    Presentation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        topic_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [draft, published] }
+        allow_jump: { type: boolean, description: 'Any slide, or in order' }
+        allow_download: { type: boolean }
+        version: { type: integer, description: 'The file in use; 0 before the first upload' }
+        slide_count: { type: integer }
+        file_name: { type: string }
+        file_bytes: { type: integer }
+        opens_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time }
+        published_at: { type: string, format: date-time }
+    PresentationInput:
+      type: object
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string }
+        allow_jump: { type: boolean }
+        allow_download: { type: boolean }
+        opens_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time }
+        clear_dates: { type: boolean }
+    Slide:
+      type: object
+      properties:
+        n: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        text: { type: string, description: "The slide's text, for alt text" }
+    PresentationView:
+      type: object
+      properties:
+        presentation: { type: object }
+        slides: { type: array, items: { $ref: '#/components/schemas/Slide' } }
+        current: { type: integer }
+        reached: { type: integer }
+        finished: { type: boolean }
     TutorialRun:
       type: object
       description: A student's state; marks, feedback and the score appear when the tutorial's feedback setting allows
