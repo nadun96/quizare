@@ -29,6 +29,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/meet"
+	"github.com/nadun96/quizplatform/internal/oidc"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
@@ -62,6 +63,7 @@ type App struct {
 	Storage   *storage.Service
 	Directory *directory.Service // school sign-in (D-64)
 	Meet      *meet.Service      // peer-to-peer meetings (D-69)
+	OIDC      *oidc.Service      // sign-in with OpenID Connect providers (D-70)
 	Tutor     *tutorlink.Service // nil when tutoring is off
 }
 
@@ -78,6 +80,9 @@ type Options struct {
 	// TutoringSecret is the key shared with the tutoring service; New loads
 	// it from cfg.TutoringSecretFile.
 	TutoringSecret []byte
+	// HTTPClient talks to outside services: OpenID Connect providers. nil:
+	// a default with a timeout (tests pass one that trusts their fakes).
+	HTTPClient *http.Client
 }
 
 // New opens the database, applies migrations and builds the app.
@@ -201,6 +206,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	}
 	a.LLM = llm.NewService(pool, vault, providers, rc, a.Live, a.Eval, log)
 	a.Directory = directory.NewService(pool, vault, a.Auth, log)
+	a.OIDC = oidc.NewService(pool, vault, a.Auth, cfg.BaseURL, opt.HTTPClient, log)
 	if a.Meet, err = meet.NewService(pool, a.Content, a.Auth, cfg.BaseURL, meet.Options{STUN: cfg.MeetSTUN, TURNURLs: cfg.MeetTURNURLs, TURNSecretFile: cfg.MeetTURNSecretFile}, log); err != nil {
 		return nil, err
 	}
@@ -240,7 +246,10 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	r.Get("/healthz", a.health)
 	r.Route("/api", func(api chi.Router) {
 		api.Use(httpx.SameOrigin(cfg.BaseURL), a.Auth.Middleware)
-		api.Route("/auth", a.Auth.Routes)
+		api.Route("/auth", func(r chi.Router) {
+			a.Auth.Routes(r)
+			a.OIDC.Routes(r) // sign-in with providers (D-70)
+		})
 		api.Route("/public", a.Analytics.PublicRoutes)
 		// Polls: anyone with the code; the poll decides whether login is needed (D-40).
 		api.Route("/polls", a.Poll.PublicRoutes)
@@ -255,6 +264,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Admin.AdminRoutes(ad)
 			a.Storage.AdminRoutes(ad, a.Auth)
 			a.Directory.AdminRoutes(ad)
+			a.OIDC.AdminRoutes(ad)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))

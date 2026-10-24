@@ -104,9 +104,53 @@ paths:
       operationId: getAuthOptions
       tags: [auth]
       summary: What the login page offers
-      description: '`directory` is true when students and teachers can sign in with their school account (LDAP or Active Directory, D-64).'
+      description: '`directory` is true when students and teachers can sign in with their school account (LDAP or Active Directory, D-64); `sso` lists the enabled OpenID Connect providers, one button each (D-70).'
       security: []
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { directory: { type: boolean } } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { directory: { type: boolean }, sso: { type: array, items: { $ref: '#/components/schemas/SSOOption' } } } } } } } }
+  /api/auth/oidc/{id}/start:
+    get:
+      operationId: getAuthOidcStart
+      tags: [auth]
+      summary: Sign in with an OpenID Connect provider (browser navigation, D-70)
+      description: 'Redirects to the provider (authorization code flow with PKCE and a nonce) and sets a short-lived state cookie. `next` is a path on this site to return to.'
+      security: []
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: next, in: query, schema: { type: string, example: /my } }]
+      responses: { '302': { description: 'To the provider' }, '404': { $ref: '#/components/responses/NotFound' }, '502': { description: 'The provider can''t be reached (`sso_unavailable`)' } }
+  /api/auth/oidc/{id}/link:
+    get:
+      operationId: getAuthOidcLink
+      tags: [auth]
+      summary: Connect a provider to the signed-in account (browser navigation, D-70)
+      description: Like `start`, but the provider's sign-in is added to the current account; the browser comes back to `/account?sso=linked`.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '302': { description: 'To the provider' }, '401': { $ref: '#/components/responses/Unauthorized' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/auth/oidc/callback:
+    get:
+      operationId: getAuthOidcCallback
+      tags: [auth]
+      summary: Where providers send the browser back (D-70)
+      description: |
+        Register this address with each provider. It checks the state cookie, exchanges the code (with the PKCE verifier) and checks the ID token's
+        signature, issuer, audience, expiry and nonce, then signs in and redirects to `next`. On failure it redirects to `/login?sso_error=CODE`
+        (or `/account?sso_error=` when linking): `sso_expired`, `sso_cancelled`, `sso_no_account`, `sso_email_unverified`, `sso_conflict`,
+        `sso_taken`, `sso_domain`, `sso_unavailable`, `account_suspended`, `pending_approval`, `sso_failed`.
+      security: []
+      parameters: [{ name: state, in: query, schema: { type: string } }, { name: code, in: query, schema: { type: string } }, { name: error, in: query, schema: { type: string } }]
+      responses: { '302': { description: 'Signed in, or back with a reason' } }
+  /api/auth/oidc/identities:
+    get:
+      operationId: getAuthOidcIdentities
+      tags: [auth]
+      summary: Your connected sign-ins, and the providers you could connect (D-70)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { identities: { type: array, items: { $ref: '#/components/schemas/Identity' } }, available: { type: array, items: { $ref: '#/components/schemas/SSOOption' } } } } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/auth/oidc/identities/{id}:
+    delete:
+      operationId: deleteAuthOidcIdentity
+      tags: [auth]
+      summary: Disconnect a provider from your account (D-70)
+      description: Refused (400) when it's the only way into the account; set a password first.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Disconnected' }, '400': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/auth/logout:
     post:
       operationId: postAuthLogout
@@ -230,6 +274,47 @@ paths:
       description: Same rules as changing the status (PL-FR-13, PL-FR-17).
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '204': { description: 'Deleted' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/admin/sso:
+    get:
+      operationId: getAdminSso
+      tags: [admin]
+      summary: Sign-in providers, and the redirect URL to register with them (admins only, D-70)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { providers: { type: array, items: { $ref: '#/components/schemas/SSOProvider' } }, redirect_url: { type: string, format: uri } } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    post:
+      operationId: postAdminSso
+      tags: [admin]
+      summary: Add a sign-in provider (admins only, D-70)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SSOProvider' } } } }
+      responses: { '201': { description: 'Added', content: { application/json: { schema: { $ref: '#/components/schemas/SSOProvider' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/sso/{id}:
+    put:
+      operationId: putAdminSso
+      tags: [admin]
+      summary: Change a sign-in provider (admins only, D-70)
+      description: An empty `client_secret` keeps the stored one; `clear_secret` removes it (a public client).
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SSOProvider' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/SSOProvider' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteAdminSso
+      tags: [admin]
+      summary: Remove a sign-in provider and every account's sign-in with it (admins only, D-70)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Removed' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/admin/sso-order:
+    put:
+      operationId: putAdminSsoOrder
+      tags: [admin]
+      summary: The order of the sign-in buttons (admins only, D-70)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: string, format: uuid } } } } } } }
+      responses: { '204': { description: 'Saved' } }
+  /api/admin/sso/test:
+    post:
+      operationId: postAdminSsoTest
+      tags: [admin]
+      summary: Read an issuer's discovery document, as a sign-in would (admins only, D-70)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [issuer], properties: { issuer: { type: string, format: uri } } } } } }
+      responses: { '200': { description: 'The result (ok or not)', content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, message: { type: string }, authorization_endpoint: { type: string }, token_endpoint: { type: string }, scopes_supported: { type: array, items: { type: string } }, pkce: { type: boolean } } } } } } }
   /api/admin/directory:
     get:
       operationId: getAdminDirectory
@@ -1659,6 +1744,38 @@ components:
       content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
 
   schemas:
+    SSOOption:
+      type: object
+      properties: { id: { type: string, format: uuid }, name: { type: string, example: Google } }
+    Identity:
+      type: object
+      properties:
+        provider_id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, description: 'As the provider last gave it' }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+    SSOProvider:
+      type: object
+      required: [name, issuer, client_id]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        name: { type: string, maxLength: 60, description: 'On the button: "Sign in with NAME"' }
+        enabled: { type: boolean }
+        issuer: { type: string, format: uri, example: 'https://accounts.google.com', description: 'https, or http on localhost' }
+        client_id: { type: string }
+        client_secret: { type: string, writeOnly: true, description: 'Sealed with the master key; empty keeps the stored one' }
+        client_secret_set: { type: boolean, readOnly: true }
+        clear_secret: { type: boolean, writeOnly: true }
+        scopes: { type: array, items: { type: string }, default: [openid, email, profile] }
+        email_claim: { type: string, default: email, description: 'Entra ID: preferred_username' }
+        trust_email: { type: boolean, description: 'Treat emails as verified when the provider sends no email_verified' }
+        allowed_domains: { type: array, items: { type: string }, description: 'Empty: any' }
+        new_accounts: { type: string, enum: [none, student, teacher], description: 'The role of accounts made on first sign-in' }
+        teacher_claim: { type: string, description: 'With new_accounts student: new accounts whose claim has one of teacher_values become teachers' }
+        teacher_values: { type: array, items: { type: string } }
+        link_by_email: { type: boolean, description: 'A first sign-in may join the student or teacher account with the same verified email' }
+        updated_at: { type: string, format: date-time, readOnly: true }
     Meeting:
       type: object
       properties:
