@@ -62,7 +62,7 @@ Resource link checks use `imageurl.Checker`. The dialer refuses non-public IPs (
 
 - **Caddy**:
   - HSTS, `nosniff`, `Referrer-Policy: same-origin`, `frame-ancestors 'none'`.
-  - A strict CSP: `default-src 'self'`, `img-src 'self' https: data:` for teacher image URLs, `connect-src 'self' wss:`, `object-src 'none'`. Google Drive's file picker (D-71) adds `https://apis.google.com` to `script-src`, Google's frames to `frame-src` and `googleapis.com` to `connect-src`; drop them if Drive is off.
+  - A strict CSP: `default-src 'self'`, `img-src 'self' https: data:` for teacher image URLs, `connect-src 'self' wss:`, `object-src 'none'`. Google Drive's file picker (D-71) adds `https://apis.google.com` to `script-src`, Google's frames to `frame-src` and `googleapis.com` to `connect-src`; drop them if Drive is off. Tutorial videos (D-74) add `https://www.youtube-nocookie.com` to `frame-src`; the server turns every video and document link into that player or Google's viewer, so nothing else is framed.
 - **Inline scripts**: SvelteKit's hash-based `<meta>` CSP blocks every inline script except its own hashed boot script.
 - **Go**: adds `nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy` to every response.
 - **Public results pages**: `X-Robots-Tag: noindex` and `Cache-Control: no-store`.
