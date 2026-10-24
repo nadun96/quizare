@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LiveSocket } from '../socket';
 import { MeetingCall } from './call.svelte';
-import { applyRoster, gridColumns, initials, polite, streamKind, type Person } from './mesh';
+import { applyRoster, fitGrid, gridColumns, initials, polite, sizeHint, sizeOptions, streamKind, type Person } from './mesh';
 
 const person = (peer_id: string, more: Partial<Person> = {}): Person => ({ peer_id, user_id: 'u-' + peer_id, name: peer_id, host: false, mic: false, cam: false, screen: false, hand: false, ...more });
 
@@ -24,6 +24,33 @@ describe('meeting roster', () => {
 	it('agrees on who gives way, from both ends', () => {
 		expect(polite('b', 'a')).toBe(true);
 		expect(polite('a', 'b')).toBe(false);
+	});
+
+	it('fits every tile on the screen, as large as it can', () => {
+		// One person on a wide screen: as tall as the screen allows.
+		expect(fitGrid(1, 1600, 900, 0)).toEqual({ cols: 1, w: 1600, h: 900 });
+		expect(fitGrid(1, 1600, 450, 0)).toEqual({ cols: 1, w: 800, h: 450 });
+		// Four on a laptop: two by two; on a tall phone: one column.
+		expect(fitGrid(4, 1280, 720, 0).cols).toBe(2);
+		expect(fitGrid(4, 390, 760, 0).cols).toBe(1);
+		// Every layout fits inside the box.
+		for (const [n, w, h] of [[3, 1280, 720], [7, 1280, 720], [12, 1920, 1080], [20, 390, 800]]) {
+			const g = fitGrid(n, w, h);
+			const rows = Math.ceil(n / g.cols);
+			expect(g.cols * g.w + (g.cols - 1) * 8).toBeLessThanOrEqual(w);
+			expect(rows * g.h + (rows - 1) * 8).toBeLessThanOrEqual(h);
+		}
+		expect(fitGrid(0, 100, 100)).toEqual({ cols: 1, w: 0, h: 0 });
+	});
+
+	it('offers the sizes the admin allows', () => {
+		expect(sizeOptions(8)).toEqual({ sizes: [4, 6, 8], initial: 6 });
+		expect(sizeOptions(3)).toEqual({ sizes: [3], initial: 3 });
+		expect(sizeOptions(10)).toEqual({ sizes: [4, 6, 8, 10], initial: 6 });
+		expect(sizeOptions(0).sizes.at(-1)).toBe(0); // no limit
+		expect(sizeHint(4)).toMatch(/slow/);
+		expect(sizeHint(0)).toMatch(/camera off/);
+		expect(sizeHint(20)).toBe(sizeHint(0));
 	});
 
 	it('lays out tiles and names them', () => {
@@ -198,6 +225,39 @@ describe('MeetingCall', () => {
 		expect(video.stop).toHaveBeenCalled();
 		expect(pcs[0].senders.map((s) => s.track)).toEqual([audio]);
 		expect(sent.at(-1)).toEqual({ type: 'state', mic: false, cam: false, screen: false, hand: false });
+	});
+
+	it('draws on the whiteboard through the meeting socket', async () => {
+		const { call, sent, recv } = setup();
+		call.join([]);
+		recv({ type: 'welcome', you: person('m', { host: true }), peers: [], ice_servers: [], board: { type: 'board_state', open: false, mode: 'host', can_draw: true, me: 'u-m', strokes: [{ id: 1, by: 'u-x', gesture: 'g', tool: 'pen', color: '#111827', size: 3, points: [1, 1] }] } });
+		expect(call.board.strokes.length).toBe(1);
+		expect(call.board.canDraw).toBe(true);
+
+		// A request resolves with its answer, and only its own.
+		const add = call.boardClient.add([{ gesture: 'h', tool: 'pen', color: '#111827', size: 3, points: [2, 2] }]);
+		const req = sent.at(-1);
+		expect(req).toMatchObject({ type: 'board_add', strokes: [{ gesture: 'h' }] });
+		recv({ type: 'board_ack', req: 'other', strokes: [] });
+		recv({ type: 'board_ack', req: req.req, strokes: [{ id: 2, by: 'u-m' }] });
+		await expect(add).resolves.toEqual([{ id: 2, by: 'u-m' }]);
+		// Refusals reject.
+		const erase = call.boardClient.erase([1]);
+		recv({ type: 'board_ack', req: sent.at(-1).req, error: 'no' });
+		await expect(erase).rejects.toThrow('no');
+
+		// Others' marks and the host's settings arrive as events.
+		recv({ type: 'board', op: 'add', strokes: [{ id: 3, by: 'u-a', gesture: 'a', tool: 'pen', color: '#111827', size: 3, points: [3, 3] }] });
+		expect(call.board.strokes.map((s) => s.id)).toEqual([1, 3]);
+		recv({ type: 'board_access', open: true, mode: 'everyone', can_draw: true });
+		expect(call.board.open).toBe(true);
+		call.setBoard(false);
+		expect(sent.at(-1)).toEqual({ type: 'board_access', open: false, mode: 'everyone' });
+
+		// Leaving refuses what's still waiting.
+		const pending = call.boardClient.clear();
+		call.leave();
+		await expect(pending).rejects.toThrow('over');
 	});
 
 	it('tells the person when the browser blocks a device', async () => {

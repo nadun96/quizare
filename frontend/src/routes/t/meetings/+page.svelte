@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
-	import type { Attendance, Meeting } from '$lib/meet/mesh';
+	import { sizeHint, sizeOptions, type Attendance, type Meeting, type MeetingLimits } from '$lib/meet/mesh';
 	import type { Classroom } from '$lib/types';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -28,6 +28,9 @@
 	let who = $state<'anyone' | 'classroom'>('anyone');
 	let classroomId = $state('');
 	let size = $state('6');
+	// What the admin allows (D-72; 0 is unlimited).
+	let limits = $state<MeetingLimits>({ max_people: 8, max_open: 0 });
+	const choices = $derived(sizeOptions(limits.max_people));
 	let error = $state('');
 	let busy = $state(false);
 	let open = $state<Record<string, Attendance[] | null>>({});
@@ -36,6 +39,10 @@
 		if (!ready()) return;
 		meetings.load();
 		api.get<{ classrooms: Classroom[] }>('/api/teacher/classrooms?size=100&sort=name').then((r) => (classrooms = r.classrooms ?? []));
+		api.get<MeetingLimits>('/api/teacher/meeting-limits').then((l) => {
+			limits = l;
+			size = String(sizeOptions(l.max_people).initial);
+		});
 	});
 
 	async function create(e: SubmitEvent) {
@@ -111,12 +118,9 @@
 			</div>
 			<div class="vstack gap-1">
 				<span class="font-semibold">Size</span>
-				<OptionGroup label="Size" value={size} onchange={(v) => (size = v)} options={[
-					{ v: '4', label: 'Up to 4', icon: 'user', hint: 'Best on slow connections' },
-					{ v: '6', label: 'Up to 6', icon: 'users' },
-					{ v: '8', label: 'Up to 8', icon: 'users', hint: 'Everyone needs a good connection' }
-				]} />
-				<p class="small muted m-0">Each person sends their video to every other one, so calls stay small.</p>
+				<OptionGroup label="Size" value={size} onchange={(v) => (size = v)} options={choices.sizes.map((n) => ({
+					v: String(n), label: n ? `Up to ${n}` : 'No limit', icon: n && n <= 4 ? 'user' : 'users', hint: sizeHint(n)
+				}))} />
 			</div>
 			{#if error}<p class="field-error" role="alert">{error}</p>{/if}
 			<div class="flex gap-2">
@@ -144,7 +148,7 @@
 							<p class="small muted m-0 mt-1">
 								{#if m.status === 'open'}<span class="badge badge-soft badge-sm ok">Open</span>{:else}<span class="badge badge-soft badge-sm">Ended</span>{/if}
 								{' · '}{m.classroom_id ? roomName(m.classroom_id) : 'Anyone with the code'}
-								{' · '}up to {m.max_people}
+								{' · '}{m.max_people ? `up to ${m.max_people}` : 'no size limit'}
 								{#if m.status === 'open'}{' · '}<span class="tabular">{m.online}</span> in now{/if}
 							</p>
 							<p class="small muted m-0 mt-1">Code <strong class="tabular">{m.code}</strong>{' · '}{time(m.created_at)}</p>
