@@ -130,6 +130,10 @@ Copy the new binary and `systemctl restart quiz`. Migrations run on start; each 
 - **Host:** `free` and `vmstat`. Watch for swap-in; the architecture's pass criteria are a Go heap under 400 MB and fewer than 25 Postgres connections.
 - **Admin console:** usage counts and job-queue states.
 
+## aaPanel
+
+On a server managed with aaPanel, with aaPanel's PostgreSQL, see [Deploying on aaPanel](deploy-aapanel.md): a package built on your computer (`scripts/package.ps1`), installed and updated by scripts that back up the database first and go back on their own if a new version doesn't start.
+
 ## CI/CD
 
 To build, test and deploy every push with Jenkins and other open-source tools, see [CI/CD with Jenkins](ci-jenkins.md).

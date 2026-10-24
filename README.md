@@ -177,6 +177,8 @@ echo 'a-strong-password' | docker compose exec -T app /app/server create-admin a
 6. Before real classes, run `loadtest/classroom.js` with k6 against a staging copy.
 7. Tutoring (optional): LiveKit with `deploy/livekit.yaml`, the tutoring service with `deploy/quiz-tutoring.service`, the `tutor.` site in `deploy/Caddyfile`, and UDP 7882 and TCP 7881 open. The in-app *Deployment* page has the steps; `node loadtest/tutoring-media.mjs` checks LiveKit's capacity on a machine.
 
+**On aaPanel**, with aaPanel's PostgreSQL: build a release on your computer with `.\scripts\package.ps1`, upload it, and run `deploy/aapanel/install.sh` once and `/www/quiz-app/update.sh` for each new version. Updates back up the database first, keep everyone signed in, and go back on their own if the new version doesn't start. The in-app page *Deploying on aaPanel* (`/docs/deploy-aapanel`) has the steps.
+
 ## License
 
 [MIT](LICENSE) © 2026 Nadun Udaraka

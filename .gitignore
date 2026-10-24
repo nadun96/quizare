@@ -31,3 +31,6 @@ local/demo/demo_seed.py
 
 # LiveKit binaries downloaded by loadtest/tutoring-media.mjs
 /loadtest/.bin/
+
+# Release packages built by scripts/package.ps1
+/dist/
