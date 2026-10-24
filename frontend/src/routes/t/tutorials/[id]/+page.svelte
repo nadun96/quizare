@@ -458,7 +458,7 @@
 						<tbody>
 							{#each progress.students as s (s.user_id)}
 								<tr>
-									<td>{s.name}{#if s.student_number}<span class="small muted"> · {s.student_number}</span>{/if}</td>
+									<td>{s.name}{#if s.student_number}<span class="small muted">{' · '}{s.student_number}</span>{/if}</td>
 									<td><span class="badge badge-soft" class:ok={s.finished}>{status(s)}</span></td>
 									<td class="tabular">{s.started ? `${s.score} / ${progress.max_score}` : '—'}{#if s.pending}<span class="badge badge-warning badge-sm ml-1">{s.pending} to mark</span>{/if}</td>
 									<td class="tabular">{s.started ? duration(s.seconds) : '—'}</td>

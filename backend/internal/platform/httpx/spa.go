@@ -21,6 +21,11 @@ func SPA(dir string) http.Handler {
 			if strings.HasPrefix(p, "/_app/immutable/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
+			// Module scripts (pdf.js's worker is .mjs) must be JavaScript, whatever
+			// the system's MIME table says (Windows' may say text/plain).
+			if ext := path.Ext(p); ext == ".js" || ext == ".mjs" {
+				w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			}
 			fs.ServeHTTP(w, r)
 			return
 		}

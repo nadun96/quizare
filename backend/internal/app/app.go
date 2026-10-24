@@ -36,6 +36,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
 	"github.com/nadun96/quizplatform/internal/poll"
+	"github.com/nadun96/quizplatform/internal/presentation"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
 	"github.com/nadun96/quizplatform/internal/storage"
@@ -63,12 +64,13 @@ type App struct {
 	Admin     *admin.Service
 	Poll      *poll.Service
 	Storage   *storage.Service
-	Directory *directory.Service // school sign-in (D-64)
-	Meet      *meet.Service      // peer-to-peer meetings (D-69)
-	OIDC      *oidc.Service      // sign-in with OpenID Connect providers (D-70)
-	Drive     *drive.Service     // teachers' Google Drive (D-71)
-	Tutorial  *tutorial.Service  // interactive tutorials (D-74)
-	Tutor     *tutorlink.Service // nil when tutoring is off
+	Directory *directory.Service    // school sign-in (D-64)
+	Meet      *meet.Service         // peer-to-peer meetings (D-69)
+	OIDC      *oidc.Service         // sign-in with OpenID Connect providers (D-70)
+	Drive     *drive.Service        // teachers' Google Drive (D-71)
+	Tutorial  *tutorial.Service     // interactive tutorials (D-74)
+	Slides    *presentation.Service // presentations (D-76)
+	Tutor     *tutorlink.Service    // nil when tutoring is off
 }
 
 // Options let tests swap infrastructure.
@@ -247,6 +249,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Tutorial = tutorial.NewService(pool, a.Content, a.Quiz, a.Auth)
 	a.Tutorial.SetLLM(a.LLM) // AI marking of written answers (D-75)
 	a.LLM.SetTutorials(a.Tutorial)
+	a.Slides = presentation.NewService(pool, a.Content, a.Auth)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -301,6 +304,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Meet.TeacherRoutes(t)
 			a.Drive.TeacherRoutes(t)
 			a.Tutorial.TeacherRoutes(t)
+			a.Slides.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
@@ -314,6 +318,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			s.Use(auth.RequireRole(auth.RoleStudent))
 			a.Live.StudentRoutes(s)
 			a.Tutorial.StudentRoutes(s)
+			a.Slides.StudentRoutes(s)
 			a.Eval.StudentRoutes(s)
 		})
 	})

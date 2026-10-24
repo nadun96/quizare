@@ -99,6 +99,8 @@ func areaOf(table string) string {
 		return "poll_uploads"
 	case "poll.board_strokes":
 		return "whiteboards"
+	case "presentation.files", "presentation.slides":
+		return "presentation_files"
 	}
 	schema, _, _ := strings.Cut(table, ".")
 	switch schema {
@@ -110,6 +112,10 @@ func areaOf(table string) string {
 		return "quizzes_sessions"
 	case "poll":
 		return "polls"
+	case "tutorial":
+		return "tutorials"
+	case "presentation":
+		return "presentations"
 	case "eval", "analytics":
 		return "results"
 	case "audit":
