@@ -128,7 +128,10 @@ func (s *Service) OnSessionEnded(ctx context.Context, tx pgx.Tx, sessionID strin
 
 // ---------- marking ----------
 
-// method resolves how a question is marked (BA §7 evaluation method; D-14).
+// Method resolves how a question is marked: key, llm or manual (BA §7
+// evaluation method; D-14). Tutorials use it too (D-74).
+func Method(q quiz.Question, configured string) string { return method(q, configured) }
+
 func method(q quiz.Question, configured string) string {
 	switch {
 	case configured == "manual":
