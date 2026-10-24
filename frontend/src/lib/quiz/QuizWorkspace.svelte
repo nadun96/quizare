@@ -22,6 +22,7 @@
 	import ListSearch from '$lib/ui/ListSearch.svelte';
 	import Pager from '$lib/ui/Pager.svelte';
 	import SortHeader from '$lib/ui/SortHeader.svelte';
+	import { driveStatus, pickFiles, shareByLink } from '$lib/drive';
 	import { QTYPE_LABEL, type Overrides, type PoolInfo, type Question, type Quiz, type Session, type StudentQuestion } from '$lib/types';
 
 	type Report = { imported: number; rejected: { row: number; code: string; errors: Record<string, string> }[] };
@@ -101,6 +102,39 @@ if (await confirmDialog({ title: 'Some resource links are broken', body: e.messa
 		}
 		input.value = '';
 	}
+	// Google Drive (D-71): shown to teachers who connected it.
+	let drive = $state(false);
+	$effect(() => {
+		driveStatus().then((s) => (drive = s.connected && !s.reconnect));
+	});
+	function driveFail(e: unknown) {
+		notice = e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : e instanceof Error ? e.message : 'Google Drive didn’t answer';
+	}
+	async function importFromDrive() {
+		try {
+			const [f] = await pickFiles({ kind: 'questions', title: 'Choose a CSV file or a Google Sheet of questions' });
+			if (!f) return;
+			report = await api.post<Report>('/api/teacher/quizzes/' + id + '/questions/import-drive', { file_id: f.id });
+			load();
+		} catch (e) {
+			driveFail(e);
+		}
+	}
+	// Fills a question's image form with a picked Drive image, shared by link.
+	async function imageFromDrive(e: MouseEvent) {
+		const form = (e.currentTarget as HTMLButtonElement).form;
+		try {
+			const [f] = await pickFiles({ kind: 'images', title: 'Choose an image' });
+			if (!f || !form) return;
+			const shared = await shareByLink(f.id);
+			(form.elements.namedItem('url') as HTMLInputElement).value = shared.image_url ?? shared.web_link;
+			const alt = form.elements.namedItem('alt') as HTMLInputElement;
+			if (!alt.value) alt.value = shared.name.replace(/\.[a-z0-9]+$/i, '');
+			toast('Shared by link: students see it without a Google account. Add alt text, then Attach.', 'info');
+		} catch (err) {
+			driveFail(err);
+		}
+	}
 	async function dup(q: Question) {
 		await api.post('/api/teacher/questions/' + q.id + '/duplicate');
 		load();
@@ -112,10 +146,12 @@ if (!(await confirmDialog({ title: 'Delete question ' + q.code + '?', confirm: '
 	}
 	async function addResource(q: Question, e: SubmitEvent) {
 		e.preventDefault();
-		const fd = new FormData(e.currentTarget as HTMLFormElement);
+		// Kept now: the event's currentTarget is null once the request is awaited.
+		const form = e.currentTarget as HTMLFormElement;
+		const fd = new FormData(form);
 		try {
 			await api.put('/api/teacher/questions/' + q.id + '/resources', { role: fd.get('role'), n: Number(fd.get('n')), url: fd.get('url'), alt_text: fd.get('alt') });
-			(e.currentTarget as HTMLFormElement).reset();
+			form.reset();
 			load();
 		} catch (err) {
 			notice = err instanceof ApiError ? Object.values(err.fields).join('; ') || err.message : 'Could not add the resource';
@@ -191,7 +227,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
 			<button class="tab" role="tab" aria-selected={tab === 'questions'} class:tab-active={tab === 'questions'} onclick={() => (tab = 'questions')}>Questions</button>
-			<button class="tab" role="tab" aria-selected={tab === 'import'} class:tab-active={tab === 'import'} onclick={() => (tab = 'import')}>CSV import</button>
+			<button class="tab" role="tab" aria-selected={tab === 'import'} class:tab-active={tab === 'import'} onclick={() => (tab = 'import')}>Import</button>
 			{#if !bank}
 				<button class="tab" role="tab" aria-selected={tab === 'pools'} class:tab-active={tab === 'pools'} onclick={() => (tab = 'pools')}>Pools{quiz.pools?.length ? ` (${quiz.pools.length})` : ''}</button>
 				<button class="tab" role="tab" aria-selected={tab === 'settings'} class:tab-active={tab === 'settings'} onclick={() => (tab = 'settings')}>Settings</button>
@@ -252,6 +288,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 								<select class="select w-full" name="role" style="width:8rem" aria-label="Attach to"><option value="Q">Question</option><option value="O">Option</option><option value="F">Feedback</option></select>
 								<input class="input w-full" name="n" type="number" min="1" value="1" style="width:5rem" aria-label="Number" />
 								<input class="input w-full" name="url" placeholder="Public image URL (Google Drive links work)" required style="flex:1;min-width:12rem" aria-label="URL" />
+								{#if drive}<button type="button" class="btn btn-sm" onclick={imageFromDrive}><Icon name="cloud" size={14} />From Drive</button>{/if}
 								<input class="input w-full" name="alt" placeholder="Alt text" style="width:10rem" aria-label="Alt text" />
 								<button class="btn btn-sm">Attach</button>
 							</form>
@@ -261,9 +298,10 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 			</div>
 		{:else if tab === 'import'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-				<h3 style="margin-top:0">Import questions from CSV</h3>
+				<h3 style="margin-top:0">Import questions</h3>
 				<p class="small">One row per question. Download the <a href="/api/teacher/quiz-template.csv" download>template</a> for examples of all seven types. Add a <code>category</code> column to sort questions into pools. Valid rows are imported; invalid ones are listed below so you can fix and re-upload just those.</p>
 				<input class="file-input w-full" type="file" accept=".csv,text/csv" onchange={(e) => upload('questions', e.currentTarget)} aria-label="Questions CSV" />
+				{#if drive}<div><button class="btn" onclick={importFromDrive}><Icon name="cloud" size={16} />Import from Google Drive</button> <span class="small muted">A CSV file, or a Google Sheet with the same columns.</span></div>{/if}
 				{#if report}
 					<p class="alert alert-soft {report.rejected.length ? '' : 'ok'}">Imported {report.imported} question(s); rejected {report.rejected.length}.</p>
 					{#if report.rejected.length}

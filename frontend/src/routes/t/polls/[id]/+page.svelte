@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AnswerList from '$lib/poll/AnswerList.svelte';
+	import SaveToDrive from '$lib/drive/SaveToDrive.svelte';
 	import ParticipantList from '$lib/poll/ParticipantList.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -205,6 +206,7 @@
 				<span class="badge badge-soft gap-1" class:ok={connected}>{#if connected}<span class="status status-success animate-pulse" aria-hidden="true"></span>Live{:else}<Icon name="wifi-off" size={12} />Reconnecting…{/if}</span>
 				<span class="spacer"></span>
 				<a class="btn btn-sm" href={'/api/teacher/polls/' + id + '/export.csv'} download><Icon name="arrow-right" size={14} />Export CSV</a>
+				<SaveToDrive kind="poll" {id} size="btn-sm" />
 				<button class="btn btn-sm btn-ghost text-error" onclick={reset}>Clear responses</button>
 			</div>
 			{#if poll.scoring}

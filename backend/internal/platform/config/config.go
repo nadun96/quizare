@@ -39,11 +39,11 @@ type Config struct {
 	MeetSTUN           []string
 	MeetTURNURLs       []string
 	MeetTURNSecretFile string
-	DBMaxConns             int32 // pgx pool size; architecture budget is 15
-	Argon2Workers          int   // bounded hashing pool; architecture budget is 2
-	DevMode                bool  // relaxes nothing security-critical; enables verbose logs and console email
-	ShutdownWait           time.Duration
-	StaticDir              string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
+	DBMaxConns         int32 // pgx pool size; architecture budget is 15
+	Argon2Workers      int   // bounded hashing pool; architecture budget is 2
+	DevMode            bool  // relaxes nothing security-critical; enables verbose logs and console email
+	ShutdownWait       time.Duration
+	StaticDir          string // optional: serve the SPA build from Go when Caddy is not in front (dev only)
 
 	// TrustedProxies are proxy IPs or CIDRs, besides loopback, whose
 	// X-Forwarded-For is believed (QP_TRUSTED_PROXIES, comma-separated), e.g.

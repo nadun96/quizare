@@ -13,6 +13,7 @@
 	import { urlState } from '$lib/urlstate';
 	import Pager from '$lib/ui/Pager.svelte';
 	import TopicList from '$lib/TopicList.svelte';
+	import ClassroomFiles from '$lib/drive/ClassroomFiles.svelte';
 
 	import StudentsPanel, { type Enrolment } from '$lib/StudentsPanel.svelte';
 	const ready = requireRole('teacher');
@@ -21,7 +22,8 @@
 	// Modules one page at a time, in the teacher's order; each lists its own topics (PL-FR-02).
 	const modules = new Paged<Module>(() => '/api/teacher/classrooms/' + id + '/modules', 'modules', { url: urlState, prefix: 'mod', sort: 'position' });
 	let studentCount = $state(0);
-	let tab = $state<'content' | 'students' | 'settings' | 'join'>('content');
+	// ?tab=files: back from connecting Google Drive (D-71).
+	let tab = $state<'content' | 'students' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
 	let newModule = $state('');
 	let errors = $state<Record<string, string>>({});
 	let notice = $state('');
@@ -106,7 +108,7 @@ if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules,
 		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}</div>
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
+			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['files', 'Files'], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -129,6 +131,8 @@ if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules,
 			</form>
 		{:else if tab === 'students'}
 			<StudentsPanel classroomId={id} bind:count={studentCount} oneditnumber={editNumber} onstatus={setEnrolment} />
+		{:else if tab === 'files'}
+			<ClassroomFiles classroomId={id} />
 		{:else if tab === 'settings'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">

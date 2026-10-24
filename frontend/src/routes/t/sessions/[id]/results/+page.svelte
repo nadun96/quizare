@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { promptDialog } from '$lib/ui/dialog.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
+	import SaveToDrive from '$lib/drive/SaveToDrive.svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import AnalyticsView from '$lib/AnalyticsView.svelte';
@@ -121,6 +122,7 @@
 			<h1 style="margin:0">Results: {session.title}</h1>
 			<span class="spacer"></span>
 			<a class="btn" href={'/api/teacher/sessions/' + id + '/export.csv'} download>Export CSV</a>
+			<SaveToDrive kind="session" {id} />
 			{#if session.results_released_at}
 				<span class="badge badge-soft badge-success">Released</span><button class="btn" onclick={() => release(false)}>Hide results</button>
 			{:else}<button class="btn btn-primary" onclick={() => release(true)}>Release results now</button>{/if}
