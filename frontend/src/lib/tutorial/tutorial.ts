@@ -6,6 +6,7 @@ export type BlockType = 'text' | 'image' | 'video' | 'document' | 'link';
 export type Block = { type: BlockType; text?: string; url?: string; embed?: string; alt?: string };
 export type Checkpoint = 'none' | 'answered' | 'correct';
 export type FeedbackTiming = 'page' | 'end' | 'release';
+export type Leaving = 'allowed' | 'recorded' | 'blocked';
 
 export type Tutorial = {
 	id: string;
@@ -26,12 +27,34 @@ export type Tutorial = {
 	page_count: number;
 };
 
-export type Page = { id: string; position: number; title: string; blocks: Block[]; question_ids: string[]; checkpoint: Checkpoint; max_tries: number };
+export type Page = {
+	id: string;
+	position: number;
+	title: string;
+	blocks: Block[];
+	question_ids: string[];
+	checkpoint: Checkpoint;
+	max_tries: number;
+	leaving: Leaving;
+	lock_after: number;
+};
 export type Editor = { tutorial: Tutorial; pages: Page[]; questions: Question[] };
 
-export type Mark = { score: number; max: number; correct: boolean; pending: boolean; feedback?: string; comment?: string; key?: Key };
+export type Mark = { score: number; max: number; correct: boolean; pending: boolean; marking: boolean; feedback?: string; comment?: string; key?: Key };
 export type QuestionView = StudentQuestion & { response?: Response; checked: boolean; locked: boolean; tries: number; mark?: Mark };
-export type PageView = { index: number; title: string; blocks: Block[]; questions: QuestionView[]; checkpoint: Checkpoint; max_tries: number; passed: boolean };
+export type PageView = {
+	index: number;
+	title: string;
+	blocks: Block[];
+	questions: QuestionView[];
+	checkpoint: Checkpoint;
+	max_tries: number;
+	passed: boolean;
+	leaving: Leaving;
+	lock_after: number;
+	leaves: number; // counted toward the lock
+	locked: boolean;
+};
 export type RunView = {
 	tutorial: { id: string; title: string; description: string; allow_back: boolean; feedback: FeedbackTiming; due_at?: string };
 	current: number;
@@ -42,6 +65,30 @@ export type RunView = {
 	pages: { title: string; questions: number; done: boolean; open: boolean }[];
 	page?: PageView;
 	score?: { score: number; max: number; pending: number };
+};
+
+export type QuestionStats = { id: string; code: string; text: string; type: string; marks: number; answered: number; correct: number; pending: number; score_pct?: number; avg_tries: number };
+export type PageStats = {
+	index: number;
+	title: string;
+	reading: boolean;
+	checkpoint: Checkpoint;
+	leaving: Leaving;
+	reached: number;
+	stopped_here: number;
+	median_seconds?: number;
+	leaves: number;
+	left_students: number;
+	locked: number;
+	out_of_tries: number;
+	questions: QuestionStats[];
+	then?: { median_seconds: number; longer_n: number; longer_pct?: number; shorter_n: number; shorter_pct?: number; questions: number };
+};
+export type Analytics = {
+	started: number;
+	finished: number;
+	pages: PageStats[];
+	students: { run_id: string; seconds: number; reading_seconds: number; score_pct?: number; finished: boolean }[];
 };
 
 export type MyTutorial = { id: string; title: string; classroom: string; page_count: number; due_at?: string; opens_at?: string; started: boolean; reached: number; finished: boolean };
@@ -65,6 +112,31 @@ export const FEEDBACK: { v: FeedbackTiming; label: string; icon: IconName; hint:
 	{ v: 'end', label: 'At the end', icon: 'flag', hint: 'Marks and feedback once the student finishes the tutorial.' },
 	{ v: 'release', label: 'When I release', icon: 'user', hint: 'Nothing until you press Release, for example after marking written answers.' }
 ];
+
+export const LEAVING: { v: Leaving; label: string; icon: IconName; hint: string }[] = [
+	{ v: 'allowed', label: 'Allowed', icon: 'logout', hint: 'Students may leave the app, for example to look something up.' },
+	{ v: 'recorded', label: 'Recorded', icon: 'eye', hint: 'Students may leave, but you see each time they did. They’re told it’s recorded.' },
+	{ v: 'blocked', label: 'Not allowed', icon: 'alert', hint: 'Students are warned first; leaving is recorded, and the page can lock until you unlock it.' }
+];
+
+/** What the page says about leaving the app, before they do. Links on the page always count as allowed. */
+export function leavingNote(p: Pick<PageView, 'leaving' | 'lock_after' | 'leaves' | 'locked'>): string {
+	if (p.locked) return 'This page is locked because you left the app too often. Ask your teacher to unlock it.';
+	if (p.leaving === 'recorded') return 'Leaving the app on this page is recorded for your teacher. Links on the page are fine.';
+	if (p.leaving !== 'blocked') return '';
+	const left = p.lock_after ? p.lock_after - p.leaves : 0;
+	const lock = p.lock_after ? ` After ${p.lock_after} ${p.lock_after === 1 ? 'time' : 'times'}, the page locks${p.leaves ? ` (${left} left)` : ''}.` : '';
+	return `Stay in the app on this page: your teacher sees each time you leave.${lock} Links on the page are fine.`;
+}
+
+/** "45 s", "3 min 05 s", "1 h 20 min". */
+export function duration(seconds: number | null | undefined): string {
+	if (seconds == null) return '—';
+	const s = Math.max(0, Math.round(seconds));
+	if (s < 60) return `${s} s`;
+	if (s < 3600) return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
+	return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+}
 
 /** A block with nothing in it yet, for the editor. */
 export function emptyBlock(type: BlockType): Block {

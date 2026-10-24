@@ -31,6 +31,9 @@ type StudentProgress struct {
 	Answered      int        `json:"answered"`
 	Score         float64    `json:"score"`
 	Pending       int        `json:"pending"`
+	Seconds       int        `json:"seconds"` // time on the tutorial's pages
+	Leaves        int        `json:"leaves"`  // times they left the app where it's recorded or not allowed
+	Locked        int        `json:"locked"`  // pages locked for leaving
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 }
 
@@ -84,8 +87,12 @@ func (s *Service) Progress(ctx context.Context, teacherID, id string) (Progress,
 	rows, err := s.pool.Query(ctx, `SELECT r.id, r.user_id, r.current, r.reached, r.finished_at IS NOT NULL, r.updated_at,
 			coalesce(array_agg(a.question_id::text) FILTER (WHERE a.question_id IS NOT NULL), '{}'),
 			coalesce(array_agg(a.score) FILTER (WHERE a.question_id IS NOT NULL), '{}'),
-			coalesce(array_agg(a.status) FILTER (WHERE a.question_id IS NOT NULL), '{}')
-		FROM tutorial.runs r LEFT JOIN tutorial.answers a ON a.run_id = r.id WHERE r.tutorial_id=$1 GROUP BY r.id`, id)
+			coalesce(array_agg(a.status) FILTER (WHERE a.question_id IS NOT NULL), '{}'),
+			coalesce(v.seconds, 0), coalesce(v.leaves, 0), coalesce(v.locked, 0)
+		FROM tutorial.runs r LEFT JOIN tutorial.answers a ON a.run_id = r.id
+		LEFT JOIN LATERAL (SELECT sum(seconds)::int AS seconds, sum(leaves)::int AS leaves, count(locked_at)::int AS locked
+			FROM tutorial.visits WHERE run_id = r.id) v ON true
+		WHERE r.tutorial_id=$1 GROUP BY r.id, v.seconds, v.leaves, v.locked`, id)
 	if err != nil {
 		return Progress{}, err
 	}
@@ -94,7 +101,7 @@ func (s *Service) Progress(ctx context.Context, teacherID, id string) (Progress,
 		var at time.Time
 		var qids, statuses []string
 		var scores []float64
-		if err := rows.Scan(&p.RunID, &p.UserID, &p.Current, &p.Reached, &p.Finished, &at, &qids, &scores, &statuses); err != nil {
+		if err := rows.Scan(&p.RunID, &p.UserID, &p.Current, &p.Reached, &p.Finished, &at, &qids, &scores, &statuses, &p.Seconds, &p.Leaves, &p.Locked); err != nil {
 			rows.Close()
 			return Progress{}, err
 		}
@@ -151,6 +158,28 @@ type AnswerDetail struct {
 	Status   string         `json:"status,omitempty"` // marked, pending, or "" when unanswered
 	Tries    int            `json:"tries"`
 	Comment  string         `json:"comment,omitempty"`
+	// AI marking (D-75): how it's marked, what the AI wrote, and whether
+	// the teacher should look at it.
+	Method     string `json:"method,omitempty"`
+	AIFeedback string `json:"ai_feedback,omitempty"`
+	AIMarked   bool   `json:"ai_marked"`
+	Marking    bool   `json:"marking"`
+	Flagged    bool   `json:"flagged"`
+	FlagReason string `json:"flag_reason,omitempty"`
+}
+
+// RunPage is one student's time on a page and the times they left from it.
+type RunPage struct {
+	PageID       string `json:"page_id"`
+	Index        int    `json:"index"`
+	Title        string `json:"title"`
+	Leaving      string `json:"leaving"`
+	Visited      bool   `json:"visited"`
+	Seconds      int    `json:"seconds"`
+	Leaves       int    `json:"leaves"`
+	AllowedLeave int    `json:"allowed_leaves"`
+	AwaySeconds  int    `json:"away_seconds"`
+	Locked       bool   `json:"locked"`
 }
 
 // RunDetail is one student's answers, page by page.
@@ -160,6 +189,7 @@ type RunDetail struct {
 	Name     string         `json:"name"`
 	Finished bool           `json:"finished"`
 	Answers  []AnswerDetail `json:"answers"`
+	Pages    []RunPage      `json:"pages"`
 }
 
 func (s *Service) ownedRun(ctx context.Context, teacherID, id, runID string) (Tutorial, *run, string, error) {
@@ -189,8 +219,11 @@ func (s *Service) Run(ctx context.Context, teacherID, id, runID string) (RunDeta
 	if err != nil {
 		return RunDetail{}, err
 	}
-	d := RunDetail{RunID: runID, UserID: userID, Name: users[userID].Name, Finished: r.finished != nil, Answers: []AnswerDetail{}}
+	d := RunDetail{RunID: runID, UserID: userID, Name: users[userID].Name, Finished: r.finished != nil, Answers: []AnswerDetail{}, Pages: []RunPage{}}
 	for i, p := range r.pages {
+		v, seen := r.visits[p.ID]
+		d.Pages = append(d.Pages, RunPage{PageID: p.ID, Index: i, Title: p.Title, Leaving: p.Leaving, Visited: seen, Seconds: v.Seconds,
+			Leaves: v.Leaves, AllowedLeave: v.Allowed, AwaySeconds: v.Away, Locked: v.LockedAt != nil})
 		for _, qid := range p.QuestionIDs {
 			q, ok := r.qs[qid]
 			if !ok {
@@ -200,6 +233,8 @@ func (s *Service) Run(ctx context.Context, teacherID, id, runID string) (RunDeta
 			if a, ok := r.answers[qid]; ok {
 				resp := a.Response
 				ad.Response, ad.Score, ad.Correct, ad.Status, ad.Tries, ad.Comment = &resp, a.Score, a.Correct, a.Status, a.Tries, a.Comment
+				ad.Method, ad.AIFeedback, ad.AIMarked, ad.Flagged, ad.FlagReason = a.Method, a.AIFeedback, a.AIMarked, a.Flagged, a.FlagReason
+				ad.Marking = a.Status == "pending" && a.Method == "llm" && !a.Flagged
 			}
 			d.Answers = append(d.Answers, ad)
 		}
@@ -232,7 +267,7 @@ func (s *Service) Mark(ctx context.Context, teacherID, id, runID, questionID str
 		return RunDetail{}, httpx.Invalid(map[string]string{"comment": "at most 2000 characters"})
 	}
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `UPDATE tutorial.answers SET score=$3, correct=$3 >= max_score, status='marked', comment=$4 WHERE run_id=$1 AND question_id=$2`,
+		if _, err := tx.Exec(ctx, `UPDATE tutorial.answers SET score=$3, correct=$3 >= max_score, status='marked', comment=$4, flagged=false WHERE run_id=$1 AND question_id=$2`,
 			runID, questionID, in.Score, in.Comment); err != nil {
 			return err
 		}
