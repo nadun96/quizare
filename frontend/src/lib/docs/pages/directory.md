@@ -1,6 +1,6 @@
 # School sign-in (Active Directory and LDAP)
 
-Students and teachers can sign in with their school account, the one they use on school computers, instead of an account made here (D-64). It works with Windows Active Directory and with other LDAP directories such as OpenLDAP. An admin sets it up in **Admin → School sign-in**.
+Students and teachers can sign in with their school account, the one they use on school computers, instead of an account made here (D-64). It works with Windows Active Directory and with other LDAP directories such as OpenLDAP. An admin sets it up in **Admin → Sign-in**, under School directory. For Google, Microsoft and other accounts, see [Sign-in with other accounts](sso.md).
 
 ## What changes for people
 
@@ -16,7 +16,7 @@ Students and teachers can sign in with their school account, the one they use on
 1. **Create a service account** that can read users and groups, for example `svc-quiz` in an *OU=Service Accounts*. Ordinary domain users can read the directory, so it needs no extra rights. Give it a long password that doesn't expire, or note when it does.
 2. **Make sure LDAPS works.** Domain controllers serve LDAPS on port 636 once they have a certificate (from AD Certificate Services or another CA). Without one, use StartTLS on port 389; it needs a certificate too. If the certificate comes from your own CA, paste the CA certificate (PEM) in **Certificate authority**.
 3. **Choose the groups.** For example *CN=Staff,OU=Groups,DC=school,DC=local* for teachers and *CN=Students,OU=Groups,…* for students. With **Groups inside the groups: Count too**, members of *Year 10* count as students when *Year 10* is inside *Students*.
-4. **Fill in Admin → School sign-in**: the server (`ldaps://dc1.school.local`), the service account's DN and password, and where to look for people (*OU=People,DC=school,DC=local*, or the whole domain *DC=school,DC=local*).
+4. **Fill in Admin → Sign-in → School directory**: the server (`ldaps://dc1.school.local`), the service account's DN and password, and where to look for people (*OU=People,DC=school,DC=local*, or the whole domain *DC=school,DC=local*).
 5. **Test with a real account.** The test shows each step: connecting, the service account signing in, finding the person, checking their password, and the role their groups give. Test a teacher and a student.
 6. **Turn it on.** The login page changes for everyone at once.
 
