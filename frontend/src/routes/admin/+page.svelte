@@ -2,6 +2,7 @@
 	import DirectoryPanel from '$lib/admin/DirectoryPanel.svelte';
 	import SsoPanel from '$lib/admin/SsoPanel.svelte';
 	import DrivePanel from '$lib/admin/DrivePanel.svelte';
+	import MeetingLimits from '$lib/admin/MeetingLimits.svelte';
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -177,6 +178,7 @@
 		{#if can(auth.user, 'settings')}
 			<h2>Platform defaults</h2>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="platform" value={platform.overrides} effective={platform.effective} onsave={savePlatform} {errors} /></div>
+			<MeetingLimits />
 		{/if}
 	{:else if tab === 'audit'}
 		<div class="row">

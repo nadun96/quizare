@@ -89,3 +89,39 @@ export function initials(name: string): string {
 	if (!parts.length) return '?';
 	return ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
+
+/**
+ * How to lay n 16:9 tiles out in a w×h box so they're as large as possible
+ * with nothing scrolling (D-72): the column count, and each tile's size.
+ */
+export function fitGrid(n: number, w: number, h: number, gap = 8, aspect = 16 / 9): { cols: number; w: number; h: number } {
+	if (n < 1 || w <= 0 || h <= 0) return { cols: 1, w: 0, h: 0 };
+	let best = { cols: 1, w: 0, h: 0 };
+	for (let cols = 1; cols <= n; cols++) {
+		const rows = Math.ceil(n / cols);
+		const tw = Math.min((w - gap * (cols - 1)) / cols, ((h - gap * (rows - 1)) / rows) * aspect);
+		if (tw > best.w) best = { cols, w: Math.floor(tw), h: Math.floor(tw / aspect) };
+	}
+	return best;
+}
+
+export type MeetingLimits = { max_people: number; max_open: number };
+
+/**
+ * The sizes a teacher can choose under the admin's limit (D-72; 0 is
+ * unlimited), and the one chosen at first.
+ */
+export function sizeOptions(max: number): { sizes: number[]; initial: number } {
+	const presets = [4, 6, 8, 12, 20, 30, 50];
+	let sizes = max > 0 ? presets.filter((n) => n <= max) : [...presets, 0];
+	if (max > 0 && !sizes.includes(max)) sizes = [...sizes, max];
+	const initial = max > 0 && max < 6 ? max : 6;
+	return { sizes, initial };
+}
+
+/** One line on what a size means for the people in the call. */
+export function sizeHint(n: number): string {
+	if (n > 0 && n <= 4) return 'Best on slow connections.';
+	if (n > 0 && n <= 8) return 'Everyone needs a good connection.';
+	return 'Everyone sends video to everyone: past 8 people, most should keep their camera off.';
+}

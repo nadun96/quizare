@@ -288,6 +288,18 @@ paths:
       summary: Save the Google app (admins only, D-71)
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }
       responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/meeting-limits:
+    get:
+      operationId: getAdminMeetingLimits
+      tags: [admin, meetings]
+      summary: Meeting limits (admins, or managers with the settings feature; D-72)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/MeetingLimits' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    put:
+      operationId: putAdminMeetingLimits
+      tags: [admin, meetings]
+      summary: Set the meeting limits; a lower size applies to open meetings at once (D-72)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MeetingLimits' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/MeetingLimits' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/admin/sso:
     get:
       operationId: getAdminSso
@@ -651,6 +663,12 @@ paths:
       summary: A classroom's Drive files, for its actively enrolled students
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { files: { type: array, items: { $ref: '#/components/schemas/ClassroomDriveFile' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/meeting-limits:
+    get:
+      operationId: getTeacherMeetingLimits
+      tags: [meetings]
+      summary: What an admin allows for meetings; 0 is unlimited (D-72)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/MeetingLimits' } } } } }
   /api/teacher/meetings:
     get:
       operationId: getTeacherMeetings
@@ -668,7 +686,7 @@ paths:
       tags: [meetings]
       summary: Open a meeting (D-69)
       description: With a classroom, only you and its enrolled students may join; without one, anyone signed in who has the code.
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [title], properties: { title: { type: string, maxLength: 120 }, classroom_id: { type: string, format: uuid, nullable: true }, max_people: { type: integer, minimum: 2, maximum: 8, default: 6, description: 'Everyone sends to everyone, so meetings stay small' } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [title], properties: { title: { type: string, maxLength: 120 }, classroom_id: { type: string, format: uuid, nullable: true }, max_people: { type: integer, minimum: 0, default: 6, description: 'Within the admin''s limit (GET /api/teacher/meeting-limits); 0 is no limit, where the admin allows it. Everyone sends to everyone, so meetings stay small' } } } } } }
       responses: { '201': { description: 'Opened', content: { application/json: { schema: { $ref: '#/components/schemas/Meeting' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/meetings/{id}/end:
     post:
@@ -1807,6 +1825,11 @@ paths:
         Server → client: `welcome` (`you`, `peers`, `ice_servers`, `meeting`), `joined` (`peer`), `left` (`peer_id`),
         `signal` (`from`, `data`), `state` (`peer_id`, `mic`, `cam`, `screen`, `hand`), `removed`, `replaced` (you joined from another tab), `ended`, `pong`.
         Client → server: `ping`, `signal` (`to`, `data`: an SDP description or ICE candidate), `state`, and for the host `remove` (`peer_id`) and `end`.
+        Whiteboard (D-72), kept in memory while the meeting is open: `welcome` carries `board` (`open`, `mode`: host|everyone, `can_draw`, `me`, `strokes`).
+        Requests carry a `req` id and are answered with `board_ack` (`req`, and `strokes`, `removed`, `upto` or `error`): `board_add` (`strokes`, 1-20, checked
+        as poll strokes; up to 20,000 per board), `board_erase` (`ids`, or `gesture` to undo one's own line; others' marks only for the host), and for the
+        host `board_clear`. The host's `board_access` (`open`, `mode`) reaches everyone as `board_access` with their own `can_draw`; others get `board` events
+        (`op`: add, remove, clear with `upto`).
       parameters: [{ $ref: '#/components/parameters/code' }]
       responses: { '101': { description: 'Switching protocols' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '410': { $ref: '#/components/responses/Gone' } }
   /beacon/attempts/{id}/violations:
@@ -1868,6 +1891,11 @@ components:
       content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
 
   schemas:
+    MeetingLimits:
+      type: object
+      properties:
+        max_people: { type: integer, minimum: 0, maximum: 1000, description: 'People in one meeting; 0 is unlimited, otherwise at least 2' }
+        max_open: { type: integer, minimum: 0, maximum: 1000, description: 'Open meetings per teacher; 0 is unlimited' }
     DriveConfig:
       type: object
       properties:

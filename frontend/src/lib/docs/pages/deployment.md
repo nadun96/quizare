@@ -95,7 +95,8 @@ Meetings (D-69) are peer-to-peer: the platform only passes the set-up messages o
 
 - **STUN.** Browsers ask a STUN server for their public address. The default is Google's public one; set `QP_MEET_STUN=stun:stun.example.edu:3478` to use your own, or `none` on a closed classroom network.
 - **TURN.** Some networks (strict firewalls, some mobile carriers) block direct connections; people there see "Can't connect" on the others' tiles. A TURN relay fixes this. Install coturn with `use-auth-secret` and `static-auth-secret=<secret>`, put the same secret in a file (mode 0400) and set `QP_MEET_TURN_URLS=turn:turn.example.edu:3478,turns:turn.example.edu:5349` and `QP_MEET_TURN_SECRET_FILE`. The platform hands each person credentials that expire after 6 hours. Open UDP and TCP 3478, TCP 5349, and coturn's relay port range.
-- **Size.** Everyone sends to everyone, so a meeting of n people needs each person to send n−1 copies of their video (about 0.5 Mbit/s each at the 640×360 the call uses). Meetings are capped at 8; for a class, use tutoring, which goes through LiveKit.
+- **Size.** Everyone sends to everyone, so a meeting of n people needs each person to send n−1 copies of their video (about 0.5 Mbit/s each at the 640×360 the call uses). Admins set the limit in **Admin → Platform settings → Meetings** (D-72): 8 people by default, 0 for no limit, and optionally how many meetings each teacher may keep open. Past 8, most people should keep their camera off; for a class, use tutoring, which goes through LiveKit.
+- **Whiteboard.** Each meeting has one, kept in the server's memory while the meeting is open: a restart clears it. Download it as a PNG to keep it.
 - **Restarts.** Who is in a meeting is kept in memory; after a restart browsers reconnect by themselves and the calls set up again.
 
 ## Restoring a backup
