@@ -738,6 +738,21 @@ paths:
       summary: Remove a page; its questions stay in the tutorial
       parameters: [{ $ref: '#/components/parameters/id' }, { name: page, in: path, required: true, schema: { type: string, format: uuid } }]
       responses: { '204': { description: 'Removed' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/tutorials/{id}/pages/{page}/duplicate:
+    post:
+      operationId: postTeacherTutorialPageDuplicate
+      tags: [tutorials]
+      summary: Copy a page, with copies of its questions, right after it
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: page, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '201': { description: 'Copied', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialPage' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/tutorials/{id}/questions/copy:
+    post:
+      operationId: postTeacherTutorialQuestionsCopy
+      tags: [tutorials]
+      summary: Copy some of your questions (from the question bank, say) into the tutorial, keeping their codes where free
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, minItems: 1, maxItems: 50, items: { type: string, format: uuid } } } } } } }
+      responses: { '201': { description: 'Copied, in the order asked', content: { application/json: { schema: { type: object, properties: { questions: { type: array, items: { $ref: '#/components/schemas/Question' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/tutorials/{id}/page-order:
     put:
       operationId: putTeacherTutorialPageOrder
@@ -753,6 +768,21 @@ paths:
       summary: The classroom's students, how far each is, their marks, and answers waiting to be marked
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/tutorials/{id}/analytics:
+    get:
+      operationId: getTeacherTutorialAnalytics
+      tags: [tutorials]
+      summary: Per page, who reached it, time on it, where students stopped, how its questions went; for reading pages, scores after it by time spent reading
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialAnalytics' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/tutorials/{id}/runs/{run}/unlock:
+    post:
+      operationId: postTeacherTutorialRunUnlock
+      tags: [tutorials]
+      summary: Unlock a page locked for leaving the app; earlier leaves stay on record but no longer count toward the lock
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: run, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { page_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: 'Unlocked', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/tutorials/{id}/runs/{run}:
     get:
       operationId: getTeacherTutorialRun
@@ -795,7 +825,7 @@ paths:
       summary: Move to another page; on only past passed checkpoints, back only when allowed
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { to: { type: integer } } } } } }
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '409': { description: 'Not allowed now (`forward_only`, `checkpoint`, `answer_locked`, `tutorial_finished`, `tutorial_past_due`, `not_this_page`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '409': { description: 'Not allowed now (`forward_only`, `checkpoint`, `answer_locked`, `tutorial_finished`, `tutorial_past_due`, `not_this_page`, `page_locked`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
   /api/tutorials/{id}/answers:
     post:
       operationId: postTutorialAnswers
@@ -803,14 +833,30 @@ paths:
       summary: Check answers on the page you're on; marks and feedback show as the tutorial says
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { page: { type: integer }, responses: { type: object, additionalProperties: { $ref: '#/components/schemas/Response' } } } } } } }
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '409': { description: 'Not allowed now (`forward_only`, `checkpoint`, `answer_locked`, `tutorial_finished`, `tutorial_past_due`, `not_this_page`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '409': { description: 'Not allowed now (`forward_only`, `checkpoint`, `answer_locked`, `tutorial_finished`, `tutorial_past_due`, `not_this_page`, `page_locked`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/tutorials/{id}/time:
+    post:
+      operationId: postTutorialTime
+      tags: [tutorials, student]
+      summary: Add seconds spent on the page you're on (at most 60 a report, and no more than has passed); ignored once you can't answer
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { page: { type: integer }, seconds: { type: integer, minimum: 0, maximum: 60 } } } } } }
+      responses: { '204': { description: 'Recorded' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/tutorials/{id}/leave:
+    post:
+      operationId: postTutorialLeave
+      tags: [tutorials, student]
+      summary: Report leaving the app from the page you're on; on a page that doesn't allow it, enough leaves lock the page
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { page: { type: integer }, away_seconds: { type: integer, minimum: 0 }, via_link: { type: boolean, description: "Through one of the page's own links: counts as allowed" } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/tutorials/{id}/finish:
     post:
       operationId: postTutorialFinish
       tags: [tutorials, student]
       summary: Finish, from the last page once it's passed
       parameters: [{ $ref: '#/components/parameters/id' }]
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '409': { description: 'Not allowed now (`forward_only`, `checkpoint`, `answer_locked`, `tutorial_finished`, `tutorial_past_due`, `not_this_page`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TutorialRun' } } } }, '409': { description: 'Not allowed now (`forward_only`, `checkpoint`, `answer_locked`, `tutorial_finished`, `tutorial_past_due`, `not_this_page`, `page_locked`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
   /api/teacher/meeting-limits:
     get:
       operationId: getTeacherMeetingLimits
@@ -2085,6 +2131,8 @@ components:
         question_ids: { type: array, items: { type: string, format: uuid } }
         checkpoint: { type: string, enum: [none, answered, correct] }
         max_tries: { type: integer, description: 'For correct: tries before going on anyway; 0 unlimited' }
+        leaving: { type: string, enum: [allowed, recorded, blocked], description: 'Leaving the app on this page' }
+        lock_after: { type: integer, description: 'For blocked: leaves before the page locks; 0 never' }
     TutorialPageInput:
       type: object
       properties:
@@ -2093,6 +2141,31 @@ components:
         question_ids: { type: array, maxItems: 20, items: { type: string, format: uuid } }
         checkpoint: { type: string, enum: [none, answered, correct] }
         max_tries: { type: integer, minimum: 0, maximum: 20 }
+        leaving: { type: string, enum: [allowed, recorded, blocked] }
+        lock_after: { type: integer, minimum: 0, maximum: 20 }
+    TutorialAnalytics:
+      type: object
+      properties:
+        started: { type: integer }
+        finished: { type: integer }
+        pages:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              title: { type: string }
+              reading: { type: boolean, description: 'Content and no questions' }
+              reached: { type: integer }
+              stopped_here: { type: integer }
+              median_seconds: { type: integer }
+              leaves: { type: integer }
+              left_students: { type: integer }
+              locked: { type: integer }
+              out_of_tries: { type: integer }
+              questions: { type: array, items: { type: object } }
+              then: { type: object, description: 'Reading pages: score on the questions after it, for students above and below the median time here' }
+        students: { type: array, items: { type: object, properties: { run_id: { type: string }, seconds: { type: integer }, reading_seconds: { type: integer }, score_pct: { type: number }, finished: { type: boolean } } } }
     TutorialRun:
       type: object
       description: A student's state; marks, feedback and the score appear when the tutorial's feedback setting allows

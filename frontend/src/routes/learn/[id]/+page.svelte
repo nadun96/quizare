@@ -1,6 +1,8 @@
 <script lang="ts">
 	// A student working through a tutorial (D-74): one page at a time, with
-	// reading, questions, checks and feedback as the teacher set them.
+	// reading, questions, checks and feedback as the teacher set them. Time
+	// on each page and leaving the app are recorded as the page says (D-75).
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page as appPage } from '$app/state';
 	import { api, ApiError } from '$lib/api';
@@ -8,7 +10,8 @@
 	import QuestionView from '$lib/QuestionView.svelte';
 	import { auth, loginUrl } from '$lib/session.svelte';
 	import Blocks from '$lib/tutorial/Blocks.svelte';
-	import { changed, checkpointNote, type RunView } from '$lib/tutorial/tutorial';
+	import { changed, checkpointNote, leavingNote, type RunView } from '$lib/tutorial/tutorial';
+	import { PageWatch } from '$lib/tutorial/watch';
 	import type { Response } from '$lib/types';
 	import Icon from '$lib/ui/Icon.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
@@ -23,9 +26,59 @@
 
 	function show(next: RunView) {
 		v = next;
+		polls = 0;
 		drafts = Object.fromEntries((next.page?.questions ?? []).map((q) => [q.id, q.response ? $state.snapshot(q.response) : undefined]));
 		if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
 	}
+	// refresh takes the server's state without losing answers being written.
+	function refresh(next: RunView) {
+		const keep = drafts;
+		v = next;
+		drafts = Object.fromEntries((next.page?.questions ?? []).map((q) => [q.id, keep[q.id] ?? (q.response ? $state.snapshot(q.response) : undefined)]));
+	}
+
+	// ---- time on the page, and leaving the app ----
+	let watch: PageWatch | null = null;
+	function sendTime(seconds: number, keepalive: boolean) {
+		if (!v?.page) return;
+		fetch(`/api/tutorials/${id}/time`, {
+			method: 'POST', keepalive, credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ page: v.page.index, seconds })
+		}).catch(() => {});
+	}
+	async function left(away: number, viaLink: boolean) {
+		const before = v?.page;
+		if (!before) return;
+		try {
+			const next = await api.post<RunView>(`/api/tutorials/${id}/leave`, { page: before.index, away_seconds: away, via_link: viaLink });
+			refresh(next);
+			const p = next.page;
+			if (!p || viaLink || p.leaving === 'allowed' || p.index !== before.index) return;
+			if (p.locked && !before.locked) toast('You left the app too often: this page is locked until your teacher unlocks it', 'error');
+			else if (p.leaving === 'blocked' && p.lock_after && !p.locked) toast(`You left the app: ${p.leaves} of ${p.lock_after} times before this page locks`, 'error');
+			else if (!p.locked) toast('You left the app: your teacher will see it', 'info');
+		} catch {
+			/* recorded next time, or not at all: it's evidence, not a gate */
+		}
+	}
+	onMount(() => {
+		watch = new PageWatch({ time: sendTime, leave: left, active: () => !!v?.page && !v.read_only });
+		watch.start();
+		return () => watch?.stop();
+	});
+
+	// ---- answers the AI is marking: look again for a couple of minutes ----
+	let polls = 0;
+	$effect(() => {
+		const p = v?.page;
+		if (!p || !p.questions.some((q) => q.mark?.marking) || polls >= 30) return;
+		const t = setTimeout(() => {
+			polls++;
+			api.get<RunView>(`/api/tutorials/${id}/pages/${p.index}`).then(refresh, () => {});
+		}, 4000);
+		return () => clearTimeout(t);
+	});
 	$effect(() => {
 		if (!auth.loaded || v || problem) return;
 		if (!auth.user) {
@@ -36,6 +89,7 @@
 	});
 
 	async function act(f: () => Promise<RunView>) {
+		watch?.flush(); // the time so far belongs to the page being left
 		busy = true;
 		try {
 			show(await f());
@@ -58,7 +112,8 @@
 	const p = $derived(v?.page);
 	const last = $derived(!!v && !!p && p.index === v.pages.length - 1);
 	const unchecked = $derived(p ? Object.keys(changed(p.questions, drafts)).length : 0);
-	const note = $derived(p ? checkpointNote(p) : '');
+	const note = $derived(p && !p.locked ? checkpointNote(p) : '');
+	const leaveNote = $derived(p && v && !v.read_only ? leavingNote(p) : '');
 	const canGoOn = $derived(!!p && (v!.read_only || (p.passed && unchecked === 0) || (p.passed && p.checkpoint === 'none')));
 	const pct = $derived(v ? Math.round(((v.finished ? v.pages.length : v.current) / Math.max(1, v.pages.length)) * 100) : 0);
 	// A page dot: reading only once nothing more can be answered; otherwise a move.
@@ -106,7 +161,11 @@
 
 		<article class="card card-border bg-base-100 shadow-sm p-4 sm:p-7 vstack gap-5">
 			{#if p.title}<h2 class="m-0">{p.title}</h2>{/if}
-			{#if p.blocks.length}<Blocks blocks={p.blocks} />{/if}
+			{#if leaveNote}
+				<p class="alert alert-soft m-0" class:alert-error={p.locked} class:alert-warning={!p.locked && p.leaving === 'blocked'} class:alert-info={!p.locked && p.leaving === 'recorded'} role={p.locked ? 'alert' : undefined}>
+					<Icon name={p.locked || p.leaving === 'blocked' ? 'alert' : 'eye'} size={18} />{leaveNote}</p>
+			{/if}
+			{#if p.blocks.length}<Blocks blocks={p.blocks} onlink={() => watch?.viaLink()} />{/if}
 			{#each p.questions as q, i (q.id)}
 				<section class="question" aria-labelledby="q-{q.id}">
 					<p class="small muted m-0" id="q-{q.id}">Question {i + 1} · {count(q.marks, 'mark')}{q.tries > 1 ? ` · try ${q.tries}` : ''}</p>
@@ -115,7 +174,7 @@
 						<div class="mark" class:right={q.mark.correct} class:pending={q.mark.pending} role="status">
 							<Icon name={q.mark.pending ? 'clock' : q.mark.correct ? 'check-circle' : 'alert'} size={18} />
 							<div class="min-w-0">
-								<strong>{q.mark.pending ? 'Your teacher will mark this' : q.mark.correct ? 'Right' : q.locked ? 'Not quite' : 'Not quite: try again'}</strong>
+								<strong>{q.mark.marking ? 'Being marked…' : q.mark.pending ? 'Your teacher will mark this' : q.mark.correct ? 'Right' : q.locked ? 'Not quite' : 'Not quite: try again'}</strong>
 								{#if !q.mark.pending}<span class="small tabular"> · {q.mark.score} / {q.mark.max}</span>{/if}
 								{#if q.mark.feedback}<p class="m-0 mt-1">{q.mark.feedback}</p>{/if}
 								{#if q.mark.key && !q.mark.correct}<p class="small m-0 mt-1">The right answer: {describeKey(q.type, q.body, q.mark.key)}</p>{/if}

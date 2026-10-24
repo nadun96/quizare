@@ -93,6 +93,19 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}))
+	r.Method("POST", "/tutorials/{id}/pages/{page}/duplicate", reply(201, func(w http.ResponseWriter, r *http.Request) (Page, error) {
+		return s.DuplicatePage(r.Context(), uid(r), chi.URLParam(r, "id"), chi.URLParam(r, "page"))
+	}))
+	r.Method("POST", "/tutorials/{id}/questions/copy", reply(201, func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			IDs []string `json:"ids"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return nil, err
+		}
+		qs, err := s.CopyQuestions(r.Context(), uid(r), chi.URLParam(r, "id"), in.IDs)
+		return map[string]any{"questions": qs}, err
+	}))
 	r.Method("PUT", "/tutorials/{id}/page-order", reply(200, func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
 			IDs []string `json:"ids"`
@@ -105,6 +118,18 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	}))
 	r.Method("GET", "/tutorials/{id}/progress", reply(200, func(w http.ResponseWriter, r *http.Request) (Progress, error) {
 		return s.Progress(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("GET", "/tutorials/{id}/analytics", reply(200, func(w http.ResponseWriter, r *http.Request) (Analytics, error) {
+		return s.Analytics(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("POST", "/tutorials/{id}/runs/{run}/unlock", reply(200, func(w http.ResponseWriter, r *http.Request) (RunDetail, error) {
+		var in struct {
+			PageID string `json:"page_id"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return RunDetail{}, err
+		}
+		return s.Unlock(r.Context(), uid(r), chi.URLParam(r, "id"), chi.URLParam(r, "run"), in.PageID)
 	}))
 	r.Method("GET", "/tutorials/{id}/runs/{run}", reply(200, func(w http.ResponseWriter, r *http.Request) (RunDetail, error) {
 		return s.Run(r.Context(), uid(r), chi.URLParam(r, "id"), chi.URLParam(r, "run"))
@@ -149,6 +174,27 @@ func (s *Service) StudentRoutes(r chi.Router) {
 			return RunView{}, err
 		}
 		return s.Answer(r.Context(), uid(r), chi.URLParam(r, "id"), in)
+	}))
+	r.Method("POST", "/tutorials/{id}/time", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Page    int `json:"page"`
+			Seconds int `json:"seconds"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		if err := s.Time(r.Context(), uid(r), chi.URLParam(r, "id"), in.Page, in.Seconds); err != nil {
+			return err
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}))
+	r.Method("POST", "/tutorials/{id}/leave", reply(200, func(w http.ResponseWriter, r *http.Request) (RunView, error) {
+		var in LeaveInput
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return RunView{}, err
+		}
+		return s.Leave(r.Context(), uid(r), chi.URLParam(r, "id"), in)
 	}))
 	r.Method("POST", "/tutorials/{id}/finish", reply(200, func(w http.ResponseWriter, r *http.Request) (RunView, error) {
 		return s.Finish(r.Context(), uid(r), chi.URLParam(r, "id"))

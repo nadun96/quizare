@@ -32,6 +32,11 @@ const (
 	CheckAnswered = "answered"
 	CheckCorrect  = "correct"
 
+	// Leaving the app on a page (PO-32, TU-FR-22).
+	LeaveAllowed  = "allowed"  // to look something up, say
+	LeaveRecorded = "recorded" // the teacher sees it
+	LeaveBlocked  = "blocked"  // the page warns, records it, and can lock
+
 	maxPages        = 100
 	maxBlocks       = 30
 	maxPageQuestion = 20
@@ -41,6 +46,7 @@ const (
 // Tutorial is a lesson in pages, under a classroom topic.
 type Tutorial struct {
 	ID          string     `json:"id"`
+	TeacherID   string     `json:"-"`
 	TopicID     string     `json:"topic_id"`
 	QuizID      string     `json:"quiz_id"` // where its questions live
 	Title       string     `json:"title"`
@@ -81,6 +87,8 @@ type Page struct {
 	QuestionIDs []string `json:"question_ids"`
 	Checkpoint  string   `json:"checkpoint"`
 	MaxTries    int      `json:"max_tries"`
+	Leaving     string   `json:"leaving"`
+	LockAfter   int      `json:"lock_after"` // leaves before a blocked page locks; 0 never
 }
 
 var (
@@ -206,6 +214,8 @@ type PageInput struct {
 	QuestionIDs []string `json:"question_ids"`
 	Checkpoint  string   `json:"checkpoint"`
 	MaxTries    int      `json:"max_tries"`
+	Leaving     string   `json:"leaving"`
+	LockAfter   int      `json:"lock_after"`
 }
 
 func (in *PageInput) clean(feedback string) error {
@@ -251,6 +261,18 @@ func (in *PageInput) clean(feedback string) error {
 	}
 	if in.Checkpoint != CheckCorrect {
 		in.MaxTries = 0
+	}
+	if in.Leaving == "" {
+		in.Leaving = LeaveAllowed
+	}
+	if in.Leaving != LeaveAllowed && in.Leaving != LeaveRecorded && in.Leaving != LeaveBlocked {
+		f["leaving"] = "choose allowed, recorded or blocked"
+	}
+	if in.LockAfter < 0 || in.LockAfter > 20 {
+		f["lock_after"] = "0 (never) to 20 times"
+	}
+	if in.Leaving != LeaveBlocked {
+		in.LockAfter = 0
 	}
 	if in.Blocks == nil {
 		in.Blocks = []Block{}

@@ -30,8 +30,10 @@ type fx struct {
 	class   content.Classroom
 }
 
-func setup(t *testing.T) *fx {
-	e := apptest.New(t)
+func setup(t *testing.T) *fx { return setupWith(t) }
+
+func setupWith(t *testing.T, opts ...apptest.Option) *fx {
+	e := apptest.New(t, opts...)
 	teacher := e.NewUser(auth.RoleTeacher)
 	var c content.Classroom
 	teacher.Call("POST", "/api/teacher/classrooms", map[string]any{"name": "Grade 9"}, 201, &c)
