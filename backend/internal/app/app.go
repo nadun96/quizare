@@ -249,7 +249,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Tutorial = tutorial.NewService(pool, a.Content, a.Quiz, a.Auth)
 	a.Tutorial.SetLLM(a.LLM) // AI marking of written answers (D-75)
 	a.LLM.SetTutorials(a.Tutorial)
-	a.Slides = presentation.NewService(pool, a.Content, a.Auth)
+	a.Slides = presentation.NewService(pool, a.Content, a.Auth, cfg.BaseURL)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -328,6 +328,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		a.Live.WSRoutes(ws)
 		a.Poll.WSRoutes(ws)
 		a.Meet.WSRoutes(ws)
+		a.Slides.WSRoutes(ws) // presenting live (D-77)
 	})
 	// The tutoring service's calls (D-59); not under /api, so not public.
 	r.Route("/internal/tutoring", tutorlink.InternalRoutes(a.Tutor))

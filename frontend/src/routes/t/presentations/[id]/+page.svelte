@@ -16,10 +16,10 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { count } from '$lib/words';
 
-	type Student = { user_id: string; viewer_id?: string; name: string; student_number?: string; started: boolean; seen: number; seconds: number; current: number; finished: boolean };
-	type SlideViews = { n: number; text: string; viewers: number; median_seconds: number; total_seconds: number };
+	type Student = { user_id: string; viewer_id?: string; name: string; student_number?: string; started: boolean; seen: number; seconds: number; live_seconds: number; current: number; finished: boolean };
+	type SlideViews = { n: number; text: string; viewers: number; median_seconds: number; total_seconds: number; live_viewers: number; live_median_seconds: number };
 	type Report = { slides: SlideViews[]; students: Student[] };
-	type Detail = { viewer_id: string; name: string; slides: { n: number; seconds: number; first_at?: string }[] };
+	type Detail = { viewer_id: string; name: string; slides: { n: number; seconds: number; live_seconds: number; first_at?: string }[] };
 
 	const ready = requireRole('teacher');
 	const id = $derived(appPage.params.id ?? '');
@@ -28,8 +28,10 @@
 	let tab = $state<'slides' | 'settings' | 'students'>('slides');
 	let errors = $state<Record<string, string>>({});
 
+	let liveNow = $state(false);
 	async function load() {
 		p = await api.get<Presentation>('/api/teacher/presentations/' + id);
+		liveNow = await api.get(`/api/teacher/presentations/${id}/live`).then(() => true, () => false);
 		slides = (await api.get<{ slides: Slide[] }>(`/api/teacher/presentations/${id}/slides`)).slides;
 	}
 	$effect(() => {
@@ -127,6 +129,7 @@
 			<h1 class="m-0">{p.title}</h1>
 			<span class="badge badge-soft" class:ok={p.status === 'published'}>{p.status === 'published' ? 'Published' : 'Draft'}</span>
 			<span class="spacer"></span>
+			{#if p.slide_count}<a class="btn" class:btn-error={liveNow} href={`/t/presentations/${id}/present`}><Icon name="play" size={16} />{liveNow ? 'Live now: back to presenting' : 'Present live'}</a>{/if}
 			{#if p.status === 'published'}<button class="btn" onclick={() => setStatus('draft')}>Unpublish</button>
 			{:else}<button class="btn btn-primary" disabled={!p.slide_count} onclick={() => setStatus('published')}><Icon name="check" size={16} />Publish to the class</button>{/if}
 		</div>
@@ -196,7 +199,7 @@
 			{:else}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
-						<thead><tr><th>Student</th><th>Progress</th><th class="text-right">Slides seen</th><th class="text-right">Time</th><th><span class="sr-only">Actions</span></th></tr></thead>
+						<thead><tr><th>Student</th><th>Progress</th><th class="text-right">Slides seen</th><th class="text-right">Own pace</th><th class="text-right">Live</th><th><span class="sr-only">Actions</span></th></tr></thead>
 						<tbody>
 							{#each report.students as s (s.user_id)}
 								<tr>
@@ -204,9 +207,10 @@
 									<td><span class="badge badge-soft" class:ok={s.finished}>{progress(s)}</span></td>
 									<td class="text-right tabular">{s.started ? `${s.seen} of ${p.slide_count}` : '—'}</td>
 									<td class="text-right tabular">{s.started ? duration(s.seconds) : '—'}</td>
+									<td class="text-right tabular">{s.live_seconds ? duration(s.live_seconds) : '—'}</td>
 									<td>{#if s.viewer_id}<button class="btn btn-sm" onclick={() => openDetail(s)}>By slide</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="5" class="muted">No students in this classroom yet.</td></tr>{/each}
+							{:else}<tr><td colspan="6" class="muted">No students in this classroom yet.</td></tr>{/each}
 						</tbody>
 					</table>
 				</div>
@@ -215,10 +219,10 @@
 						<div class="flex items-center gap-2"><h3 class="m-0">{detail.name}, slide by slide</h3><span class="spacer"></span><IconBtn icon="x" label="Close" hint="Close the slide times" onclick={() => (detail = null)} /></div>
 						<div class="table-wrap">
 							<table class="table table-sm">
-								<thead><tr><th>Slide</th><th class="text-right">Time</th><th class="text-right">First seen</th></tr></thead>
+								<thead><tr><th>Slide</th><th class="text-right">Own pace</th><th class="text-right">Live</th><th class="text-right">First seen</th></tr></thead>
 								<tbody>
 									{#each detail.slides as st (st.n)}
-										<tr class:muted={!st.first_at}><td>{st.n}</td><td class="text-right tabular">{st.first_at ? duration(st.seconds) : '—'}</td>
+										<tr class:muted={!st.first_at}><td>{st.n}</td><td class="text-right tabular">{st.first_at ? duration(st.seconds) : '—'}</td><td class="text-right tabular">{st.live_seconds ? duration(st.live_seconds) : '—'}</td>
 											<td class="text-right small tabular">{st.first_at ? new Date(st.first_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not seen'}</td></tr>
 									{/each}
 								</tbody>
@@ -229,10 +233,10 @@
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table table-sm">
 						<caption class="text-left font-semibold pb-2">Each slide</caption>
-						<thead><tr><th>Slide</th><th class="text-right">Students</th><th class="text-right">Median time</th></tr></thead>
+						<thead><tr><th>Slide</th><th class="text-right">Students</th><th class="text-right">Median time</th><th class="text-right">Live: students</th><th class="text-right">Live: median</th></tr></thead>
 						<tbody>
 							{#each report.slides as sv (sv.n)}
-								<tr><td>{sv.n}{#if sv.text}<span class="small muted">{' · '}{sv.text.slice(0, 60)}</span>{/if}</td><td class="text-right tabular">{sv.viewers}</td><td class="text-right tabular">{sv.viewers ? duration(sv.median_seconds) : '—'}</td></tr>
+								<tr><td>{sv.n}{#if sv.text}<span class="small muted">{' · '}{sv.text.slice(0, 60)}</span>{/if}</td><td class="text-right tabular">{sv.viewers}</td><td class="text-right tabular">{sv.viewers ? duration(sv.median_seconds) : '—'}</td><td class="text-right tabular">{sv.live_viewers}</td><td class="text-right tabular">{sv.live_viewers ? duration(sv.live_median_seconds) : '—'}</td></tr>
 							{/each}
 						</tbody>
 					</table>

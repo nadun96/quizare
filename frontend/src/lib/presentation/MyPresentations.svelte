@@ -20,10 +20,11 @@
 				<li>
 					<span class="icon" aria-hidden="true"><Icon name={p.finished ? 'check-circle' : 'monitor'} size={18} /></span>
 					<div class="min-w-0 flex-1">
-						<p class="m-0 truncate font-semibold">{p.title}</p>
+						<p class="m-0 truncate font-semibold">{p.title}{#if p.live}<span class="badge badge-error badge-soft badge-sm ml-2">Live now</span>{/if}</p>
 						<p class="small muted m-0">{p.classroom} · {progressText(p)}{p.due_at && !p.finished ? ` · by ${when(p.due_at)}` : ''}</p>
 					</div>
-					{#if notYet(p)}<span class="small muted whitespace-nowrap">Opens {when(p.opens_at!)}</span>
+					{#if p.live}<a class="btn btn-sm btn-primary" href={`/slides/${p.id}/live`}>Join</a>
+					{:else if notYet(p)}<span class="small muted whitespace-nowrap">Opens {when(p.opens_at!)}</span>
 					{:else}<a class="btn btn-sm" class:btn-primary={!p.finished} href={'/slides/' + p.id}>{p.finished ? 'Look again' : p.started ? 'Continue' : 'Start'}</a>{/if}
 				</li>
 			{/each}

@@ -179,21 +179,26 @@ func (s *Service) Time(ctx context.Context, userID, id string, n, seconds int) e
 	return err
 }
 
-// Image returns a slide's JPEG, if the student may see it (and the next one
-// in order, so it can load ahead, PR-NFR-01).
+// Image returns a slide's JPEG, if the student may see it: at their own
+// pace (and the next one in order, so it can load ahead, PR-NFR-01), or
+// shown already while it's presented live.
 func (s *Service) Image(ctx context.Context, userID, id string, version, n int) ([]byte, error) {
-	p, err := s.student(ctx, userID, id)
+	p, l, err := s.access(ctx, userID, id)
 	if err != nil {
 		return nil, err
 	}
 	if version != p.Version {
 		return nil, httpx.ErrNotFound
 	}
-	v, err := s.viewer(ctx, p, userID, false)
-	if err != nil {
-		return nil, err
+	ok := l != nil && n >= 1 && n <= l.MaxShown
+	if !ok && p.Status == StatusPublished && (p.OpensAt == nil || !s.now().Before(*p.OpensAt)) {
+		v, err := s.viewer(ctx, p, userID, false)
+		if err != nil && !errors.Is(err, httpx.ErrNotFound) {
+			return nil, err
+		}
+		ok = err == nil && p.mayOpen(v, n)
 	}
-	if !p.mayOpen(v, n) {
+	if !ok {
 		return nil, httpx.ErrNotFound
 	}
 	return s.image(ctx, id, version, n)
@@ -223,12 +228,14 @@ type Mine struct {
 	Reached     int        `json:"reached"`
 	Finished    bool       `json:"finished"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
+	Live        bool       `json:"live"` // being presented now: join it
+	Published   bool       `json:"published"`
 }
 
 // MyPresentations lists the published presentations of a student's classrooms.
 func (s *Service) MyPresentations(ctx context.Context, userID string) ([]Mine, error) {
 	rows, err := s.pool.Query(ctx, `SELECT p.id, p.title, c.name, f.slides, p.opens_at, p.due_at,
-			v.id IS NOT NULL, coalesce(v.reached, 0), v.finished_at IS NOT NULL, p.published_at
+			v.id IS NOT NULL, coalesce(v.reached, 0), v.finished_at IS NOT NULL, p.published_at, l.id IS NOT NULL, p.status = 'published'
 		FROM presentation.presentations p
 		JOIN presentation.files f ON f.presentation_id = p.id AND f.version = p.version
 		JOIN content.topics tp ON tp.id = p.topic_id
@@ -236,14 +243,15 @@ func (s *Service) MyPresentations(ctx context.Context, userID string) ([]Mine, e
 		JOIN content.classrooms c ON c.id = m.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
 		LEFT JOIN presentation.viewers v ON v.presentation_id = p.id AND v.user_id = $1
-		WHERE p.status = 'published'
-		ORDER BY (v.finished_at IS NOT NULL), p.due_at NULLS LAST, p.published_at DESC LIMIT 200`, userID)
+		LEFT JOIN presentation.lives l ON l.presentation_id = p.id AND l.ended_at IS NULL
+		WHERE p.status = 'published' OR l.id IS NOT NULL
+		ORDER BY l.id IS NULL, (v.finished_at IS NOT NULL), p.due_at NULLS LAST, p.published_at DESC LIMIT 200`, userID)
 	if err != nil {
 		return nil, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Mine, error) {
 		var m Mine
-		return m, r.Scan(&m.ID, &m.Title, &m.Classroom, &m.Slides, &m.OpensAt, &m.DueAt, &m.Started, &m.Reached, &m.Finished, &m.PublishedAt)
+		return m, r.Scan(&m.ID, &m.Title, &m.Classroom, &m.Slides, &m.OpensAt, &m.DueAt, &m.Started, &m.Reached, &m.Finished, &m.PublishedAt, &m.Live, &m.Published)
 	})
 	if out == nil {
 		out = []Mine{}

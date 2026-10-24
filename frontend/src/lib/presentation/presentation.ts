@@ -32,7 +32,45 @@ export type View = {
 	finished: boolean;
 };
 
-export type MyPresentation = { id: string; title: string; classroom: string; slide_count: number; opens_at?: string; due_at?: string; started: boolean; reached: number; finished: boolean };
+export type MyPresentation = {
+	id: string;
+	title: string;
+	classroom: string;
+	slide_count: number;
+	opens_at?: string;
+	due_at?: string;
+	started: boolean;
+	reached: number;
+	finished: boolean;
+	live: boolean; // being presented now
+	published: boolean;
+};
+
+// Presenting live (D-77).
+export type Live = { id: string; presentation_id: string; code: string; slide: number; max_shown: number; allow_browse: boolean; started_at: string };
+export type LiveView = { presentation: { id: string; title: string; version: number; published: boolean }; slides: Slide[]; live: Live };
+export type Person = { user_id: string; name: string; slide: number; following: boolean; visible: boolean };
+export type Counts = { joined: number; following: number; looking_back: number; away: number };
+
+/** Where a student may go on their own while live: back to what's been shown, never ahead. */
+export function liveCanGo(l: Pick<Live, 'max_shown' | 'allow_browse'>, n: number): boolean {
+	return l.allow_browse && n >= 1 && n <= l.max_shown;
+}
+
+/** "12:05" since the start, or "1:02:05" past an hour. */
+export function elapsed(fromIso: string, now: number): string {
+	const s = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 1000));
+	const p = (n: number) => String(n).padStart(2, '0');
+	const h = Math.floor(s / 3600);
+	return h ? `${h}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}` : `${Math.floor(s / 60)}:${p(s % 60)}`;
+}
+
+/** A person in the audience, in a word for the presenter. */
+export function personState(p: Person, slide: number): string {
+	if (!p.visible) return 'Away from the page';
+	if (p.following) return 'Following';
+	return p.slide === slide ? 'On your slide' : `Looking at slide ${p.slide}`;
+}
 
 export const MAX_PDF_BYTES = 50 * 1024 * 1024;
 export const MAX_SLIDES = 300;

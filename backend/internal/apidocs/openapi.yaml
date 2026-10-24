@@ -953,6 +953,41 @@ paths:
       summary: The PDF in use
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { description: 'PDF', content: { application/pdf: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/live:
+    get:
+      operationId: getTeacherPresentationLive
+      tags: [presentations]
+      summary: The live session, while presenting (404 `not_live` otherwise)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PresentationLive' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postTeacherPresentationLive
+      tags: [presentations]
+      summary: Start presenting live, or get the session already open; then join /ws/presentations/{id}
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'Live', content: { application/json: { schema: { $ref: '#/components/schemas/PresentationLive' } } } }, '409': { description: '`presentation_empty`' }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putTeacherPresentationLive
+      tags: [presentations]
+      summary: Whether students may look back on their own
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { allow_browse: { type: boolean } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PresentationLive' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/live/slide:
+    post:
+      operationId: postTeacherPresentationLiveSlide
+      tags: [presentations]
+      summary: Show a slide; everyone following moves to it
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { slide: { type: integer, minimum: 1 } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PresentationLive' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/presentations/{id}/live/end:
+    post:
+      operationId: postTeacherPresentationLiveEnd
+      tags: [presentations]
+      summary: End presenting; time records stay
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Ended' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/presentations/{id}/report:
     get:
       operationId: getTeacherPresentationReport
@@ -973,6 +1008,20 @@ paths:
       tags: [presentations, student]
       summary: Published presentations of the classrooms you're in, with how far you are
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { presentations: { type: array, items: { type: object } } } } } } } }
+  /api/presentations/{id}/live/join:
+    post:
+      operationId: postPresentationLiveJoin
+      tags: [presentations, student]
+      summary: Join the live presentation (even a draft, while it's live); then connect to /ws/presentations/{id}
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { presentation: { type: object }, slides: { type: array, items: { $ref: '#/components/schemas/Slide' } }, live: { $ref: '#/components/schemas/PresentationLive' } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/presentations/code/{code}:
+    get:
+      operationId: getPresentationByCode
+      tags: [presentations, student]
+      summary: The presentation being presented with this code, for its classroom's students
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { id: { type: string, format: uuid } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/presentations/{id}/open:
     post:
       operationId: postPresentationOpen
@@ -2162,6 +2211,19 @@ paths:
       description: Server → client `results` (a `PollTeacherResults`) on connect and at most every 500 ms while changing; `deleted`; `pong`.
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '101': { description: 'Switching protocols' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /ws/presentations/{id}:
+    get:
+      operationId: getWsPresentationLive
+      tags: [realtime, presentations]
+      summary: Live presentation WebSocket (upgrade; D-77)
+      description: |
+        The presentation's teacher joins as the presenter; a student of its classroom joins while it's live (404 `not_live` otherwise).
+        Server → client: `live` (`live`: the slide, how far students may look back, whether they may), `ended`, `pong`,
+        and for presenters `audience` (`counts`: joined, following, looking_back, away; `people`), at most once a second.
+        Client → server: `ping` (`t`), and from students `state` (`slide`, `following`, `visible`) when it changes and every 15 s;
+        the server counts live time on slides from these.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '101': { description: 'Switching protocols' }, '404': { $ref: '#/components/responses/NotFound' } }
   /ws/meet/{code}:
     get:
       operationId: getWsMeetByCode
@@ -2353,6 +2415,16 @@ components:
         width: { type: integer }
         height: { type: integer }
         text: { type: string, description: "The slide's text, for alt text" }
+    PresentationLive:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        presentation_id: { type: string, format: uuid }
+        code: { type: string }
+        slide: { type: integer, description: "The teacher's slide" }
+        max_shown: { type: integer, description: 'Students may look back up to here, never ahead' }
+        allow_browse: { type: boolean }
+        started_at: { type: string, format: date-time }
     PresentationView:
       type: object
       properties:
