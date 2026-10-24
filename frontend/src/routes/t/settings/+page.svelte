@@ -4,6 +4,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
 	import SettingsEditor from '$lib/SettingsEditor.svelte';
+	import DriveCard from '$lib/drive/DriveCard.svelte';
 	import type { Effective, Overrides } from '$lib/types';
 
 	type Key = { id: string; provider: string; label: string; model: string; last4: string; is_default: boolean; last_test_at: string | null; last_test_ok: boolean | null; last_test_error?: string };
@@ -69,6 +70,7 @@ if (await confirmDialog({ title: 'Delete this API key?', body: 'Quizzes that use
 	<p class="small muted">These apply to all your classrooms and quizzes unless a lower level overrides them.</p>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="teacher" value={overrides} {effective} onsave={save} {errors} /></div>
 
+	<DriveCard />
 	<h2>LLM API keys</h2>
 	<p class="small">Keys are encrypted and can never be shown again after saving: only the last 4 characters appear here. They are used only for marking and feedback on your own quizzes.</p>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">

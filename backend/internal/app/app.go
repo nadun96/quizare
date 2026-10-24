@@ -23,6 +23,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/directory"
+	"github.com/nadun96/quizplatform/internal/drive"
 	"github.com/nadun96/quizplatform/internal/eval"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/live"
@@ -64,6 +65,7 @@ type App struct {
 	Directory *directory.Service // school sign-in (D-64)
 	Meet      *meet.Service      // peer-to-peer meetings (D-69)
 	OIDC      *oidc.Service      // sign-in with OpenID Connect providers (D-70)
+	Drive     *drive.Service     // teachers' Google Drive (D-71)
 	Tutor     *tutorlink.Service // nil when tutoring is off
 }
 
@@ -83,6 +85,8 @@ type Options struct {
 	// HTTPClient talks to outside services: OpenID Connect providers. nil:
 	// a default with a timeout (tests pass one that trusts their fakes).
 	HTTPClient *http.Client
+	// Google is where Google Drive is reached (D-71); zero means Google.
+	Google drive.Endpoints
 }
 
 // New opens the database, applies migrations and builds the app.
@@ -174,10 +178,14 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, snapshotWorker)
 	directoryWorker := &directory.CheckWorker{}
 	river.AddWorker(workers, directoryWorker)
+	driveBackup, driveSync := &drive.BackupWorker{}, &drive.SyncWorker{}
+	river.AddWorker(workers, driveBackup)
+	river.AddWorker(workers, driveSync)
 	var periodic []*river.PeriodicJob
 	if opt.RunJobs {
 		periodic = append(periodic, storage.Periodic())   // hourly storage figures (PL-FR-04)
 		periodic = append(periodic, directory.Periodic()) // sign out accounts the directory disabled (D-64)
+		periodic = append(periodic, drive.SyncPeriodic()) // classroom Drive files follow enrolments (D-71)
 	}
 	rc, err := jobs.NewClient(pool, w, log, periodic...)
 	if err != nil {
@@ -230,6 +238,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			return storage.Freed{Items: n, Bytes: b}, err
 		}})
 	a.Analytics.SetPolls(a.Poll)
+	a.Drive = drive.NewService(pool, vault, a.Auth, a.Content, a.Quiz, driveResults{a}, rc, cfg.BaseURL, opt.Google, opt.HTTPClient, log)
+	driveBackup.Service, driveSync.Service = a.Drive, a.Drive
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -237,7 +247,10 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			if err := a.Eval.OnSessionEnded(ctx, tx, sessionID); err != nil {
 				return err
 			}
-			return a.Analytics.OnResults(ctx, tx, sessionID) // completion and invalidation rates change at the end
+			if err := a.Analytics.OnResults(ctx, tx, sessionID); err != nil { // completion and invalidation rates change at the end
+				return err
+			}
+			return a.Drive.OnSessionEnded(ctx, tx, sessionID) // save results to Drive, if the teacher asked (D-71)
 		},
 	})
 
@@ -265,6 +278,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Storage.AdminRoutes(ad, a.Auth)
 			a.Directory.AdminRoutes(ad)
 			a.OIDC.AdminRoutes(ad)
+			a.Drive.AdminRoutes(ad)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
@@ -277,6 +291,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Analytics.TeacherRoutes(t)
 			a.Poll.TeacherRoutes(t)
 			a.Meet.TeacherRoutes(t)
+			a.Drive.TeacherRoutes(t)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
@@ -284,6 +299,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Admin.UserRoutes(s)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 			a.Meet.UserRoutes(s)
+			a.Drive.UserRoutes(s)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole(auth.RoleStudent))
@@ -352,4 +368,32 @@ func (a *App) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// driveResults gives the Drive integration results to save (D-71).
+type driveResults struct{ a *App }
+
+func (d driveResults) SessionCSV(ctx context.Context, teacherID, sessionID string) (string, []byte, error) {
+	info, err := d.a.Live.SessionInfo(ctx, teacherID, sessionID)
+	if err != nil {
+		return "", nil, err
+	}
+	data, err := d.a.Analytics.ExportSessionCSV(ctx, teacherID, sessionID)
+	if err != nil {
+		return "", nil, err
+	}
+	name := info.QuizTitle
+	if info.Title != "" && info.Title != info.QuizTitle {
+		name += " – " + info.Title
+	}
+	return fmt.Sprintf("%s (%s)", name, info.CreatedAt.Format("2 Jan 2006 15:04")), data, nil
+}
+
+func (d driveResults) PollCSV(ctx context.Context, teacherID, pollID string) (string, []byte, error) {
+	return d.a.Poll.ExportCSV(ctx, teacherID, pollID)
+}
+
+func (d driveResults) SessionTeacher(ctx context.Context, sessionID string) (string, error) {
+	info, err := d.a.Live.SessionInfo(ctx, "", sessionID)
+	return info.TeacherID, err
 }

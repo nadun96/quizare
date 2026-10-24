@@ -1,6 +1,7 @@
 package poll
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -333,14 +334,35 @@ func (s *Service) hFile(w http.ResponseWriter, r *http.Request) error {
 
 // hExport writes one row per participant and one column per question.
 func (s *Service) hExport(w http.ResponseWriter, r *http.Request) error {
-	p, err := s.GetPoll(r.Context(), teacherID(r), chi.URLParam(r, "id"))
+	p, data, err := s.exportCSV(r.Context(), teacherID(r), chi.URLParam(r, "id"))
 	if err != nil {
 		return err
 	}
-	rows, err := s.pool.Query(r.Context(), `SELECT pa.id, pa.user_id, r.question_id, r.value, r.hidden
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": "poll-" + p.JoinCode + ".csv"}))
+	_, err = w.Write(data)
+	return err
+}
+
+// ExportCSV is a poll's answers as CSV, and a name for the file: the
+// download, and results saved to Google Drive (D-71).
+func (s *Service) ExportCSV(ctx context.Context, teacherID, id string) (string, []byte, error) {
+	p, data, err := s.exportCSV(ctx, teacherID, id)
+	if err != nil {
+		return "", nil, err
+	}
+	return fmt.Sprintf("%s (poll %s, %s)", plain(p.Title), p.JoinCode, p.CreatedAt.Format("2 Jan 2006")), data, nil
+}
+
+func (s *Service) exportCSV(ctx context.Context, teacherID, id string) (*Poll, []byte, error) {
+	p, err := s.GetPoll(ctx, teacherID, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT pa.id, pa.user_id, r.question_id, r.value, r.hidden
 		FROM poll.participants pa LEFT JOIN poll.responses r ON r.participant_id = pa.id WHERE pa.poll_id=$1 ORDER BY pa.created_at`, p.ID)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	type person struct {
 		user    *string
@@ -359,7 +381,7 @@ func (s *Service) hExport(w http.ResponseWriter, r *http.Request) error {
 		var hidden *bool
 		if err := rows.Scan(&pid, &uid, &qid, &raw, &hidden); err != nil {
 			rows.Close()
-			return err
+			return nil, nil, err
 		}
 		if people[pid] == nil {
 			people[pid] = &person{user: uid, answers: map[string]string{}}
@@ -384,13 +406,12 @@ func (s *Service) hExport(w http.ResponseWriter, r *http.Request) error {
 	}
 	users := map[string]auth.User{}
 	if len(ids) > 0 {
-		if users, err = s.users.UsersByID(r.Context(), ids); err != nil {
-			return err
+		if users, err = s.users.UsersByID(ctx, ids); err != nil {
+			return nil, nil, err
 		}
 	}
-	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": "poll-" + p.JoinCode + ".csv"}))
-	cw := csv.NewWriter(w)
+	var buf bytes.Buffer
+	cw := csv.NewWriter(&buf)
 	head := []string{"participant", "name", "email"}
 	for i, q := range p.Questions {
 		head = append(head, fmt.Sprintf("Q%d %s", i+1, plain(q.Text)))
@@ -408,7 +429,7 @@ func (s *Service) hExport(w http.ResponseWriter, r *http.Request) error {
 		_ = cw.Write(row)
 	}
 	cw.Flush()
-	return cw.Error()
+	return p, buf.Bytes(), cw.Error()
 }
 
 // safeCSV stops spreadsheet formula injection from participant text.
