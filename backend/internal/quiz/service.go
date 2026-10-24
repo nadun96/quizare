@@ -210,7 +210,7 @@ func (s *Service) ListQuizzes(ctx context.Context, teacherID, topicID, status st
 	if _, err := s.topics.TopicContext(ctx, teacherID, topicID); err != nil {
 		return nil, 0, err
 	}
-	where := ` FROM quiz.quizzes q WHERE q.topic_id=$1 AND q.teacher_id=$2 AND ($3 = '' OR q.title ILIKE $3) AND ($4 = '' OR q.status = $4)`
+	where := ` FROM quiz.quizzes q WHERE q.topic_id=$1 AND q.teacher_id=$2 AND q.kind='quiz' AND ($3 = '' OR q.title ILIKE $3) AND ($4 = '' OR q.status = $4)`
 	args := []any{topicID, teacherID, p.Like(), status}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
@@ -253,8 +253,8 @@ func (s *Service) UpdateQuiz(ctx context.Context, teacherID, id string, in QuizI
 // DeleteQuiz deletes a quiz, or archives it when sessions have results (BR-16).
 // It reports whether the quiz was archived instead.
 func (s *Service) DeleteQuiz(ctx context.Context, teacherID, id string) (archived bool, err error) {
-	if s.isBank(ctx, id) {
-		return false, errBankNotAQuiz
+	if err := s.notAQuiz(ctx, id); err != nil {
+		return false, err
 	}
 	if _, err := s.GetQuiz(ctx, teacherID, id); err != nil {
 		return false, err
@@ -311,8 +311,8 @@ func (s *Service) Readiness(ctx context.Context, teacherID, id string) (blocking
 
 // SetStatus moves a quiz between draft and ready.
 func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string, acceptWarnings bool) (Quiz, error) {
-	if s.isBank(ctx, id) {
-		return Quiz{}, errBankNotAQuiz
+	if err := s.notAQuiz(ctx, id); err != nil {
+		return Quiz{}, err
 	}
 	switch status {
 	case StatusReady:

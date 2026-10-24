@@ -123,8 +123,11 @@ func (s *Service) CreateSession(ctx context.Context, teacherID, quizID string, i
 	if err != nil {
 		return nil, err
 	}
-	if qz.Kind == quiz.KindBank {
+	switch qz.Kind {
+	case quiz.KindBank:
 		return nil, httpx.NewError(http.StatusConflict, "question_bank", "the question bank isn't a quiz: draw from it through a quiz's pools")
+	case quiz.KindTutorial:
+		return nil, httpx.NewError(http.StatusConflict, "tutorial_questions", "these are a tutorial's questions: students work through the tutorial instead")
 	}
 	if qz.Status != quiz.StatusReady {
 		return nil, httpx.NewError(http.StatusConflict, "quiz_not_ready", "mark the quiz as Ready before starting a session")
