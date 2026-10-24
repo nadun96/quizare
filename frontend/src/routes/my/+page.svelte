@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
 	import MyFiles from '$lib/drive/MyFiles.svelte';
+	import MyPresentations from '$lib/presentation/MyPresentations.svelte';
 	import MyTutorials from '$lib/tutorial/MyTutorials.svelte';
 	import { auth, loginUrl } from '$lib/session.svelte';
 	import { STATE_BADGE, STATE_ICON, STATE_LABEL } from '$lib/types';
@@ -79,6 +80,7 @@
 		{/if}
 	</div>
 	<MyTutorials />
+	<MyPresentations />
 	<h2>My classrooms</h2>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
 		{#if classes.rows.length}
