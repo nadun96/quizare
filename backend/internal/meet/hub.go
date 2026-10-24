@@ -15,6 +15,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/whiteboard"
 )
 
 // The signalling hub: who is in each meeting, and the set-up messages passed
@@ -23,7 +24,7 @@ import (
 const (
 	readTimeout  = 45 * time.Second // clients ping every ~15 s
 	writeTimeout = 10 * time.Second
-	maxMessage   = 64 << 10 // an SDP offer with several tracks fits easily
+	maxMessage   = 1 << 20 // an SDP offer fits in 64 KB; a batch of whiteboard strokes needs more
 	sendQueue    = 64
 )
 
@@ -50,9 +51,14 @@ type hub struct {
 	s     *Service
 	mu    sync.Mutex
 	rooms map[string]*room
+	// Whiteboards outlive an empty room: people step out and come back.
+	// They go when the meeting ends (or the server restarts).
+	boards map[string]*board
 }
 
-func newHub(s *Service) *hub { return &hub{s: s, rooms: map[string]*room{}} }
+func newHub(s *Service) *hub {
+	return &hub{s: s, rooms: map[string]*room{}, boards: map[string]*board{}}
+}
 
 func (h *hub) count(meetingID string) int {
 	h.mu.Lock()
@@ -120,7 +126,7 @@ func (h *hub) join(meetingID string, max int, p *peer) ([]peer, error) {
 			replaced = o
 		}
 	}
-	if replaced == nil && len(r.peers) >= r.max {
+	if replaced == nil && r.max > 0 && len(r.peers) >= r.max { // 0: no limit
 		return nil, errFull
 	}
 	if replaced != nil {
@@ -158,6 +164,7 @@ func (h *hub) end(meetingID string) {
 	h.mu.Lock()
 	r := h.rooms[meetingID]
 	delete(h.rooms, meetingID)
+	delete(h.boards, meetingID)
 	h.mu.Unlock()
 	if r == nil {
 		return
@@ -169,14 +176,20 @@ func (h *hub) end(meetingID string) {
 }
 
 type inbound struct {
-	Type   string          `json:"type"`
-	To     string          `json:"to"`
-	PeerID string          `json:"peer_id"`
-	Data   json.RawMessage `json:"data"`
-	Mic    bool            `json:"mic"`
-	Cam    bool            `json:"cam"`
-	Screen bool            `json:"screen"`
-	Hand   bool            `json:"hand"`
+	Type    string              `json:"type"`
+	Req     string              `json:"req"` // a whiteboard request, answered with board_ack
+	Strokes []whiteboard.Stroke `json:"strokes"`
+	IDs     []int64             `json:"ids"`
+	Gesture string              `json:"gesture"`
+	Open    bool                `json:"open"`
+	Mode    string              `json:"mode"`
+	To      string              `json:"to"`
+	PeerID  string              `json:"peer_id"`
+	Data    json.RawMessage     `json:"data"`
+	Mic     bool                `json:"mic"`
+	Cam     bool                `json:"cam"`
+	Screen  bool                `json:"screen"`
+	Hand    bool                `json:"hand"`
 }
 
 func (h *hub) handle(ctx context.Context, meetingID string, me *peer, in inbound) {
@@ -213,6 +226,8 @@ func (h *hub) handle(ctx context.Context, meetingID string, me *peer, in inbound
 			h.leave(meetingID, target.ID)
 			go func(c context.CancelFunc) { time.Sleep(200 * time.Millisecond); c() }(target.cancel)
 		}
+	case "board_add", "board_erase", "board_clear", "board_access":
+		h.boardMessage(meetingID, me, in)
 	case "end":
 		if me.Host {
 			if err := h.s.End(ctx, me.UserID, meetingID); err != nil {
@@ -250,7 +265,7 @@ func (s *Service) WSRoutes(r chi.Router) {
 			return
 		}
 		s.arrived(ctx, acc.Meeting.ID, u.ID)
-		me.push(msg(map[string]any{"type": "welcome", "you": me, "peers": others, "ice_servers": acc.ICE, "meeting": acc.Meeting}))
+		me.push(msg(map[string]any{"type": "welcome", "you": me, "peers": others, "ice_servers": acc.ICE, "meeting": acc.Meeting, "board": s.hub.boardView(acc.Meeting.ID, me)}))
 		defer func() {
 			if s.hub.leave(acc.Meeting.ID, me.ID) {
 				s.left(context.Background(), acc.Meeting.ID, u.ID)

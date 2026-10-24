@@ -16,7 +16,21 @@
 		erase: (ids: number[], gesture?: string) => Promise<number[]>;
 		clear?: () => Promise<void>;
 	};
-	let { board, client, teacher = false, title = 'whiteboard' }: { board: BoardState; client: Client; teacher?: boolean; title?: string } = $props();
+	let {
+		board,
+		client,
+		teacher = false,
+		title = 'whiteboard',
+		fit = false
+	}: {
+		board: BoardState;
+		client: Client;
+		teacher?: boolean;
+		title?: string;
+		/** Fill the box it's in (a meeting, D-72): the tools float over the board and can be hidden. */
+		fit?: boolean;
+	} = $props();
+	let toolsHidden = $state(false);
 
 	let tool = $state<Tool | 'eraser'>('pen');
 	let color = $state(INKS[0][0]);
@@ -305,7 +319,10 @@
 <svelte:window onkeydown={keys} />
 <svelte:document onfullscreenchange={fullscreenChange} />
 
-<div class="wb" class:full role="group" aria-label="Whiteboard" bind:this={root} style:--tb-h="{toolbarH}px">
+<div class="wb" class:full class:fit role="group" aria-label="Whiteboard" bind:this={root} style:--tb-h="{toolbarH}px">
+	{#if fit && toolsHidden}
+		<button type="button" class="btn btn-sm show-tools" onclick={() => (toolsHidden = false)}><Icon name="pencil" size={15} />{board.canDraw ? 'Tools' : 'View only'}</button>
+	{:else}
 	<div class="toolbar" role="toolbar" aria-label="Whiteboard tools" bind:this={toolbarEl}>
 		{#if board.canDraw}
 			<div class="grp">
@@ -329,9 +346,11 @@
 			<span class="small muted flex items-center gap-1"><Icon name="eye" size={14} />View only</span>
 		{/if}
 		<span class="spacer"></span>
-		<IconBtn icon={full ? 'minimize' : 'maximize'} label={full ? 'Exit full screen' : 'Full screen'} hint={full ? 'Exit full screen (Esc)' : 'Full screen'} class="btn-sm btn-ghost" tip="left" aria-pressed={full} onclick={toggleFull} />
+		{#if !fit}<IconBtn icon={full ? 'minimize' : 'maximize'} label={full ? 'Exit full screen' : 'Full screen'} hint={full ? 'Exit full screen (Esc)' : 'Full screen'} class="btn-sm btn-ghost" tip="left" aria-pressed={full} onclick={toggleFull} />{/if}
 		<span class="tooltip tooltip-left" data-tip="Download the board as a PNG image"><button type="button" class="btn btn-sm btn-ghost" onclick={exportPNG}><Icon name="download" size={16} />PNG</button></span>
+		{#if fit}<IconBtn icon="eye-off" label="Hide tools" hint="Hide the tools" class="btn-sm btn-ghost" tip="left" onclick={() => (toolsHidden = true)} />{/if}
 	</div>
+	{/if}
 	<div class="surface" bind:this={wrap} role="img" aria-label={label}>
 		<canvas bind:this={main} width={px.w} height={px.h} aria-hidden="true"></canvas>
 		<canvas bind:this={over} width={px.w} height={px.h} class="over" class:draw={board.canDraw} class:erase={tool === 'eraser'}
@@ -354,6 +373,16 @@
 	}
 	.wb.full .surface { justify-self: center; width: min(100%, calc((100dvh - var(--tb-h) - 1.5rem) * 16 / 9)); }
 	.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+	/* Filling a meeting's stage: the largest 16:9 board that fits, tools floating on top. */
+	.wb.fit { position: relative; width: 100%; height: 100%; display: grid; place-items: center; container-type: size; }
+	.wb.fit .surface { width: min(100cqw, calc(100cqh * 16 / 9)); }
+	.wb.fit .toolbar, .wb.fit .show-tools {
+		position: absolute; top: 0.5rem; left: 0; right: 0; margin: 0 auto; z-index: 2;
+		box-shadow: 0 4px 16px rgb(0 0 0 / 0.15); border: 1px solid var(--color-base-300);
+	}
+	.wb.fit .show-tools { width: max-content; }
+	.wb.fit .toolbar { width: max-content; max-width: calc(100% - 1rem); padding: 0.35rem 0.5rem; border-radius: 0.75rem; background: color-mix(in oklab, var(--color-base-100) 94%, transparent); gap: 0.35rem; }
+	.wb.fit .grp { padding-right: 0.35rem; }
 	.grp { display: flex; flex-wrap: wrap; gap: 0.25rem; padding-right: 0.5rem; border-right: 1px solid var(--color-base-300); }
 	.swatch { width: 1.75rem; height: 1.75rem; border-radius: 999px; border: 2px solid var(--color-base-100); box-shadow: 0 0 0 1px var(--color-base-300); cursor: pointer; }
 	.swatch.on { box-shadow: 0 0 0 2.5px var(--color-base-content); }

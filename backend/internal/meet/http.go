@@ -12,6 +12,7 @@ import (
 
 // TeacherRoutes mounts hosting under /api/teacher.
 func (s *Service) TeacherRoutes(r chi.Router) {
+	s.TeacherLimitsRoute(r)
 	r.Method("POST", "/meetings", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in MeetingInput
 		if err := httpx.Decode(w, r, &in); err != nil {
@@ -46,6 +47,42 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 			return err
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{"attendance": rows})
+		return nil
+	}))
+}
+
+// TeacherLimitsRoute tells teachers what they may open (under /api/teacher).
+func (s *Service) TeacherLimitsRoute(r chi.Router) {
+	r.Method("GET", "/meeting-limits", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		l, err := s.Limits(r.Context())
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, l)
+		return nil
+	}))
+}
+
+// AdminRoutes lets admins, and managers with the settings feature, set the limits.
+func (s *Service) AdminRoutes(r chi.Router, a *auth.Service) {
+	r.With(a.RequireFeature(auth.FeatSettings)).Method("GET", "/meeting-limits", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		l, err := s.Limits(r.Context())
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, l)
+		return nil
+	}))
+	r.With(a.RequireFeature(auth.FeatSettings)).Method("PUT", "/meeting-limits", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in Limits
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		l, err := s.SetLimits(r.Context(), auth.MustUser(r.Context()).ID, in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, l)
 		return nil
 	}))
 }

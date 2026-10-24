@@ -279,6 +279,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Directory.AdminRoutes(ad)
 			a.OIDC.AdminRoutes(ad)
 			a.Drive.AdminRoutes(ad)
+			a.Meet.AdminRoutes(ad, a.Auth)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))

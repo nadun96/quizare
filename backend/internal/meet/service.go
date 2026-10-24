@@ -34,10 +34,10 @@ import (
 const (
 	StatusOpen  = "open"
 	StatusEnded = "ended"
-	// DefaultMax and MaxPeople bound the mesh: every person sends their
-	// streams to every other person.
+	// DefaultMax is a new meeting's size when the host doesn't choose; the
+	// admin's limit (D-72) bounds it, since every person sends their streams
+	// to every other person.
 	DefaultMax = 6
-	MaxPeople  = 8
 	turnTTL    = 6 * time.Hour
 )
 
@@ -145,7 +145,55 @@ func newCode() string {
 type MeetingInput struct {
 	Title       string  `json:"title"`
 	ClassroomID *string `json:"classroom_id"`
-	MaxPeople   int     `json:"max_people"`
+	// MaxPeople: nil takes the default; 0 is no limit of the meeting's own,
+	// when the admin allows that.
+	MaxPeople *int `json:"max_people"`
+}
+
+// Limits are what an admin allows (D-72); 0 means unlimited.
+type Limits struct {
+	MaxPeople int `json:"max_people"` // people in one meeting
+	MaxOpen   int `json:"max_open"`   // open meetings per teacher
+}
+
+// Limits returns the admin's limits.
+func (s *Service) Limits(ctx context.Context) (Limits, error) {
+	var l Limits
+	err := s.pool.QueryRow(ctx, `SELECT max_people, max_open FROM meet.limits`).Scan(&l.MaxPeople, &l.MaxOpen)
+	return l, err
+}
+
+// SetLimits saves them. Lowering the size applies to open meetings at once.
+func (s *Service) SetLimits(ctx context.Context, actorID string, l Limits) (Limits, error) {
+	f := map[string]string{}
+	if l.MaxPeople < 0 || l.MaxPeople == 1 || l.MaxPeople > 1000 {
+		f["max_people"] = "0 for no limit, or 2 to 1000 people"
+	}
+	if l.MaxOpen < 0 || l.MaxOpen > 1000 {
+		f["max_open"] = "0 for no limit, or up to 1000 meetings"
+	}
+	if len(f) > 0 {
+		return Limits{}, httpx.Invalid(f)
+	}
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE meet.limits SET max_people=$1, max_open=$2, updated_at=now(), updated_by=$3`, l.MaxPeople, l.MaxOpen, actorID); err != nil {
+			return err
+		}
+		return audit.Log(ctx, tx, actorID, "meeting_limits_changed", "meeting_limits", "limits", l)
+	})
+	return l, err
+}
+
+// capOf is how many people a meeting takes now: its own size, within the
+// admin's limit (0 = no limit).
+func capOf(own, limit int) int {
+	switch {
+	case limit == 0:
+		return own
+	case own == 0 || own > limit:
+		return limit
+	}
+	return own
 }
 
 const cols = `m.id, m.host_id, coalesce(u.name, ''), m.title, m.code, m.classroom_id, m.max_people, m.status, m.created_at, m.ended_at`
@@ -168,11 +216,22 @@ func (s *Service) Create(ctx context.Context, host auth.User, in MeetingInput) (
 	if n := len([]rune(in.Title)); n < 1 || n > 120 {
 		f["title"] = "give the meeting a title (at most 120 characters)"
 	}
-	if in.MaxPeople == 0 {
-		in.MaxPeople = DefaultMax
+	lim, err := s.Limits(ctx)
+	if err != nil {
+		return Meeting{}, err
 	}
-	if in.MaxPeople < 2 || in.MaxPeople > MaxPeople {
-		f["max_people"] = fmt.Sprintf("a peer-to-peer meeting holds 2 to %d people; use a tutoring session for a class", MaxPeople)
+	size := DefaultMax
+	if lim.MaxPeople > 0 && lim.MaxPeople < size {
+		size = lim.MaxPeople
+	}
+	if in.MaxPeople != nil {
+		size = *in.MaxPeople
+	}
+	switch {
+	case lim.MaxPeople > 0 && (size < 2 || size > lim.MaxPeople):
+		f["max_people"] = fmt.Sprintf("a meeting here holds 2 to %d people", lim.MaxPeople)
+	case lim.MaxPeople == 0 && (size == 1 || size < 0 || size > 1000):
+		f["max_people"] = "2 to 1000 people, or 0 for no limit"
 	}
 	if in.ClassroomID != nil && *in.ClassroomID == "" {
 		in.ClassroomID = nil
@@ -185,11 +244,20 @@ func (s *Service) Create(ctx context.Context, host auth.User, in MeetingInput) (
 	if len(f) > 0 {
 		return Meeting{}, httpx.Invalid(f)
 	}
+	if lim.MaxOpen > 0 {
+		var open int
+		if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM meet.meetings WHERE host_id=$1 AND status='open'`, host.ID).Scan(&open); err != nil {
+			return Meeting{}, err
+		}
+		if open >= lim.MaxOpen {
+			return Meeting{}, httpx.NewError(http.StatusConflict, "too_many_meetings", fmt.Sprintf("you have %d open meetings, the most allowed here; end one first", open))
+		}
+	}
 	var id string
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		for range 5 {
 			err := tx.QueryRow(ctx, `INSERT INTO meet.meetings(host_id, title, code, classroom_id, max_people) VALUES ($1,$2,$3,$4,$5)
-				ON CONFLICT (code) DO NOTHING RETURNING id`, host.ID, in.Title, newCode(), in.ClassroomID, in.MaxPeople).Scan(&id)
+				ON CONFLICT (code) DO NOTHING RETURNING id`, host.ID, in.Title, newCode(), in.ClassroomID, size).Scan(&id)
 			if err == nil {
 				return audit.Log(ctx, tx, host.ID, "meeting_created", "meeting", id, nil)
 			}
@@ -260,6 +328,11 @@ func (s *Service) Join(ctx context.Context, u auth.User, code string) (Access, e
 			return Access{}, errNotInClass
 		}
 	}
+	lim, err := s.Limits(ctx)
+	if err != nil {
+		return Access{}, err
+	}
+	m.MaxPeople = capOf(m.MaxPeople, lim.MaxPeople)
 	return Access{Meeting: m, Host: host, ICE: s.ICEServers(u.ID)}, nil
 }
 
