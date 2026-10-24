@@ -6,17 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
+	"github.com/nadun96/quizplatform/internal/platform/whiteboard"
 )
 
 // Whiteboard (V2-09, D-47). Each poll has one board on a 1600×900 canvas.
@@ -27,30 +25,17 @@ import (
 // mode allows it (everyone, or selected groups and participants).
 
 const (
-	BoardW, BoardH   = 1600, 900
 	MaxStrokes       = 20000
-	maxPointsPer     = 4000 // numbers, i.e. 2000 points
 	maxStrokesPerReq = 20
 )
 
 var (
-	colorRe   = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
-	gestureRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 	errNoDraw = httpx.NewError(http.StatusForbidden, "cannot_draw", "the teacher hasn't let you draw on this board")
 )
 
 // Stroke is one mark on the board. By is "t" for the teacher or the
 // participant's opaque rank key, so a browser can recognise its own strokes.
-type Stroke struct {
-	ID      int64     `json:"id"`
-	By      string    `json:"by"`
-	Gesture string    `json:"gesture"`
-	Tool    string    `json:"tool"` // pen highlighter line rect ellipse arrow text
-	Color   string    `json:"color"`
-	Size    float64   `json:"size"`
-	Points  []float64 `json:"points"`
-	Text    string    `json:"text,omitempty"`
-}
+type Stroke = whiteboard.Stroke
 
 // BoardAccess says who may draw.
 type BoardAccess struct {
@@ -82,58 +67,6 @@ func (v BoardView) MarshalJSON() ([]byte, error) {
 		plain
 		Strokes json.RawMessage `json:"strokes"`
 	}{plain(v), v.raw})
-}
-
-func (st *Stroke) clean() map[string]string {
-	f := map[string]string{}
-	switch st.Tool {
-	case "pen", "highlighter":
-		if len(st.Points) < 2 || len(st.Points)%2 != 0 || len(st.Points) > maxPointsPer {
-			f["points"] = "a line needs 1-2000 points"
-		}
-	case "line", "rect", "ellipse", "arrow":
-		if len(st.Points) != 4 {
-			f["points"] = "a shape needs two corners"
-		}
-	case "text":
-		if len(st.Points) != 2 {
-			f["points"] = "text needs a position"
-		}
-		st.Text = strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) && r != '\n' {
-				return -1
-			}
-			return r
-		}, strings.TrimSpace(st.Text))
-		if n := utf8.RuneCountInString(st.Text); n < 1 || n > 200 {
-			f["text"] = "text must be 1-200 characters"
-		}
-	default:
-		f["tool"] = "unknown tool"
-	}
-	if st.Tool != "text" {
-		st.Text = ""
-	}
-	for i, v := range st.Points {
-		lim := float64(BoardW)
-		if i%2 == 1 {
-			lim = BoardH
-		}
-		if v < -50 || v > lim+50 || v != v {
-			f["points"] = "points must be on the board"
-			break
-		}
-	}
-	if !colorRe.MatchString(st.Color) {
-		f["color"] = "colour must be #rrggbb"
-	}
-	if st.Size < 1 || st.Size > 80 {
-		f["size"] = "size must be 1-80"
-	}
-	if !gestureRe.MatchString(st.Gesture) {
-		f["gesture"] = "invalid gesture id"
-	}
-	return f
 }
 
 // boardCache keeps each board's access settings and stroke count in memory
@@ -387,7 +320,7 @@ func (s *Service) addStrokes(ctx context.Context, p *Poll, pid *string, in Strok
 		return nil, httpx.Invalid(map[string]string{"strokes": fmt.Sprintf("send 1-%d strokes", maxStrokesPerReq)})
 	}
 	for i := range in.Strokes {
-		if f := in.Strokes[i].clean(); len(f) > 0 {
+		if f := in.Strokes[i].Clean(); len(f) > 0 {
 			return nil, httpx.Invalid(f)
 		}
 	}

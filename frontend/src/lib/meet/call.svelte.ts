@@ -3,6 +3,7 @@
 // messages between them (/ws/meet/{code}); media never goes through it.
 // Each pair follows WebRTC's "perfect negotiation", so either side can add or
 // remove a track at any time without the two offers colliding.
+import { BoardState, type BoardEvent, type BoardView, type NewStroke, type Stroke } from '../board/strokes.svelte';
 import { LiveSocket, type Message } from '../socket';
 import { applyRoster, CLOSE_FULL, polite, streamKind, type Ending, type Meeting, type Person, type StreamIds } from './mesh';
 
@@ -37,6 +38,10 @@ export class MeetingCall {
 	/** What this person sends: one stream for the microphone and camera, one for the screen. */
 	readonly local = new MediaStream();
 	readonly screenStream = new MediaStream();
+	/** The meeting's whiteboard (D-72): shown or hidden for everyone by the host. */
+	readonly board = new BoardState();
+	private requests = new Map<string, { resolve: (m: Message) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+	private seq = 0;
 	private links = new Map<string, Link>();
 	private socket: LiveSocket | null = null;
 	private ice: RTCIceServer[] = [];
@@ -73,6 +78,7 @@ export class MeetingCall {
 				this.meeting = m.meeting as Meeting;
 				if (Array.isArray(m.ice_servers)) this.ice = m.ice_servers as RTCIceServer[];
 				this.people = applyRoster(this.people, m);
+				if (m.board) this.board.load(m.board as BoardView);
 				this.sendState();
 				for (const p of this.people) this.link(p.peer_id);
 				return;
@@ -90,6 +96,23 @@ export class MeetingCall {
 			case 'signal':
 				this.onSignal(m.from as string, (m.data ?? {}) as SignalData);
 				return;
+			case 'board':
+				this.board.apply(m as unknown as BoardEvent);
+				return;
+			case 'board_access':
+				this.board.open = !!m.open;
+				this.board.mode = String(m.mode ?? 'host');
+				this.board.canDraw = !!m.can_draw;
+				return;
+			case 'board_ack': {
+				const r = this.requests.get(String(m.req));
+				if (!r) return;
+				this.requests.delete(String(m.req));
+				clearTimeout(r.timer);
+				if (m.error) r.reject(new Error(String(m.error)));
+				else r.resolve(m);
+				return;
+			}
 			case 'ended':
 			case 'removed':
 			case 'replaced':
@@ -100,6 +123,33 @@ export class MeetingCall {
 
 	private send(m: Record<string, unknown>) {
 		this.socket?.send(m);
+	}
+
+	/** A whiteboard request: resolves with the server's answer. */
+	private request(type: string, body: Record<string, unknown>): Promise<Message> {
+		const req = 'r' + ++this.seq;
+		return new Promise((resolve, reject) => {
+			if (!this.socket?.send({ type, req, ...body })) return reject(new Error('Not connected; try again in a moment'));
+			const timer = setTimeout(() => {
+				this.requests.delete(req);
+				reject(new Error('The board didn’t answer; try again'));
+			}, 10_000);
+			this.requests.set(req, { resolve, reject, timer });
+		});
+	}
+
+	/** What the whiteboard component calls to draw, erase and clear. */
+	readonly boardClient = {
+		add: async (strokes: NewStroke[]) => ((await this.request('board_add', { strokes })).strokes ?? []) as Stroke[],
+		erase: async (ids: number[], gesture = '') => ((await this.request('board_erase', { ids, gesture })).removed ?? []) as number[],
+		clear: async () => {
+			await this.request('board_clear', {});
+		}
+	};
+
+	/** Host only (the server checks): show or hide the board, and who draws. */
+	setBoard(open: boolean, mode = this.board.mode) {
+		this.send({ type: 'board_access', open, mode });
 	}
 
 	private sendState() {
@@ -284,6 +334,11 @@ export class MeetingCall {
 		if (this.ending) return;
 		this.ending = why;
 		this.socket?.close();
+		for (const r of this.requests.values()) {
+			clearTimeout(r.timer);
+			r.reject(new Error('The meeting is over'));
+		}
+		this.requests.clear();
 		for (const id of [...this.links.keys()]) this.drop(id);
 		for (const t of [...this.local.getTracks(), ...this.screenStream.getTracks()]) t.stop();
 		this.mic = this.cam = this.screen = this.hand = false;
