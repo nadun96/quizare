@@ -128,9 +128,20 @@ The Resources tab (teachers, TS-FR-33) shows the session's use and its share, al
 
 The admin console's **Tutoring** tab shows upload, download, CPU, tracks, participants and reconnects, in total and for each live session, now and over the last 24 hours or 7 days (D-82, TS-NFR-41).
 
-- **Measured or estimated.** LiveKit reports nothing per room. With `prometheus_port` in LiveKit's config and `LIVEKIT_METRICS_URL` for the tutoring service, the totals are measured from LiveKit's own counters (bytes sent and received, its process's CPU) every 2 seconds. Each session's figures are the estimates above; its CPU is the measured CPU shared out by its upload. Without the metrics, everything is estimated, and the page says so. Keep the metrics port closed to the outside.
+- **Measured or estimated.** LiveKit reports nothing per room. With `prometheus: port:` in LiveKit's config and `LIVEKIT_METRICS_URL` for the tutoring service, the totals are measured from LiveKit's own counters (bytes sent and received, its process's CPU) every 2 seconds. Each session's figures are the estimates above; its CPU is the measured CPU shared out by its upload. Without the metrics, everything is estimated, and the page says so. Keep the metrics port closed to the outside.
 - **Reconnects** count a person's connection to the session coming back, and their page joining the video again after it dropped.
 - **History.** While anything is live, a row a minute is saved for all of tutoring and for each session (the minute's averages, the most tracks and people, the reconnects), and kept 7 days. The charts show 5-minute points for a day and 30-minute points for a week; below them, each session's peaks.
+
+## The relay on port 443
+
+Video normally travels over UDP 7882 (TCP 7881 as a fallback). Some school networks let nothing out but HTTPS, so LiveKit's own TURN relay also runs behind port 443 (D-83, TS-NFR-12):
+
+- LiveKit tells browsers about `turns:turn.example.edu:443` (`turn` in `deploy/livekit.yaml`, with `external_tls: true`). A browser that can't reach the media ports sends the video through the relay, over TLS on 443, like any HTTPS connection.
+- Port 443 is shared by name. Caddy, built with the [layer4 plugin](https://github.com/mholt/caddy-l4), takes connections for the relay's name, ends TLS with its own automatic certificate and passes them to LiveKit on 5349; every other name reaches the sites as before (`deploy/Caddyfile`). Compose builds that Caddy (`deploy/container/caddy.Dockerfile`); set `QP_TURN_DOMAIN` and enable `turn` in `deploy/container/livekit.yaml`. With aaPanel's nginx, the stream module does the same split (`deploy/aapanel/nginx-turn.conf`); this moves every HTTPS site to an internal port, so read its steps first.
+- LiveKit's relay refuses to forward to private or loopback addresses (`turn.allow_restricted_peer_cidrs` lists exceptions). A server with a public address needs nothing; a school running everything on its own network adds its LiveKit address there.
+- **Checking it:** open a session link with `?relay=1`. The page says "Relay only" and sends and receives video only through the relay, as from behind such a firewall.
+
+Tested on one computer with Caddy 2.11.7 and caddy-l4 0.1.2 in front of LiveKit 1.13.7: with `?relay=1`, Chrome watched the teacher's screen through `turns:…:443` over TLS (`tutor-relay.mjs`). The aaPanel config was not tried on aaPanel.
 
 ## Layout
 
@@ -215,7 +226,7 @@ If Windows refuses the ports (`netsh interface ipv4 show excludedportrange proto
 | `LIVEKIT_PUBLIC_URL` | — | What browsers connect to, e.g. `wss://tutor.example.edu` |
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET_FILE` | — | LiveKit's key and its secret file: just the secret, or LiveKit's own `key: secret` key file |
 | `TUTOR_GENERATE_LIVEKIT_KEYS` | off | `1`: write the LiveKit key file on first start (containers) |
-| `LIVEKIT_METRICS_URL` | — | LiveKit's Prometheus endpoint (`prometheus_port` in its config), e.g. `http://127.0.0.1:6789/metrics`: measured bandwidth and CPU for monitoring (D-82) |
+| `LIVEKIT_METRICS_URL` | — | LiveKit's Prometheus endpoint (`prometheus: port:` in its config), e.g. `http://127.0.0.1:6789/metrics`: measured bandwidth and CPU for monitoring (D-82) |
 | `TUTOR_RECORDINGS_DIR` | `data/recordings` | Where recordings are kept, encrypted (D-80); the systemd unit uses `/var/lib/quiz-tutoring/recordings`, containers `/var/lib/tutoring/recordings` |
 
 Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 show excludedportrange protocol=tcp`); run LiveKit on other ports then.

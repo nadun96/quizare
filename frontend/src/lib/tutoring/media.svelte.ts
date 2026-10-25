@@ -48,6 +48,12 @@ export class SessionMedia {
 	hasStage = $state(false);
 	/** The breakout group room joined, if any. */
 	groupRoom = $state('');
+	/**
+	 * Only through the relay (TURN on 443), as from behind a school firewall
+	 * that lets nothing else out (D-83, TS-NFR-12): `?relay=1` on the session
+	 * link, to check the relay works.
+	 */
+	forceRelay = false;
 	private lk: LK | null = null;
 	private rooms: Partial<Record<Which, Room>> = {};
 	private audio = new Map<string, HTMLMediaElement>();
@@ -100,7 +106,7 @@ export class SessionMedia {
 				this.refresh();
 			});
 		}
-		await room.connect(url, token, { autoSubscribe: true });
+		await room.connect(url, token, { autoSubscribe: true, ...(this.forceRelay ? { rtcConfig: { iceTransportPolicy: 'relay' as const } } : {}) });
 		this.rooms[which] = room;
 		for (const p of room.remoteParticipants.values()) for (const pub of p.trackPublications.values()) if (pub.track) this.attach(pub.track);
 		return room;
