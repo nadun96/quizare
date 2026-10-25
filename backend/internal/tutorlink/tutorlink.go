@@ -24,6 +24,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
+	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 )
 
@@ -52,28 +53,37 @@ type UserClaims struct {
 type Classrooms interface {
 	ClassroomAccess(ctx context.Context, classroomID, userID string) (content.Classroom, string, error)
 	CategoryMembers(ctx context.Context, teacherID, classroomID string) ([]content.CategoryMember, error)
+	// For scheduling (D-84): someone's classrooms, and a classroom's people.
+	TutoringClassrooms(ctx context.Context, userID string) ([]content.TutoringClassroom, error)
+	ClassroomMembers(ctx context.Context, classroomID string) (string, []string, error)
 }
 
-// Teachers finds teacher accounts, for co-teachers (TS-FR-70).
+// Teachers finds teacher accounts, for co-teachers (TS-FR-70), and anyone's
+// name and email, for reminders (D-84).
 type Teachers interface {
 	ActiveTeacher(ctx context.Context, email string) (auth.User, error)
+	UsersByID(ctx context.Context, ids []string) (map[string]auth.User, error)
 }
+
+// Mailer queues emails (the platform's email jobs).
+type Mailer func(ctx context.Context, msgs []mail.Message) error
 
 type Service struct {
 	secret     []byte
 	url        string // the tutoring service's public address
 	classrooms Classrooms
 	teachers   Teachers
+	mail       Mailer
 	now        func() time.Time
 }
 
 // New returns nil when tutoring isn't configured: the platform then shows no
 // tutoring features (TS-NFR-55).
-func New(secret []byte, url string, classrooms Classrooms, teachers Teachers) *Service {
+func New(secret []byte, url string, classrooms Classrooms, teachers Teachers, send Mailer) *Service {
 	if len(secret) == 0 || url == "" {
 		return nil
 	}
-	return &Service{secret: secret, url: strings.TrimRight(url, "/"), classrooms: classrooms, teachers: teachers, now: time.Now}
+	return &Service{secret: secret, url: strings.TrimRight(url, "/"), classrooms: classrooms, teachers: teachers, mail: send, now: time.Now}
 }
 
 func jti() string {
@@ -161,7 +171,73 @@ func InternalRoutes(s *Service) func(chi.Router) {
 		r.Method("POST", "/access", httpx.Handler(s.handleAccess))
 		r.Method("POST", "/teacher", httpx.Handler(s.handleTeacher))
 		r.Method("POST", "/categories", httpx.Handler(s.handleCategories))
+		r.Method("POST", "/classrooms", httpx.Handler(s.handleClassrooms))
+		r.Method("POST", "/notify", httpx.Handler(s.handleNotify))
 	}
+}
+
+// handleClassrooms lists the classrooms someone teaches or is actively
+// enrolled in, for their calendar of sessions (D-84, TS-FR-86).
+func (s *Service) handleClassrooms(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		UserID string `json:"user_id"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	list, err := s.classrooms.TutoringClassrooms(r.Context(), in.UserID)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, map[string]any{"classrooms": list})
+	return nil
+}
+
+// NotifyInput is an email from tutoring: a reminder, a change or a
+// cancellation (D-84, TS-FR-87). It goes to the classroom's teacher and,
+// with Students, its active students, and to the people named (co-teachers),
+// each once, to active accounts only.
+type NotifyInput struct {
+	ClassroomID string   `json:"classroom_id"`
+	Students    bool     `json:"students"`
+	UserIDs     []string `json:"user_ids"`
+	Subject     string   `json:"subject"`
+	Body        string   `json:"body"`
+}
+
+func (s *Service) handleNotify(w http.ResponseWriter, r *http.Request) error {
+	var in NotifyInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	if strings.TrimSpace(in.Subject) == "" || len(in.Subject) > 200 || len(in.Body) > 4000 {
+		return httpx.Invalid(map[string]string{"subject": "a subject of up to 200 characters, and a body of up to 4,000"})
+	}
+	teacher, students, err := s.classrooms.ClassroomMembers(r.Context(), in.ClassroomID)
+	if err != nil {
+		return err
+	}
+	ids := append([]string{teacher}, in.UserIDs...)
+	if in.Students {
+		ids = append(ids, students...)
+	}
+	users, err := s.teachers.UsersByID(r.Context(), ids)
+	if err != nil {
+		return err
+	}
+	var msgs []mail.Message
+	for _, u := range users {
+		if u.Status == "active" && u.Email != "" {
+			msgs = append(msgs, mail.Message{To: u.Email, Subject: in.Subject, Body: in.Body})
+		}
+	}
+	if len(msgs) > 0 && s.mail != nil {
+		if err := s.mail(r.Context(), msgs); err != nil {
+			return err
+		}
+	}
+	httpx.JSON(w, 200, map[string]int{"sent": len(msgs)})
+	return nil
 }
 
 // AccessResult tells tutoring how a person may take part in a classroom's

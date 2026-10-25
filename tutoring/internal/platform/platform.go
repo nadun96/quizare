@@ -148,3 +148,67 @@ func (c *Client) Categories(ctx context.Context, classroomID, teacherID string) 
 	}
 	return nil, ErrUnavailable
 }
+
+// post sends one internal request and decodes a 200 answer into out.
+func (c *Client) post(ctx context.Context, path string, in, out any) error {
+	token, err := c.keys.ServiceToken()
+	if err != nil {
+		return err
+	}
+	body, _ := json.Marshal(in)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/internal/tutoring/"+path, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return ErrUnavailable
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		if out == nil {
+			return nil
+		}
+		return json.NewDecoder(resp.Body).Decode(out)
+	case http.StatusNotFound:
+		return web.ErrNotFound
+	}
+	return ErrUnavailable
+}
+
+// Classroom is one someone teaches or is actively enrolled in (D-84).
+type Classroom struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"` // teacher or student
+}
+
+// Classrooms lists someone's classrooms, for their calendar (TS-FR-86).
+func (c *Client) Classrooms(ctx context.Context, userID string) ([]Classroom, error) {
+	var out struct {
+		Classrooms []Classroom `json:"classrooms"`
+	}
+	err := c.post(ctx, "classrooms", map[string]string{"user_id": userID}, &out)
+	return out.Classrooms, err
+}
+
+// Notice is an email to a classroom's people: its teacher, its active
+// students when Students is set, and the people named (D-84, TS-FR-87).
+type Notice struct {
+	ClassroomID string   `json:"classroom_id"`
+	Students    bool     `json:"students"`
+	UserIDs     []string `json:"user_ids"`
+	Subject     string   `json:"subject"`
+	Body        string   `json:"body"`
+}
+
+// Notify has the platform email a notice.
+func (c *Client) Notify(ctx context.Context, n Notice) error {
+	if n.UserIDs == nil {
+		n.UserIDs = []string{}
+	}
+	return c.post(ctx, "notify", n, nil)
+}

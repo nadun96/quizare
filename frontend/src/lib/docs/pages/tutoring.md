@@ -46,6 +46,17 @@ Both kinds are signed with **one shared secret file**: `QP_TUTORING_SECRET_FILE`
 
 One socket per person and session: a second tab replaces the first, which shows "You opened this session in another tab".
 
+## Scheduling and reminders
+
+A teacher can start a session now, or **schedule** it from the Tutoring page (D-84, TS-FR-85 to TS-FR-89):
+
+- **When.** A date and time in a time zone (the browser's, by default), and a length. "Tuesdays at 15:30" stays 15:30 when daylight saving time changes.
+- **Repeating.** Every day or every week (on chosen days), every 1 to 12 days or weeks, until a date or for a number of times; at most 100 sessions, within a year. Each occurrence is an ordinary session with its own join code, so one can be **moved** or **cancelled** alone, from the session's **Schedule** panel; the panel can also cancel the rest of the series. Everyone concerned is emailed about a move or a cancellation.
+- **Opening early.** A scheduled session opens for students 10 minutes before it starts (0 to 120, per session); before that, joining says when it opens. Students then wait in the room as usual. It never starts by itself: the teacher starts it. Teachers can go in any time.
+- **Reminders.** By email, 24 hours and 15 minutes before by default (1 hour is the other choice; up to 4, or none), to the classroom's active students, the teacher and co-teachers. A reminder whose time had already passed when the session was scheduled or moved isn't sent. The tutoring service decides when one is due and asks the platform to email it (`/internal/tutoring/notify`), since the platform has the addresses.
+- **In the platform.** The student's My page and the teacher's Tutoring page show what's on in the next week; a session that is live, open, or starting within 15 minutes stands out with a Join button.
+- **Calendars.** `/tutoring/calendar` shows a month, a week or the next 60 days: for teachers, the sessions they teach or co-teach; for students, those of the classrooms they're in (the platform says which, `/internal/tutoring/classrooms`). Each session can be downloaded as a calendar file (`.ics`, the whole series for a series), and each person can make a private feed link for their calendar app, which is shown once and can be replaced or turned off (only a hash of it is stored).
+
 ## Two media rooms: the broadcast and backstage
 
 Every session has two LiveKit rooms (D-60):
@@ -233,10 +244,11 @@ Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 s
 
 ## Tests
 
-- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit); monitoring, with a fake of LiveKit's metrics whose counters the test moves on (`metrics_api_test.go`).
+- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit); monitoring, with a fake of LiveKit's metrics whose counters the test moves on (`metrics_api_test.go`); scheduling: series, joining early, moving and cancelling with their emails, reminders falling due (the test moves the service's clock), calendars, `.ics` files and feeds (`schedule_api_test.go`), and how schedules repeat across a change of daylight saving time (`schedule_test.go`).
+- `backend/internal/tutorlink`: also the classrooms someone teaches or studies in, and emails to a classroom's people, once each, active accounts only.
 - `backend/internal/tutorlink`: tokens, the internal API and every way a service token is refused.
 - `loadtest/tutoring-media.mjs`: LiveKit's capacity on this machine (D-58). Run it with nothing else busy: the simulated viewers share the machine's cores.
 
 ## Not yet
 
-Later phases add: scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
+Later phases add: the whiteboard and polls inside a session, attendance reports for classrooms, and a device check before joining.

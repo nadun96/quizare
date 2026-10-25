@@ -31,8 +31,8 @@ Without `QP_TEST_DATABASE_URL`, each test package starts its own embedded server
 .\scripts\start-local.ps1              # database, build, server: http://localhost:8080
 .\scripts\start-local.ps1 -Build       # also rebuild the frontend
 .\scripts\start-local.ps1 -Tutoring    # also LiveKit and the tutoring service (needs local\ set up)
-.\scripts\start-local.ps1 -Port 8180   # another port, when Windows has reserved 8080
-.\scripts\start-local.ps1 -Port 8180 -Tutoring -TutorPort 8190   # the same for the tutoring service
+.\scripts\start-local.ps1 -Port 8180   # a port of your choice (when 8080 is reserved by Windows, the script picks 8180 by itself)
+.\scripts\start-local.ps1 -Tutoring -TutorPort 8190   # the same for the tutoring service (8090 moves to 8190 by itself)
 .\scripts\stop-local.ps1               # stop everything; -KeepDatabase leaves PostgreSQL running
 ```
 
