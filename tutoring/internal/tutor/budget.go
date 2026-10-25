@@ -538,6 +538,11 @@ type Load struct {
 	Screens  int     `json:"screens"` // the broadcaster's
 	Cameras  int     `json:"cameras"` // the broadcaster's
 	Students int     `json:"students_sharing"`
+	// For monitoring (D-82): what reaches the server (each published track
+	// once), who is connected, and how often people came back today.
+	DownMbps     float64 `json:"down_mbps"`
+	Participants int     `json:"participants"`
+	Reconnects   int     `json:"reconnects"`
 	// The broadcaster's tracks beyond the first screen and camera (step 3).
 	extra       []string
 	broadcaster string
@@ -578,6 +583,7 @@ func (s *Service) measure(ctx context.Context, sess Session) (Load, error) {
 		}
 	}
 	l.Viewers = max(len(online)-1, 0)
+	l.Participants = len(online)
 	l.broadcaster = sess.TeacherID
 	if sess.BroadcasterID != nil {
 		l.broadcaster = *sess.BroadcasterID
@@ -607,6 +613,7 @@ func (s *Service) measure(ctx context.Context, sess Session) (Load, error) {
 				continue
 			}
 			l.Tracks++
+			l.DownMbps += rateOf(t.Source)
 			switch {
 			case t.Source == "SCREEN_SHARE" && p.Identity == l.broadcaster:
 				if l.Screens == 0 {
@@ -640,6 +647,7 @@ func (s *Service) measure(ctx context.Context, sess Session) (Load, error) {
 				continue
 			}
 			l.Tracks++
+			l.DownMbps += rateOf(t.Source)
 			shared = true
 			e.add("Shared with the teachers", rateOf(t.Source)*float64(max(staff, 1)))
 		}
@@ -662,6 +670,7 @@ func (s *Service) measure(ctx context.Context, sess Session) (Load, error) {
 				for _, t := range p.Tracks {
 					if !t.Muted {
 						l.Tracks++
+						l.DownMbps += rateOf(t.Source)
 						e.add("In groups", rateOf(t.Source)*others)
 					}
 				}
@@ -681,5 +690,6 @@ func (s *Service) measure(ctx context.Context, sess Session) (Load, error) {
 		l.Items = append(l.Items, Item{Name: n, Mbps: round2(sum[n])})
 	}
 	l.Mbps = e.Mbps
+	l.DownMbps = round2(l.DownMbps)
 	return l, nil
 }

@@ -57,14 +57,15 @@ type monitorState struct {
 	mu      sync.Mutex
 	over    int             // checks in a row over the budget
 	offered map[string]bool // sessions told there's room again
+	met     metricsState    // monitoring (D-82)
 }
 
 // Resources is what a session uses, for its teachers (TS-FR-33).
 type Resources struct {
 	Load    Load     `json:"load"`
-	Total   float64  `json:"total_mbps"`   // all of tutoring
-	Limit   float64  `json:"limit_mbps"`   // this session's share now
-	Budget  float64  `json:"budget_mbps"`  // the admin's budget
+	Total   float64  `json:"total_mbps"`  // all of tutoring
+	Limit   float64  `json:"limit_mbps"`  // this session's share now
+	Budget  float64  `json:"budget_mbps"` // the admin's budget
 	HardCap float64  `json:"hard_cap_mbps"`
 	Plan    Estimate `json:"plan"` // the plan's forecast
 	AutoOff []string `json:"auto_off"`
@@ -140,6 +141,7 @@ func (s *Service) CheckLoad(ctx context.Context) error {
 		loads[sess.ID] = l
 		total += l.Mbps
 	}
+	s.observe(ctx, live, loads)
 	s.loadMu.Lock()
 	s.load = loads
 	s.loadMu.Unlock()
@@ -343,6 +345,12 @@ type LiveUse struct {
 	Mbps        float64  `json:"mbps"`
 	Viewers     int      `json:"viewers"`
 	AutoOff     []string `json:"auto_off"`
+	// For monitoring (D-82); CPU is the measured CPU shared out by upload.
+	DownMbps     float64  `json:"down_mbps"`
+	Tracks       int      `json:"tracks"`
+	Participants int      `json:"participants"`
+	Reconnects   int      `json:"reconnects"`
+	CPU          *float64 `json:"cpu,omitempty"`
 }
 
 // BudgetOverview is the budget and what each live session uses now.
@@ -360,22 +368,14 @@ func (s *Service) AdminBudget(ctx context.Context, p authn.Person) (BudgetOvervi
 	if err != nil {
 		return BudgetOverview{}, err
 	}
-	rows, _ := s.pool.Query(ctx, `SELECT `+sessionCols+` FROM tutoring.sessions WHERE status='live'`)
-	live, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Session, error) { return scanSession(r) })
+	sessions, err := s.liveUses(ctx)
 	if err != nil {
 		return BudgetOverview{}, err
 	}
-	out := BudgetOverview{Budget: b, Sessions: []LiveUse{}}
-	for _, sess := range live {
-		l := s.loadOf(sess.ID)
-		off := sess.AutoOff
-		if off == nil {
-			off = []string{}
-		}
-		out.Sessions = append(out.Sessions, LiveUse{ID: sess.ID, Title: sess.Title, TeacherName: sess.TeacherName, Mbps: l.Mbps, Viewers: l.Viewers, AutoOff: off})
-		out.Total += l.Mbps
+	out := BudgetOverview{Budget: b, Sessions: sessions}
+	for _, u := range sessions {
+		out.Total += u.Mbps
 	}
 	out.Total = round2(out.Total)
-	slices.SortFunc(out.Sessions, func(a, c LiveUse) int { return cmp.Compare(c.Mbps, a.Mbps) })
 	return out, nil
 }

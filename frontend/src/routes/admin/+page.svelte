@@ -20,6 +20,7 @@
 	import ManagerList from '$lib/admin/ManagerList.svelte';
 	import RecordingsPanel from '$lib/admin/RecordingsPanel.svelte';
 	import BudgetPanel from '$lib/admin/BudgetPanel.svelte';
+	import MonitorPanel from '$lib/admin/MonitorPanel.svelte';
 	import StoragePanel from '$lib/admin/StoragePanel.svelte';
 	import BackupsPanel from '$lib/admin/BackupsPanel.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
@@ -213,6 +214,7 @@
 	{:else if tab === 'recordings'}
 		<div class="vstack">
 			<BudgetPanel />
+			<MonitorPanel />
 			<RecordingsPanel meId={auth.user?.id ?? ''} />
 		</div>
 	{:else if tab === 'managers'}

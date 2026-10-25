@@ -189,6 +189,10 @@ To send password-reset and verification emails:
 
 Never delete `/www/quiz-app/config` or the `quiz` database in aaPanel. Uninstalling the site in aaPanel doesn't touch either; it only removes the Nginx site.
 
+## Tutoring's relay on port 443
+
+If you run tutoring (see [Deployment](deployment.md)) and students sit behind school firewalls that let only HTTPS out, LiveKit's relay has to share port 443 with your websites. With aaPanel's nginx, its stream module splits 443 by name: `deploy/aapanel/nginx-turn.conf` holds the configuration and the steps (D-83). It moves **every** HTTPS site on the server to an internal port, so plan a quiet moment, and check the sites' `listen` lines again after changing their SSL settings in aaPanel, which rewrites them. This configuration hasn't been tried on aaPanel itself; the same split was tested with Caddy.
+
 ## Troubleshooting
 
 | What you see | Why, and what to do |

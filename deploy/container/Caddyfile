@@ -6,6 +6,24 @@
 # No domain? A name like 203-0-113-5.sslip.io points at that IP and gets a
 # Let's Encrypt certificate (see home.env.example).
 
+# Tutoring's relay on 443 (D-83): connections for QP_TURN_DOMAIN go to
+# LiveKit's TURN, TLS ended here; everything else reaches the sites below.
+# This Caddy is built with the layer4 plugin (deploy/container/caddy.Dockerfile).
+{
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				@turn tls sni {$QP_TURN_DOMAIN:turn.localhost}
+				route @turn {
+					tls
+					proxy livekit:5349
+				}
+			}
+			tls
+		}
+	}
+}
+
 {$QP_DOMAIN:localhost} {
 	encode zstd gzip
 
@@ -36,3 +54,8 @@
 	reverse_proxy tutoring:8090
 }
 
+# The relay's name only keeps its certificate here; its connections are taken
+# by the layer4 route at the top (D-83).
+{$QP_TURN_DOMAIN:turn.localhost} {
+	respond "Tutoring relay" 404
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
-import { insistable, mbps, meter } from './types';
+import { fillGaps, insistable, mbps, meter } from './types';
 
 // The bandwidth budget in the browser (D-81).
 
@@ -27,6 +27,21 @@ describe('figures', () => {
 		expect(insistable('it would use about 1.2 Mbit/s more, and 0.4 are left: stop another screen or camera, or send it anyway')).toBe(true);
 		expect(insistable('that would take the server above its hard limit (270 Mbit/s): stop another screen or camera')).toBe(false);
 		expect(sentence('its plan needs about 255 Mbit/s')).toBe('Its plan needs about 255 Mbit/s.');
+	});
+});
+
+describe('monitoring history (D-82)', () => {
+	const at = (min: number) => new Date(Date.UTC(2026, 9, 25, 10, min)).toISOString();
+	const p = (min: number, v = 5) => ({ at: at(min), v });
+	const zero = (a: string) => ({ at: a, v: 0 });
+
+	it('drops to zero across time nothing ran, and leaves runs of points alone', () => {
+		expect(fillGaps([p(0), p(5), p(10)], 300, zero)).toEqual([p(0), p(5), p(10)]);
+		// 10:00, then 10:40: zeros at 10:05 and 10:35, not a line straight across.
+		expect(fillGaps([p(0), p(40)], 300, zero)).toEqual([p(0), p(5, 0), p(35, 0), p(40)]);
+		// One missing step: a single zero.
+		expect(fillGaps([p(0), p(10)], 300, zero)).toEqual([p(0), p(5, 0), p(10)]);
+		expect(fillGaps([], 300, zero)).toEqual([]);
 	});
 });
 

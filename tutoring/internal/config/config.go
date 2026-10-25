@@ -36,6 +36,10 @@ type Config struct {
 	// RecordingsDir keeps recordings, encrypted (TUTOR_RECORDINGS_DIR,
 	// default data/recordings; D-80). They're deleted 2 days after they end.
 	RecordingsDir string
+	// LiveKitMetricsURL is LiveKit's Prometheus endpoint (LIVEKIT_METRICS_URL,
+	// optional; D-82): with it, the monitor shows measured bandwidth and CPU
+	// for the whole media server, not only estimates.
+	LiveKitMetricsURL string
 }
 
 // generateKeys writes a LiveKit key file ("key: secret", LiveKit's key_file
@@ -76,14 +80,15 @@ func env(k, def string) string {
 
 func FromEnv() (Config, error) {
 	c := Config{
-		Listen:           env("TUTOR_LISTEN", "127.0.0.1:8090"),
-		DatabaseURL:      os.Getenv("TUTOR_DATABASE_URL"),
-		PlatformURL:      strings.TrimRight(os.Getenv("TUTOR_PLATFORM_URL"), "/"),
-		PlatformOrigin:   strings.TrimRight(os.Getenv("TUTOR_PLATFORM_ORIGIN"), "/"),
-		LiveKitURL:       env("LIVEKIT_URL", "http://127.0.0.1:7880"),
-		LiveKitPublicURL: os.Getenv("LIVEKIT_PUBLIC_URL"),
-		LiveKitKey:       os.Getenv("LIVEKIT_API_KEY"),
-		RecordingsDir:    env("TUTOR_RECORDINGS_DIR", "data/recordings"),
+		Listen:            env("TUTOR_LISTEN", "127.0.0.1:8090"),
+		DatabaseURL:       os.Getenv("TUTOR_DATABASE_URL"),
+		PlatformURL:       strings.TrimRight(os.Getenv("TUTOR_PLATFORM_URL"), "/"),
+		PlatformOrigin:    strings.TrimRight(os.Getenv("TUTOR_PLATFORM_ORIGIN"), "/"),
+		LiveKitURL:        env("LIVEKIT_URL", "http://127.0.0.1:7880"),
+		LiveKitPublicURL:  os.Getenv("LIVEKIT_PUBLIC_URL"),
+		LiveKitKey:        os.Getenv("LIVEKIT_API_KEY"),
+		RecordingsDir:     env("TUTOR_RECORDINGS_DIR", "data/recordings"),
+		LiveKitMetricsURL: os.Getenv("LIVEKIT_METRICS_URL"),
 	}
 	var missing []string
 	for k, v := range map[string]string{"TUTOR_DATABASE_URL": c.DatabaseURL, "TUTOR_PLATFORM_URL": c.PlatformURL, "TUTOR_PLATFORM_ORIGIN": c.PlatformOrigin,

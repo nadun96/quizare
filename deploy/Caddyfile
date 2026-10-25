@@ -1,6 +1,28 @@
 # Caddy 2 (ADR-12): automatic HTTPS, HTTP/2+3, WebSocket proxying, precompressed static files.
 # Replace quiz.example.edu with your domain and set QP_BASE_URL=https://quiz.example.edu.
 
+# Tutoring's relay on port 443 (D-83, TS-NFR-12): connections for the relay's
+# name go to LiveKit's TURN (deploy/livekit.yaml), with TLS ended here; every
+# other name reaches the sites below as usual. This needs Caddy built with the
+# layer4 plugin, e.g.
+#   xcaddy build v2.11.7 --with github.com/mholt/caddy-l4@v0.1.2
+# Without tutoring, or with a stock Caddy, delete this block and the
+# turn.example.edu site at the end.
+{
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				@turn tls sni turn.example.edu
+				route @turn {
+					tls
+					proxy 127.0.0.1:5349
+				}
+			}
+			tls
+		}
+	}
+}
+
 quiz.example.edu {
 	encode zstd gzip
 
@@ -61,4 +83,10 @@ tutor.example.edu {
 	@rtc path /rtc /rtc/*
 	reverse_proxy @rtc 127.0.0.1:7880
 	reverse_proxy 127.0.0.1:8090
+}
+
+# The relay's name (D-83): this site only keeps its certificate; its
+# connections are taken by the layer4 route at the top and never reach HTTP.
+turn.example.edu {
+	respond "Tutoring relay" 404
 }

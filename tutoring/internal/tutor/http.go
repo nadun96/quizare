@@ -70,6 +70,7 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("GET", "/resources", h(s.hResources))
 			r.Method("POST", "/budget/track", h(s.hCheckTrack))
 			r.Method("POST", "/budget/restore", h(s.hRestore))
+			r.Method("POST", "/media-reconnected", h(s.simple(s.MediaReconnected)))
 		})
 		r.Method("POST", "/plans/estimate", h(s.hEstimatePlan))
 		r.Method("GET", "/plan-presets", h(s.hPresets))
@@ -77,6 +78,7 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 		r.Method("DELETE", "/plan-presets/{preset}", h(s.hDeletePreset))
 		r.Method("GET", "/admin/budget", h(s.hAdminBudget))
 		r.Method("PUT", "/admin/budget", h(s.hSetBudget))
+		r.Method("GET", "/admin/monitor", h(s.hMonitor))
 		r.Method("GET", "/my/recordings", h(s.hMyRecordings))
 		r.Method("POST", "/recordings/{rec}/link", h(s.hRecordingLink))
 		r.Method("DELETE", "/recordings/{rec}", h(s.hDeleteRecording))
@@ -678,6 +680,19 @@ func (s *Service) hDeletePreset(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Service) hAdminBudget(w http.ResponseWriter, r *http.Request) error {
 	v, err := s.AdminBudget(r.Context(), me(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, v)
+	return nil
+}
+
+func (s *Service) hMonitor(w http.ResponseWriter, r *http.Request) error {
+	rng := r.URL.Query().Get("range")
+	if rng == "" {
+		rng = "24h"
+	}
+	v, err := s.Monitoring(r.Context(), me(r), rng)
 	if err != nil {
 		return err
 	}
