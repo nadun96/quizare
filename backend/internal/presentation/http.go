@@ -186,6 +186,31 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}))
+	r.Method("GET", "/presentations/{id}/links", reply(200, func(w http.ResponseWriter, r *http.Request) (Links, error) {
+		return s.Links(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("PUT", "/presentations/{id}/links", reply(200, func(w http.ResponseWriter, r *http.Request) (Links, error) {
+		var in struct {
+			Linked []Linkable `json:"linked"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return Links{}, err
+		}
+		return s.SetLinks(r.Context(), uid(r), chi.URLParam(r, "id"), in.Linked)
+	}))
+	r.Method("GET", "/presentations/{id}/analysis", reply(200, func(w http.ResponseWriter, r *http.Request) (Analysis, error) {
+		return s.Analysis(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("GET", "/presentations/{id}/report.csv", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		name, data, err := s.CSV(r.Context(), uid(r), chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".csv"}))
+		_, err = w.Write(data)
+		return err
+	}))
 	r.Method("GET", "/presentations/{id}/report", reply(200, func(w http.ResponseWriter, r *http.Request) (Report, error) {
 		return s.Report(r.Context(), uid(r), chi.URLParam(r, "id"))
 	}))

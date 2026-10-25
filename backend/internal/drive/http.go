@@ -1,7 +1,13 @@
 package drive
 
 import (
+	"io"
+	"mime"
 	"net/http"
+	"net/url"
+	"path"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -84,6 +90,30 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		httpx.JSON(w, http.StatusOK, f)
 		return nil
 	}))
+	// Presentations (D-78): a PowerPoint file as the body, or a file picked
+	// in Drive, back as a PDF for the browser to turn into slides.
+	r.Method("POST", "/drive/slides-pdf", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		r.Body = http.MaxBytesReader(w, r.Body, MaxDeckBytes+1024)
+		name, _ := url.QueryUnescape(r.Header.Get("X-File-Name"))
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			return httpx.Invalid(map[string]string{"file": "a presentation of at most 100 MB"})
+		}
+		pdf, err := s.SlidesToPDF(r.Context(), me(r), name, data)
+		if err != nil {
+			return err
+		}
+		sendPDF(w, pdf, strings.TrimSuffix(path.Base(name), path.Ext(name))+".pdf")
+		return nil
+	}))
+	r.Method("POST", "/drive/files/{file}/slides-pdf", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		pdf, name, err := s.DrivePDF(r.Context(), me(r), chi.URLParam(r, "file"))
+		if err != nil {
+			return err
+		}
+		sendPDF(w, pdf, name)
+		return nil
+	}))
 	r.Method("GET", "/drive/exports", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		list, err := s.Exports(r.Context(), me(r), r.URL.Query().Get("target_id"), 20)
 		if err != nil {
@@ -157,6 +187,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	}
 	r.Method("POST", "/sessions/{id}/drive-export", export("session"))
 	r.Method("POST", "/polls/{id}/drive-export", export("poll"))
+	r.Method("POST", "/presentations/{id}/drive-export", export("presentation"))
 }
 
 // UserRoutes: a classroom's files for its students, under /api.
@@ -196,4 +227,16 @@ func (s *Service) AdminRoutes(r chi.Router) {
 			return nil
 		}))
 	})
+}
+
+// sendPDF answers with a converted PDF, for the browser to read, never to open as a page.
+func sendPDF(w http.ResponseWriter, data []byte, name string) {
+	h := w.Header()
+	h.Set("Content-Type", MimePDF)
+	h.Set("Content-Length", strconv.Itoa(len(data)))
+	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	h.Set("X-File-Name", url.QueryEscape(name))
+	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	h.Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
 }

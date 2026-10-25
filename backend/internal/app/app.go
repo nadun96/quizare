@@ -35,6 +35,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
+	"github.com/nadun96/quizplatform/internal/platform/page"
 	"github.com/nadun96/quizplatform/internal/poll"
 	"github.com/nadun96/quizplatform/internal/presentation"
 	"github.com/nadun96/quizplatform/internal/quiz"
@@ -250,6 +251,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Tutorial.SetLLM(a.LLM) // AI marking of written answers (D-75)
 	a.LLM.SetTutorials(a.Tutorial)
 	a.Slides = presentation.NewService(pool, a.Content, a.Auth, cfg.BaseURL)
+	a.Slides.SetMarks(presentationMarks{a}) // time on slides against marks (D-78)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -386,6 +388,50 @@ func (a *App) health(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// presentationMarks finds a topic's quizzes and tutorials, and students'
+// scores on them, for presentations (D-78).
+type presentationMarks struct{ a *App }
+
+func (m presentationMarks) Linkable(ctx context.Context, teacherID, topicID string) ([]presentation.Linkable, error) {
+	var out []presentation.Linkable
+	for pg := 1; ; pg++ {
+		qs, total, err := m.a.Quiz.ListQuizzes(ctx, teacherID, topicID, "", page.Request{Page: pg, Size: page.MaxSize})
+		if err != nil {
+			return nil, err
+		}
+		for _, q := range qs {
+			out = append(out, presentation.Linkable{Kind: "quiz", ID: q.ID, Title: q.Title})
+		}
+		if pg*page.MaxSize >= total {
+			break
+		}
+	}
+	ts, err := m.a.Tutorial.List(ctx, teacherID, topicID)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range ts {
+		out = append(out, presentation.Linkable{Kind: "tutorial", ID: t.ID, Title: t.Title})
+	}
+	return out, nil
+}
+
+func (m presentationMarks) Scores(ctx context.Context, quizIDs, tutorialIDs []string) (map[string][2]float64, error) {
+	out, err := m.a.Eval.QuizScores(ctx, quizIDs)
+	if err != nil {
+		return nil, err
+	}
+	ts, err := m.a.Tutorial.Scores(ctx, tutorialIDs)
+	if err != nil {
+		return nil, err
+	}
+	for user, v := range ts {
+		w := out[user]
+		out[user] = [2]float64{w[0] + v[0], w[1] + v[1]}
+	}
+	return out, nil
+}
+
 // driveResults gives the Drive integration results to save (D-71).
 type driveResults struct{ a *App }
 
@@ -403,6 +449,10 @@ func (d driveResults) SessionCSV(ctx context.Context, teacherID, sessionID strin
 		name += " – " + info.Title
 	}
 	return fmt.Sprintf("%s (%s)", name, info.CreatedAt.Format("2 Jan 2006 15:04")), data, nil
+}
+
+func (d driveResults) PresentationCSV(ctx context.Context, teacherID, id string) (string, []byte, error) {
+	return d.a.Slides.CSV(ctx, teacherID, id)
 }
 
 func (d driveResults) PollCSV(ctx context.Context, teacherID, pollID string) (string, []byte, error) {

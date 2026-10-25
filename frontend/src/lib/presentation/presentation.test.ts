@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canOpen, elapsed, liveCanGo, personState, progressText, slideAlt, slideScale, type MyPresentation, type View } from './presentation';
+import { canOpen, elapsed, fileKind, liveCanGo, niceSeconds, trendWords, personState, progressText, slideAlt, slideScale, type MyPresentation, type View } from './presentation';
 
 const view = (allow_jump: boolean, reached: number): Pick<View, 'presentation' | 'reached' | 'slides'> => ({
 	presentation: { id: 'p', title: 'T', description: '', allow_jump, allow_download: false, version: 1 },
@@ -52,5 +52,24 @@ describe('presentations', () => {
 		expect(personState(who, 4)).toBe('Looking at slide 2');
 		expect(personState({ ...who, following: true }, 4)).toBe('Following');
 		expect(personState({ ...who, visible: false }, 4)).toBe('Away from the page');
+	});
+
+	it('knows which files Drive converts first', () => {
+		expect(fileKind('Cells.PDF')).toBe('pdf');
+		expect(fileKind('Cells.pptx')).toBe('deck');
+		expect(fileKind('old.ppt')).toBe('deck');
+		expect(fileKind('notes.docx')).toBeNull();
+	});
+
+	it('scales the time axis and reads the trend within the data', () => {
+		expect(niceSeconds(14)).toBe(20);
+		expect(niceSeconds(50)).toBe(60);
+		expect(niceSeconds(500)).toBe(600);
+		expect(niceSeconds(5000)).toBe(7200);
+		const fmt = (s: number) => `${s} s`;
+		expect(trendWords({ per_ten_minutes: 600, intercept: 10, r: 0.81 }, 5, 14, fmt)).toBe('A strong link: students who spent longer scored higher. Along the trend, from 15% at 5 s to 24% at 14 s (r = 0.81).');
+		expect(trendWords({ per_ten_minutes: -30, intercept: 70, r: -0.45 }, 60, 600, fmt)).toMatch(/^A clear link: .* scored lower/);
+		expect(trendWords({ per_ten_minutes: 1, intercept: 70, r: 0.1 }, 60, 600, fmt)).toMatch(/hardly go together/);
+		expect(trendWords({ per_ten_minutes: 9000, intercept: -50, r: 0.9 }, 5, 14, fmt)).toMatch(/from 25% at 5 s to 100% at 14 s/); // clamped to 0–100
 	});
 });

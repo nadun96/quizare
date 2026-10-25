@@ -660,6 +660,28 @@ paths:
       summary: Save a poll's answers to Drive, as a Google Sheet in the results folder
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '201': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveExport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { description: '`drive_not_connected` or `drive_reconnect`' } }
+  /api/teacher/presentations/{id}/drive-export:
+    post:
+      operationId: postTeacherPresentationDriveExport
+      tags: [drive, presentations]
+      summary: Save a presentation's viewing records to Drive, as a Google Sheet in the results folder
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveExport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { description: '`drive_not_connected` or `drive_reconnect`' } }
+  /api/teacher/drive/slides-pdf:
+    post:
+      operationId: postTeacherDriveSlidesPdf
+      tags: [drive, presentations]
+      summary: Turn a PowerPoint, OpenDocument or Keynote file into a PDF through the teacher's Drive (D-78); the copy made there is deleted
+      parameters: [{ name: X-File-Name, in: header, required: true, schema: { type: string }, description: 'The file name, URL-encoded; its extension says what it is' }]
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary, maxLength: 104857600 } } } }
+      responses: { '200': { description: 'The PDF, for the browser to turn into slides', content: { application/pdf: { schema: { type: string, format: binary } } } }, '422': { $ref: '#/components/responses/Invalid' }, '409': { description: '`drive_not_connected` or `drive_reconnect`' }, '502': { description: '`drive_unavailable` or `drive_convert_failed`' } }
+  /api/teacher/drive/files/{file}/slides-pdf:
+    post:
+      operationId: postTeacherDriveFileSlidesPdf
+      tags: [drive, presentations]
+      summary: A presentation picked in Drive, as a PDF (Google Slides exported, a PDF as it is, PowerPoint converted)
+      parameters: [{ name: file, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: 'The PDF, for the browser to turn into slides', content: { application/pdf: { schema: { type: string, format: binary } } } }, '403': { description: '`drive_no_access`' }, '422': { $ref: '#/components/responses/Invalid' }, '409': { description: '`drive_not_connected` or `drive_reconnect`' }, '502': { description: '`drive_unavailable` or `drive_convert_failed`' } }
   /api/my/classrooms/{id}/drive-files:
     get:
       operationId: getMyClassroomDriveFiles
@@ -988,6 +1010,34 @@ paths:
       summary: End presenting; time records stay
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '204': { description: 'Ended' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/links:
+    get:
+      operationId: getTeacherPresentationLinks
+      tags: [presentations]
+      summary: The quizzes and tutorials it's set beside, and the topic's others
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { linked: { type: array, items: { $ref: '#/components/schemas/Linkable' } }, options: { type: array, items: { $ref: '#/components/schemas/Linkable' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putTeacherPresentationLinks
+      tags: [presentations]
+      summary: Set which of the topic's quizzes and tutorials it goes with
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { linked: { type: array, items: { $ref: '#/components/schemas/Linkable' } } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { linked: { type: array, items: { $ref: '#/components/schemas/Linkable' } }, options: { type: array, items: { $ref: '#/components/schemas/Linkable' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/presentations/{id}/analysis:
+    get:
+      operationId: getTeacherPresentationAnalysis
+      tags: [presentations]
+      summary: Time on the presentation set beside scores on the linked quizzes and tutorials, overall (points, trend) and slide by slide
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentations/{id}/report.csv:
+    get:
+      operationId: getTeacherPresentationReportCsv
+      tags: [presentations]
+      summary: Viewing records as CSV, one row per student, with each slide's seconds and the linked score
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'CSV', content: { text/csv: { schema: { type: string } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/presentations/{id}/report:
     get:
       operationId: getTeacherPresentationReport
@@ -2425,6 +2475,12 @@ components:
         max_shown: { type: integer, description: 'Students may look back up to here, never ahead' }
         allow_browse: { type: boolean }
         started_at: { type: string, format: date-time }
+    Linkable:
+      type: object
+      properties:
+        kind: { type: string, enum: [quiz, tutorial] }
+        id: { type: string, format: uuid }
+        title: { type: string, readOnly: true }
     PresentationView:
       type: object
       properties:
@@ -2475,7 +2531,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [session, poll] }
+        kind: { type: string, enum: [session, poll, presentation] }
         target_id: { type: string, format: uuid }
         name: { type: string }
         web_link: { type: string }

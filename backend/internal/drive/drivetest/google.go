@@ -48,6 +48,13 @@ type Google struct {
 	NoScope  bool            // the next consent leaves Drive unticked
 	Refuse   bool            // refresh tokens stop working (revoked in the Google account)
 	NoGoogle map[string]bool // emails without a Google account
+
+	// Presentations (D-78): what an upload converted to Google Slides
+	// exports as (a PDF; nil makes one up), and how big an export Drive's
+	// export call answers before saying to use the export link (0: any).
+	SlidesPDF   []byte
+	ExportLimit int
+	Converted   []string // names of files converted to Slides, in order
 }
 
 // New starts a fake Google; it stops when the test ends.
@@ -65,6 +72,16 @@ func New(t testing.TB) *Google {
 	})
 	mux.HandleFunc("/drive/v3/", g.authed(g.drive))
 	mux.HandleFunc("POST /upload/drive/v3/files", g.authed(g.upload))
+	// Export links, for exports bigger than the export call answers.
+	mux.HandleFunc("GET /export-link/{id}", g.authed(func(w http.ResponseWriter, r *http.Request) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if f := g.files[r.PathValue("id")]; f != nil && f.MimeType == drive.MimeSlides {
+			_, _ = w.Write(f.Data)
+			return
+		}
+		http.NotFound(w, r)
+	}))
 	g.Server = httptest.NewTLSServer(mux)
 	t.Cleanup(g.Server.Close)
 	return g
@@ -225,13 +242,28 @@ func (g *Google) drive(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
+		case len(parts) == 2 && r.Method == "DELETE":
+			delete(g.files, f.ID)
+			w.WriteHeader(204)
 		case len(parts) == 2 && r.URL.Query().Get("alt") == "media":
 			_, _ = w.Write(f.Data)
+		case len(parts) == 2 && r.URL.Query().Get("fields") == "exportLinks":
+			links := map[string]string{}
+			if f.MimeType == drive.MimeSlides {
+				links[drive.MimePDF] = g.Server.URL + "/export-link/" + f.ID
+			}
+			writeJSON(w, 200, map[string]any{"exportLinks": links})
 		case len(parts) == 2:
 			writeJSON(w, 200, f.File)
 		case parts[2] == "export":
-			if f.MimeType != drive.MimeSheet || r.URL.Query().Get("mimeType") != "text/csv" {
+			want := r.URL.Query().Get("mimeType")
+			ok := (f.MimeType == drive.MimeSheet && want == "text/csv") || (f.MimeType == drive.MimeSlides && want == drive.MimePDF)
+			if !ok {
 				apiErr(w, 400, "badRequest", "Export only supports Docs Editors files.")
+				return
+			}
+			if g.ExportLimit > 0 && len(f.Data) > g.ExportLimit {
+				apiErr(w, 403, "exportSizeLimitExceeded", "This file is too large to be exported.")
 				return
 			}
 			_, _ = w.Write(f.Data)
@@ -299,6 +331,12 @@ func (g *Google) upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id := "u" + strings.ToLower(rand.Text()[:12])
+	if meta.MimeType == drive.MimeSlides { // Google converts it; here it becomes the PDF it will export as
+		g.Converted = append(g.Converted, meta.Name)
+		if data = g.SlidesPDF; data == nil {
+			data = []byte("%PDF-1.4\n% converted from " + meta.Name + "\n%%EOF\n")
+		}
+	}
 	g.files[id] = &File{File: drive.File{ID: id, Name: meta.Name, MimeType: meta.MimeType, WebViewLink: "https://docs.google.test/spreadsheets/" + id}, Data: data, Parent: parent}
 	writeJSON(w, 200, g.files[id].File)
 }

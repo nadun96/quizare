@@ -58,6 +58,7 @@ type Questions interface {
 type Results interface {
 	SessionCSV(ctx context.Context, teacherID, sessionID string) (name string, data []byte, err error)
 	PollCSV(ctx context.Context, teacherID, pollID string) (name string, data []byte, err error)
+	PresentationCSV(ctx context.Context, teacherID, presentationID string) (name string, data []byte, err error)
 	SessionTeacher(ctx context.Context, sessionID string) (string, error)
 }
 

@@ -59,9 +59,12 @@ func (s *Service) Save(ctx context.Context, teacherID, kind, targetID string, au
 	var name string
 	var data []byte
 	var err error
-	if kind == "poll" {
+	switch kind {
+	case "poll":
 		name, data, err = s.results.PollCSV(ctx, teacherID, targetID)
-	} else {
+	case "presentation":
+		name, data, err = s.results.PresentationCSV(ctx, teacherID, targetID)
+	default:
 		name, data, err = s.results.SessionCSV(ctx, teacherID, targetID)
 	}
 	if err != nil {
