@@ -51,6 +51,7 @@ type UserClaims struct {
 // Classrooms answers whether someone teaches or studies in a classroom.
 type Classrooms interface {
 	ClassroomAccess(ctx context.Context, classroomID, userID string) (content.Classroom, string, error)
+	CategoryMembers(ctx context.Context, teacherID, classroomID string) ([]content.CategoryMember, error)
 }
 
 // Teachers finds teacher accounts, for co-teachers (TS-FR-70).
@@ -159,6 +160,7 @@ func InternalRoutes(s *Service) func(chi.Router) {
 		})
 		r.Method("POST", "/access", httpx.Handler(s.handleAccess))
 		r.Method("POST", "/teacher", httpx.Handler(s.handleTeacher))
+		r.Method("POST", "/categories", httpx.Handler(s.handleCategories))
 	}
 }
 
@@ -185,6 +187,43 @@ func (s *Service) handleTeacher(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.JSON(w, 200, map[string]string{"id": u.ID, "name": u.Name})
+	return nil
+}
+
+// CategoryGroup is a classroom category and its active students, for
+// forming breakout groups from categories (TS-FR-50, D-79).
+type CategoryGroup struct {
+	Name    string   `json:"name"`
+	Color   int      `json:"color"`
+	UserIDs []string `json:"user_ids"`
+}
+
+// handleCategories lists a classroom's categories with their students, as
+// its teacher would see them.
+func (s *Service) handleCategories(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		ClassroomID string `json:"classroom_id"`
+		TeacherID   string `json:"teacher_id"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	members, err := s.classrooms.CategoryMembers(r.Context(), in.TeacherID, in.ClassroomID)
+	if err != nil {
+		return err
+	}
+	out := []CategoryGroup{}
+	idx := map[string]int{}
+	for _, m := range members {
+		i, ok := idx[m.CategoryID]
+		if !ok {
+			i = len(out)
+			idx[m.CategoryID] = i
+			out = append(out, CategoryGroup{Name: m.CategoryName, Color: m.Color, UserIDs: []string{}})
+		}
+		out[i].UserIDs = append(out[i].UserIDs, m.UserID)
+	}
+	httpx.JSON(w, 200, map[string]any{"categories": out})
 	return nil
 }
 

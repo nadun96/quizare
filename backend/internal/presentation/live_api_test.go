@@ -105,7 +105,9 @@ func TestLive(t *testing.T) {
 	img(4, 404)
 
 	// Looking back on their own, then the tab hidden: the teacher sees both.
-	time.Sleep(1100 * time.Millisecond) // a second on slide 3, following
+	// Time counts between the moments the server hears from the student, so
+	// the waits leave room for a busy machine delaying a message.
+	time.Sleep(2500 * time.Millisecond) // on slide 3, following
 	send(t, stu, map[string]any{"type": "state", "slide": 1, "following": false, "visible": true})
 	audience(t, pres, func(c map[string]any) bool { return c["looking_back"] == 1.0 })
 	send(t, stu, map[string]any{"type": "state", "slide": 4, "following": false, "visible": true}) // ahead: ignored
@@ -123,7 +125,7 @@ func TestLive(t *testing.T) {
 	send(t, stu, map[string]any{"type": "state", "slide": 1, "following": true, "visible": true})
 	audience(t, pres, func(c map[string]any) bool { return c["following"] == 1.0 })
 	send(t, stu, map[string]any{"type": "state", "slide": 2, "following": false, "visible": true})
-	time.Sleep(1200 * time.Millisecond)
+	time.Sleep(2500 * time.Millisecond)
 	send(t, stu, map[string]any{"type": "state", "slide": 3, "following": true, "visible": true})
 
 	// Ending: everyone is told; live time is recorded apart from their own pace.
@@ -132,15 +134,24 @@ func TestLive(t *testing.T) {
 	f.teacher.Call("GET", tpath+"/live", nil, 404, nil)
 	s.Call("GET", "/api/presentations/code/"+l.Code, nil, 404, nil)
 	img(1, 404) // a draft, no longer live
+	// The last report's time is written by the student's connection as it
+	// arrives, so the report may need a moment to include it.
 	var rep presentation.Report
-	f.teacher.Call("GET", tpath+"/report", nil, 200, &rep)
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		rep = presentation.Report{}
+		f.teacher.Call("GET", tpath+"/report", nil, 200, &rep)
+		if rep.Slides[2].LiveMedian >= 3 || time.Now().After(deadline) { // slide 3's own time, its one viewer
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	st := rep.Students[0]
-	if st.LiveSeconds < 2 || st.Seen != 0 || rep.Slides[2].LiveViewers != 1 {
+	if st.LiveSeconds < 3 || st.Seen != 0 || rep.Slides[2].LiveViewers != 1 {
 		t.Fatalf("report = %+v slides=%+v", st, rep.Slides)
 	}
 	var d presentation.ViewerDetail
 	f.teacher.Call("GET", tpath+"/viewers/"+st.ViewerID, nil, 200, &d)
-	if d.Slides[2].LiveSeconds < 2 || d.Slides[2].Seconds != 0 {
+	if d.Slides[2].LiveSeconds < 3 || d.Slides[2].Seconds != 0 {
 		t.Fatalf("detail = %+v", d.Slides)
 	}
 	f.e.NewUser(auth.RoleTeacher).Call("POST", tpath+"/live", nil, 404, nil)

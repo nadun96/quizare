@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A tutoring session's room (D-59): the waiting room, the broadcast, the
-	// teacher's controls, raised hands and chat. Joining needs a login and a
-	// computer (TS-FR-02, TS-FR-09).
+	// teacher's controls, raised hands, chat and breakout groups (D-79).
+	// Joining needs a login and a computer (TS-FR-02, TS-FR-09).
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -15,7 +15,8 @@
 	import TrackView from '$lib/tutoring/TrackView.svelte';
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
-	import { broadcasterName, CHAT_MODES, isBroadcaster, isStaffRole, LAYOUTS, publishTarget, type Attendee, type ChatMessage, type TutoringSession, type TutoringView } from '$lib/tutoring/types';
+	import GroupsPanel from '$lib/tutoring/GroupsPanel.svelte';
+	import { broadcasterName, CHAT_MODES, groupNow, isBroadcaster, isStaffRole, LAYOUTS, publishTarget, secondsLeft, type Attendee, type ChatMessage, type TutoringSession, type TutoringView } from '$lib/tutoring/types';
 
 	const code = page.params.code ?? '';
 	const client = new TutorClient();
@@ -27,7 +28,7 @@
 	let audioHost = $state<HTMLDivElement>();
 	const media = new SessionMedia(() => audioHost, (m) => toast(m, 'error'));
 	let socket: TutorSocket | null = null;
-	let side = $state<'chat' | 'people' | 'attendance'>('chat');
+	let side = $state<'chat' | 'people' | 'groups' | 'attendance'>('chat');
 	let ask = $state<{ mic: boolean; camera: boolean; screen: boolean } | null>(null);
 	let offer = $state(false); // asked to broadcast (TS-FR-17)
 	let myLayout = $state<TutoringSession['layout'] | null>(null); // a student's own choice (TS-FR-13)
@@ -43,7 +44,13 @@
 	const live = $derived(view?.session.status === 'live');
 	const link = $derived(typeof location !== 'undefined' ? location.origin + '/tutor/' + code : '');
 	// The broadcast, and backstage (students' and co-teachers' tracks, seen by the teachers only).
-	const broadcast = $derived(media.tiles.filter((t) => !t.backstage));
+	const broadcast = $derived(media.tiles.filter((t) => !t.backstage && !t.group));
+	// Breakout groups (D-79): the group this person is in (or visiting), and its people.
+	const group = $derived(view ? groupNow(view) : undefined);
+	const groupTiles = $derived(media.tiles.filter((t) => t.group));
+	let now = $state(Date.now());
+	const closingIn = $derived(secondsLeft(view?.session.groups_close_at, now));
+	const helpAsked = $derived(!!view && !!view.groups.find((g) => g.id === view!.me.group)?.help_at);
 	const stageTiles = $derived(media.tiles.filter((t) => t.backstage && (teacher || t.local)));
 	const main = $derived<Tile | undefined>(broadcast.find((t) => !t.local) ?? broadcast[0]);
 	const others = $derived(broadcast.filter((t) => t !== main));
@@ -59,6 +66,10 @@
 		}
 	});
 
+	onMount(() => {
+		const t = setInterval(() => (now = Date.now()), 1000);
+		return () => clearInterval(t);
+	});
 	onMount(async () => {
 		if (!looksLikeComputer(window, navigator.userAgent)) {
 			problem = 'Tutoring sessions need a computer. Open this link on a laptop or desktop.';
@@ -119,6 +130,18 @@
 			case 'ask_answer':
 				toast(e.data.accepted ? `${e.data.name} is turning it on` : `${e.data.name} declined`, e.data.accepted ? 'info' : 'error');
 				break;
+			case 'groups_opened':
+				if (!teacher) toast('Groups are open: you’re with your group now');
+				break;
+			case 'groups_closed':
+				toast('The groups have closed: everyone is back together');
+				break;
+			case 'announcement':
+				if (!teacher) toast(`${e.data.name}: ${e.data.text}`, 'info');
+				break;
+			case 'group_help':
+				toast(`${e.data.name} asks for help in their group`, 'error');
+				break;
 			case 'closed':
 				closed = e.data?.reason ?? 'closed';
 				media.disconnect();
@@ -172,7 +195,7 @@
 	// When the broadcaster changes, or a student is first allowed to share,
 	// media moves: new tokens, publishing to the other room (D-60).
 	let routed = '';
-	const routeKey = (v: TutoringView) => `${publishTarget(v)}|${v.me.allow_mic || v.me.allow_camera || v.me.allow_screen}`;
+	const routeKey = (v: TutoringView) => `${publishTarget(v)}|${v.me.allow_mic || v.me.allow_camera || v.me.allow_screen}|${groupNow(v)?.id ?? ''}`;
 	$effect(() => {
 		if (!view || media.state !== 'connected') return;
 		const key = routeKey(view);
@@ -203,6 +226,8 @@
 	}
 	const settings = (s: Record<string, unknown>) => act(() => client.put(`/api/sessions/${sid()}/settings`, s));
 	const hand = (raised: boolean) => act(() => client.put(`/api/sessions/${sid()}/hand`, { raised }));
+	const help = (on: boolean) => act(() => client.put(`/api/sessions/${sid()}/help`, { on }), on ? 'Your teachers have been asked to come to your group' : undefined);
+	const choose = (groupId: number) => act(() => client.put(`/api/sessions/${sid()}/my-group`, { group_id: groupId }));
 
 	// Devices: only ever after the person's own click (PO-3). A student just
 	// allowed may not have joined backstage yet; join it first.
@@ -296,7 +321,36 @@
 		{:else}
 			<div class="layout">
 				<div class="stage vstack">
+					{#if !teacher && view.session.groups_open}
+						<div class="alert alert-soft py-2" class:alert-info={!!group} role="status">
+							{#if group}
+								<span class="flex-1">You’re in <strong>{group.name}</strong>{#if view.group_mates?.length}{' with '}{view.group_mates.map((m) => m.name).join(', ')}{/if}. Only your group sees and hears you here.</span>
+								<button class="btn btn-sm" class:btn-warning={helpAsked} onclick={() => help(!helpAsked)}>{helpAsked ? 'Cancel the call' : 'Ask for help'}</button>
+							{:else}
+								<span>The class is in groups; your teacher will put you in one.</span>
+							{/if}
+						</div>
+					{/if}
+					{#if closingIn !== null}<p class="alert alert-soft alert-warning py-2 m-0" role="timer">Groups close in {closingIn} s</p>{/if}
+					{#if !teacher && view.session.groups_choose && view.groups.length && !group}
+						<div class="card card-border bg-base-100 p-3 vstack gap-2">
+							<p class="m-0 font-semibold">Choose your group</p>
+							<div class="row flex-wrap gap-2">
+								{#each view.groups as g (g.id)}<button class="btn btn-sm" class:btn-primary={view.me.group === g.id} onclick={() => choose(g.id)}>{g.name} <span class="muted">({g.size})</span></button>{/each}
+							</div>
+						</div>
+					{/if}
+					{#if group}
+						<h2 class="m-0 text-sm">{teacher ? `Visiting ${group.name}` : group.name}</h2>
+						{#if groupTiles.length}
+							<div class="grid-view">{#each groupTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
+						{:else}
+							<div class="empty small">{media.canMic || media.canCamera ? 'Nobody has turned on a camera here yet. Turn on your microphone to talk with your group.' : 'Your group is here. Use the chat to work together.'}</div>
+						{/if}
+						<h2 class="m-0 text-sm">The main room</h2>
+					{/if}
 					{#if media.needsClick}<button class="btn btn-primary" onclick={() => media.startAudio()}>Click to hear the session</button>{/if}
+					<div class="main-room" class:mini={!!group}>
 					{#if !main}
 						<div class="empty">{isBroadcaster(view) ? 'Share a screen or camera; everyone will see it here.' : `${broadcasterName(view)} isn’t sharing anything yet.`}{media.state === 'error' ? ' ' + media.error : ''}</div>
 					{:else if layout === 'spotlight'}
@@ -305,6 +359,7 @@
 					{:else}
 						<div class={layout === 'side' ? 'side-by-side' : 'grid-view'}>{#each broadcast as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
+					</div>
 					{#if stageTiles.length}
 						<h2 class="m-0 text-sm">{teacher ? 'Shared with the teachers only' : 'What you share: only your teachers see it'}</h2>
 						<div class="thumbs">{#each stageTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
@@ -350,6 +405,7 @@
 						<button class="tab" role="tab" aria-selected={side === 'chat'} class:tab-active={side === 'chat'} onclick={() => (side = 'chat')}>Chat</button>
 						{#if teacher}
 							<button class="tab" role="tab" aria-selected={side === 'people'} class:tab-active={side === 'people'} onclick={() => (side = 'people')}>People{#if view.waiting}{' '}({view.waiting}){/if}</button>
+							<button class="tab" role="tab" aria-selected={side === 'groups'} class:tab-active={side === 'groups'} onclick={() => (side = 'groups')}>Groups{#if view.groups.some((g) => g.help_at)}{' '}<span class="badge badge-warning badge-xs">help</span>{/if}</button>
 							<button class="tab" role="tab" aria-selected={side === 'attendance'} class:tab-active={side === 'attendance'} onclick={showAttendance}>Attendance</button>
 						{/if}
 					</div>
@@ -357,6 +413,8 @@
 						<ChatPanel {client} {view} {messages} />
 					{:else if side === 'people' && teacher}
 						<PeoplePanel {client} {view} />
+					{:else if side === 'groups' && teacher}
+						<GroupsPanel {client} {view} />
 					{:else if side === 'attendance' && teacher}
 						<div class="vstack">
 							<button class="btn btn-sm" onclick={() => act(() => client.download(`/api/sessions/${sid()}/attendance?format=csv`, `attendance-${code}.csv`))}>Download CSV</button>
@@ -416,6 +474,10 @@
 	.layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) 22rem; align-items: start; }
 	@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
 	.stage { min-width: 0; }
+	/* While in a breakout group, the group comes first and the main room shrinks (D-79). */
+	.main-room { display: grid; gap: 0.5rem; }
+	.main-room.mini { max-width: 22rem; }
+	.main-room.mini .empty { aspect-ratio: auto; padding: 0.75rem; }
 	.empty { aspect-ratio: 16 / 9; display: grid; place-items: center; text-align: center; padding: 1rem; border-radius: 0.75rem; background: var(--color-base-200); color: var(--color-muted); }
 	.thumbs { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
 	.side-by-side { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }

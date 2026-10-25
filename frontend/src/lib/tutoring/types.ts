@@ -19,6 +19,14 @@ export type TutoringSession = {
 	/** Shown only to the person asked to broadcast. */
 	broadcast_offer?: string;
 	layout: 'spotlight' | 'side' | 'grid';
+	/** Breakout groups (D-79). */
+	groups_open: boolean;
+	groups_close_at?: string;
+	groups_choose: boolean;
+	group_chat: boolean;
+	group_mic: boolean;
+	group_camera: boolean;
+	group_screen: boolean;
 	scheduled_at?: string;
 	created_at: string;
 	started_at?: string;
@@ -37,15 +45,21 @@ export type TutoringParticipant = {
 	hand_at?: string;
 	first_at: string;
 	online: boolean;
+	/** A student's breakout group, or the group a teacher is visiting (D-79). */
+	group?: number;
+	visiting?: number;
 };
+
+export type Group = { id: number; name: string; members: string[]; size: number; help_at?: string };
 
 export type ChatMessage = {
 	id: number;
 	user_id: string;
 	name: string;
 	from_teacher: boolean;
-	audience: 'everyone' | 'teachers' | 'one';
+	audience: 'everyone' | 'teachers' | 'one' | 'group';
 	to_user?: string;
+	group_id?: number;
 	text: string;
 	created_at: string;
 };
@@ -60,7 +74,23 @@ export type TutoringView = {
 	media_url: string;
 	/** The lead teacher and co-teachers (TS-FR-73). */
 	teachers: { id: string; name: string; role: 'teacher' | 'coteacher' }[];
+	/** All groups for teachers; for students names and sizes, and who is in their own group. */
+	groups: Group[];
+	group_mates?: { id: string; name: string }[];
 };
+
+/** The breakout group whose room this person is in now: a student's own, or the one a teacher visits. */
+export function groupNow(v: TutoringView): Group | undefined {
+	if (!v.session.groups_open || v.session.status !== 'live') return undefined;
+	const id = isStaffRole(v.me.role) ? v.me.visiting : v.me.group;
+	return id ? v.groups.find((g) => g.id === id) : undefined;
+}
+
+/** Seconds until the groups close, when a countdown is running. */
+export function secondsLeft(closeAt: string | undefined, now: number): number | null {
+	if (!closeAt) return null;
+	return Math.max(0, Math.ceil((Date.parse(closeAt) - now) / 1000));
+}
 
 export const isStaffRole = (r?: string) => r === 'teacher' || r === 'coteacher';
 
@@ -74,7 +104,8 @@ export function isBroadcaster(v: TutoringView): boolean {
  * teachers. The lead teacher's microphone stays in the broadcast while
  * someone else broadcasts.
  */
-export function publishTarget(v: TutoringView): 'main' | 'stage' {
+export function publishTarget(v: TutoringView): 'main' | 'stage' | 'group' {
+	if (groupNow(v)) return 'group'; // in a breakout group, devices go to the group (D-79)
 	return isBroadcaster(v) || v.me.role === 'teacher' ? 'main' : 'stage';
 }
 
@@ -121,6 +152,7 @@ export function handQueue(ps: TutoringParticipant[]): TutoringParticipant[] {
 
 /** Whether a message is the student's question to the teacher, or a private reply. */
 export function audienceLabel(m: ChatMessage, meId: string): string {
+	if (m.audience === 'group') return 'group';
 	if (m.audience === 'teachers') return m.user_id === meId ? 'to the teacher' : 'question to teachers';
 	if (m.audience === 'one') return m.to_user === meId ? 'private, to you' : 'private';
 	return '';

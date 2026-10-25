@@ -1,6 +1,6 @@
 # Tutoring sessions
 
-Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design), D-60 (backstage, the broadcaster, co-teachers).
+Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design), D-60 (backstage, the broadcaster, co-teachers), D-79 (breakout groups).
 
 A tutoring session is a live online class in a desktop browser: the teacher broadcasts screens, cameras and voice to the class, students watch, chat and raise their hand, and speak or share only when the teacher allows it. It runs as its **own service** beside the quiz platform, so a busy or failing tutoring session can't slow down or stop a live quiz (ADR-18, PO-5).
 
@@ -71,6 +71,16 @@ LiveKit carries each change out at once: taking a source's permission away remov
 ## Co-teachers
 
 The lead teacher adds other teachers by their email (the platform confirms an active teacher account) (TS-FR-70). Co-teachers join with the link without being in the classroom, see the people panel and backstage, and admit, allow, mute, lower hands, moderate the chat and read attendance (TS-FR-71). Only the lead teacher starts and ends, locks, changes how students are admitted and the layout, removes students, chooses the broadcaster and adds or removes co-teachers. Co-teachers share backstage, where the teachers see them, and to the class only as the broadcaster (TS-FR-72). Students see who teaches: the lead teacher and co-teachers are named in the session's header (TS-FR-73).
+
+## Breakout groups
+
+The lead teacher makes groups (TS-FR-50): at random (a number of groups, or students per group), from the classroom's categories (the platform's `/internal/tutoring/categories`; a student in two goes to the first, the rest to "Others"), empty groups to fill by hand, or groups students choose themselves. Making groups again replaces them; they can be made before the session starts.
+
+Opening the groups (TS-FR-51) puts every placed student in their group's own media room (`{session}-g{group}`). Its members publish what they may in the main room plus what the lead teacher allows everyone in groups (microphones by default; cameras and screens when turned on, TS-FR-53), and they see and hear each other there, which TS-FR-37 allows within a group. Everyone stays in the main broadcast too, so the teacher can still speak to all groups at once; "Message to every group" also sends a chat announcement. Teachers visit a group by joining its room, where they are seen and heard (TS-FR-52), and move students between groups: the student leaves the old room at once (`RemoveParticipant`) and the page joins the new one. A student can ask for help (TS-FR-54); the teachers see it until they visit or dismiss it.
+
+Each group has its own chat (TS-FR-46, PO-14), on by default even when the main chat is off; the lead teacher can turn it off. A group's messages reach its members and the teachers, and students are told the teachers can read them.
+
+Closing brings everyone back, at once or after a countdown of up to 5 minutes that everyone sees; the group rooms then end. A countdown that runs out while the service is down is closed when it starts again (and a sweep every 30 s catches any missed one). Ending the session ends the group rooms too.
 
 ## Layout
 
@@ -166,4 +176,4 @@ Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 s
 
 ## Not yet
 
-Later phases add: groups, recording, the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
+Later phases add: recording, the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.

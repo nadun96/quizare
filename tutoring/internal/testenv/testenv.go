@@ -127,13 +127,15 @@ var Secret = bytes.Repeat([]byte{5}, 32)
 // Platform is a fake of the platform's internal API: classrooms with their
 // teacher and enrolled students.
 type Platform struct {
-	mu        sync.Mutex
-	Teachers  map[string]string          // classroom → teacher
-	Enrolled  map[string]map[string]bool // classroom → students
-	Archived  map[string]bool
-	Accounts  map[string]platform.Person // teacher accounts by email
-	Calls     int
-	BadTokens int
+	mu       sync.Mutex
+	Teachers map[string]string          // classroom → teacher
+	Enrolled map[string]map[string]bool // classroom → students
+	Archived map[string]bool
+	Accounts map[string]platform.Person // teacher accounts by email
+	// Categories of each classroom, with their students (D-79).
+	Categories map[string][]platform.Category
+	Calls      int
+	BadTokens  int
 }
 
 func (p *Platform) Enrol(classroom, student string) {
@@ -151,9 +153,27 @@ func (p *Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.Calls++
 	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if _, err := jwt.Parse(raw, func(*jwt.Token) (any, error) { return Secret, nil }, jwt.WithIssuer("tutoring"), jwt.WithAudience("quiz-platform"),
-		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil || (r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher") {
+		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil ||
+		(r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher" && r.URL.Path != "/internal/tutoring/categories") {
 		p.BadTokens++
 		w.WriteHeader(404)
+		return
+	}
+	if r.URL.Path == "/internal/tutoring/categories" {
+		var in struct {
+			ClassroomID string `json:"classroom_id"`
+			TeacherID   string `json:"teacher_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if p.Teachers[in.ClassroomID] != in.TeacherID {
+			w.WriteHeader(404)
+			return
+		}
+		cats := p.Categories[in.ClassroomID]
+		if cats == nil {
+			cats = []platform.Category{}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"categories": cats})
 		return
 	}
 	if r.URL.Path == "/internal/tutoring/teacher" {
@@ -254,7 +274,8 @@ type Env struct {
 // New starts the service with fakes around it.
 func New(t testing.TB) *Env {
 	t.Helper()
-	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}, Accounts: map[string]platform.Person{}},
+	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}, Accounts: map[string]platform.Person{},
+		Categories: map[string][]platform.Category{}},
 		LiveKit: &LiveKit{Tracks: map[string][]media.Track{}}, Origin: "https://quiz.example.edu", LKSecret: []byte("livekit-secret-of-at-least-32-chars!!")}
 	plat := httptest.NewServer(e.Platform)
 	lk := httptest.NewServer(e.LiveKit)
