@@ -13,6 +13,14 @@ export function requireRole(role: Role) {
 	return () => auth.loaded && auth.user?.role === role;
 }
 
+/** Like requireRole, for pages anyone signed in may see (the tutoring calendar, D-84). */
+export function requireLogin() {
+	$effect(() => {
+		if (auth.loaded && !auth.user) goto(loginUrl(page.url.pathname + page.url.search), { replaceState: true });
+	});
+	return () => auth.loaded && !!auth.user;
+}
+
 /** Like requireRole, for the admin console: admins and managers (D-56). */
 export function requireStaff() {
 	$effect(() => {

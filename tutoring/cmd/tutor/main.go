@@ -73,6 +73,7 @@ func run(log *slog.Logger) error {
 	// What live sessions send, against the bandwidth budget (D-81), with
 	// LiveKit's measured figures when its metrics are configured (D-82).
 	svc.SetMetrics(cfg.LiveKitMetricsURL)
+	svc.SetLinks(cfg.PlatformOrigin) // links in reminders (D-84)
 	go svc.Monitor(ctx)
 	go func() {
 		t := time.NewTicker(30 * time.Second)
@@ -88,6 +89,10 @@ func run(log *slog.Logger) error {
 				// Recordings 2 days past their end go; quiet recorders stop (D-80).
 				if err := svc.SweepRecordings(ctx); err != nil {
 					log.Warn("sweeping recordings", "err", err)
+				}
+				// Reminders of scheduled sessions that are due (D-84).
+				if err := svc.SendReminders(ctx); err != nil {
+					log.Warn("sending reminders", "err", err)
 				}
 			}
 		}

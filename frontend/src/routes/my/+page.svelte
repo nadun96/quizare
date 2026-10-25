@@ -5,6 +5,7 @@
 	import MyPresentations from '$lib/presentation/MyPresentations.svelte';
 	import MyTutorials from '$lib/tutorial/MyTutorials.svelte';
 	import MyRecordings from '$lib/tutoring/MyRecordings.svelte';
+	import UpcomingTutoring from '$lib/tutoring/UpcomingTutoring.svelte';
 	import { auth, loginUrl } from '$lib/session.svelte';
 	import { STATE_BADGE, STATE_ICON, STATE_LABEL } from '$lib/types';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
@@ -40,6 +41,7 @@
 
 <div class="page-container vstack">
 	<div class="row"><h1 style="margin:0">My quizzes</h1><span class="spacer"></span><a class="btn btn-primary" href="/join">Join with a code</a></div>
+	<UpcomingTutoring />
 	{#each liveNow as a (a.attempt_id)}
 		<a class="card card-border interactive live-card p-4 text-inherit no-underline shadow-sm sm:p-5" href={'/attempt/' + a.attempt_id} in:flyIn>
 			<div class="flex items-center gap-3">
