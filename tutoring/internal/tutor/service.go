@@ -48,6 +48,7 @@ type Service struct {
 	log      *slog.Logger
 	now      func() time.Time
 	hub      *hub
+	rec      *recordings // nil: recording is off (D-80)
 }
 
 func New(pool *pgxpool.Pool, p Platform, m Media, mediaURL string, log *slog.Logger) *Service {
@@ -300,6 +301,9 @@ type View struct {
 	Waiting  int      `json:"waiting"`
 	Pinned   *Message `json:"pinned,omitempty"`
 	MediaURL string   `json:"media_url"`
+	// Recording is shown to everyone while the presenter is recorded,
+	// including students waiting to be let in (TS-FR-76, D-80).
+	Recording *RecordingState `json:"recording,omitempty"`
 	// Breakout groups (D-79): all of them for teachers; for students their
 	// names and sizes, and who is in their own group.
 	Groups     []Group  `json:"groups"`

@@ -18,6 +18,7 @@
 	import SortHeader from '$lib/ui/SortHeader.svelte';
 	import { can, canActOn, consoleTabs, isAdmin, roleLabel, type ConsoleTab } from '$lib/staff';
 	import ManagerList from '$lib/admin/ManagerList.svelte';
+	import RecordingsPanel from '$lib/admin/RecordingsPanel.svelte';
 	import StoragePanel from '$lib/admin/StoragePanel.svelte';
 	import BackupsPanel from '$lib/admin/BackupsPanel.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
@@ -29,7 +30,7 @@
 	type Ev = { id: number; actor_name: string; actor_role?: string; action: string; target_type: string; target_id: string; details: unknown; created_at: string };
 	const ready = requireStaff();
 	const tabs = $derived(consoleTabs(auth.user));
-	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', signin: 'Sign-in', drive: 'Google Drive', audit: 'Audit log', storage: 'Storage', backups: 'Backups', managers: 'Managers' };
+	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', signin: 'Sign-in', drive: 'Google Drive', audit: 'Audit log', storage: 'Storage', backups: 'Backups', recordings: 'Recordings', managers: 'Managers' };
 	let tab = $state<ConsoleTab | null>(null);
 	let role = $state(Paged.fromUrl(urlState, 'role'));
 	let status = $state(Paged.fromUrl(urlState, 'status'));
@@ -208,6 +209,8 @@
 		</div>
 	{:else if tab === 'drive'}
 		<DrivePanel />
+	{:else if tab === 'recordings'}
+		<RecordingsPanel meId={auth.user?.id ?? ''} />
 	{:else if tab === 'managers'}
 		<ManagerList onactivity={activity} />
 	{/if}

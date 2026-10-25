@@ -74,6 +74,8 @@ export type TutoringView = {
 	media_url: string;
 	/** The lead teacher and co-teachers (TS-FR-73). */
 	teachers: { id: string; name: string; role: 'teacher' | 'coteacher' }[];
+	/** The recording under way, shown to everyone (TS-FR-76, D-80). */
+	recording?: { id: string; status: 'recording' | 'paused'; started_by: string; started_by_name: string; started_at: string };
 	/** All groups for teachers; for students names and sizes, and who is in their own group. */
 	groups: Group[];
 	group_mates?: { id: string; name: string }[];
@@ -156,4 +158,40 @@ export function audienceLabel(m: ChatMessage, meId: string): string {
 	if (m.audience === 'teachers') return m.user_id === meId ? 'to the teacher' : 'question to teachers';
 	if (m.audience === 'one') return m.to_user === meId ? 'private, to you' : 'private';
 	return '';
+}
+
+/** A recording of a session (D-80): the presenter's screen and voice, kept 2 days. */
+export type Recording = {
+	id: string;
+	session_id: string;
+	session_title?: string;
+	started_by: string;
+	started_by_name: string;
+	status: 'recording' | 'paused' | 'stopped';
+	mime: string;
+	bytes: number;
+	chunks: number;
+	viewers: 'teachers' | 'students';
+	started_at: string;
+	ended_at?: string;
+	expires_at?: string;
+	/** This person leads the session (or is the admin): download, who watches, delete. */
+	lead: boolean;
+};
+
+/** "12 min", "1 h 05 min": how long a recording runs. */
+export function recordingLength(r: Pick<Recording, 'started_at' | 'ended_at'>, now = Date.now()): string {
+	const s = Math.max(0, Math.round(((r.ended_at ? Date.parse(r.ended_at) : now) - Date.parse(r.started_at)) / 1000));
+	if (s < 60) return `${s} s`;
+	const m = Math.round(s / 60);
+	return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
+
+/** When a recording is deleted, in words: "in 2 days", "in 5 hours". */
+export function deletedIn(expiresAt: string | undefined, now = Date.now()): string {
+	if (!expiresAt) return '';
+	const h = Math.max(0, (Date.parse(expiresAt) - now) / 3_600_000);
+	if (h >= 36) return `in ${Math.round(h / 24)} days`;
+	if (h >= 1) return `in ${Math.round(h)} hours`;
+	return 'within the hour';
 }

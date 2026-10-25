@@ -311,6 +311,23 @@ export class SessionMedia {
 		this.refresh();
 	}
 
+	/**
+	 * What a recording keeps (D-80, TS-FR-77): the broadcaster's screen in the
+	 * broadcast, and their voice and screen sound there. Never cameras.
+	 */
+	presenterTracks(identity: string): { screen?: MediaStreamTrack; audio: MediaStreamTrack[] } {
+		const room = this.rooms.main;
+		const p = !room ? undefined : room.localParticipant.identity === identity ? room.localParticipant : room.remoteParticipants.get(identity);
+		const out: { screen?: MediaStreamTrack; audio: MediaStreamTrack[] } = { audio: [] };
+		for (const pub of p?.trackPublications.values() ?? []) {
+			const t = pub.track?.mediaStreamTrack;
+			if (!t || pub.isMuted || t.readyState !== 'live') continue;
+			if (pub.source === 'screen_share') out.screen ??= t;
+			else if (pub.source === 'microphone' || pub.source === 'screen_share_audio') out.audio.push(t);
+		}
+		return out;
+	}
+
 	/** Cameras the browser can see (labels appear once a permission was given). */
 	async cameras(): Promise<MediaDeviceInfo[]> {
 		const lk = (this.lk ??= await import('livekit-client'));

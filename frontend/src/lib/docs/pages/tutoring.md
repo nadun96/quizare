@@ -1,6 +1,6 @@
 # Tutoring sessions
 
-Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design), D-60 (backstage, the broadcaster, co-teachers), D-79 (breakout groups).
+Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design), D-60 (backstage, the broadcaster, co-teachers), D-79 (breakout groups), D-80 (recording).
 
 A tutoring session is a live online class in a desktop browser: the teacher broadcasts screens, cameras and voice to the class, students watch, chat and raise their hand, and speak or share only when the teacher allows it. It runs as its **own service** beside the quiz platform, so a busy or failing tutoring session can't slow down or stop a live quiz (ADR-18, PO-5).
 
@@ -81,6 +81,16 @@ Opening the groups (TS-FR-51) puts every placed student in their group's own med
 Each group has its own chat (TS-FR-46, PO-14), on by default even when the main chat is off; the lead teacher can turn it off. A group's messages reach its members and the teachers, and students are told the teachers can read them.
 
 Closing brings everyone back, at once or after a countdown of up to 5 minutes that everyone sees; the group rooms then end. A countdown that runs out while the service is down is closed when it starts again (and a sweep every 30 s catches any missed one). Ending the session ends the group rooms too.
+
+## Recording
+
+The lead teacher or a co-teacher presses **Record** (TS-FR-75). The recording is made in that teacher's browser (`lib/tutoring/recorder.svelte.ts`), not on the server: every frame draws the current broadcaster's screen share onto a 1280×720 canvas (a card saying "isn't sharing a screen" when there is none), and their microphone and screen sound are mixed into one audio track, so it follows the broadcast as it changes hands (TS-FR-77). Cameras, other people's microphones, groups, chat and the whiteboard are never recorded. `MediaRecorder` makes WebM (or MP4) parts every 5 seconds, which are uploaded in order to `PUT /api/sessions/{id}/recordings/{rec}/chunks/{n}` (a retry of the same part is accepted). If that tab closes, what was uploaded is kept, and the service stops a recording that has been quiet for 2 minutes. The browser throttles a tab in the background, so the recording teacher should keep the session's tab in front.
+
+Everyone sees **● Recording** while it runs, including students in the waiting room, and the presenter is told their screen and voice are recorded (TS-FR-76); nobody is asked for consent (PO-21). Pause and resume keep the indicator.
+
+The service never re-encodes a recording. Each part is encrypted with AES-256-GCM (a key derived from the shared secret with HKDF; the recording's id and the part's number are bound in) and appended to `TUTOR_RECORDINGS_DIR/{id}.rec` (TS-NFR-24). Recordings play in the browser from 5-minute signed links (`/media/recordings/{id}?exp=…&sig=…`), since a `<video>` can't send a token; the platform's CSP needs the tutoring address in `media-src`. The session's teachers can watch; students only when the lead teacher chooses "Students too" (TS-FR-78). Only the lead teacher and the admin download. Students find recordings they may watch on their My page, and teachers find theirs on the Tutoring page.
+
+Each recording is deleted 2 days after it ends (PO-22), by a sweep every 30 s. All recordings together may use 5 GB by default; the admin's **Recordings** tab shows the space and every recording, deletes any, and changes the limit, up to the free disk space (PO-24, TS-FR-79). Teachers are told at 80 %, and a recording stops when the space is full.
 
 ## Layout
 
@@ -165,6 +175,7 @@ If Windows refuses the ports (`netsh interface ipv4 show excludedportrange proto
 | `LIVEKIT_PUBLIC_URL` | — | What browsers connect to, e.g. `wss://tutor.example.edu` |
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET_FILE` | — | LiveKit's key and its secret file: just the secret, or LiveKit's own `key: secret` key file |
 | `TUTOR_GENERATE_LIVEKIT_KEYS` | off | `1`: write the LiveKit key file on first start (containers) |
+| `TUTOR_RECORDINGS_DIR` | `data/recordings` | Where recordings are kept, encrypted (D-80); the systemd unit uses `/var/lib/quiz-tutoring/recordings`, containers `/var/lib/tutoring/recordings` |
 
 Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 show excludedportrange protocol=tcp`); run LiveKit on other ports then.
 
@@ -176,4 +187,4 @@ Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 s
 
 ## Not yet
 
-Later phases add: recording, the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
+Later phases add: the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.

@@ -137,6 +137,7 @@ if ($Tutoring) {
 	$env:LIVEKIT_API_KEY = 'tutoring'
 	$env:LIVEKIT_API_SECRET_FILE = Join-Path $localDir 'livekit-keys.yaml'
 	$env:TUTOR_LISTEN = "127.0.0.1:$TutorPort"
+	$env:TUTOR_RECORDINGS_DIR = Join-Path $localDir 'recordings'
 	Write-Host '-> Starting the tutoring service'
 	$log = Start-Background $tutor $null (Join-Path $root 'tutoring') 'tutoring'
 	Wait-Until { Test-Health "http://127.0.0.1:$TutorPort/healthz" } 30 'The tutoring service' $log
