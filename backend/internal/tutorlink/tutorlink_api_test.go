@@ -165,3 +165,46 @@ func TestInternalTeacherLookup(t *testing.T) {
 		t.Fatalf("no token: %d", code)
 	}
 }
+
+// Breakout groups from classroom categories (TS-FR-50, D-79): the categories
+// and their active students, for the classroom's own teacher only.
+func TestInternalCategories(t *testing.T) {
+	e := apptest.New(t, apptest.WithTutoring("http://localhost:8090", secret))
+	teacher := e.NewUser(auth.RoleTeacher)
+	var c content.Classroom
+	teacher.Call("POST", "/api/teacher/classrooms", map[string]any{"name": "C"}, 201, &c)
+	var enrol []content.Enrolment
+	for range 3 {
+		s := e.NewUser(auth.RoleStudent)
+		var en content.Enrolment
+		s.Call("POST", "/api/enrolments", map[string]string{"join_code": c.JoinCode}, 200, &en)
+		enrol = append(enrol, en)
+	}
+	var red, blue content.Category
+	teacher.Call("POST", "/api/teacher/classrooms/"+c.ID+"/categories", map[string]any{"name": "Red", "color": 1}, 201, &red)
+	teacher.Call("POST", "/api/teacher/classrooms/"+c.ID+"/categories", map[string]any{"name": "Blue", "color": 2}, 201, &blue)
+	teacher.Call("POST", "/api/teacher/categories/"+red.ID+"/members", map[string]any{"enrolment_ids": []string{enrol[0].ID, enrol[1].ID}, "assigned": true}, 200, nil)
+	teacher.Call("POST", "/api/teacher/categories/"+blue.ID+"/members", map[string]any{"enrolment_ids": []string{enrol[2].ID}, "assigned": true}, 200, nil)
+
+	cl := e.Client()
+	ask := func(token, teacherID string) (int, string) {
+		cl.Headers = map[string]string{"Authorization": "Bearer " + token}
+		body, _ := json.Marshal(map[string]string{"classroom_id": c.ID, "teacher_id": teacherID})
+		code, out := cl.Raw("POST", "/internal/tutoring/categories", "application/json", body)
+		cl.Headers = nil
+		return code, string(out)
+	}
+	good := serviceToken(t, secret, time.Minute, "tutoring", "quiz-platform")
+	code, out := ask(good, teacher.User.ID)
+	var got struct{ Categories []tutorlink.CategoryGroup }
+	json.Unmarshal([]byte(out), &got)
+	if code != 200 || len(got.Categories) != 2 || got.Categories[0].Name != "Red" || len(got.Categories[0].UserIDs) != 2 || len(got.Categories[1].UserIDs) != 1 {
+		t.Fatalf("categories: %d %s", code, out)
+	}
+	if code, _ := ask(good, e.NewUser(auth.RoleTeacher).User.ID); code != 404 {
+		t.Fatalf("another teacher's classroom: %d", code)
+	}
+	if code, _ := ask("", teacher.User.ID); code != 404 {
+		t.Fatalf("no token: %d", code)
+	}
+}

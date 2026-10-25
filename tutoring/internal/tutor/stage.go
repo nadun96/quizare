@@ -176,9 +176,12 @@ func (s *Service) AnswerBroadcast(ctx context.Context, p authn.Person, id string
 	return s.applyAll(ctx, id, targets...)
 }
 
-// toStaff sends an event to the lead teacher and co-teachers.
-func (s *Service) toStaff(id string, e event) {
+// toStaff sends an event to the lead teacher and co-teachers, and anyone else named, once each.
+func (s *Service) toStaff(id string, e event, also ...string) {
 	staff := map[string]bool{}
+	for _, u := range also {
+		staff[u] = true
+	}
 	rows, err := s.pool.Query(context.Background(), `SELECT user_id FROM tutoring.participants WHERE session_id=$1 AND role IN ('teacher', 'coteacher')`, id)
 	if err == nil {
 		ids, _ := pgx.CollectRows(rows, pgx.RowTo[string])

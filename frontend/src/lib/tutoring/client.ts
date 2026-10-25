@@ -58,8 +58,9 @@ export class TutorClient {
 		try {
 			res = await this.f(this.base + path, {
 				method,
-				headers: { Authorization: 'Bearer ' + token, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
-				body: body !== undefined ? JSON.stringify(body) : undefined
+				// A Blob goes as it is (recording parts, D-80); anything else as JSON.
+				headers: { Authorization: 'Bearer ' + token, ...(body instanceof Blob ? { 'Content-Type': 'application/octet-stream' } : body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+				body: body instanceof Blob ? body : body !== undefined ? JSON.stringify(body) : undefined
 			});
 		} catch {
 			throw new ApiError(0, 'network', "Tutoring isn't reachable right now. We'll keep trying.");
@@ -79,6 +80,7 @@ export class TutorClient {
 	get = <T>(p: string) => this.call<T>('GET', p);
 	post = <T>(p: string, b: unknown = {}) => this.call<T>('POST', p, b);
 	put = <T>(p: string, b: unknown = {}) => this.call<T>('PUT', p, b);
+	patch = <T>(p: string, b: unknown = {}) => this.call<T>('PATCH', p, b);
 	del = <T>(p: string) => this.call<T>('DELETE', p);
 
 	/** Downloads a file (attendance CSV) with the token, then saves it. */

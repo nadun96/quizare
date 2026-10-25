@@ -110,3 +110,41 @@ func (c *Client) Teacher(ctx context.Context, email string) (Person, error) {
 	}
 	return p, ErrUnavailable
 }
+
+// Category is a classroom category and its active students (D-79).
+type Category struct {
+	Name    string   `json:"name"`
+	Color   int      `json:"color"`
+	UserIDs []string `json:"user_ids"`
+}
+
+// Categories lists a classroom's categories with their students, for
+// forming breakout groups (TS-FR-50); teacherID must teach the classroom.
+func (c *Client) Categories(ctx context.Context, classroomID, teacherID string) ([]Category, error) {
+	token, err := c.keys.ServiceToken()
+	if err != nil {
+		return nil, err
+	}
+	body, _ := json.Marshal(map[string]string{"classroom_id": classroomID, "teacher_id": teacherID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/internal/tutoring/categories", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		var out struct {
+			Categories []Category `json:"categories"`
+		}
+		return out.Categories, json.NewDecoder(resp.Body).Decode(&out)
+	case http.StatusNotFound:
+		return nil, web.ErrNotFound
+	}
+	return nil, ErrUnavailable
+}

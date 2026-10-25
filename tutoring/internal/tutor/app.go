@@ -29,5 +29,7 @@ func (s *Service) Handler(keys authn.Keys, platformOrigin string, pool *pgxpool.
 		host = u.Host
 	}
 	r.Get("/ws/sessions/{id}", s.ServeWS(keys, []string{host}))
+	// Recordings play from signed 5-minute links: a <video> can't send a token (D-80).
+	r.Get("/media/recordings/{rec}", func(w http.ResponseWriter, r *http.Request) { s.ServeRecording(w, r, chi.URLParam(r, "rec")) })
 	return r
 }

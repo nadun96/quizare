@@ -22,6 +22,9 @@ Environment=TUTOR_PLATFORM_ORIGIN=https://quiz.example.edu
 Environment=LIVEKIT_URL=http://127.0.0.1:7880
 Environment=LIVEKIT_PUBLIC_URL=wss://tutor.example.edu
 Environment=LIVEKIT_API_KEY=tutoring
+# Recordings (D-80), encrypted; deleted 2 days after they end.
+StateDirectory=quiz-tutoring
+Environment=TUTOR_RECORDINGS_DIR=/var/lib/quiz-tutoring/recordings
 # Secrets as files exposed only to this service; the same tutoring secret is
 # the platform's QP_TUTORING_SECRET_FILE (load it there with LoadCredential too).
 LoadCredential=tutoring_secret:/etc/quiz/tutoring.secret

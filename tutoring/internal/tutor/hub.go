@@ -176,6 +176,16 @@ func (h *hub) chat(id string, m Message) {
 	})
 }
 
+// chatGroup delivers a group's message to its members and the teachers.
+func (h *hub) chatGroup(id string, m Message, members map[string]bool) {
+	b, _ := json.Marshal(event{Type: "chat", Data: m})
+	h.each(id, func(c *client) {
+		if c.admitted() && (members[c.userID] || c.role == "teacher" || c.role == "coteacher") {
+			c.push(b)
+		}
+	})
+}
+
 func (h *hub) broadcast(id string, e event) {
 	b, _ := json.Marshal(e)
 	h.each(id, func(c *client) {
@@ -259,6 +269,8 @@ type snap struct {
 	sess   Session
 	all    []Participant
 	pinned *Message
+	groups []Group
+	rec    *RecordingState
 }
 
 func (s *Service) snapshot(ctx context.Context, id string) (snap, error) {
@@ -276,6 +288,18 @@ func (s *Service) snapshot(ctx context.Context, id string) (snap, error) {
 	for i := range sn.all {
 		sn.all[i].Online = online[sn.all[i].UserID]
 	}
+	if sn.groups, err = s.groups(ctx, s.pool, id); err != nil {
+		return sn, err
+	}
+	var rs RecordingState
+	err = s.pool.QueryRow(ctx, `SELECT id, status, started_by, started_by_name, started_at FROM tutoring.recordings WHERE session_id=$1 AND status <> 'stopped'`, id).
+		Scan(&rs.ID, &rs.Status, &rs.StartedBy, &rs.StartedByName, &rs.StartedAt)
+	switch {
+	case err == nil:
+		sn.rec = &rs
+	case !errors.Is(err, pgx.ErrNoRows):
+		return sn, err
+	}
 	if sn.sess.PinnedID != nil {
 		if m, err := s.message(ctx, *sn.sess.PinnedID); err == nil && m.DeletedAt == nil {
 			sn.pinned = &m
@@ -285,7 +309,7 @@ func (s *Service) snapshot(ctx context.Context, id string) (snap, error) {
 }
 
 func (sn snap) viewFor(userID, mediaURL string) (View, bool) {
-	v := View{Session: sn.sess, Pinned: sn.pinned, MediaURL: mediaURL}
+	v := View{Session: sn.sess, Pinned: sn.pinned, MediaURL: mediaURL, Recording: sn.rec}
 	found := false
 	for _, p := range sn.all {
 		if p.UserID == userID {
@@ -310,7 +334,27 @@ func (sn snap) viewFor(userID, mediaURL string) (View, bool) {
 	}
 	if v.Me.Staff() {
 		v.Participants = sn.all
+		v.Groups = sn.groups
 	} else {
+		// Students see the groups' names and sizes (to choose one), and who is in their own.
+		names := map[string]string{}
+		for _, p := range sn.all {
+			names[p.UserID] = p.Name
+		}
+		v.Groups = make([]Group, 0, len(sn.groups))
+		for _, g := range sn.groups {
+			mine := v.Me.Group != nil && *v.Me.Group == g.ID
+			pub := Group{ID: g.ID, Name: g.Name, Size: g.Size, Members: []string{}}
+			if mine {
+				pub.HelpAt = g.HelpAt
+				for _, u := range g.Members {
+					if u != userID {
+						v.GroupMates = append(v.GroupMates, Person{ID: u, Name: names[u]})
+					}
+				}
+			}
+			v.Groups = append(v.Groups, pub)
+		}
 		v.Session.JoinCode = "" // teachers share the code
 		if o := sn.sess.BroadcastOffer; o == nil || *o != userID {
 			v.Session.BroadcastOffer = nil // only the person asked sees an offer

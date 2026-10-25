@@ -1180,6 +1180,15 @@ paths:
       security: []
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /internal/tutoring/categories:
+    post:
+      operationId: postInternalTutoringCategories
+      tags: [tutoring]
+      summary: 'For the tutoring service only: a classroom''s categories and their active students, for breakout groups (TS-FR-50, D-79)'
+      description: Same protection as /internal/tutoring/access. Only for the classroom's own teacher; otherwise 404.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [classroom_id, teacher_id], properties: { classroom_id: { type: string, format: uuid }, teacher_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { categories: { type: array, items: { type: object, properties: { name: { type: string }, color: { type: integer }, user_ids: { type: array, items: { type: string, format: uuid } } } } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
 
   # ---------------- teacher settings ----------------
   /api/teacher/settings:

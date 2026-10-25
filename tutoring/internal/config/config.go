@@ -33,6 +33,9 @@ type Config struct {
 	LiveKitPublicURL string
 	LiveKitKey       string
 	LiveKitSecret    []byte
+	// RecordingsDir keeps recordings, encrypted (TUTOR_RECORDINGS_DIR,
+	// default data/recordings; D-80). They're deleted 2 days after they end.
+	RecordingsDir string
 }
 
 // generateKeys writes a LiveKit key file ("key: secret", LiveKit's key_file
@@ -80,6 +83,7 @@ func FromEnv() (Config, error) {
 		LiveKitURL:       env("LIVEKIT_URL", "http://127.0.0.1:7880"),
 		LiveKitPublicURL: os.Getenv("LIVEKIT_PUBLIC_URL"),
 		LiveKitKey:       os.Getenv("LIVEKIT_API_KEY"),
+		RecordingsDir:    env("TUTOR_RECORDINGS_DIR", "data/recordings"),
 	}
 	var missing []string
 	for k, v := range map[string]string{"TUTOR_DATABASE_URL": c.DatabaseURL, "TUTOR_PLATFORM_URL": c.PlatformURL, "TUTOR_PLATFORM_ORIGIN": c.PlatformOrigin,
