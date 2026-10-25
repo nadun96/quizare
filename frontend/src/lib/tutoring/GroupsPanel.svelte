@@ -8,6 +8,7 @@
 	import { confirmDialog, promptDialog } from '../ui/dialog.svelte';
 	import { toast } from '../ui/toast.svelte';
 	import { count } from '../words';
+	import { withBudget } from './budget';
 	import type { TutorClient } from './client';
 	import { secondsLeft, type Group, type TutoringView } from './types';
 
@@ -55,7 +56,13 @@
 	const visit = (g: Group | null) => act(() => client.put(path + '/visit', { group_id: g?.id ?? 0 }));
 	const dismiss = (g: Group) => act(() => client.del(`${path}/groups/${g.id}/help`));
 	const move = (userId: string, groupId: number) => act(() => client.put(`${path}/participants/${userId}/group`, { group_id: groupId }));
-	const set = (k: string, v: boolean) => act(() => client.put(path + '/groups/settings', { [k]: v }));
+	// Video in open groups is checked against the bandwidth budget (D-81).
+	// A refused or declined toggle goes back to how the session has it.
+	async function set(k: string, v: boolean, box?: HTMLInputElement) {
+		let done = false;
+		await act(async () => (done = await withBudget((force) => client.put(path + '/groups/settings', { [k]: v, ...(force ? { force } : {}) }), 'Turn it on')));
+		if (!done && box) box.checked = !v;
+	}
 	async function rename(g: Group) {
 		const name = await promptDialog({ title: 'Rename the group', confirm: 'Rename', value: g.name, label: 'Name', maxlength: 60 });
 		if (name?.trim()) await act(() => client.patch(`${path}/groups/${g.id}`, { name }));
@@ -158,8 +165,8 @@
 			<div class="vstack gap-1 mt-2">
 				<label class="row font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={s.group_chat} onchange={(e) => set('group_chat', e.currentTarget.checked)} /> Chat in their group</label>
 				<label class="row font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={s.group_mic} onchange={(e) => set('group_mic', e.currentTarget.checked)} /> Use their microphone</label>
-				<label class="row font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={s.group_camera} onchange={(e) => set('group_camera', e.currentTarget.checked)} /> Use their camera</label>
-				<label class="row font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={s.group_screen} onchange={(e) => set('group_screen', e.currentTarget.checked)} /> Share their screen</label>
+				<label class="row font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={s.group_camera} onchange={(e) => set('group_camera', e.currentTarget.checked, e.currentTarget)} /> Use their camera</label>
+				<label class="row font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={s.group_screen} onchange={(e) => set('group_screen', e.currentTarget.checked, e.currentTarget)} /> Share their screen</label>
 				<label class="row font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={s.groups_choose} onchange={(e) => set('groups_choose', e.currentTarget.checked)} /> Choose their own group</label>
 				<p class="small muted m-0">On top of what each student may do in the main room. Only their group sees and hears them, and the teachers can read every group’s chat.</p>
 			</div>

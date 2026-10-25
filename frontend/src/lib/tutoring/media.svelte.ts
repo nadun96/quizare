@@ -250,11 +250,43 @@ export class SessionMedia {
 		this.refresh();
 	}
 
+	/** Screens are captured at 5 frames a second while the server is short of bandwidth (TS-FR-38, D-81). */
+	slowScreens = $state(false);
+
+	/**
+	 * Follows what the service switched off to stay within the budget: the
+	 * server has muted the tracks already; this stops sending them at all.
+	 */
+	async cutBack(step: string) {
+		const lp = this.rooms.main?.localParticipant;
+		if (!lp) return;
+		const pubs = [...lp.trackPublications.values()].filter((p) => p.kind === 'video' && p.track);
+		if (step === 'fps') {
+			this.slowScreens = true;
+			for (const p of pubs) if (p.source === 'screen_share') await p.track!.mediaStreamTrack.applyConstraints({ frameRate: { max: 5 } }).catch(() => {});
+			return;
+		}
+		// Keep the first screen and the first camera; or, for "camera", no camera.
+		const seen = new Set<string>();
+		for (const p of pubs) {
+			const extra = seen.has(p.source);
+			seen.add(p.source);
+			if ((step === 'extra_tracks' && extra) || (step === 'camera' && p.source === 'camera')) await this.stop({ key: 'main:' + p.trackSid, label: p.trackName, source: p.source as Tile['source'], backstage: false, group: false } as Tile);
+		}
+	}
+
+	/** The frame rate may go back up. */
+	async restoreFps() {
+		this.slowScreens = false;
+		const lp = this.rooms.main?.localParticipant;
+		for (const p of lp?.trackPublications.values() ?? []) if (p.source === 'screen_share' && p.kind === 'video' && p.track) await p.track.mediaStreamTrack.applyConstraints({ frameRate: { max: 15 } }).catch(() => {});
+	}
+
 	/** Adds one more screen, window or tab (TS-FR-10), with its sound where the browser offers it (TS-FR-12). */
 	async addScreen() {
 		const lk = this.lk!;
 		const lp = this.publisher;
-		const tracks: LocalTrack[] = await lk.createLocalScreenTracks({ audio: true, resolution: lk.ScreenSharePresets.h1080fps15.resolution });
+		const tracks: LocalTrack[] = await lk.createLocalScreenTracks({ audio: true, resolution: { ...lk.ScreenSharePresets.h1080fps15.resolution, frameRate: this.slowScreens ? 5 : 15 } });
 		const n = [...lp.trackPublications.values()].filter((p) => p.source === 'screen_share').length + 1;
 		for (const t of tracks) {
 			const pub = await lp.publishTrack(t, {

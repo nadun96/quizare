@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -220,25 +221,61 @@ type Call struct {
 type LiveKit struct {
 	mu     sync.Mutex
 	calls  []Call
-	Tracks map[string][]media.Track // identity → published tracks
+	Tracks map[string][]media.Track // identity → published tracks, in any room without its own
+	// rooms are the tracks of particular rooms (D-81): room → identity → tracks.
+	rooms map[string]map[string][]media.Track
+}
+
+// Publish sets what identity publishes in one room.
+func (l *LiveKit) Publish(room, identity string, tracks ...media.Track) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.rooms == nil {
+		l.rooms = map[string]map[string][]media.Track{}
+	}
+	if l.rooms[room] == nil {
+		l.rooms[room] = map[string][]media.Track{}
+	}
+	l.rooms[room][identity] = tracks
+}
+
+// Published is what identity publishes in a room now.
+func (l *LiveKit) Published(room, identity string) []media.Track {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.rooms[room][identity])
 }
 
 func (l *LiveKit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	method := strings.TrimPrefix(r.URL.Path, "/twirp/livekit.RoomService/")
 	var body map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	room, _ := body["room"].(string)
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.calls = append(l.calls, Call{method, body})
 	tracks := l.Tracks
-	l.mu.Unlock()
+	if rt, ok := l.rooms[room]; ok {
+		tracks = rt
+	}
 	w.Header().Set("Content-Type", "application/json")
-	if method == "ListParticipants" {
-		var ps []media.Participant
+	switch method {
+	case "ListParticipants":
+		ps := []media.Participant{}
 		for id, ts := range tracks {
 			ps = append(ps, media.Participant{Identity: id, Tracks: ts})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"participants": ps})
 		return
+	case "MutePublishedTrack":
+		if rt, ok := l.rooms[room]; ok {
+			who, _ := body["identity"].(string)
+			for i, t := range rt[who] {
+				if t.Sid == body["trackSid"] {
+					rt[who][i].Muted = true
+				}
+			}
+		}
 	}
 	_, _ = w.Write([]byte(`{}`))
 }

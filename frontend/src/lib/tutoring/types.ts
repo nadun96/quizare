@@ -31,6 +31,10 @@ export type TutoringSession = {
 	created_at: string;
 	started_at?: string;
 	ended_at?: string;
+	/** What the session will use (TS-FR-08, D-81). */
+	plan: Plan;
+	/** What the service switched off to stay within the bandwidth budget (TS-FR-38). */
+	auto_off: AutoOffStep[];
 };
 
 export type TutoringParticipant = {
@@ -185,6 +189,84 @@ export function recordingLength(r: Pick<Recording, 'started_at' | 'ended_at'>, n
 	if (s < 60) return `${s} s`;
 	const m = Math.round(s / 60);
 	return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
+
+// ---------- the bandwidth budget (D-81) ----------
+
+/** What a session will use (TS-FR-08). */
+export type Plan = {
+	students: number;
+	screens: number;
+	cameras: number;
+	quality: 'readable' | 'smooth';
+	student_mics: number;
+	student_cameras: number;
+	student_screens: number;
+	group_video: boolean;
+};
+
+export type Estimate = { mbps: number; items: { name: string; mbps: number }[] };
+
+export type Budget = {
+	total_mbps: number;
+	hard_cap_mbps: number;
+	session_mbps: number;
+	max_teacher_tracks: number;
+	max_student_cameras: number;
+	max_student_screens: number;
+};
+
+/** A plan, its forecast, and what's free for it now. */
+export type PlanView = { plan: Plan; forecast: Estimate; free_mbps: number; hard_free_mbps: number; limit_mbps: number; budget: Budget; fits: boolean; advice?: string[] };
+
+export type Preset = { id: string; name: string; plan: Plan };
+
+export type AutoOffStep = 'group_camera' | 'group_screen' | 'student_shares' | 'extra_tracks' | 'camera' | 'fps';
+
+/** What a session sends now, estimated, pushed to its teachers every 2 s (TS-FR-33). */
+export type Resources = {
+	load: Estimate & { viewers: number; tracks: number; screens: number; cameras: number; students_sharing: number };
+	total_mbps: number;
+	limit_mbps: number;
+	budget_mbps: number;
+	hard_cap_mbps: number;
+	plan: Estimate;
+	auto_off: AutoOffStep[];
+};
+
+export type BudgetOverview = {
+	budget: Budget;
+	total_mbps: number;
+	sessions: { id: string; title: string; teacher_name: string; mbps: number; viewers: number; auto_off: AutoOffStep[] }[];
+};
+
+/** What each switched-off step was, for "Turn back on". */
+export const STEP_LABELS: Record<AutoOffStep, string> = {
+	group_camera: 'Cameras in groups',
+	group_screen: 'Sharing screens in groups',
+	student_shares: 'More than two students sharing',
+	extra_tracks: 'Extra screens and cameras',
+	camera: 'The broadcaster’s camera',
+	fps: 'Full frame rate for the screen'
+};
+
+export const DEFAULT_PLAN: Plan = { students: 30, screens: 1, cameras: 1, quality: 'readable', student_mics: 2, student_cameras: 2, student_screens: 2, group_video: false };
+
+/** "12.4 Mbit/s"; small figures keep two decimals. */
+export function mbps(n: number): string {
+	return `${n < 10 ? n.toFixed(n < 1 ? 2 : 1) : Math.round(n)} Mbit/s`;
+}
+
+/** How full a meter is, and whether to warn (80 %) or alarm (over). */
+export function meter(used: number, limit: number): { pct: number; level: 'ok' | 'warn' | 'over' } {
+	if (limit <= 0) return { pct: used > 0 ? 100 : 0, level: used > 0 ? 'over' : 'ok' };
+	const pct = Math.round((used / limit) * 100);
+	return { pct: Math.min(100, pct), level: used > limit ? 'over' : pct >= 80 ? 'warn' : 'ok' };
+}
+
+/** Whether a refusal over the budget can be overridden ("…, or send it anyway"). */
+export function insistable(message: string): boolean {
+	return /\banyway$/.test(message);
 }
 
 /** When a recording is deleted, in words: "in 2 days", "in 5 hours". */
