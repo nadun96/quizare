@@ -268,7 +268,9 @@ type Env struct {
 	LiveKit  *LiveKit
 	Origin   string
 	LKSecret []byte
-	seq      atomic.Int64
+	// RecordingsDir holds the recordings (D-80).
+	RecordingsDir string
+	seq           atomic.Int64
 }
 
 // New starts the service with fakes around it.
@@ -284,6 +286,10 @@ func New(t testing.TB) *Env {
 	keys := authn.Keys{Secret: Secret}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.Service = tutor.New(e.Pool, platform.New(plat.URL, keys), media.New(lk.URL, "devkey", e.LKSecret), "wss://tutor.example.edu", log)
+	e.RecordingsDir = t.TempDir()
+	if err := e.Service.SetRecordings(e.RecordingsDir, Secret); err != nil {
+		t.Fatal(err)
+	}
 	e.Server = httptest.NewServer(e.Service.Handler(keys, e.Origin, e.Pool))
 	t.Cleanup(e.Server.Close)
 	return e

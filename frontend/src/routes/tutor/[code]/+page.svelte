@@ -1,6 +1,7 @@
 <script lang="ts">
 	// A tutoring session's room (D-59): the waiting room, the broadcast, the
-	// teacher's controls, raised hands, chat and breakout groups (D-79).
+	// teacher's controls, raised hands, chat, breakout groups (D-79) and
+	// recording the presenter (D-80).
 	// Joining needs a login and a computer (TS-FR-02, TS-FR-09).
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -16,7 +17,9 @@
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
 	import GroupsPanel from '$lib/tutoring/GroupsPanel.svelte';
-	import { broadcasterName, CHAT_MODES, groupNow, isBroadcaster, isStaffRole, LAYOUTS, publishTarget, secondsLeft, type Attendee, type ChatMessage, type TutoringSession, type TutoringView } from '$lib/tutoring/types';
+	import RecordingsList from '$lib/tutoring/RecordingsList.svelte';
+	import { PresenterRecorder } from '$lib/tutoring/recorder.svelte';
+	import { broadcasterName, CHAT_MODES, groupNow, isBroadcaster, isStaffRole, LAYOUTS, publishTarget, secondsLeft, type Attendee, type ChatMessage, type Recording, type TutoringSession, type TutoringView } from '$lib/tutoring/types';
 
 	const code = page.params.code ?? '';
 	const client = new TutorClient();
@@ -28,7 +31,7 @@
 	let audioHost = $state<HTMLDivElement>();
 	const media = new SessionMedia(() => audioHost, (m) => toast(m, 'error'));
 	let socket: TutorSocket | null = null;
-	let side = $state<'chat' | 'people' | 'groups' | 'attendance'>('chat');
+	let side = $state<'chat' | 'people' | 'groups' | 'recordings' | 'attendance'>('chat');
 	let ask = $state<{ mic: boolean; camera: boolean; screen: boolean } | null>(null);
 	let offer = $state(false); // asked to broadcast (TS-FR-17)
 	let myLayout = $state<TutoringSession['layout'] | null>(null); // a student's own choice (TS-FR-13)
@@ -50,6 +53,29 @@
 	const groupTiles = $derived(media.tiles.filter((t) => t.group));
 	let now = $state(Date.now());
 	const closingIn = $derived(secondsLeft(view?.session.groups_close_at, now));
+	// Recording (D-80): the recorder runs in the browser of the teacher who started it.
+	let recorder = $state<PresenterRecorder | null>(null);
+	let recordings = $state<Recording[]>([]);
+	const recordingHere = $derived(!!recorder && recorder.state !== 'idle' && recorder.id === view?.recording?.id);
+	function startRecording() {
+		if (!view) return;
+		const v = view;
+		recorder = new PresenterRecorder(client, v.session.id, () => {
+			const who = view?.session.broadcaster_id ?? view?.session.teacher_id ?? v.session.teacher_id;
+			return { ...media.presenterTracks(who), name: view ? broadcasterName(view) : 'The presenter' };
+		}, (m) => toast(m, 'error'));
+		recorder.start();
+	}
+	async function loadRecordings() {
+		side = 'recordings';
+		if (view) recordings = (await client.get<{ recordings: Recording[] }>(`/api/sessions/${view.session.id}/recordings`)).recordings;
+	}
+	$effect(() => {
+		if (!recordingHere) return;
+		const warn = (e: BeforeUnloadEvent) => e.preventDefault(); // leaving stops the recording
+		window.addEventListener('beforeunload', warn);
+		return () => window.removeEventListener('beforeunload', warn);
+	});
 	const helpAsked = $derived(!!view && !!view.groups.find((g) => g.id === view!.me.group)?.help_at);
 	const stageTiles = $derived(media.tiles.filter((t) => t.backstage && (teacher || t.local)));
 	const main = $derived<Tile | undefined>(broadcast.find((t) => !t.local) ?? broadcast[0]);
@@ -206,6 +232,7 @@
 	});
 
 	onDestroy(() => {
+		recorder?.stop();
 		socket?.close();
 		media.disconnect();
 	});
@@ -304,6 +331,17 @@
 			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
 			{#if !closed && (media.state === 'reconnecting' || media.state === 'error' || media.state === 'disconnected')}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
 			{#if live}<span class="badge badge-soft danger">● Live</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">Not started</span>{/if}
+			{#if view.recording}<span class="badge badge-error gap-1" role="status" title="Only the presenter’s screen and voice are recorded">{view.recording.status === 'paused' ? '❚❚ Recording paused' : '● Recording'}</span>{/if}
+			{#if teacher && live}
+				{#if recordingHere && recorder}
+					<button class="btn btn-sm" onclick={() => recorder?.pause(recorder.state !== 'paused')}>{recorder.state === 'paused' ? 'Resume' : 'Pause'}</button>
+					<button class="btn btn-sm btn-error" disabled={recorder.state === 'stopping'} onclick={() => recorder?.stop()}>{recorder.state === 'stopping' ? 'Saving…' : 'Stop recording'}</button>
+				{:else if view.recording}
+					<span class="small muted">Recorded by {view.recording.started_by_name}</span>
+				{:else}
+					<button class="btn btn-sm" disabled={recorder?.state === 'starting'} onclick={startRecording} title="Records the presenter’s screen and voice, in this browser">Record</button>
+				{/if}
+			{/if}
 			<label class="sr-only" for="layout">Layout</label>
 			<select id="layout" class="select select-sm w-auto" value={layout} onchange={(e) => (lead ? settings({ layout: e.currentTarget.value }) : (myLayout = e.currentTarget.value as TutoringSession['layout']))} title={lead ? 'What students see' : 'Your own view, until the teacher changes it'}>
 				{#each LAYOUTS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
@@ -349,6 +387,7 @@
 						{/if}
 						<h2 class="m-0 text-sm">The main room</h2>
 					{/if}
+					{#if view.recording && isBroadcaster(view)}<p class="alert alert-soft alert-error py-2 m-0" role="status">You’re presenting: your screen and voice are being recorded.</p>{/if}
 					{#if media.needsClick}<button class="btn btn-primary" onclick={() => media.startAudio()}>Click to hear the session</button>{/if}
 					<div class="main-room" class:mini={!!group}>
 					{#if !main}
@@ -403,6 +442,7 @@
 				<aside class="side card card-border bg-base-100 p-3 vstack">
 					<div class="tabs tabs-border" role="tablist">
 						<button class="tab" role="tab" aria-selected={side === 'chat'} class:tab-active={side === 'chat'} onclick={() => (side = 'chat')}>Chat</button>
+						<button class="tab" role="tab" aria-selected={side === 'recordings'} class:tab-active={side === 'recordings'} onclick={loadRecordings}>Recordings</button>
 						{#if teacher}
 							<button class="tab" role="tab" aria-selected={side === 'people'} class:tab-active={side === 'people'} onclick={() => (side = 'people')}>People{#if view.waiting}{' '}({view.waiting}){/if}</button>
 							<button class="tab" role="tab" aria-selected={side === 'groups'} class:tab-active={side === 'groups'} onclick={() => (side = 'groups')}>Groups{#if view.groups.some((g) => g.help_at)}{' '}<span class="badge badge-warning badge-xs">help</span>{/if}</button>
@@ -415,6 +455,9 @@
 						<PeoplePanel {client} {view} />
 					{:else if side === 'groups' && teacher}
 						<GroupsPanel {client} {view} />
+					{:else if side === 'recordings'}
+						<RecordingsList {client} {recordings} meId={view.me.user_id} leadOf={(r) => r.lead} onchange={loadRecordings} />
+						{#if !recordings.length && !teacher}<p class="small muted m-0">Your teacher chooses whether students can watch recordings.</p>{/if}
 					{:else if side === 'attendance' && teacher}
 						<div class="vstack">
 							<button class="btn btn-sm" onclick={() => act(() => client.download(`/api/sessions/${sid()}/attendance?format=csv`, `attendance-${code}.csv`))}>Download CSV</button>

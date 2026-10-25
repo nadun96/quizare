@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -63,6 +64,12 @@ func run(log *slog.Logger) error {
 	if err := svc.CloseDueGroups(ctx); err != nil {
 		return err
 	}
+	if err := svc.SetRecordings(cfg.RecordingsDir, cfg.Secret); err != nil {
+		return fmt.Errorf("TUTOR_RECORDINGS_DIR: %w", err)
+	}
+	if err := svc.SweepRecordings(ctx); err != nil {
+		return err
+	}
 	go func() {
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
@@ -73,6 +80,10 @@ func run(log *slog.Logger) error {
 			case <-t.C:
 				if err := svc.CloseDueGroups(ctx); err != nil {
 					log.Warn("closing groups", "err", err)
+				}
+				// Recordings 2 days past their end go; quiet recorders stop (D-80).
+				if err := svc.SweepRecordings(ctx); err != nil {
+					log.Warn("sweeping recordings", "err", err)
 				}
 			}
 		}

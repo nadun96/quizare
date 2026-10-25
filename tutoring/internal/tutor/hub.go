@@ -270,6 +270,7 @@ type snap struct {
 	all    []Participant
 	pinned *Message
 	groups []Group
+	rec    *RecordingState
 }
 
 func (s *Service) snapshot(ctx context.Context, id string) (snap, error) {
@@ -290,6 +291,15 @@ func (s *Service) snapshot(ctx context.Context, id string) (snap, error) {
 	if sn.groups, err = s.groups(ctx, s.pool, id); err != nil {
 		return sn, err
 	}
+	var rs RecordingState
+	err = s.pool.QueryRow(ctx, `SELECT id, status, started_by, started_by_name, started_at FROM tutoring.recordings WHERE session_id=$1 AND status <> 'stopped'`, id).
+		Scan(&rs.ID, &rs.Status, &rs.StartedBy, &rs.StartedByName, &rs.StartedAt)
+	switch {
+	case err == nil:
+		sn.rec = &rs
+	case !errors.Is(err, pgx.ErrNoRows):
+		return sn, err
+	}
 	if sn.sess.PinnedID != nil {
 		if m, err := s.message(ctx, *sn.sess.PinnedID); err == nil && m.DeletedAt == nil {
 			sn.pinned = &m
@@ -299,7 +309,7 @@ func (s *Service) snapshot(ctx context.Context, id string) (snap, error) {
 }
 
 func (sn snap) viewFor(userID, mediaURL string) (View, bool) {
-	v := View{Session: sn.sess, Pinned: sn.pinned, MediaURL: mediaURL}
+	v := View{Session: sn.sess, Pinned: sn.pinned, MediaURL: mediaURL, Recording: sn.rec}
 	found := false
 	for _, p := range sn.all {
 		if p.UserID == userID {

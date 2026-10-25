@@ -58,8 +58,9 @@ export class TutorClient {
 		try {
 			res = await this.f(this.base + path, {
 				method,
-				headers: { Authorization: 'Bearer ' + token, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
-				body: body !== undefined ? JSON.stringify(body) : undefined
+				// A Blob goes as it is (recording parts, D-80); anything else as JSON.
+				headers: { Authorization: 'Bearer ' + token, ...(body instanceof Blob ? { 'Content-Type': 'application/octet-stream' } : body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+				body: body instanceof Blob ? body : body !== undefined ? JSON.stringify(body) : undefined
 			});
 		} catch {
 			throw new ApiError(0, 'network', "Tutoring isn't reachable right now. We'll keep trying.");

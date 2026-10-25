@@ -125,6 +125,7 @@ services:
       LIVEKIT_API_KEY: tutoring
       LIVEKIT_API_SECRET_FILE: /var/lib/tutoring/livekit-keys.yaml
       TUTOR_GENERATE_LIVEKIT_KEYS: "1"
+      TUTOR_RECORDINGS_DIR: /var/lib/tutoring/recordings # encrypted; deleted 2 days after they end (D-80)
       GOMEMLIMIT: 300MiB
     mem_limit: 400m
     volumes:

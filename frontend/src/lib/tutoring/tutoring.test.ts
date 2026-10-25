@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../api';
 import { looksLikeComputer, TutorClient, tutoringConfig } from './client';
 import { rejoinDelay } from './media.svelte';
-import { audienceLabel, broadcasterName, groupNow, handQueue, isBroadcaster, linkParts, publishTarget, secondsLeft, type ChatMessage, type TutoringParticipant, type TutoringView } from './types';
+import { fit, pickMime } from './recorder.svelte';
+import { audienceLabel, broadcasterName, deletedIn, groupNow, handQueue, isBroadcaster, linkParts, publishTarget, recordingLength, secondsLeft, type ChatMessage, type TutoringParticipant, type TutoringView } from './types';
 
 // Tutoring in the browser (D-59).
 
@@ -152,5 +153,30 @@ describe('breakout groups (D-79)', () => {
 	});
 	it('labels group messages', () => {
 		expect(audienceLabel({ audience: 'group', group_id: 1 } as ChatMessage, 'x')).toBe('group');
+	});
+});
+
+describe('recording the presenter (D-80)', () => {
+	it('picks the best format the browser records', () => {
+		expect(pickMime((t) => t === 'video/webm;codecs=vp8,opus' || t === 'video/mp4')).toBe('video/webm;codecs=vp8,opus');
+		expect(pickMime((t) => t.startsWith('video/mp4'))).toBe('video/mp4;codecs=avc1,mp4a');
+		expect(pickMime(() => false)).toBeNull();
+	});
+	it('fits a screen of any shape into the frame without stretching it', () => {
+		expect(fit(1920, 1080)).toEqual({ x: 0, y: 0, w: 1280, h: 720 });
+		const tall = fit(1080, 1920);
+		expect(tall.h).toBe(720);
+		expect(tall.x).toBeCloseTo((1280 - 405) / 2);
+		expect(fit(0, 0)).toEqual({ x: 0, y: 0, w: 1280, h: 720 });
+	});
+	it('says how long a recording runs and when it goes', () => {
+		const start = '2026-10-25T10:00:00Z';
+		expect(recordingLength({ started_at: start, ended_at: '2026-10-25T10:00:40Z' })).toBe('40 s');
+		expect(recordingLength({ started_at: start, ended_at: '2026-10-25T10:12:20Z' })).toBe('12 min');
+		expect(recordingLength({ started_at: start, ended_at: '2026-10-25T11:05:00Z' })).toBe('1 h 05 min');
+		const now = Date.parse(start);
+		expect(deletedIn('2026-10-27T10:00:00Z', now)).toBe('in 2 days');
+		expect(deletedIn('2026-10-25T15:00:00Z', now)).toBe('in 5 hours');
+		expect(deletedIn('2026-10-25T10:20:00Z', now)).toBe('within the hour');
 	});
 });

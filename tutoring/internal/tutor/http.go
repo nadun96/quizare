@@ -57,7 +57,20 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("PUT", "/my-group", h(s.hChoose))
 			r.Method("PUT", "/visit", h(s.hVisit))
 			r.Method("PUT", "/help", h(s.hHelp))
+			// Recording the presenter (D-80).
+			r.Method("GET", "/recordings", h(s.hSessionRecordings))
+			r.Method("POST", "/recordings", h(s.hStartRecording))
+			r.Method("PUT", "/recordings/{rec}/chunks/{n}", h(s.hChunk))
+			r.Method("POST", "/recordings/{rec}/pause", h(s.hPauseRecording))
+			r.Method("POST", "/recordings/{rec}/stop", h(s.hStopRecording))
+			r.Method("PUT", "/recordings/{rec}/viewers", h(s.hRecordingViewers))
 		})
+		r.Method("GET", "/my/recordings", h(s.hMyRecordings))
+		r.Method("POST", "/recordings/{rec}/link", h(s.hRecordingLink))
+		r.Method("DELETE", "/recordings/{rec}", h(s.hDeleteRecording))
+		r.Method("GET", "/admin/recordings", h(s.hAdminRecordings))
+		r.Method("PUT", "/admin/recordings/limit", h(s.hRecordingLimit))
+		r.Method("DELETE", "/admin/recordings/{rec}", h(s.hAdminDeleteRecording))
 	}
 }
 
@@ -414,4 +427,130 @@ func (s *Service) hHelp(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return noContent(w, s.Help(r.Context(), me(r), id(r), in.On))
+}
+
+// ---------- recording (D-80) ----------
+
+func rec(r *http.Request) string { return chi.URLParam(r, "rec") }
+
+func (s *Service) hSessionRecordings(w http.ResponseWriter, r *http.Request) error {
+	list, err := s.Recordings(r.Context(), me(r), id(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"recordings": list})
+	return nil
+}
+
+func (s *Service) hMyRecordings(w http.ResponseWriter, r *http.Request) error {
+	list, err := s.MyRecordings(r.Context(), me(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"recordings": list})
+	return nil
+}
+
+func (s *Service) hStartRecording(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Mime string `json:"mime"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	rc, err := s.StartRecording(r.Context(), me(r), id(r), in.Mime)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusCreated, rc)
+	return nil
+}
+
+// hChunk takes one part of the recording as the raw body.
+func (s *Service) hChunk(w http.ResponseWriter, r *http.Request) error {
+	n, err := strconv.Atoi(chi.URLParam(r, "n"))
+	if err != nil || n < 0 {
+		return web.ErrNotFound
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxChunk+1024)
+	return noContent(w, s.Chunk(r.Context(), me(r), id(r), rec(r), n, r.Body))
+}
+
+func (s *Service) hPauseRecording(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Paused bool `json:"paused"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.PauseRecording(r.Context(), me(r), id(r), rec(r), in.Paused))
+}
+
+func (s *Service) hStopRecording(w http.ResponseWriter, r *http.Request) error {
+	rc, err := s.StopRecording(r.Context(), me(r), id(r), rec(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, rc)
+	return nil
+}
+
+func (s *Service) hRecordingViewers(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Viewers string `json:"viewers"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.SetViewers(r.Context(), me(r), id(r), rec(r), in.Viewers))
+}
+
+func (s *Service) hRecordingLink(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Download bool `json:"download"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	u, err := s.PlayLink(r.Context(), me(r), rec(r), in.Download)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]string{"url": u})
+	return nil
+}
+
+func (s *Service) hDeleteRecording(w http.ResponseWriter, r *http.Request) error {
+	return noContent(w, s.DeleteRecording(r.Context(), me(r), rec(r)))
+}
+
+var recordingSorts = map[string]string{"started": "r.started_at"}
+
+func (s *Service) hAdminRecordings(w http.ResponseWriter, r *http.Request) error {
+	pg := ParsePage(r, recordingSorts, "started", true)
+	list, total, space, err := s.AdminRecordings(r.Context(), me(r), pg)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"recordings": list, "total": total, "page": pg.Page, "size": pg.Size, "space": space})
+	return nil
+}
+
+func (s *Service) hRecordingLimit(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Limit int64 `json:"limit"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	sp, err := s.SetRecordingLimit(r.Context(), me(r), in.Limit)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, sp)
+	return nil
+}
+
+func (s *Service) hAdminDeleteRecording(w http.ResponseWriter, r *http.Request) error {
+	return noContent(w, s.AdminDeleteRecording(r.Context(), me(r), rec(r)))
 }
