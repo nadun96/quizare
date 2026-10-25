@@ -31,5 +31,7 @@ func (s *Service) Handler(keys authn.Keys, platformOrigin string, pool *pgxpool.
 	r.Get("/ws/sessions/{id}", s.ServeWS(keys, []string{host}))
 	// Recordings play from signed 5-minute links: a <video> can't send a token (D-80).
 	r.Get("/media/recordings/{rec}", func(w http.ResponseWriter, r *http.Request) { s.ServeRecording(w, r, chi.URLParam(r, "rec")) })
+	// Private calendar feeds: calendar apps can't send a token, so the link is the key (D-84).
+	r.Get("/feeds/{token}", func(w http.ResponseWriter, r *http.Request) { s.ServeFeed(w, r, chi.URLParam(r, "token")) })
 	return r
 }

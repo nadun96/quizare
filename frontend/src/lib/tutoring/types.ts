@@ -8,7 +8,7 @@ export type TutoringSession = {
 	classroom_name: string;
 	title: string;
 	join_code: string;
-	status: 'open' | 'live' | 'ended';
+	status: 'open' | 'live' | 'ended' | 'cancelled';
 	admit_mode: 'auto' | 'manual';
 	locked: boolean;
 	chat_mode: 'off' | 'to_teacher' | 'everyone' | 'announcements';
@@ -35,7 +35,100 @@ export type TutoringSession = {
 	plan: Plan;
 	/** What the service switched off to stay within the bandwidth budget (TS-FR-38). */
 	auto_off: AutoOffStep[];
+	/** Scheduling (D-84): its series, length, time zone, how early it opens, reminders (minutes before). */
+	series_id?: string;
+	duration_min: number;
+	time_zone: string;
+	open_early_min: number;
+	reminders: number[];
+	cancelled_at?: string;
 };
+
+/** How a schedule repeats (D-84): once, daily or weekly, until a date or a number of times. */
+export type Repeat = { freq: '' | 'daily' | 'weekly'; interval?: number; days?: number[]; until?: string; count?: number };
+
+/** A session in someone's calendar (TS-FR-86). */
+export type CalendarEntry = {
+	id: string;
+	series_id?: string;
+	title: string;
+	classroom_id: string;
+	classroom_name: string;
+	teacher_name: string;
+	join_code: string;
+	status: TutoringSession['status'];
+	scheduled_at?: string;
+	started_at?: string;
+	duration_min: number;
+	time_zone: string;
+	opens_at?: string;
+	role: 'teacher' | 'coteacher' | 'student';
+};
+
+export const REMINDER_CHOICES: { minutes: number; label: string }[] = [
+	{ minutes: 1440, label: '24 hours before' },
+	{ minutes: 60, label: '1 hour before' },
+	{ minutes: 15, label: '15 minutes before' }
+];
+
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "2026-11-02T15:30": a moment as the wall clock shows it in a time zone, for a date-time field. */
+export function localInput(iso: string | Date, timeZone: string): string {
+	const parts = Object.fromEntries(
+		new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+			.formatToParts(typeof iso === 'string' ? new Date(iso) : iso)
+			.map((p) => [p.type, p.value])
+	);
+	return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+/** The browser's time zone, e.g. "Asia/Colombo". */
+export const myZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+/** "every week on Mon and Wed, 5 times", for showing a series. */
+export function repeatSummary(r: Repeat): string {
+	if (!r.freq) return 'once';
+	const n = r.interval && r.interval > 1 ? r.interval : 1;
+	const every = r.freq === 'daily' ? (n === 1 ? 'every day' : `every ${n} days`) : n === 1 ? 'every week' : `every ${n} weeks`;
+	const on = r.freq === 'weekly' && r.days?.length ? ' on ' + [...r.days].sort().map((d) => WEEKDAYS[d]).join(', ') : '';
+	const end = r.count ? `, ${r.count} times` : r.until ? `, until ${r.until}` : '';
+	return every + on + end;
+}
+
+/** The days a month view shows: whole weeks, Sunday first, from the 1st's week to the last's. */
+export function monthDays(year: number, month: number): Date[] {
+	const first = new Date(year, month, 1);
+	const start = new Date(year, month, 1 - first.getDay());
+	const last = new Date(year, month + 1, 0);
+	const days: Date[] = [];
+	for (let d = new Date(start); d <= last || d.getDay() !== 0; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) days.push(d);
+	return days;
+}
+
+/** Same calendar day, in the browser's time zone. */
+export const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/**
+ * What's on now or very soon, for the reminder in the platform (TS-FR-87):
+ * live sessions, and those open for joining or starting within 15 minutes.
+ */
+export function happeningSoon(list: CalendarEntry[], now: number): CalendarEntry[] {
+	return list.filter((e) => {
+		if (e.status === 'live') return true;
+		if (e.status !== 'open' || !e.scheduled_at) return false;
+		const start = Date.parse(e.scheduled_at);
+		const opens = e.opens_at ? Date.parse(e.opens_at) : start;
+		return start > now - 60 * 60_000 && (opens <= now || start - now <= 15 * 60_000);
+	});
+}
+
+/** Whether someone may go in now: teachers always; students once it's open. */
+export function canJoin(e: CalendarEntry, now: number): boolean {
+	if (e.status === 'live') return true;
+	if (e.status !== 'open') return false;
+	return e.role !== 'student' || !e.opens_at || Date.parse(e.opens_at) <= now;
+}
 
 export type TutoringParticipant = {
 	user_id: string;

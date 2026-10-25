@@ -32,6 +32,9 @@ type Platform interface {
 	Access(ctx context.Context, classroomID, userID string) (platform.Access, error)
 	Teacher(ctx context.Context, email string) (platform.Person, error)
 	Categories(ctx context.Context, classroomID, teacherID string) ([]platform.Category, error)
+	// Scheduling (D-84): someone's classrooms, and emails to a classroom's people.
+	Classrooms(ctx context.Context, userID string) ([]platform.Classroom, error)
+	Notify(ctx context.Context, n platform.Notice) error
 }
 
 // Media is the media server's part (LiveKit).
@@ -54,6 +57,7 @@ type Service struct {
 	now      func() time.Time
 	hub      *hub
 	rec      *recordings // nil: recording is off (D-80)
+	origin   string      // the platform's address, for links in emails (D-84)
 	// What each live session sends now, as the monitor last measured it (D-81).
 	loadMu sync.Mutex
 	load   map[string]Load
@@ -106,25 +110,42 @@ type Session struct {
 	// (TS-FR-38, TS-FR-39, D-81).
 	Plan    Plan     `json:"plan"`
 	AutoOff []string `json:"auto_off"`
+	// Scheduling (D-84): the series it belongs to, how long it runs, the time
+	// zone it was planned in, how early it opens for joining, the reminders
+	// (minutes before), and when it was cancelled (status "cancelled").
+	SeriesID     *string    `json:"series_id,omitempty"`
+	DurationMin  int        `json:"duration_min"`
+	TimeZone     string     `json:"time_zone"`
+	OpenEarlyMin int        `json:"open_early_min"`
+	Reminders    []int32    `json:"reminders"`
+	CancelledAt  *time.Time `json:"cancelled_at,omitempty"`
 }
 
 const sessionCols = `id, teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, status, admit_mode, locked, chat_mode,
 	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, groups_open, groups_close_at, groups_choose, group_chat,
-	group_mic, group_camera, group_screen, scheduled_at, created_at, started_at, ended_at, plan, auto_off`
+	group_mic, group_camera, group_screen, scheduled_at, created_at, started_at, ended_at, plan, auto_off,
+	series_id, duration_min, time_zone, open_early_min, reminders, cancelled_at`
 
-func scanSession(row pgx.Row) (Session, error) {
+func scanSession(row pgx.Row) (Session, error) { return scanSessionWith(row) }
+
+// scanSessionWith scans sessionCols and then any extra columns into extra.
+func scanSessionWith(row pgx.Row, extra ...any) (Session, error) {
 	var s Session
 	var plan []byte
-	err := row.Scan(&s.ID, &s.TeacherID, &s.TeacherName, &s.ClassroomID, &s.ClassroomName, &s.Title, &s.JoinCode, &s.Status, &s.AdmitMode,
+	dest := append([]any{&s.ID, &s.TeacherID, &s.TeacherName, &s.ClassroomID, &s.ClassroomName, &s.Title, &s.JoinCode, &s.Status, &s.AdmitMode,
 		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout,
 		&s.GroupsOpen, &s.GroupsCloseAt, &s.GroupsChoose, &s.GroupChat, &s.GroupMic, &s.GroupCamera, &s.GroupScreen, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt,
-		&plan, &s.AutoOff)
+		&plan, &s.AutoOff, &s.SeriesID, &s.DurationMin, &s.TimeZone, &s.OpenEarlyMin, &s.Reminders, &s.CancelledAt}, extra...)
+	err := row.Scan(dest...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s, web.ErrNotFound
 	}
 	s.Plan = DefaultPlan
 	if s.AutoOff == nil {
 		s.AutoOff = []string{}
+	}
+	if s.Reminders == nil {
+		s.Reminders = []int32{}
 	}
 	if err == nil && len(plan) > 2 {
 		err = json.Unmarshal(plan, &s.Plan)
@@ -183,12 +204,13 @@ func (p Participant) allowed() []string {
 }
 
 var (
-	errEnded    = web.NewError(http.StatusGone, "session_ended", "this session has ended")
-	errLocked   = web.NewError(http.StatusForbidden, "session_locked", "this session is locked: nobody new can join")
-	errRemoved  = web.NewError(http.StatusForbidden, "removed", "the teacher removed you from this session")
-	errRefused  = web.NewError(http.StatusForbidden, "refused", "the teacher didn't admit you to this session")
-	errNotLive  = web.NewError(http.StatusConflict, "not_live", "the session hasn't started yet")
-	errLeadOnly = web.NewError(http.StatusForbidden, "lead_only", "only the lead teacher can do this")
+	errEnded     = web.NewError(http.StatusGone, "session_ended", "this session has ended")
+	errCancelled = web.NewError(http.StatusGone, "session_cancelled", "this session was cancelled")
+	errLocked    = web.NewError(http.StatusForbidden, "session_locked", "this session is locked: nobody new can join")
+	errRemoved   = web.NewError(http.StatusForbidden, "removed", "the teacher removed you from this session")
+	errRefused   = web.NewError(http.StatusForbidden, "refused", "the teacher didn't admit you to this session")
+	errNotLive   = web.NewError(http.StatusConflict, "not_live", "the session hasn't started yet")
+	errLeadOnly  = web.NewError(http.StatusForbidden, "lead_only", "only the lead teacher can do this")
 )
 
 // ---------- sessions ----------
@@ -360,6 +382,9 @@ func (s *Service) Join(ctx context.Context, p authn.Person, code string) (View, 
 	if sess.Status == "ended" {
 		return View{}, errEnded
 	}
+	if sess.Status == "cancelled" {
+		return View{}, errCancelled
+	}
 	role := "student"
 	var co bool
 	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tutoring.coteachers WHERE session_id=$1 AND user_id=$2)`, sess.ID, p.ID).Scan(&co); err != nil {
@@ -377,6 +402,10 @@ func (s *Service) Join(ctx context.Context, p authn.Person, code string) (View, 
 		}
 		if a.Role != "student" {
 			return View{}, web.ErrForbidden
+		}
+		// A scheduled session opens for students a while before it starts (TS-FR-89).
+		if err := s.notYetOpen(sess); err != nil {
+			return View{}, err
 		}
 	}
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {

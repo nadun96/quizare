@@ -234,7 +234,18 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Storage = storage.NewService(pool, a.Auth, log, cfg.BackupDir, cfg.NightlyBackupDir, opt.KEK)
 	snapshotWorker.Service = a.Storage
-	a.Tutor = tutorlink.New(opt.TutoringSecret, cfg.TutoringURL, a.Content, a.Auth)
+	// Tutoring's reminders and notices go out as the platform's email jobs (D-84).
+	tutorMail := func(ctx context.Context, msgs []mail.Message) error {
+		return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+			for _, m := range msgs {
+				if _, err := rc.InsertTx(ctx, tx, mail.Args{Message: m}, nil); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	a.Tutor = tutorlink.New(opt.TutoringSecret, cfg.TutoringURL, a.Content, a.Auth, tutorMail)
 	a.Storage.AddArea(storage.Area{ID: "poll_files", Label: "Uploaded files of polls closed before the date",
 		Preview: func(ctx context.Context, before time.Time) (storage.Freed, error) {
 			n, b, err := a.Poll.PreviewOldFiles(ctx, before)

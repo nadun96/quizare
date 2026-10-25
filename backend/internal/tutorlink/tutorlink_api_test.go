@@ -208,3 +208,62 @@ func TestInternalCategories(t *testing.T) {
 		t.Fatalf("no token: %d", code)
 	}
 }
+
+// Scheduling (D-84): someone's classrooms for their calendar, and emails
+// to a classroom's people for reminders and changes.
+func TestInternalScheduling(t *testing.T) {
+	e := apptest.New(t, apptest.WithTutoring("http://localhost:8090", secret))
+	teacher := e.NewUser(auth.RoleTeacher)
+	co := e.NewUser(auth.RoleTeacher)
+	var c, other content.Classroom
+	teacher.Call("POST", "/api/teacher/classrooms", map[string]any{"name": "Physics"}, 201, &c)
+	co.Call("POST", "/api/teacher/classrooms", map[string]any{"name": "Chemistry"}, 201, &other)
+	ann, bob := e.NewUser(auth.RoleStudent), e.NewUser(auth.RoleStudent)
+	for _, s := range []*apptest.Client{ann, bob} {
+		s.Call("POST", "/api/enrolments", map[string]string{"join_code": c.JoinCode}, 200, nil)
+	}
+	ann.Call("POST", "/api/enrolments", map[string]string{"join_code": other.JoinCode}, 200, nil)
+	e.TakeJobs("email")
+
+	cl := e.Client()
+	post := func(path string, body any) (int, []byte) {
+		cl.Headers = map[string]string{"Authorization": "Bearer " + serviceToken(t, secret, time.Minute, "tutoring", "quiz-platform")}
+		raw, _ := json.Marshal(body)
+		code, out := cl.Raw("POST", "/internal/tutoring/"+path, "application/json", raw)
+		cl.Headers = nil
+		return code, out
+	}
+	var got struct{ Classrooms []content.TutoringClassroom }
+	code, out := post("classrooms", map[string]string{"user_id": ann.User.ID})
+	json.Unmarshal(out, &got)
+	if code != 200 || len(got.Classrooms) != 2 || got.Classrooms[0].Role != "student" {
+		t.Fatalf("Ann's classrooms: %d %s", code, out)
+	}
+	code, out = post("classrooms", map[string]string{"user_id": teacher.User.ID})
+	json.Unmarshal(out, &got)
+	if code != 200 || len(got.Classrooms) != 1 || got.Classrooms[0].ID != c.ID || got.Classrooms[0].Role != "teacher" {
+		t.Fatalf("the teacher's classrooms: %d %s", code, out)
+	}
+
+	// A reminder to everyone: the teacher, both students and the co-teacher, once each.
+	code, out = post("notify", tutorlink.NotifyInput{ClassroomID: c.ID, Students: true, UserIDs: []string{co.User.ID, teacher.User.ID},
+		Subject: "Tutoring in 15 minutes: Waves", Body: "Join: http://localhost:5173/tutor/ABC"})
+	if code != 200 || !strings.Contains(string(out), `"sent":4`) {
+		t.Fatalf("notify: %d %s", code, out)
+	}
+	jobs := e.TakeJobs("email")
+	if len(jobs) != 4 || !strings.Contains(string(jobs[0]), "Tutoring in 15 minutes: Waves") {
+		t.Fatalf("emails = %s", jobs)
+	}
+	// Teachers only.
+	post("notify", tutorlink.NotifyInput{ClassroomID: c.ID, UserIDs: []string{co.User.ID}, Subject: "x", Body: "y"})
+	if jobs := e.TakeJobs("email"); len(jobs) != 2 {
+		t.Fatalf("teachers only = %d", len(jobs))
+	}
+	if code, _ := post("notify", tutorlink.NotifyInput{ClassroomID: c.ID, Subject: " "}); code != 422 {
+		t.Fatalf("no subject: %d", code)
+	}
+	if code, _ := post("notify", tutorlink.NotifyInput{ClassroomID: "00000000-0000-0000-0000-000000000000", Subject: "x"}); code != 404 {
+		t.Fatalf("no such classroom: %d", code)
+	}
+}
