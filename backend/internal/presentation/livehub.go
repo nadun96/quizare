@@ -43,7 +43,8 @@ type member struct {
 	n         int // the slide they're on
 	following bool
 	visible   bool
-	since     time.Time // when that state began
+	since     time.Time             // when that state began
+	carry     map[int]time.Duration // time on each slide not yet recorded: under a second
 }
 
 func (m *member) push(b []byte) {
@@ -94,16 +95,24 @@ func (h *liveHub) close(m *member, now time.Time) []spent {
 	}
 	d := min(now.Sub(m.since), maxInterval)
 	m.since = now
-	if d < time.Second {
+	// Whole seconds are recorded; the rest waits for the next interval on
+	// that slide, so quick slide changes don't lose time to rounding.
+	if m.carry == nil {
+		m.carry = map[int]time.Duration{}
+	}
+	m.carry[m.n] += d
+	whole := m.carry[m.n].Truncate(time.Second)
+	if whole == 0 {
 		return nil
 	}
-	return []spent{{m.viewerID, m.n, d}}
+	m.carry[m.n] -= whole
+	return []spent{{m.viewerID, m.n, whole}}
 }
 
 // record adds live time to the students' records.
 func (h *liveHub) record(ctx context.Context, xs []spent) {
 	for _, x := range xs {
-		secs := int(x.d.Round(time.Second) / time.Second)
+		secs := int(x.d / time.Second)
 		if _, err := h.s.pool.Exec(ctx, `INSERT INTO presentation.views(viewer_id, n, mode, seconds) VALUES ($1,$2,'live',$3)
 			ON CONFLICT (viewer_id, n, mode) DO UPDATE SET seconds = presentation.views.seconds + $3, last_at = now()`, x.viewerID, x.n, secs); err != nil {
 			h.log.Warn("recording live time", "err", err)
