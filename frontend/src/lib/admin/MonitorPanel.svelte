@@ -62,7 +62,7 @@
 			<div class="tile"><span class="small muted">Reconnects</span><strong class="tabular">{v.total.reconnects}</strong></div>
 		</div>
 		{#if !v.measuring}
-			<p class="small muted m-0">Figures are estimates. Set <code>LIVEKIT_METRICS_URL</code> for the tutoring service (and <code>prometheus_port</code> in LiveKit’s config) to measure bandwidth and CPU.</p>
+			<p class="small muted m-0">Figures are estimates. Set <code>LIVEKIT_METRICS_URL</code> for the tutoring service (and <code>prometheus: port:</code> in LiveKit’s config) to measure bandwidth and CPU.</p>
 		{:else if !v.total.measured}
 			<p class="small text-warning m-0">The media server’s metrics aren’t answering: these are estimates.</p>
 		{/if}
