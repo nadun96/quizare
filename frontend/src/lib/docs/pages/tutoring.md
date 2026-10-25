@@ -124,6 +124,14 @@ LiveKit mutes the tracks at once, and the broadcaster's browser stops sending th
 
 The Resources tab (teachers, TS-FR-33) shows the session's use and its share, all of tutoring against the budget, what makes up the figure, and the plan.
 
+## Monitoring
+
+The admin console's **Tutoring** tab shows upload, download, CPU, tracks, participants and reconnects, in total and for each live session, now and over the last 24 hours or 7 days (D-82, TS-NFR-41).
+
+- **Measured or estimated.** LiveKit reports nothing per room. With `prometheus_port` in LiveKit's config and `LIVEKIT_METRICS_URL` for the tutoring service, the totals are measured from LiveKit's own counters (bytes sent and received, its process's CPU) every 2 seconds. Each session's figures are the estimates above; its CPU is the measured CPU shared out by its upload. Without the metrics, everything is estimated, and the page says so. Keep the metrics port closed to the outside.
+- **Reconnects** count a person's connection to the session coming back, and their page joining the video again after it dropped.
+- **History.** While anything is live, a row a minute is saved for all of tutoring and for each session (the minute's averages, the most tracks and people, the reconnects), and kept 7 days. The charts show 5-minute points for a day and 30-minute points for a week; below them, each session's peaks.
+
 ## Layout
 
 The lead teacher chooses what students see: spotlight (the main track large, the others small), side by side, or a grid; the choice reaches students at once. A student can pick another layout for themself until the teacher changes it again (TS-FR-13).
@@ -207,16 +215,17 @@ If Windows refuses the ports (`netsh interface ipv4 show excludedportrange proto
 | `LIVEKIT_PUBLIC_URL` | — | What browsers connect to, e.g. `wss://tutor.example.edu` |
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET_FILE` | — | LiveKit's key and its secret file: just the secret, or LiveKit's own `key: secret` key file |
 | `TUTOR_GENERATE_LIVEKIT_KEYS` | off | `1`: write the LiveKit key file on first start (containers) |
+| `LIVEKIT_METRICS_URL` | — | LiveKit's Prometheus endpoint (`prometheus_port` in its config), e.g. `http://127.0.0.1:6789/metrics`: measured bandwidth and CPU for monitoring (D-82) |
 | `TUTOR_RECORDINGS_DIR` | `data/recordings` | Where recordings are kept, encrypted (D-80); the systemd unit uses `/var/lib/quiz-tutoring/recordings`, containers `/var/lib/tutoring/recordings` |
 
 Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 show excludedportrange protocol=tcp`); run LiveKit on other ports then.
 
 ## Tests
 
-- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit).
+- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit); monitoring, with a fake of LiveKit's metrics whose counters the test moves on (`metrics_api_test.go`).
 - `backend/internal/tutorlink`: tokens, the internal API and every way a service token is refused.
 - `loadtest/tutoring-media.mjs`: LiveKit's capacity on this machine (D-58). Run it with nothing else busy: the simulated viewers share the machine's cores.
 
 ## Not yet
 
-Later phases add: monitoring the server's measured CPU and bandwidth, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
+Later phases add: scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.

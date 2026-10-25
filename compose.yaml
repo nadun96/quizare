@@ -124,6 +124,7 @@ services:
       LIVEKIT_PUBLIC_URL: ${QP_TUTORING_MEDIA_URL:-ws://localhost:7880}
       LIVEKIT_API_KEY: tutoring
       LIVEKIT_API_SECRET_FILE: /var/lib/tutoring/livekit-keys.yaml
+      LIVEKIT_METRICS_URL: http://livekit:6789/metrics # measured bandwidth and CPU (D-82)
       TUTOR_GENERATE_LIVEKIT_KEYS: "1"
       TUTOR_RECORDINGS_DIR: /var/lib/tutoring/recordings # encrypted; deleted 2 days after they end (D-80)
       GOMEMLIMIT: 300MiB

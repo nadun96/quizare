@@ -15,3 +15,6 @@ rtc:
 key_file: /etc/livekit/keys.yaml
 logging:
   level: info
+# Prometheus metrics, which the tutoring service reads for monitoring (D-82,
+# LIVEKIT_METRICS_URL). Keep 6789 closed in the firewall too.
+prometheus_port: 6789

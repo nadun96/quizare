@@ -138,6 +138,9 @@ if ($Tutoring) {
 	$env:LIVEKIT_API_SECRET_FILE = Join-Path $localDir 'livekit-keys.yaml'
 	$env:TUTOR_LISTEN = "127.0.0.1:$TutorPort"
 	$env:TUTOR_RECORDINGS_DIR = Join-Path $localDir 'recordings'
+	# Measured bandwidth and CPU (D-82), when livekit.yaml sets prometheus_port.
+	$prom = Select-String -Path (Join-Path $localDir 'livekit.yaml') -Pattern '^prometheus_port:\s*(\d+)' | Select-Object -First 1
+	$env:LIVEKIT_METRICS_URL = if ($prom) { "http://127.0.0.1:$($prom.Matches[0].Groups[1].Value)/metrics" } else { '' }
 	Write-Host '-> Starting the tutoring service'
 	$log = Start-Background $tutor $null (Join-Path $root 'tutoring') 'tutoring'
 	Wait-Until { Test-Health "http://127.0.0.1:$TutorPort/healthz" } 30 'The tutoring service' $log
