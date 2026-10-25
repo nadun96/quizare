@@ -30,6 +30,7 @@ param(
 	[int]$TutorPort = 8090
 )
 $ErrorActionPreference = 'Stop'
+$PSBoundParameters_Main = $PSBoundParameters # which ports were chosen, for Select-Port
 $root = Split-Path -Parent $PSScriptRoot
 $bin = Join-Path $root 'backend\bin'
 $localDir = Join-Path $root 'local'
@@ -41,12 +42,45 @@ function Test-Port([int]$port) {
 	try { return $c.ConnectAsync('127.0.0.1', $port).Wait(300) -and $c.Connected } catch { return $false } finally { $c.Dispose() }
 }
 
-function Wait-Until([scriptblock]$check, [int]$seconds, [string]$what, [string]$log) {
-	for ($i = 0; $i -lt $seconds * 4; $i++) {
+# Waits for $check, by the clock (a refused connection can take 2 s on
+# Windows), and gives up at once if the program has already exited, showing
+# the end of its logs.
+function Wait-Until([scriptblock]$check, [int]$seconds, [string]$what, $started) {
+	$clock = [Diagnostics.Stopwatch]::StartNew()
+	while ($clock.Elapsed.TotalSeconds -lt $seconds) {
 		if (& $check) { return }
+		if ($started.Process.HasExited) {
+			Write-Host "$what stopped. The end of its logs:" -ForegroundColor Red
+			foreach ($f in $started.Out, $started.Err) { if (Test-Path $f) { Get-Content $f -Tail 5 | ForEach-Object { Write-Host "   $_" } } }
+			throw "$what stopped. Logs: $($started.Out), $($started.Err)"
+		}
 		Start-Sleep -Milliseconds 250
 	}
-	throw "$what did not start in $seconds s. See $log"
+	throw "$what did not start in $seconds s. Logs: $($started.Out), $($started.Err)"
+}
+
+# Whether this computer lets a program listen on the port: Windows reserves
+# ranges of ports (they can move after a restart), and another program may hold it.
+function Test-Free([int]$port) {
+	$l = $null
+	try { $l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port); $l.Start(); return $true }
+	catch { return $false }
+	finally { if ($l) { $l.Stop() } }
+}
+
+# The port to use: the one asked for, or, when it wasn't chosen and isn't
+# free, the first free one of a few others.
+function Select-Port([int]$port, [string]$param, [int[]]$others) {
+	if (Test-Free $port) { return $port }
+	$why = "port $port is taken or reserved by Windows (netsh interface ipv4 show excludedportrange protocol=tcp)"
+	if ($PSBoundParameters_Main.ContainsKey($param)) { throw "The $why. Choose another with -$param." }
+	foreach ($p in $others) {
+		if (Test-Free $p) {
+			Write-Host "-> $why; using $p instead (or choose with -$param)" -ForegroundColor Yellow
+			return $p
+		}
+	}
+	throw "The $why, and so are $($others -join ', '). Choose a free port with -$param."
 }
 
 function Test-Health([string]$url) {
@@ -67,8 +101,8 @@ function Start-Background([string]$exe, [string[]]$arguments, [string]$dir, [str
 	$line = '"' + $exe + '"'
 	foreach ($a in $arguments) { $line += ' "' + $a + '"' }
 	$line += ' > "' + $out + '" 2> "' + $err + '"'
-	Start-Process cmd.exe -ArgumentList '/d', '/c', ('"' + $line + '"') -WorkingDirectory $dir -WindowStyle Hidden
-	return $err
+	$p = Start-Process cmd.exe -ArgumentList '/d', '/c', ('"' + $line + '"') -WorkingDirectory $dir -WindowStyle Hidden -PassThru
+	return @{ Process = $p; Out = $out; Err = $err }
 }
 
 function Invoke-Step([string]$what, [scriptblock]$block) {
@@ -110,7 +144,14 @@ try {
 # Restart what's already running, so the new build is used.
 $server = Join-Path $bin 'server.exe'
 $tutor = Join-Path $bin 'tutor.exe'
-foreach ($exe in @($server, $tutor)) { Get-Running $exe | Stop-Process -Force }
+$stopped = @(foreach ($exe in @($server, $tutor)) { Get-Running $exe })
+$stopped | Stop-Process -Force
+# A stopped server can hold its port for a moment.
+if ($stopped) { $clock = [Diagnostics.Stopwatch]::StartNew(); while (-not (Test-Free $Port) -and $clock.Elapsed.TotalSeconds -lt 3) { Start-Sleep -Milliseconds 200 } }
+
+# Ports this computer allows now: Windows reserves ranges, which can move after a restart.
+$Port = Select-Port $Port 'Port' @(8180, 8280, 8380, 8480, 8580)
+if ($Tutoring) { $TutorPort = Select-Port $TutorPort 'TutorPort' (@(8190, 8290, 8390, 8490, 8590) | Where-Object { $_ -ne $Port }) }
 
 $dbUrl = "postgres://postgres:postgres@localhost:54329/$Database`?sslmode=disable"
 
