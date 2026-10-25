@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../api';
 import { looksLikeComputer, TutorClient, tutoringConfig } from './client';
 import { rejoinDelay } from './media.svelte';
-import { audienceLabel, broadcasterName, handQueue, isBroadcaster, linkParts, publishTarget, type ChatMessage, type TutoringParticipant, type TutoringView } from './types';
+import { audienceLabel, broadcasterName, groupNow, handQueue, isBroadcaster, linkParts, publishTarget, secondsLeft, type ChatMessage, type TutoringParticipant, type TutoringView } from './types';
 
 // Tutoring in the browser (D-59).
 
@@ -125,5 +125,32 @@ describe('rejoining the video', () => {
 	it('waits 2 s, doubling, at most 30 s', () => {
 		expect([0, 1, 2, 3, 4, 5, 9].map(rejoinDelay)).toEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000]);
 		expect(rejoinDelay(-1)).toBe(2000);
+	});
+});
+
+describe('breakout groups (D-79)', () => {
+	const groups = [{ id: 1, name: 'Readers', members: ['s1'], size: 1 }, { id: 2, name: 'Group 2', members: [], size: 0 }];
+	const v = (me: Record<string, unknown>, open = true, status = 'live') =>
+		({ session: { groups_open: open, status, teacher_name: 'Ms Perera' }, me: { user_id: 'x', ...me }, groups, teachers: [] }) as unknown as TutoringView;
+	it('a student is in their group only while the groups are open in a live session', () => {
+		expect(groupNow(v({ role: 'student', group: 1 }))?.name).toBe('Readers');
+		expect(groupNow(v({ role: 'student', group: 1 }, false))).toBeUndefined();
+		expect(groupNow(v({ role: 'student', group: 1 }, true, 'ended'))).toBeUndefined();
+		expect(groupNow(v({ role: 'student' }))).toBeUndefined();
+	});
+	it('a teacher is in a group only while visiting it, and their devices go there', () => {
+		expect(groupNow(v({ role: 'teacher', group: 1 }))).toBeUndefined();
+		expect(groupNow(v({ role: 'coteacher', visiting: 2 }))?.name).toBe('Group 2');
+		expect(publishTarget(v({ role: 'teacher', visiting: 2 }))).toBe('group');
+		expect(publishTarget(v({ role: 'student', group: 1 }))).toBe('group');
+		expect(publishTarget(v({ role: 'student', group: 1 }, false))).toBe('stage');
+	});
+	it('counts down to closing', () => {
+		expect(secondsLeft(undefined, 0)).toBeNull();
+		expect(secondsLeft('2026-10-25T10:01:00Z', Date.parse('2026-10-25T10:00:00.400Z'))).toBe(60);
+		expect(secondsLeft('2026-10-25T10:01:00Z', Date.parse('2026-10-25T10:02:00Z'))).toBe(0);
+	});
+	it('labels group messages', () => {
+		expect(audienceLabel({ audience: 'group', group_id: 1 } as ChatMessage, 'x')).toBe('group');
 	});
 });

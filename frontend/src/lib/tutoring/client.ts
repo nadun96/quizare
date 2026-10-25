@@ -79,6 +79,7 @@ export class TutorClient {
 	get = <T>(p: string) => this.call<T>('GET', p);
 	post = <T>(p: string, b: unknown = {}) => this.call<T>('POST', p, b);
 	put = <T>(p: string, b: unknown = {}) => this.call<T>('PUT', p, b);
+	patch = <T>(p: string, b: unknown = {}) => this.call<T>('PATCH', p, b);
 	del = <T>(p: string) => this.call<T>('DELETE', p);
 
 	/** Downloads a file (attendance CSV) with the token, then saves it. */

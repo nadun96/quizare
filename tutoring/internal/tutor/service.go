@@ -28,6 +28,7 @@ import (
 type Platform interface {
 	Access(ctx context.Context, classroomID, userID string) (platform.Access, error)
 	Teacher(ctx context.Context, email string) (platform.Person, error)
+	Categories(ctx context.Context, classroomID, teacherID string) ([]platform.Category, error)
 }
 
 // Media is the media server's part (LiveKit).
@@ -73,22 +74,34 @@ type Session struct {
 	PinnedID      *int64 `json:"pinned_id,omitempty"`
 	// BroadcasterID is who broadcasts when it isn't the lead teacher
 	// (TS-FR-17); BroadcastOffer is someone asked who hasn't answered.
-	BroadcasterID  *string    `json:"broadcaster_id,omitempty"`
-	BroadcastOffer *string    `json:"broadcast_offer,omitempty"`
-	Layout         string     `json:"layout"` // spotlight, side or grid (TS-FR-13)
-	ScheduledAt    *time.Time `json:"scheduled_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	StartedAt      *time.Time `json:"started_at,omitempty"`
-	EndedAt        *time.Time `json:"ended_at,omitempty"`
+	BroadcasterID  *string `json:"broadcaster_id,omitempty"`
+	BroadcastOffer *string `json:"broadcast_offer,omitempty"`
+	Layout         string  `json:"layout"` // spotlight, side or grid (TS-FR-13)
+	// Breakout groups (D-79): open or not, the countdown before they close,
+	// whether students pick their group, group chat, and what every student
+	// may also do in groups (TS-FR-53).
+	GroupsOpen    bool       `json:"groups_open"`
+	GroupsCloseAt *time.Time `json:"groups_close_at,omitempty"`
+	GroupsChoose  bool       `json:"groups_choose"`
+	GroupChat     bool       `json:"group_chat"`
+	GroupMic      bool       `json:"group_mic"`
+	GroupCamera   bool       `json:"group_camera"`
+	GroupScreen   bool       `json:"group_screen"`
+	ScheduledAt   *time.Time `json:"scheduled_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	StartedAt     *time.Time `json:"started_at,omitempty"`
+	EndedAt       *time.Time `json:"ended_at,omitempty"`
 }
 
 const sessionCols = `id, teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, status, admit_mode, locked, chat_mode,
-	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, scheduled_at, created_at, started_at, ended_at`
+	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, groups_open, groups_close_at, groups_choose, group_chat,
+	group_mic, group_camera, group_screen, scheduled_at, created_at, started_at, ended_at`
 
 func scanSession(row pgx.Row) (Session, error) {
 	var s Session
 	err := row.Scan(&s.ID, &s.TeacherID, &s.TeacherName, &s.ClassroomID, &s.ClassroomName, &s.Title, &s.JoinCode, &s.Status, &s.AdmitMode,
-		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt)
+		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout,
+		&s.GroupsOpen, &s.GroupsCloseAt, &s.GroupsChoose, &s.GroupChat, &s.GroupMic, &s.GroupCamera, &s.GroupScreen, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s, web.ErrNotFound
 	}
@@ -108,13 +121,16 @@ type Participant struct {
 	HandAt      *time.Time `json:"hand_at,omitempty"`
 	FirstAt     time.Time  `json:"first_at"`
 	Online      bool       `json:"online"`
+	Visiting    *int64     `json:"visiting,omitempty"` // a teacher visiting a group (D-79)
+	Group       *int64     `json:"group,omitempty"`    // a student's breakout group (D-79)
 }
 
-const participantCols = `user_id, name, role, state, allow_mic, allow_camera, allow_screen, chat_muted, hand_at, first_at`
+const participantCols = `user_id, name, role, state, allow_mic, allow_camera, allow_screen, chat_muted, hand_at, first_at, visiting,
+	(SELECT gm.group_id FROM tutoring.group_members gm WHERE gm.session_id = tutoring.participants.session_id AND gm.user_id = tutoring.participants.user_id)`
 
 func scanParticipant(row pgx.Row) (Participant, error) {
 	var p Participant
-	err := row.Scan(&p.UserID, &p.Name, &p.Role, &p.State, &p.AllowMic, &p.AllowCamera, &p.AllowScreen, &p.ChatMuted, &p.HandAt, &p.FirstAt)
+	err := row.Scan(&p.UserID, &p.Name, &p.Role, &p.State, &p.AllowMic, &p.AllowCamera, &p.AllowScreen, &p.ChatMuted, &p.HandAt, &p.FirstAt, &p.Visiting, &p.Group)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, web.ErrNotFound
 	}
@@ -284,6 +300,10 @@ type View struct {
 	Waiting  int      `json:"waiting"`
 	Pinned   *Message `json:"pinned,omitempty"`
 	MediaURL string   `json:"media_url"`
+	// Breakout groups (D-79): all of them for teachers; for students their
+	// names and sizes, and who is in their own group.
+	Groups     []Group  `json:"groups"`
+	GroupMates []Person `json:"group_mates,omitempty"`
 }
 
 // Join enters a session by its code. The platform checks the classroom:
@@ -367,6 +387,10 @@ type MediaTokens struct {
 	URL   string `json:"url"`
 	Main  string `json:"main"`            // the broadcast everyone watches
 	Stage string `json:"stage,omitempty"` // backstage: students' tracks, for teachers only
+	// Group is the breakout group's room (D-79): a student's own group, or
+	// the one a teacher is visiting. Its members see and hear each other.
+	Group     string `json:"group,omitempty"`
+	GroupRoom string `json:"group_room,omitempty"`
 }
 
 // MediaToken lets an admitted person join the session's media rooms, with
@@ -396,7 +420,13 @@ func (s *Service) MediaToken(ctx context.Context, p authn.Person, sessionID stri
 		return out, err
 	}
 	if stage := stageSources(sess, me); me.Staff() || len(stage) > 0 {
-		out.Stage, err = s.media.Token(media.Grant{Room: stageRoom(sess.ID), Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: me.Staff(), Sources: stage})
+		if out.Stage, err = s.media.Token(media.Grant{Room: stageRoom(sess.ID), Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: me.Staff(), Sources: stage}); err != nil {
+			return out, err
+		}
+	}
+	if room := groupRoomOf(sess, me); room != "" {
+		out.GroupRoom = room
+		out.Group, err = s.media.Token(media.Grant{Room: room, Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: true, Sources: groupSources(sess, me)})
 	}
 	return out, err
 }
@@ -437,9 +467,17 @@ func (s *Service) End(ctx context.Context, p authn.Person, id string) error {
 	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.visits SET left_at=$2 WHERE session_id=$1 AND left_at IS NULL`, id, now); err != nil {
 		return err
 	}
+	gs, err := s.groups(ctx, s.pool, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.sessions SET groups_open=false, groups_close_at=NULL WHERE id=$1`, id); err != nil {
+		return err
+	}
 	// Browsers hear first, so they leave the media rooms themselves; then the
 	// rooms go, which stops anything still being sent.
 	s.hub.end(id)
+	s.endGroupRooms(ctx, id, gs)
 	for _, room := range []string{id, stageRoom(id)} {
 		if err := s.media.EndRoom(ctx, room); err != nil && !errors.Is(err, media.ErrNotInRoom) {
 			s.log.Warn("ending media room", "session", id, "room", room, "err", err)

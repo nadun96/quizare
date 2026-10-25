@@ -58,6 +58,25 @@ func run(log *slog.Logger) error {
 	if err := svc.CloseOpenVisits(ctx); err != nil {
 		return err
 	}
+	// Groups whose countdown ran out while it was down close now, and then
+	// whenever one is missed (D-79); each countdown also has its own timer.
+	if err := svc.CloseDueGroups(ctx); err != nil {
+		return err
+	}
+	go func() {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := svc.CloseDueGroups(ctx); err != nil {
+					log.Warn("closing groups", "err", err)
+				}
+			}
+		}
+	}()
 	srv := &http.Server{Addr: cfg.Listen, Handler: svc.Handler(keys, cfg.PlatformOrigin, pool), ReadHeaderTimeout: 10 * time.Second}
 	errCh := make(chan error, 1)
 	go func() {

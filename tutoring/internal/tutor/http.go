@@ -45,6 +45,18 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("PUT", "/broadcaster", h(s.hBroadcaster))
 			r.Method("POST", "/broadcast-answer", h(s.hBroadcastAnswer))
 			r.Method("POST", "/ask-answer", h(s.hAskAnswer))
+			// Breakout groups (D-79).
+			r.Method("PUT", "/groups", h(s.hForm))
+			r.Method("POST", "/groups/open", h(s.simple(s.OpenGroups)))
+			r.Method("POST", "/groups/close", h(s.hCloseGroups))
+			r.Method("PUT", "/groups/settings", h(s.hGroupSettings))
+			r.Method("POST", "/groups/announce", h(s.hAnnounce))
+			r.Method("PATCH", "/groups/{group}", h(s.hRenameGroup))
+			r.Method("DELETE", "/groups/{group}/help", h(s.hDismissHelp))
+			r.Method("PUT", "/participants/{user}/group", h(s.hMove))
+			r.Method("PUT", "/my-group", h(s.hChoose))
+			r.Method("PUT", "/visit", h(s.hVisit))
+			r.Method("PUT", "/help", h(s.hHelp))
 		})
 	}
 }
@@ -278,4 +290,128 @@ func (s *Service) hAttendance(w http.ResponseWriter, r *http.Request) error {
 	}
 	web.JSON(w, http.StatusOK, map[string]any{"attendance": list})
 	return nil
+}
+
+// ---------- breakout groups (D-79) ----------
+
+func groupParam(r *http.Request) (int64, error) {
+	n, err := strconv.ParseInt(chi.URLParam(r, "group"), 10, 64)
+	if err != nil {
+		return 0, web.ErrNotFound
+	}
+	return n, nil
+}
+
+func noContent(w http.ResponseWriter, err error) error {
+	if err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (s *Service) hForm(w http.ResponseWriter, r *http.Request) error {
+	var in FormInput
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	gs, err := s.Form(r.Context(), me(r), id(r), in)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"groups": gs})
+	return nil
+}
+
+func (s *Service) hCloseGroups(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Countdown int `json:"countdown"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.CloseGroups(r.Context(), me(r), id(r), in.Countdown))
+}
+
+func (s *Service) hGroupSettings(w http.ResponseWriter, r *http.Request) error {
+	var in GroupSettingsInput
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.GroupSettings(r.Context(), me(r), id(r), in))
+}
+
+func (s *Service) hAnnounce(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Text string `json:"text"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	m, err := s.Announce(r.Context(), me(r), id(r), in.Text)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusCreated, m)
+	return nil
+}
+
+func (s *Service) hRenameGroup(w http.ResponseWriter, r *http.Request) error {
+	g, err := groupParam(r)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.RenameGroup(r.Context(), me(r), id(r), g, in.Name))
+}
+
+func (s *Service) hDismissHelp(w http.ResponseWriter, r *http.Request) error {
+	g, err := groupParam(r)
+	if err != nil {
+		return err
+	}
+	return noContent(w, s.DismissHelp(r.Context(), me(r), id(r), g))
+}
+
+type groupIn struct {
+	GroupID int64 `json:"group_id"` // 0: none
+}
+
+func (s *Service) hMove(w http.ResponseWriter, r *http.Request) error {
+	var in groupIn
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.Move(r.Context(), me(r), id(r), chi.URLParam(r, "user"), in.GroupID))
+}
+
+func (s *Service) hChoose(w http.ResponseWriter, r *http.Request) error {
+	var in groupIn
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.Choose(r.Context(), me(r), id(r), in.GroupID))
+}
+
+func (s *Service) hVisit(w http.ResponseWriter, r *http.Request) error {
+	var in groupIn
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.Visit(r.Context(), me(r), id(r), in.GroupID))
+}
+
+func (s *Service) hHelp(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		On bool `json:"on"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.Help(r.Context(), me(r), id(r), in.On))
 }
