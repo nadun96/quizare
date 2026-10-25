@@ -32,7 +32,45 @@ export type View = {
 	finished: boolean;
 };
 
-export type MyPresentation = { id: string; title: string; classroom: string; slide_count: number; opens_at?: string; due_at?: string; started: boolean; reached: number; finished: boolean };
+export type MyPresentation = {
+	id: string;
+	title: string;
+	classroom: string;
+	slide_count: number;
+	opens_at?: string;
+	due_at?: string;
+	started: boolean;
+	reached: number;
+	finished: boolean;
+	live: boolean; // being presented now
+	published: boolean;
+};
+
+// Presenting live (D-77).
+export type Live = { id: string; presentation_id: string; code: string; slide: number; max_shown: number; allow_browse: boolean; started_at: string };
+export type LiveView = { presentation: { id: string; title: string; version: number; published: boolean }; slides: Slide[]; live: Live };
+export type Person = { user_id: string; name: string; slide: number; following: boolean; visible: boolean };
+export type Counts = { joined: number; following: number; looking_back: number; away: number };
+
+/** Where a student may go on their own while live: back to what's been shown, never ahead. */
+export function liveCanGo(l: Pick<Live, 'max_shown' | 'allow_browse'>, n: number): boolean {
+	return l.allow_browse && n >= 1 && n <= l.max_shown;
+}
+
+/** "12:05" since the start, or "1:02:05" past an hour. */
+export function elapsed(fromIso: string, now: number): string {
+	const s = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 1000));
+	const p = (n: number) => String(n).padStart(2, '0');
+	const h = Math.floor(s / 3600);
+	return h ? `${h}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}` : `${Math.floor(s / 60)}:${p(s % 60)}`;
+}
+
+/** A person in the audience, in a word for the presenter. */
+export function personState(p: Person, slide: number): string {
+	if (!p.visible) return 'Away from the page';
+	if (p.following) return 'Following';
+	return p.slide === slide ? 'On your slide' : `Looking at slide ${p.slide}`;
+}
 
 export const MAX_PDF_BYTES = 50 * 1024 * 1024;
 export const MAX_SLIDES = 300;
@@ -132,4 +170,72 @@ export async function uploadPdf(id: string, file: File, progress: (done: number,
 	} finally {
 		await doc.destroy();
 	}
+}
+
+// ---- PowerPoint through Google Drive, and time against marks (D-78) ----
+
+/** Files the browser renders itself, and ones Google Drive converts first. */
+export const PDF_TYPES = ['.pdf'];
+export const DECK_TYPES = ['.pptx', '.ppt', '.odp', '.key'];
+export const MAX_DECK_BYTES = 100 * 1024 * 1024;
+export const ACCEPT = [...PDF_TYPES, ...DECK_TYPES, 'application/pdf'].join(',');
+
+export function fileKind(name: string): 'pdf' | 'deck' | null {
+	const ext = name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? '';
+	if (PDF_TYPES.includes(ext)) return 'pdf';
+	if (DECK_TYPES.includes(ext)) return 'deck';
+	return null;
+}
+
+async function pdfFrom(res: Response, fallbackName: string): Promise<File> {
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new ApiError(res.status, data.code ?? 'error', data.fields?.file ?? data.message ?? 'Google Drive couldn’t convert it', data.fields ?? {});
+	}
+	const name = decodeURIComponent(res.headers.get('X-File-Name') ?? '') || fallbackName;
+	return new File([await res.blob()], name, { type: 'application/pdf' });
+}
+
+/** A PowerPoint, OpenDocument or Keynote file, as a PDF converted in the teacher's Google Drive. */
+export async function deckToPdf(file: File): Promise<File> {
+	if (file.size > MAX_DECK_BYTES) throw new Error('A presentation of at most 100 MB, please');
+	const res = await fetch('/api/teacher/drive/slides-pdf', {
+		method: 'POST', credentials: 'same-origin', body: file,
+		headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) }
+	});
+	return pdfFrom(res, file.name.replace(/\.[a-z0-9]+$/i, '') + '.pdf');
+}
+
+/** A presentation picked in Drive (Google Slides, a PDF or PowerPoint), as a PDF. */
+export async function drivePdf(fileId: string, name: string): Promise<File> {
+	const res = await fetch(`/api/teacher/drive/files/${encodeURIComponent(fileId)}/slides-pdf`, {
+		method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' }
+	});
+	return pdfFrom(res, name.replace(/\.[a-z0-9]+$/i, '') + '.pdf');
+}
+
+export type Linkable = { kind: 'quiz' | 'tutorial'; id: string; title?: string };
+export type Links = { linked: Linkable[]; options: Linkable[] };
+export type Point = { user_id: string; name: string; seconds: number; seen: number; score_pct: number };
+export type Trend = { per_ten_minutes: number; intercept: number; r: number };
+export type SlideSplit = { n: number; text: string; median_seconds: number; longer_n: number; longer_pct?: number; shorter_n: number; shorter_pct?: number; skipped: number };
+export type Analysis = { linked: Linkable[]; points: Point[]; no_score: number; not_viewed: number; trend?: Trend; slides: SlideSplit[] };
+
+/** A round top for the time axis, in seconds, just above the largest value; quarters stay whole seconds. */
+export function niceSeconds(v: number): number {
+	for (const c of [20, 40, 60, 120, 240, 300, 600, 1200, 1800, 3600]) if (c >= v) return c;
+	return Math.ceil(v / 3600) * 3600;
+}
+
+/**
+ * The trend in a sentence a teacher reads at a glance. It speaks only of the
+ * range the students' times cover, never beyond it.
+ */
+export function trendWords(t: Trend, fromSecs: number, toSecs: number, fmt: (secs: number) => string): string {
+	const r = Math.abs(t.r);
+	const strength = r >= 0.7 ? 'A strong' : r >= 0.4 ? 'A clear' : r >= 0.2 ? 'A loose' : '';
+	if (!strength || t.per_ten_minutes === 0 || toSecs <= fromSecs) return 'Time on the slides and score hardly go together here.';
+	const at = (secs: number) => Math.round(Math.min(100, Math.max(0, t.intercept + (t.per_ten_minutes / 600) * secs)));
+	const dir = t.per_ten_minutes > 0 ? 'higher' : 'lower';
+	return `${strength} link: students who spent longer scored ${dir}. Along the trend, from ${at(fromSecs)}% at ${fmt(fromSecs)} to ${at(toSecs)}% at ${fmt(toSecs)} (r = ${t.r.toFixed(2)}).`;
 }

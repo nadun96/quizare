@@ -157,6 +157,60 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		sendPDF(w, f)
 		return nil
 	}))
+	r.Method("GET", "/presentations/{id}/live", reply(200, func(w http.ResponseWriter, r *http.Request) (Live, error) {
+		return s.CurrentLive(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("POST", "/presentations/{id}/live", reply(200, func(w http.ResponseWriter, r *http.Request) (Live, error) {
+		return s.StartLive(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("PUT", "/presentations/{id}/live", reply(200, func(w http.ResponseWriter, r *http.Request) (Live, error) {
+		var in LiveInput
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return Live{}, err
+		}
+		return s.SetLive(r.Context(), uid(r), chi.URLParam(r, "id"), in)
+	}))
+	r.Method("POST", "/presentations/{id}/live/slide", reply(200, func(w http.ResponseWriter, r *http.Request) (Live, error) {
+		var in struct {
+			Slide int `json:"slide"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return Live{}, err
+		}
+		return s.ShowSlide(r.Context(), uid(r), chi.URLParam(r, "id"), in.Slide)
+	}))
+	r.Method("POST", "/presentations/{id}/live/end", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		if err := s.EndLive(r.Context(), uid(r), chi.URLParam(r, "id")); err != nil {
+			return err
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}))
+	r.Method("GET", "/presentations/{id}/links", reply(200, func(w http.ResponseWriter, r *http.Request) (Links, error) {
+		return s.Links(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("PUT", "/presentations/{id}/links", reply(200, func(w http.ResponseWriter, r *http.Request) (Links, error) {
+		var in struct {
+			Linked []Linkable `json:"linked"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return Links{}, err
+		}
+		return s.SetLinks(r.Context(), uid(r), chi.URLParam(r, "id"), in.Linked)
+	}))
+	r.Method("GET", "/presentations/{id}/analysis", reply(200, func(w http.ResponseWriter, r *http.Request) (Analysis, error) {
+		return s.Analysis(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("GET", "/presentations/{id}/report.csv", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		name, data, err := s.CSV(r.Context(), uid(r), chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".csv"}))
+		_, err = w.Write(data)
+		return err
+	}))
 	r.Method("GET", "/presentations/{id}/report", reply(200, func(w http.ResponseWriter, r *http.Request) (Report, error) {
 		return s.Report(r.Context(), uid(r), chi.URLParam(r, "id"))
 	}))
@@ -170,6 +224,13 @@ func (s *Service) StudentRoutes(r chi.Router) {
 	r.Method("GET", "/my/presentations", reply(200, func(w http.ResponseWriter, r *http.Request) (any, error) {
 		list, err := s.MyPresentations(r.Context(), uid(r))
 		return map[string]any{"presentations": list}, err
+	}))
+	r.Method("POST", "/presentations/{id}/live/join", reply(200, func(w http.ResponseWriter, r *http.Request) (LiveView, error) {
+		return s.JoinLive(r.Context(), uid(r), chi.URLParam(r, "id"))
+	}))
+	r.Method("GET", "/presentations/code/{code}", reply(200, func(w http.ResponseWriter, r *http.Request) (any, error) {
+		id, err := s.ByCode(r.Context(), uid(r), chi.URLParam(r, "code"))
+		return map[string]string{"id": id}, err
 	}))
 	r.Method("POST", "/presentations/{id}/open", reply(200, func(w http.ResponseWriter, r *http.Request) (View, error) {
 		return s.Open(r.Context(), uid(r), chi.URLParam(r, "id"))

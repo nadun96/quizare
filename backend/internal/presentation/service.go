@@ -45,14 +45,19 @@ type Users interface {
 }
 
 type Service struct {
-	pool   *pgxpool.Pool
-	topics Topics
-	users  Users
-	now    func() time.Time
+	pool    *pgxpool.Pool
+	topics  Topics
+	users   Users
+	baseURL string
+	hub     *liveHub
+	marks   Marks
+	now     func() time.Time
 }
 
-func NewService(pool *pgxpool.Pool, topics Topics, users Users) *Service {
-	return &Service{pool: pool, topics: topics, users: users, now: time.Now}
+func NewService(pool *pgxpool.Pool, topics Topics, users Users, baseURL string) *Service {
+	s := &Service{pool: pool, topics: topics, users: users, baseURL: strings.TrimRight(baseURL, "/"), now: time.Now}
+	s.hub = newLiveHub(s)
+	return s
 }
 
 // Presentation is a slide deck under a classroom topic.
@@ -254,10 +259,14 @@ func (s *Service) Delete(ctx context.Context, teacherID, id string) error {
 	if err != nil {
 		return err
 	}
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `DELETE FROM presentation.presentations WHERE id=$1`, id); err != nil {
 			return err
 		}
 		return audit.Log(ctx, tx, teacherID, "presentation_deleted", "presentation", id, map[string]string{"title": p.Title})
 	})
+	if err == nil {
+		s.hub.end(id)
+	}
+	return err
 }
