@@ -24,7 +24,7 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 		r.Route("/sessions/{id}", func(r chi.Router) {
 			r.Method("GET", "/", h(s.hView))
 			r.Method("POST", "/media-token", h(s.hMediaToken))
-			r.Method("POST", "/start", h(s.simple(s.Start)))
+			r.Method("POST", "/start", h(s.hStart))
 			r.Method("POST", "/end", h(s.simple(s.End)))
 			r.Method("PUT", "/settings", h(s.hSettings))
 			r.Method("POST", "/admit", h(s.hAdmit))
@@ -64,7 +64,19 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("POST", "/recordings/{rec}/pause", h(s.hPauseRecording))
 			r.Method("POST", "/recordings/{rec}/stop", h(s.hStopRecording))
 			r.Method("PUT", "/recordings/{rec}/viewers", h(s.hRecordingViewers))
+			// The bandwidth budget (D-81).
+			r.Method("GET", "/plan", h(s.hPlan))
+			r.Method("PUT", "/plan", h(s.hSetPlan))
+			r.Method("GET", "/resources", h(s.hResources))
+			r.Method("POST", "/budget/track", h(s.hCheckTrack))
+			r.Method("POST", "/budget/restore", h(s.hRestore))
 		})
+		r.Method("POST", "/plans/estimate", h(s.hEstimatePlan))
+		r.Method("GET", "/plan-presets", h(s.hPresets))
+		r.Method("POST", "/plan-presets", h(s.hSavePreset))
+		r.Method("DELETE", "/plan-presets/{preset}", h(s.hDeletePreset))
+		r.Method("GET", "/admin/budget", h(s.hAdminBudget))
+		r.Method("PUT", "/admin/budget", h(s.hSetBudget))
 		r.Method("GET", "/my/recordings", h(s.hMyRecordings))
 		r.Method("POST", "/recordings/{rec}/link", h(s.hRecordingLink))
 		r.Method("DELETE", "/recordings/{rec}", h(s.hDeleteRecording))
@@ -553,4 +565,135 @@ func (s *Service) hRecordingLimit(w http.ResponseWriter, r *http.Request) error 
 
 func (s *Service) hAdminDeleteRecording(w http.ResponseWriter, r *http.Request) error {
 	return noContent(w, s.AdminDeleteRecording(r.Context(), me(r), rec(r)))
+}
+
+// ---------- the bandwidth budget (D-81) ----------
+
+// hStart takes an optional {"force": true}: start over the budget.
+func (s *Service) hStart(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Force bool `json:"force"`
+	}
+	if r.ContentLength != 0 {
+		if err := web.Decode(w, r, &in); err != nil {
+			return err
+		}
+	}
+	return noContent(w, s.Start(r.Context(), me(r), id(r), in.Force))
+}
+
+func (s *Service) hPlan(w http.ResponseWriter, r *http.Request) error {
+	v, err := s.PlanFor(r.Context(), me(r), id(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, v)
+	return nil
+}
+
+func (s *Service) hSetPlan(w http.ResponseWriter, r *http.Request) error {
+	var in Plan
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	v, err := s.SetPlan(r.Context(), me(r), id(r), in)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, v)
+	return nil
+}
+
+func (s *Service) hEstimatePlan(w http.ResponseWriter, r *http.Request) error {
+	var in Plan
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	v, err := s.EstimatePlan(r.Context(), me(r), in)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, v)
+	return nil
+}
+
+func (s *Service) hResources(w http.ResponseWriter, r *http.Request) error {
+	v, err := s.SessionResources(r.Context(), me(r), id(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, v)
+	return nil
+}
+
+func (s *Service) hCheckTrack(w http.ResponseWriter, r *http.Request) error {
+	var in TrackCheck
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	e, err := s.CheckTrack(r.Context(), me(r), id(r), in)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, e)
+	return nil
+}
+
+func (s *Service) hRestore(w http.ResponseWriter, r *http.Request) error {
+	var in RestoreInput
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.Restore(r.Context(), me(r), id(r), in))
+}
+
+func (s *Service) hPresets(w http.ResponseWriter, r *http.Request) error {
+	list, err := s.Presets(r.Context(), me(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"presets": list})
+	return nil
+}
+
+func (s *Service) hSavePreset(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Name string `json:"name"`
+		Plan Plan   `json:"plan"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	pr, err := s.SavePreset(r.Context(), me(r), in.Name, in.Plan)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, pr)
+	return nil
+}
+
+func (s *Service) hDeletePreset(w http.ResponseWriter, r *http.Request) error {
+	return noContent(w, s.DeletePreset(r.Context(), me(r), chi.URLParam(r, "preset")))
+}
+
+func (s *Service) hAdminBudget(w http.ResponseWriter, r *http.Request) error {
+	v, err := s.AdminBudget(r.Context(), me(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, v)
+	return nil
+}
+
+func (s *Service) hSetBudget(w http.ResponseWriter, r *http.Request) error {
+	var in Budget
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	b, err := s.SetBudget(r.Context(), me(r), in)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, b)
+	return nil
 }

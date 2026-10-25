@@ -462,33 +462,56 @@ type GroupSettingsInput struct {
 	Camera *bool `json:"group_camera,omitempty"`
 	Screen *bool `json:"group_screen,omitempty"`
 	Choose *bool `json:"groups_choose,omitempty"`
+	// Force turns video in open groups on over the budget, up to the hard cap (D-81).
+	Force bool `json:"force,omitempty"`
 }
 
 // GroupSettings changes them (the lead teacher's, PO-14); a change applies
-// at once in the open groups.
+// at once in the open groups. Turning on video in open groups is checked
+// against the bandwidth budget (TS-FR-32).
 func (s *Service) GroupSettings(ctx context.Context, p authn.Person, id string, in GroupSettingsInput) error {
-	if _, err := s.owned(ctx, p, id); err != nil {
-		return err
-	}
-	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.sessions SET group_chat=coalesce($2, group_chat), group_mic=coalesce($3, group_mic),
-		group_camera=coalesce($4, group_camera), group_screen=coalesce($5, group_screen), groups_choose=coalesce($6, groups_choose) WHERE id=$1`,
-		id, in.Chat, in.Mic, in.Camera, in.Screen, in.Choose); err != nil {
-		return err
-	}
-	s.logAction(ctx, id, p.ID, "group_settings_changed", nil, in)
-	sess, err := s.session(ctx, id)
+	sess, err := s.owned(ctx, p, id)
 	if err != nil {
 		return err
 	}
-	if sess.GroupsOpen {
-		rows, _ := s.pool.Query(ctx, `SELECT `+participantCols+` FROM tutoring.participants WHERE session_id=$1 AND role='student' AND state='admitted'`, id)
-		ps, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Participant, error) { return scanParticipant(r) })
-		if err != nil {
+	var add float64
+	if in.Camera != nil && *in.Camera && !sess.GroupCamera && sess.GroupsOpen {
+		if add, err = s.groupVideoCost(ctx, id); err != nil {
 			return err
 		}
-		for _, sp := range ps {
-			s.applyGroup(ctx, sess, sp)
+	}
+	if in.Screen != nil && *in.Screen && !sess.GroupScreen && sess.GroupsOpen {
+		var groups int
+		if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM tutoring.groups WHERE session_id=$1`, id).Scan(&groups); err != nil {
+			return err
 		}
+		add += float64(groups) * rateScreen * 4
+	}
+	if add > 0 {
+		if err := s.checkAdd(ctx, id, "video in groups", add, in.Force, "keep groups to voice and chat"); err != nil {
+			return err
+		}
+	}
+	// Turning one on again clears what the monitor switched off (D-81).
+	cleared := []string{} // not nil: x = ANY(NULL) would drop them all
+	if in.Camera != nil && *in.Camera {
+		cleared = append(cleared, stepGroupCamera)
+	}
+	if in.Screen != nil && *in.Screen {
+		cleared = append(cleared, stepGroupScreen)
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.sessions SET group_chat=coalesce($2, group_chat), group_mic=coalesce($3, group_mic),
+		group_camera=coalesce($4, group_camera), group_screen=coalesce($5, group_screen), groups_choose=coalesce($6, groups_choose),
+		auto_off=ARRAY(SELECT x FROM unnest(auto_off) x WHERE NOT x = ANY($7::text[])) WHERE id=$1`,
+		id, in.Chat, in.Mic, in.Camera, in.Screen, in.Choose, cleared); err != nil {
+		return err
+	}
+	s.logAction(ctx, id, p.ID, "group_settings_changed", nil, in)
+	if sess, err = s.session(ctx, id); err != nil {
+		return err
+	}
+	if err := s.applyGroups(ctx, sess); err != nil {
+		return err
 	}
 	s.hub.changed(id)
 	return nil

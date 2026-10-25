@@ -90,7 +90,39 @@ Everyone sees **● Recording** while it runs, including students in the waiting
 
 The service never re-encodes a recording. Each part is encrypted with AES-256-GCM (a key derived from the shared secret with HKDF; the recording's id and the part's number are bound in) and appended to `TUTOR_RECORDINGS_DIR/{id}.rec` (TS-NFR-24). Recordings play in the browser from 5-minute signed links (`/media/recordings/{id}?exp=…&sig=…`), since a `<video>` can't send a token; the platform's CSP needs the tutoring address in `media-src`. The session's teachers can watch; students only when the lead teacher chooses "Students too" (TS-FR-78). Only the lead teacher and the admin download. Students find recordings they may watch on their My page, and teachers find theirs on the Tutoring page.
 
-Each recording is deleted 2 days after it ends (PO-22), by a sweep every 30 s. All recordings together may use 5 GB by default; the admin's **Recordings** tab shows the space and every recording, deletes any, and changes the limit, up to the free disk space (PO-24, TS-FR-79). Teachers are told at 80 %, and a recording stops when the space is full.
+Each recording is deleted 2 days after it ends (PO-22), by a sweep every 30 s. All recordings together may use 5 GB by default; the admin's **Tutoring** tab shows the space and every recording, deletes any, and changes the limit, up to the free disk space (PO-24, TS-FR-79). Teachers are told at 80 %, and a recording stops when the space is full.
+
+## The bandwidth budget
+
+Live video costs the server upload: each track goes once to everyone who receives it. LiveKit doesn't report bandwidth per room, so the service estimates each live session's use every 2 seconds from what it publishes (`ListParticipants` on the broadcast, backstage and each group room) and how many receive it, at typical rates per receiver (D-81):
+
+| Track | Mbit/s per receiver |
+|---|---|
+| A readable screen (1080p, low frame rate) | 1.2 |
+| A smooth screen (higher frame rate) | 2.5 |
+| A camera | 0.4 |
+| A second screen or camera, as a thumbnail | 0.2 |
+| A voice | 0.04 |
+
+What students share backstage counts once per teacher; a group's tracks once per other member. Everything shown says "estimated".
+
+**The admin's budget** (the admin console's **Tutoring** tab, TS-FR-31): all sessions together (240 Mbit/s by default, PO-9), a hard limit nothing goes above (270), an optional share per session, how many screens and cameras the broadcaster may send (4), and how many students may share a camera or a screen at once (2, and never fewer, TS-FR-25). Changes apply at once. The tab also lists what each live session sends now.
+
+**Plans** (TS-FR-08). Each session has a plan: expected students, the broadcaster's screens and cameras, screen quality, students sharing and speaking at once, and cameras in groups. The default is a lecture: 30 students, one screen and a camera, two students sharing (about 56 Mbit/s). The Resources tab shows the forecast against what is free, with advice when it doesn't fit ("send no camera", "plan for at most 188 students"); teachers save plans they use often as presets.
+
+**Checks** (TS-FR-32). Starting a session, letting another student share a camera or screen, turning on video in open groups, and the broadcaster adding a screen or camera (`POST /api/sessions/{id}/budget/track`) are checked against the session's share of what's free. Over the budget, the teacher may go ahead anyway, up to the hard limit; each override is logged.
+
+**When it's over** (TS-FR-38). If all of tutoring stays over the budget for two checks in a row (over 3 s), the busiest session gives up one thing, then the next if it's still over, in this order:
+
+1. cameras and screens in breakout groups;
+2. students sharing a camera or screen, beyond the first two;
+3. the broadcaster's extra screens and cameras;
+4. the broadcaster's camera;
+5. the screen, down to 5 frames a second.
+
+LiveKit mutes the tracks at once, and the broadcaster's browser stops sending them. The teachers are told what was switched off and why, and the Resources tab lists it. Nothing comes back by itself (TS-FR-39): once tutoring is below 80 % of the budget, the teachers are told once, and turn each thing back on, which is checked against the budget again.
+
+The Resources tab (teachers, TS-FR-33) shows the session's use and its share, all of tutoring against the budget, what makes up the figure, and the plan.
 
 ## Layout
 
@@ -181,10 +213,10 @@ Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 s
 
 ## Tests
 
-- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout.
+- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit).
 - `backend/internal/tutorlink`: tokens, the internal API and every way a service token is refused.
 - `loadtest/tutoring-media.mjs`: LiveKit's capacity on this machine (D-58). Run it with nothing else busy: the simulated viewers share the machine's cores.
 
 ## Not yet
 
-Later phases add: the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
+Later phases add: monitoring the server's measured CPU and bandwidth, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.

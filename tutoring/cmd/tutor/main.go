@@ -70,6 +70,8 @@ func run(log *slog.Logger) error {
 	if err := svc.SweepRecordings(ctx); err != nil {
 		return err
 	}
+	// What live sessions send, against the bandwidth budget (D-81).
+	go svc.Monitor(ctx)
 	go func() {
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
