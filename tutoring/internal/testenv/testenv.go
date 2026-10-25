@@ -137,6 +137,17 @@ type Platform struct {
 	Categories map[string][]platform.Category
 	Calls      int
 	BadTokens  int
+	// Notices are the emails tutoring asked for (D-84).
+	Notices []platform.Notice
+}
+
+// TakeNotices returns and forgets the notices so far.
+func (p *Platform) TakeNotices() []platform.Notice {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := p.Notices
+	p.Notices = nil
+	return out
 }
 
 func (p *Platform) Enrol(classroom, student string) {
@@ -155,9 +166,38 @@ func (p *Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if _, err := jwt.Parse(raw, func(*jwt.Token) (any, error) { return Secret, nil }, jwt.WithIssuer("tutoring"), jwt.WithAudience("quiz-platform"),
 		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil ||
-		(r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher" && r.URL.Path != "/internal/tutoring/categories") {
+		(r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher" && r.URL.Path != "/internal/tutoring/categories" &&
+			r.URL.Path != "/internal/tutoring/classrooms" && r.URL.Path != "/internal/tutoring/notify") {
 		p.BadTokens++
 		w.WriteHeader(404)
+		return
+	}
+	switch r.URL.Path {
+	case "/internal/tutoring/classrooms":
+		var in struct {
+			UserID string `json:"user_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		out := []platform.Classroom{}
+		for c, t := range p.Teachers {
+			switch {
+			case t == in.UserID:
+				out = append(out, platform.Classroom{ID: c, Name: "Room " + c[:4], Role: "teacher"})
+			case p.Enrolled[c][in.UserID]:
+				out = append(out, platform.Classroom{ID: c, Name: "Room " + c[:4], Role: "student"})
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"classrooms": out})
+		return
+	case "/internal/tutoring/notify":
+		var n platform.Notice
+		_ = json.NewDecoder(r.Body).Decode(&n)
+		if _, ok := p.Teachers[n.ClassroomID]; !ok {
+			w.WriteHeader(404)
+			return
+		}
+		p.Notices = append(p.Notices, n)
+		_ = json.NewEncoder(w).Encode(map[string]int{"sent": 1})
 		return
 	}
 	if r.URL.Path == "/internal/tutoring/categories" {
@@ -356,6 +396,7 @@ func New(t testing.TB) *Env {
 	met := httptest.NewServer(e.Metrics)
 	t.Cleanup(met.Close)
 	e.Service.SetMetrics(met.URL + "/metrics")
+	e.Service.SetLinks(e.Origin)
 	e.RecordingsDir = t.TempDir()
 	if err := e.Service.SetRecordings(e.RecordingsDir, Secret); err != nil {
 		t.Fatal(err)

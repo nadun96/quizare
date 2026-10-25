@@ -315,6 +315,53 @@ func (s *Service) MyClassrooms(ctx context.Context, userID string, p page.Reques
 	return list, total, err
 }
 
+// TutoringClassroom is a classroom someone teaches or is actively enrolled
+// in, for tutoring's calendars and feeds (D-84).
+type TutoringClassroom struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"` // teacher or student
+}
+
+// TutoringClassrooms lists the classrooms, not archived, a user teaches or
+// is actively enrolled in.
+func (s *Service) TutoringClassrooms(ctx context.Context, userID string) ([]TutoringClassroom, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, name, 'teacher' FROM content.classrooms WHERE teacher_id=$1 AND archived_at IS NULL
+		UNION ALL
+		SELECT c.id, c.name, 'student' FROM content.enrolments e JOIN content.classrooms c ON c.id=e.classroom_id
+		WHERE e.user_id=$1 AND e.status='active' AND c.archived_at IS NULL`, userID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TutoringClassroom, error) {
+		var c TutoringClassroom
+		err := r.Scan(&c.ID, &c.Name, &c.Role)
+		return c, err
+	})
+	if out == nil {
+		out = []TutoringClassroom{}
+	}
+	return out, err
+}
+
+// ClassroomMembers returns a classroom's teacher and its actively enrolled
+// students, for tutoring's reminders (D-84).
+func (s *Service) ClassroomMembers(ctx context.Context, classroomID string) (string, []string, error) {
+	var teacher string
+	if err := s.pool.QueryRow(ctx, `SELECT teacher_id FROM content.classrooms WHERE id=$1`, classroomID).Scan(&teacher); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil, httpx.ErrNotFound
+		}
+		return "", nil, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT user_id::text FROM content.enrolments WHERE classroom_id=$1 AND status='active'`, classroomID)
+	if err != nil {
+		return "", nil, err
+	}
+	students, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	return teacher, students, err
+}
+
 // ClassroomAccess says how a user may take part in a classroom's tutoring
 // sessions (TS-FR-02, D-59): "teacher" for its teacher, "student" for an
 // active enrolment. Joining may enrol the student, as joining a quiz does

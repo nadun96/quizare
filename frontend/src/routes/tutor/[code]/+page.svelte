@@ -19,6 +19,7 @@
 	import GroupsPanel from '$lib/tutoring/GroupsPanel.svelte';
 	import RecordingsList from '$lib/tutoring/RecordingsList.svelte';
 	import ResourcesPanel from '$lib/tutoring/ResourcesPanel.svelte';
+	import SessionTiming from '$lib/tutoring/SessionTiming.svelte';
 	import { PresenterRecorder } from '$lib/tutoring/recorder.svelte';
 	import { sentence, withBudget } from '$lib/tutoring/budget';
 	import { broadcasterName, CHAT_MODES, groupNow, isBroadcaster, isStaffRole, LAYOUTS, publishTarget, secondsLeft, STEP_LABELS, type Attendee, type AutoOffStep, type ChatMessage, type Recording, type Resources, type TutoringSession, type TutoringView } from '$lib/tutoring/types';
@@ -385,7 +386,7 @@
 			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
 			{#if !closed && (media.state === 'reconnecting' || media.state === 'error' || media.state === 'disconnected')}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
 			{#if media.forceRelay}<span class="badge badge-soft" title="Opened with ?relay=1: video goes only through the relay on port 443">Relay only</span>{/if}
-			{#if live}<span class="badge badge-soft danger">● Live</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">Not started</span>{/if}
+			{#if live}<span class="badge badge-soft danger">● Live</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">{view.session.scheduled_at ? 'Starts ' + new Date(view.session.scheduled_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : 'Not started'}</span>{/if}
 			{#if view.recording}<span class="badge badge-error gap-1" role="status" title="Only the presenter’s screen and voice are recorded">{view.recording.status === 'paused' ? '❚❚ Recording paused' : '● Recording'}</span>{/if}
 			{#if teacher && live}
 				{#if recordingHere && recorder}
@@ -527,6 +528,12 @@
 				</aside>
 			</div>
 
+			{#if lead && view.session.status === 'open'}
+				<details class="card card-border bg-base-100 p-4" open={!!view.session.scheduled_at && Date.parse(view.session.scheduled_at) > now + 60 * 60_000}>
+					<summary class="font-semibold">Schedule{#if view.session.scheduled_at}{' '}<span class="font-normal small muted">· {new Date(view.session.scheduled_at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>{/if}</summary>
+					<div class="mt-3"><SessionTiming {client} session={view.session} /></div>
+				</details>
+			{/if}
 			{#if teacher}
 				<details class="card card-border bg-base-100 p-4">
 					<summary class="font-semibold">Joining and chat settings</summary>

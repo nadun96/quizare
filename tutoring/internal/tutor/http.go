@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -71,7 +72,16 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("POST", "/budget/track", h(s.hCheckTrack))
 			r.Method("POST", "/budget/restore", h(s.hRestore))
 			r.Method("POST", "/media-reconnected", h(s.simple(s.MediaReconnected)))
+			// Scheduling (D-84).
+			r.Method("PUT", "/timing", h(s.hSetTiming))
+			r.Method("POST", "/cancel", h(s.hCancel))
+			r.Method("GET", "/calendar.ics", h(s.hSessionICS))
 		})
+		r.Method("POST", "/schedule", h(s.hSchedule))
+		r.Method("GET", "/calendar", h(s.hCalendar))
+		r.Method("GET", "/my/feed", h(s.hFeed))
+		r.Method("POST", "/my/feed", h(s.hNewFeed))
+		r.Method("DELETE", "/my/feed", h(s.hRevokeFeed))
 		r.Method("POST", "/plans/estimate", h(s.hEstimatePlan))
 		r.Method("GET", "/plan-presets", h(s.hPresets))
 		r.Method("POST", "/plan-presets", h(s.hSavePreset))
@@ -711,4 +721,98 @@ func (s *Service) hSetBudget(w http.ResponseWriter, r *http.Request) error {
 	}
 	web.JSON(w, http.StatusOK, b)
 	return nil
+}
+
+// ---------- scheduling (D-84) ----------
+
+func (s *Service) hSchedule(w http.ResponseWriter, r *http.Request) error {
+	var in ScheduleInput
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	out, err := s.Schedule(r.Context(), me(r), in)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusCreated, out)
+	return nil
+}
+
+func (s *Service) hSetTiming(w http.ResponseWriter, r *http.Request) error {
+	var in TimingInput
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	sess, err := s.SetTiming(r.Context(), me(r), id(r), in)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, sess)
+	return nil
+}
+
+func (s *Service) hCancel(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Series bool `json:"series"`
+	}
+	if r.ContentLength != 0 {
+		if err := web.Decode(w, r, &in); err != nil {
+			return err
+		}
+	}
+	n, err := s.Cancel(r.Context(), me(r), id(r), in.Series)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]int{"cancelled": n})
+	return nil
+}
+
+func (s *Service) hCalendar(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	from, err1 := time.Parse(time.RFC3339, q.Get("from"))
+	to, err2 := time.Parse(time.RFC3339, q.Get("to"))
+	if err1 != nil || err2 != nil {
+		return web.Invalid(map[string]string{"from": "from and to, as RFC 3339 times"})
+	}
+	list, err := s.Calendar(r.Context(), me(r), from, to)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"sessions": list})
+	return nil
+}
+
+func (s *Service) hSessionICS(w http.ResponseWriter, r *http.Request) error {
+	body, code, err := s.SessionICS(r.Context(), me(r), id(r))
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", "tutoring-"+code+".ics"))
+	_, err = w.Write([]byte(body))
+	return err
+}
+
+func (s *Service) hFeed(w http.ResponseWriter, r *http.Request) error {
+	at, err := s.Feed(r.Context(), me(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"active": at != nil, "created_at": at})
+	return nil
+}
+
+func (s *Service) hNewFeed(w http.ResponseWriter, r *http.Request) error {
+	token, err := s.NewFeed(r.Context(), me(r))
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	web.JSON(w, http.StatusCreated, map[string]string{"path": "/feeds/" + token + ".ics"})
+	return nil
+}
+
+func (s *Service) hRevokeFeed(w http.ResponseWriter, r *http.Request) error {
+	return noContent(w, s.RevokeFeed(r.Context(), me(r)))
 }
