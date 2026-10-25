@@ -15,6 +15,7 @@
   .\scripts\start-local.ps1 -Build -Tutoring
   .\scripts\start-local.ps1 -Database qp_dev
   .\scripts\start-local.ps1 -Port 8180   # when Windows has reserved 8080 (netsh ... show excludedportrange)
+  .\scripts\start-local.ps1 -Port 8180 -Tutoring -TutorPort 8190
 #>
 param(
 	# The database the app uses; created if missing.
@@ -24,7 +25,9 @@ param(
 	# Also start LiveKit and the tutoring service (needs the files in local\, see HOW-TO-RUN.local.md).
 	[switch]$Tutoring,
 	# The server's port. Windows sometimes reserves a range that includes 8080 after a restart.
-	[int]$Port = 8080
+	[int]$Port = 8080,
+	# The tutoring service's port, with -Tutoring (the same reserved range can include 8090).
+	[int]$TutorPort = 8090
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -133,11 +136,12 @@ if ($Tutoring) {
 	$env:LIVEKIT_PUBLIC_URL = 'ws://127.0.0.1:7980'
 	$env:LIVEKIT_API_KEY = 'tutoring'
 	$env:LIVEKIT_API_SECRET_FILE = Join-Path $localDir 'livekit-keys.yaml'
-	$env:TUTOR_LISTEN = '127.0.0.1:8090'
+	$env:TUTOR_LISTEN = "127.0.0.1:$TutorPort"
+	$env:TUTOR_RECORDINGS_DIR = Join-Path $localDir 'recordings'
 	Write-Host '-> Starting the tutoring service'
 	$log = Start-Background $tutor $null (Join-Path $root 'tutoring') 'tutoring'
-	Wait-Until { Test-Health 'http://127.0.0.1:8090/healthz' } 30 'The tutoring service' $log
-	$env:QP_TUTORING_URL = 'http://localhost:8090'
+	Wait-Until { Test-Health "http://127.0.0.1:$TutorPort/healthz" } 30 'The tutoring service' $log
+	$env:QP_TUTORING_URL = "http://localhost:$TutorPort"
 	$env:QP_TUTORING_SECRET_FILE = Join-Path $localDir 'tutoring.secret'
 }
 
@@ -159,6 +163,6 @@ Write-Host "Running. Database: $Database" -ForegroundColor Green
 Write-Host "  App        http://localhost:$Port"
 Write-Host "  Docs       http://localhost:$Port/docs/overview"
 Write-Host "  API        http://localhost:$Port/api/docs"
-if ($Tutoring) { Write-Host '  Tutoring   http://localhost:8090/healthz' }
+if ($Tutoring) { Write-Host "  Tutoring   http://localhost:$TutorPort/healthz" }
 Write-Host "  Logs       $logs"
 Write-Host '  Stop with  .\scripts\stop-local.ps1'

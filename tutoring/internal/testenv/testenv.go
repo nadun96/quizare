@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,13 +128,15 @@ var Secret = bytes.Repeat([]byte{5}, 32)
 // Platform is a fake of the platform's internal API: classrooms with their
 // teacher and enrolled students.
 type Platform struct {
-	mu        sync.Mutex
-	Teachers  map[string]string          // classroom → teacher
-	Enrolled  map[string]map[string]bool // classroom → students
-	Archived  map[string]bool
-	Accounts  map[string]platform.Person // teacher accounts by email
-	Calls     int
-	BadTokens int
+	mu       sync.Mutex
+	Teachers map[string]string          // classroom → teacher
+	Enrolled map[string]map[string]bool // classroom → students
+	Archived map[string]bool
+	Accounts map[string]platform.Person // teacher accounts by email
+	// Categories of each classroom, with their students (D-79).
+	Categories map[string][]platform.Category
+	Calls      int
+	BadTokens  int
 }
 
 func (p *Platform) Enrol(classroom, student string) {
@@ -151,9 +154,27 @@ func (p *Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.Calls++
 	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if _, err := jwt.Parse(raw, func(*jwt.Token) (any, error) { return Secret, nil }, jwt.WithIssuer("tutoring"), jwt.WithAudience("quiz-platform"),
-		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil || (r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher") {
+		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil ||
+		(r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher" && r.URL.Path != "/internal/tutoring/categories") {
 		p.BadTokens++
 		w.WriteHeader(404)
+		return
+	}
+	if r.URL.Path == "/internal/tutoring/categories" {
+		var in struct {
+			ClassroomID string `json:"classroom_id"`
+			TeacherID   string `json:"teacher_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if p.Teachers[in.ClassroomID] != in.TeacherID {
+			w.WriteHeader(404)
+			return
+		}
+		cats := p.Categories[in.ClassroomID]
+		if cats == nil {
+			cats = []platform.Category{}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"categories": cats})
 		return
 	}
 	if r.URL.Path == "/internal/tutoring/teacher" {
@@ -200,25 +221,61 @@ type Call struct {
 type LiveKit struct {
 	mu     sync.Mutex
 	calls  []Call
-	Tracks map[string][]media.Track // identity → published tracks
+	Tracks map[string][]media.Track // identity → published tracks, in any room without its own
+	// rooms are the tracks of particular rooms (D-81): room → identity → tracks.
+	rooms map[string]map[string][]media.Track
+}
+
+// Publish sets what identity publishes in one room.
+func (l *LiveKit) Publish(room, identity string, tracks ...media.Track) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.rooms == nil {
+		l.rooms = map[string]map[string][]media.Track{}
+	}
+	if l.rooms[room] == nil {
+		l.rooms[room] = map[string][]media.Track{}
+	}
+	l.rooms[room][identity] = tracks
+}
+
+// Published is what identity publishes in a room now.
+func (l *LiveKit) Published(room, identity string) []media.Track {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.rooms[room][identity])
 }
 
 func (l *LiveKit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	method := strings.TrimPrefix(r.URL.Path, "/twirp/livekit.RoomService/")
 	var body map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	room, _ := body["room"].(string)
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.calls = append(l.calls, Call{method, body})
 	tracks := l.Tracks
-	l.mu.Unlock()
+	if rt, ok := l.rooms[room]; ok {
+		tracks = rt
+	}
 	w.Header().Set("Content-Type", "application/json")
-	if method == "ListParticipants" {
-		var ps []media.Participant
+	switch method {
+	case "ListParticipants":
+		ps := []media.Participant{}
 		for id, ts := range tracks {
 			ps = append(ps, media.Participant{Identity: id, Tracks: ts})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"participants": ps})
 		return
+	case "MutePublishedTrack":
+		if rt, ok := l.rooms[room]; ok {
+			who, _ := body["identity"].(string)
+			for i, t := range rt[who] {
+				if t.Sid == body["trackSid"] {
+					rt[who][i].Muted = true
+				}
+			}
+		}
 	}
 	_, _ = w.Write([]byte(`{}`))
 }
@@ -248,13 +305,16 @@ type Env struct {
 	LiveKit  *LiveKit
 	Origin   string
 	LKSecret []byte
-	seq      atomic.Int64
+	// RecordingsDir holds the recordings (D-80).
+	RecordingsDir string
+	seq           atomic.Int64
 }
 
 // New starts the service with fakes around it.
 func New(t testing.TB) *Env {
 	t.Helper()
-	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}, Accounts: map[string]platform.Person{}},
+	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}, Accounts: map[string]platform.Person{},
+		Categories: map[string][]platform.Category{}},
 		LiveKit: &LiveKit{Tracks: map[string][]media.Track{}}, Origin: "https://quiz.example.edu", LKSecret: []byte("livekit-secret-of-at-least-32-chars!!")}
 	plat := httptest.NewServer(e.Platform)
 	lk := httptest.NewServer(e.LiveKit)
@@ -263,6 +323,10 @@ func New(t testing.TB) *Env {
 	keys := authn.Keys{Secret: Secret}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.Service = tutor.New(e.Pool, platform.New(plat.URL, keys), media.New(lk.URL, "devkey", e.LKSecret), "wss://tutor.example.edu", log)
+	e.RecordingsDir = t.TempDir()
+	if err := e.Service.SetRecordings(e.RecordingsDir, Secret); err != nil {
+		t.Fatal(err)
+	}
 	e.Server = httptest.NewServer(e.Service.Handler(keys, e.Origin, e.Pool))
 	t.Cleanup(e.Server.Close)
 	return e

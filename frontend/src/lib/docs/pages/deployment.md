@@ -83,7 +83,7 @@ Tutoring (D-59) is a second service with LiveKit as its media server, on its own
   1. Create the shared secret: `openssl rand -hex 32 > /etc/quiz/tutoring.secret`, mode 0400. Give it to both services with `LoadCredential` and set `QP_TUTORING_URL=https://tutor.example.edu` and `QP_TUTORING_SECRET_FILE` for the platform.
   2. Create LiveKit's key file: `printf 'tutoring: %s\n' "$(openssl rand -hex 24)" > /etc/livekit/keys.yaml`, mode 0400. Run LiveKit 1.13.7 with `deploy/livekit.yaml`.
   3. Build `tutoring/` (`go build -o /srv/quiz-tutoring/tutor ./cmd/tutor`), create a `quiz-tutoring` user and database role, and install `deploy/quiz-tutoring.service`.
-  4. Add the `tutor.example.edu` block of `deploy/Caddyfile`, and its address to the platform's `connect-src`.
+  4. Add the `tutor.example.edu` block of `deploy/Caddyfile`, and its address to the platform's `connect-src` and `media-src` (recordings play from it, D-80).
   5. Open UDP 7882 and TCP 7881 in the firewall for media. Keep 7880 and 8090 closed: Caddy reaches them on loopback.
 - **Containers.** Set `QP_TUTORING_URL`, `QP_TUTORING_MEDIA_URL` (`wss://…`) and `QP_TUTOR_DOMAIN` in `.env`, then `docker compose --profile tls --profile tutoring up -d --build`. The app creates the shared secret in the `tutorsecrets` volume on first start and the tutoring service creates LiveKit's key file there; LiveKit starts once both exist. Caddy forwards `/rtc` to LiveKit and the rest to the tutoring service.
 - **Limits.** Tutoring and LiveKit have their own memory and CPU limits (TS-NFR-54); the bandwidth budget comes in a later phase.

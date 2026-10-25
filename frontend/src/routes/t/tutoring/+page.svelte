@@ -12,6 +12,8 @@
 	import SortHeader from '$lib/ui/SortHeader.svelte';
 	import { TutorClient, tutoringConfig } from '$lib/tutoring/client';
 	import type { TutoringSession } from '$lib/tutoring/types';
+	import MyRecordings from '$lib/tutoring/MyRecordings.svelte';
+	import { auth } from '$lib/session.svelte';
 
 	const ready = requireRole('teacher');
 	const client = new TutorClient();
@@ -108,5 +110,6 @@
 			</table>
 		</div>
 		<Pager {list} label="Tutoring sessions" />
+		<MyRecordings meId={auth.user?.id ?? ''} heading="Recordings" />
 	{/if}
 </div>

@@ -162,6 +162,11 @@ func (c *Client) Participants(ctx context.Context, room string) ([]Participant, 
 	return out.Participants, err
 }
 
+// MuteTrack mutes one published track (D-81: an extra screen or camera).
+func (c *Client) MuteTrack(ctx context.Context, room, identity, sid string) error {
+	return c.call(ctx, "MutePublishedTrack", room, map[string]any{"room": room, "identity": identity, "trackSid": sid, "muted": true}, nil)
+}
+
 // Mute mutes a person's published tracks of the given sources (TS-FR-23).
 func (c *Client) Mute(ctx context.Context, room, identity string, sources ...string) error {
 	ps, err := c.Participants(ctx, room)

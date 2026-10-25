@@ -19,10 +19,22 @@ export type TutoringSession = {
 	/** Shown only to the person asked to broadcast. */
 	broadcast_offer?: string;
 	layout: 'spotlight' | 'side' | 'grid';
+	/** Breakout groups (D-79). */
+	groups_open: boolean;
+	groups_close_at?: string;
+	groups_choose: boolean;
+	group_chat: boolean;
+	group_mic: boolean;
+	group_camera: boolean;
+	group_screen: boolean;
 	scheduled_at?: string;
 	created_at: string;
 	started_at?: string;
 	ended_at?: string;
+	/** What the session will use (TS-FR-08, D-81). */
+	plan: Plan;
+	/** What the service switched off to stay within the bandwidth budget (TS-FR-38). */
+	auto_off: AutoOffStep[];
 };
 
 export type TutoringParticipant = {
@@ -37,15 +49,21 @@ export type TutoringParticipant = {
 	hand_at?: string;
 	first_at: string;
 	online: boolean;
+	/** A student's breakout group, or the group a teacher is visiting (D-79). */
+	group?: number;
+	visiting?: number;
 };
+
+export type Group = { id: number; name: string; members: string[]; size: number; help_at?: string };
 
 export type ChatMessage = {
 	id: number;
 	user_id: string;
 	name: string;
 	from_teacher: boolean;
-	audience: 'everyone' | 'teachers' | 'one';
+	audience: 'everyone' | 'teachers' | 'one' | 'group';
 	to_user?: string;
+	group_id?: number;
 	text: string;
 	created_at: string;
 };
@@ -60,7 +78,25 @@ export type TutoringView = {
 	media_url: string;
 	/** The lead teacher and co-teachers (TS-FR-73). */
 	teachers: { id: string; name: string; role: 'teacher' | 'coteacher' }[];
+	/** The recording under way, shown to everyone (TS-FR-76, D-80). */
+	recording?: { id: string; status: 'recording' | 'paused'; started_by: string; started_by_name: string; started_at: string };
+	/** All groups for teachers; for students names and sizes, and who is in their own group. */
+	groups: Group[];
+	group_mates?: { id: string; name: string }[];
 };
+
+/** The breakout group whose room this person is in now: a student's own, or the one a teacher visits. */
+export function groupNow(v: TutoringView): Group | undefined {
+	if (!v.session.groups_open || v.session.status !== 'live') return undefined;
+	const id = isStaffRole(v.me.role) ? v.me.visiting : v.me.group;
+	return id ? v.groups.find((g) => g.id === id) : undefined;
+}
+
+/** Seconds until the groups close, when a countdown is running. */
+export function secondsLeft(closeAt: string | undefined, now: number): number | null {
+	if (!closeAt) return null;
+	return Math.max(0, Math.ceil((Date.parse(closeAt) - now) / 1000));
+}
 
 export const isStaffRole = (r?: string) => r === 'teacher' || r === 'coteacher';
 
@@ -74,7 +110,8 @@ export function isBroadcaster(v: TutoringView): boolean {
  * teachers. The lead teacher's microphone stays in the broadcast while
  * someone else broadcasts.
  */
-export function publishTarget(v: TutoringView): 'main' | 'stage' {
+export function publishTarget(v: TutoringView): 'main' | 'stage' | 'group' {
+	if (groupNow(v)) return 'group'; // in a breakout group, devices go to the group (D-79)
 	return isBroadcaster(v) || v.me.role === 'teacher' ? 'main' : 'stage';
 }
 
@@ -121,7 +158,122 @@ export function handQueue(ps: TutoringParticipant[]): TutoringParticipant[] {
 
 /** Whether a message is the student's question to the teacher, or a private reply. */
 export function audienceLabel(m: ChatMessage, meId: string): string {
+	if (m.audience === 'group') return 'group';
 	if (m.audience === 'teachers') return m.user_id === meId ? 'to the teacher' : 'question to teachers';
 	if (m.audience === 'one') return m.to_user === meId ? 'private, to you' : 'private';
 	return '';
+}
+
+/** A recording of a session (D-80): the presenter's screen and voice, kept 2 days. */
+export type Recording = {
+	id: string;
+	session_id: string;
+	session_title?: string;
+	started_by: string;
+	started_by_name: string;
+	status: 'recording' | 'paused' | 'stopped';
+	mime: string;
+	bytes: number;
+	chunks: number;
+	viewers: 'teachers' | 'students';
+	started_at: string;
+	ended_at?: string;
+	expires_at?: string;
+	/** This person leads the session (or is the admin): download, who watches, delete. */
+	lead: boolean;
+};
+
+/** "12 min", "1 h 05 min": how long a recording runs. */
+export function recordingLength(r: Pick<Recording, 'started_at' | 'ended_at'>, now = Date.now()): string {
+	const s = Math.max(0, Math.round(((r.ended_at ? Date.parse(r.ended_at) : now) - Date.parse(r.started_at)) / 1000));
+	if (s < 60) return `${s} s`;
+	const m = Math.round(s / 60);
+	return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
+
+// ---------- the bandwidth budget (D-81) ----------
+
+/** What a session will use (TS-FR-08). */
+export type Plan = {
+	students: number;
+	screens: number;
+	cameras: number;
+	quality: 'readable' | 'smooth';
+	student_mics: number;
+	student_cameras: number;
+	student_screens: number;
+	group_video: boolean;
+};
+
+export type Estimate = { mbps: number; items: { name: string; mbps: number }[] };
+
+export type Budget = {
+	total_mbps: number;
+	hard_cap_mbps: number;
+	session_mbps: number;
+	max_teacher_tracks: number;
+	max_student_cameras: number;
+	max_student_screens: number;
+};
+
+/** A plan, its forecast, and what's free for it now. */
+export type PlanView = { plan: Plan; forecast: Estimate; free_mbps: number; hard_free_mbps: number; limit_mbps: number; budget: Budget; fits: boolean; advice?: string[] };
+
+export type Preset = { id: string; name: string; plan: Plan };
+
+export type AutoOffStep = 'group_camera' | 'group_screen' | 'student_shares' | 'extra_tracks' | 'camera' | 'fps';
+
+/** What a session sends now, estimated, pushed to its teachers every 2 s (TS-FR-33). */
+export type Resources = {
+	load: Estimate & { viewers: number; tracks: number; screens: number; cameras: number; students_sharing: number };
+	total_mbps: number;
+	limit_mbps: number;
+	budget_mbps: number;
+	hard_cap_mbps: number;
+	plan: Estimate;
+	auto_off: AutoOffStep[];
+};
+
+export type BudgetOverview = {
+	budget: Budget;
+	total_mbps: number;
+	sessions: { id: string; title: string; teacher_name: string; mbps: number; viewers: number; auto_off: AutoOffStep[] }[];
+};
+
+/** What each switched-off step was, for "Turn back on". */
+export const STEP_LABELS: Record<AutoOffStep, string> = {
+	group_camera: 'Cameras in groups',
+	group_screen: 'Sharing screens in groups',
+	student_shares: 'More than two students sharing',
+	extra_tracks: 'Extra screens and cameras',
+	camera: 'The broadcaster’s camera',
+	fps: 'Full frame rate for the screen'
+};
+
+export const DEFAULT_PLAN: Plan = { students: 30, screens: 1, cameras: 1, quality: 'readable', student_mics: 2, student_cameras: 2, student_screens: 2, group_video: false };
+
+/** "12.4 Mbit/s"; small figures keep two decimals. */
+export function mbps(n: number): string {
+	return `${n < 10 ? n.toFixed(n < 1 ? 2 : 1) : Math.round(n)} Mbit/s`;
+}
+
+/** How full a meter is, and whether to warn (80 %) or alarm (over). */
+export function meter(used: number, limit: number): { pct: number; level: 'ok' | 'warn' | 'over' } {
+	if (limit <= 0) return { pct: used > 0 ? 100 : 0, level: used > 0 ? 'over' : 'ok' };
+	const pct = Math.round((used / limit) * 100);
+	return { pct: Math.min(100, pct), level: used > limit ? 'over' : pct >= 80 ? 'warn' : 'ok' };
+}
+
+/** Whether a refusal over the budget can be overridden ("…, or send it anyway"). */
+export function insistable(message: string): boolean {
+	return /\banyway$/.test(message);
+}
+
+/** When a recording is deleted, in words: "in 2 days", "in 5 hours". */
+export function deletedIn(expiresAt: string | undefined, now = Date.now()): string {
+	if (!expiresAt) return '';
+	const h = Math.max(0, (Date.parse(expiresAt) - now) / 3_600_000);
+	if (h >= 36) return `in ${Math.round(h / 24)} days`;
+	if (h >= 1) return `in ${Math.round(h)} hours`;
+	return 'within the hour';
 }

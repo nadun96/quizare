@@ -9,9 +9,12 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -28,6 +31,7 @@ import (
 type Platform interface {
 	Access(ctx context.Context, classroomID, userID string) (platform.Access, error)
 	Teacher(ctx context.Context, email string) (platform.Person, error)
+	Categories(ctx context.Context, classroomID, teacherID string) ([]platform.Category, error)
 }
 
 // Media is the media server's part (LiveKit).
@@ -35,8 +39,10 @@ type Media interface {
 	Token(g media.Grant) (string, error)
 	SetPermission(ctx context.Context, room, identity string, subscribe bool, sources []string) error
 	Mute(ctx context.Context, room, identity string, sources ...string) error
+	MuteTrack(ctx context.Context, room, identity, sid string) error
 	Remove(ctx context.Context, room, identity string) error
 	EndRoom(ctx context.Context, room string) error
+	Participants(ctx context.Context, room string) ([]media.Participant, error)
 }
 
 type Service struct {
@@ -47,10 +53,15 @@ type Service struct {
 	log      *slog.Logger
 	now      func() time.Time
 	hub      *hub
+	rec      *recordings // nil: recording is off (D-80)
+	// What each live session sends now, as the monitor last measured it (D-81).
+	loadMu sync.Mutex
+	load   map[string]Load
+	mon    monitorState
 }
 
 func New(pool *pgxpool.Pool, p Platform, m Media, mediaURL string, log *slog.Logger) *Service {
-	s := &Service{pool: pool, platform: p, media: m, mediaURL: mediaURL, log: log, now: time.Now}
+	s := &Service{pool: pool, platform: p, media: m, mediaURL: mediaURL, log: log, now: time.Now, load: map[string]Load{}, mon: monitorState{offered: map[string]bool{}}}
 	s.hub = newHub(s)
 	return s
 }
@@ -73,27 +84,56 @@ type Session struct {
 	PinnedID      *int64 `json:"pinned_id,omitempty"`
 	// BroadcasterID is who broadcasts when it isn't the lead teacher
 	// (TS-FR-17); BroadcastOffer is someone asked who hasn't answered.
-	BroadcasterID  *string    `json:"broadcaster_id,omitempty"`
-	BroadcastOffer *string    `json:"broadcast_offer,omitempty"`
-	Layout         string     `json:"layout"` // spotlight, side or grid (TS-FR-13)
-	ScheduledAt    *time.Time `json:"scheduled_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	StartedAt      *time.Time `json:"started_at,omitempty"`
-	EndedAt        *time.Time `json:"ended_at,omitempty"`
+	BroadcasterID  *string `json:"broadcaster_id,omitempty"`
+	BroadcastOffer *string `json:"broadcast_offer,omitempty"`
+	Layout         string  `json:"layout"` // spotlight, side or grid (TS-FR-13)
+	// Breakout groups (D-79): open or not, the countdown before they close,
+	// whether students pick their group, group chat, and what every student
+	// may also do in groups (TS-FR-53).
+	GroupsOpen    bool       `json:"groups_open"`
+	GroupsCloseAt *time.Time `json:"groups_close_at,omitempty"`
+	GroupsChoose  bool       `json:"groups_choose"`
+	GroupChat     bool       `json:"group_chat"`
+	GroupMic      bool       `json:"group_mic"`
+	GroupCamera   bool       `json:"group_camera"`
+	GroupScreen   bool       `json:"group_screen"`
+	ScheduledAt   *time.Time `json:"scheduled_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	StartedAt     *time.Time `json:"started_at,omitempty"`
+	EndedAt       *time.Time `json:"ended_at,omitempty"`
+	// The session's plan (TS-FR-08), and what the service switched off to
+	// stay within the bandwidth budget until a teacher turns it back on
+	// (TS-FR-38, TS-FR-39, D-81).
+	Plan    Plan     `json:"plan"`
+	AutoOff []string `json:"auto_off"`
 }
 
 const sessionCols = `id, teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, status, admit_mode, locked, chat_mode,
-	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, scheduled_at, created_at, started_at, ended_at`
+	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, groups_open, groups_close_at, groups_choose, group_chat,
+	group_mic, group_camera, group_screen, scheduled_at, created_at, started_at, ended_at, plan, auto_off`
 
 func scanSession(row pgx.Row) (Session, error) {
 	var s Session
+	var plan []byte
 	err := row.Scan(&s.ID, &s.TeacherID, &s.TeacherName, &s.ClassroomID, &s.ClassroomName, &s.Title, &s.JoinCode, &s.Status, &s.AdmitMode,
-		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt)
+		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout,
+		&s.GroupsOpen, &s.GroupsCloseAt, &s.GroupsChoose, &s.GroupChat, &s.GroupMic, &s.GroupCamera, &s.GroupScreen, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt,
+		&plan, &s.AutoOff)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s, web.ErrNotFound
 	}
+	s.Plan = DefaultPlan
+	if s.AutoOff == nil {
+		s.AutoOff = []string{}
+	}
+	if err == nil && len(plan) > 2 {
+		err = json.Unmarshal(plan, &s.Plan)
+	}
 	return s, err
 }
+
+// off says whether the service switched this off (D-81).
+func (s Session) off(step string) bool { return slices.Contains(s.AutoOff, step) }
 
 // Participant is one person in a session and what they may do.
 type Participant struct {
@@ -108,13 +148,16 @@ type Participant struct {
 	HandAt      *time.Time `json:"hand_at,omitempty"`
 	FirstAt     time.Time  `json:"first_at"`
 	Online      bool       `json:"online"`
+	Visiting    *int64     `json:"visiting,omitempty"` // a teacher visiting a group (D-79)
+	Group       *int64     `json:"group,omitempty"`    // a student's breakout group (D-79)
 }
 
-const participantCols = `user_id, name, role, state, allow_mic, allow_camera, allow_screen, chat_muted, hand_at, first_at`
+const participantCols = `user_id, name, role, state, allow_mic, allow_camera, allow_screen, chat_muted, hand_at, first_at, visiting,
+	(SELECT gm.group_id FROM tutoring.group_members gm WHERE gm.session_id = tutoring.participants.session_id AND gm.user_id = tutoring.participants.user_id)`
 
 func scanParticipant(row pgx.Row) (Participant, error) {
 	var p Participant
-	err := row.Scan(&p.UserID, &p.Name, &p.Role, &p.State, &p.AllowMic, &p.AllowCamera, &p.AllowScreen, &p.ChatMuted, &p.HandAt, &p.FirstAt)
+	err := row.Scan(&p.UserID, &p.Name, &p.Role, &p.State, &p.AllowMic, &p.AllowCamera, &p.AllowScreen, &p.ChatMuted, &p.HandAt, &p.FirstAt, &p.Visiting, &p.Group)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, web.ErrNotFound
 	}
@@ -166,6 +209,7 @@ type CreateInput struct {
 	Title       string     `json:"title"`
 	AdmitMode   string     `json:"admit_mode"`
 	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
+	Plan        *Plan      `json:"plan,omitempty"` // the lecture default when left out
 }
 
 // Create makes a session for one of the teacher's classrooms (TS-FR-01).
@@ -184,6 +228,18 @@ func (s *Service) Create(ctx context.Context, p authn.Person, in CreateInput) (S
 	if len(f) > 0 {
 		return Session{}, web.Invalid(f)
 	}
+	plan := DefaultPlan
+	if in.Plan != nil {
+		b, err := s.budget(ctx)
+		if err != nil {
+			return Session{}, err
+		}
+		if err := in.Plan.clean(b); err != nil {
+			return Session{}, err
+		}
+		plan = *in.Plan
+	}
+	planRaw, _ := json.Marshal(plan)
 	a, err := s.platform.Access(ctx, in.ClassroomID, p.ID)
 	if err != nil {
 		return Session{}, err
@@ -195,8 +251,8 @@ func (s *Service) Create(ctx context.Context, p authn.Person, in CreateInput) (S
 		return Session{}, web.Conflict("this classroom is archived")
 	}
 	for range 5 {
-		sess, err := scanSession(s.pool.QueryRow(ctx, `INSERT INTO tutoring.sessions (teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, admit_mode, scheduled_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING `+sessionCols, p.ID, p.Name, a.ClassroomID, a.ClassroomName, in.Title, newCode(), in.AdmitMode, in.ScheduledAt))
+		sess, err := scanSession(s.pool.QueryRow(ctx, `INSERT INTO tutoring.sessions (teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, admit_mode, scheduled_at, plan)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+sessionCols, p.ID, p.Name, a.ClassroomID, a.ClassroomName, in.Title, newCode(), in.AdmitMode, in.ScheduledAt, planRaw))
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
 			continue // the join code was taken
@@ -284,6 +340,13 @@ type View struct {
 	Waiting  int      `json:"waiting"`
 	Pinned   *Message `json:"pinned,omitempty"`
 	MediaURL string   `json:"media_url"`
+	// Recording is shown to everyone while the presenter is recorded,
+	// including students waiting to be let in (TS-FR-76, D-80).
+	Recording *RecordingState `json:"recording,omitempty"`
+	// Breakout groups (D-79): all of them for teachers; for students their
+	// names and sizes, and who is in their own group.
+	Groups     []Group  `json:"groups"`
+	GroupMates []Person `json:"group_mates,omitempty"`
 }
 
 // Join enters a session by its code. The platform checks the classroom:
@@ -367,6 +430,10 @@ type MediaTokens struct {
 	URL   string `json:"url"`
 	Main  string `json:"main"`            // the broadcast everyone watches
 	Stage string `json:"stage,omitempty"` // backstage: students' tracks, for teachers only
+	// Group is the breakout group's room (D-79): a student's own group, or
+	// the one a teacher is visiting. Its members see and hear each other.
+	Group     string `json:"group,omitempty"`
+	GroupRoom string `json:"group_room,omitempty"`
 }
 
 // MediaToken lets an admitted person join the session's media rooms, with
@@ -396,21 +463,41 @@ func (s *Service) MediaToken(ctx context.Context, p authn.Person, sessionID stri
 		return out, err
 	}
 	if stage := stageSources(sess, me); me.Staff() || len(stage) > 0 {
-		out.Stage, err = s.media.Token(media.Grant{Room: stageRoom(sess.ID), Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: me.Staff(), Sources: stage})
+		if out.Stage, err = s.media.Token(media.Grant{Room: stageRoom(sess.ID), Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: me.Staff(), Sources: stage}); err != nil {
+			return out, err
+		}
+	}
+	if room := groupRoomOf(sess, me); room != "" {
+		out.GroupRoom = room
+		out.Group, err = s.media.Token(media.Grant{Room: room, Identity: p.ID, Name: me.Name, Metadata: string(meta), Subscribe: true, Sources: groupSources(sess, me)})
 	}
 	return out, err
 }
 
 // ---------- the teacher's controls ----------
 
-// Start makes the session live (TS-FR-04).
-func (s *Service) Start(ctx context.Context, p authn.Person, id string) error {
+// Start makes the session live (TS-FR-04), when its plan fits what the
+// server has free (TS-FR-32). Force starts it over the budget, up to the
+// hard limit, which nothing goes above.
+func (s *Service) Start(ctx context.Context, p authn.Person, id string, force bool) error {
 	sess, err := s.owned(ctx, p, id)
 	if err != nil {
 		return err
 	}
 	if sess.Status != "open" {
 		return web.Conflict("the session has already started or ended")
+	}
+	pv, err := s.planView(ctx, sess, sess.Plan)
+	if err != nil {
+		return err
+	}
+	switch {
+	case pv.Forecast.Mbps > pv.HardFree:
+		return overBudget(fmt.Sprintf("its plan needs about %.0f Mbit/s and the server can give at most %.0f", pv.Forecast.Mbps, pv.HardFree), advise(sess.Plan, pv.HardFree)...)
+	case !pv.Fits && !force:
+		return overBudget(fmt.Sprintf("its plan needs about %.0f Mbit/s and %.0f are free", pv.Forecast.Mbps, pv.Limit), append(pv.Advice, "start anyway")...)
+	case !pv.Fits:
+		s.logAction(ctx, id, p.ID, "budget_overridden", nil, map[string]any{"start": pv.Forecast.Mbps})
 	}
 	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.sessions SET status='live', started_at=$2 WHERE id=$1`, id, s.now()); err != nil {
 		return err
@@ -437,9 +524,17 @@ func (s *Service) End(ctx context.Context, p authn.Person, id string) error {
 	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.visits SET left_at=$2 WHERE session_id=$1 AND left_at IS NULL`, id, now); err != nil {
 		return err
 	}
+	gs, err := s.groups(ctx, s.pool, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE tutoring.sessions SET groups_open=false, groups_close_at=NULL WHERE id=$1`, id); err != nil {
+		return err
+	}
 	// Browsers hear first, so they leave the media rooms themselves; then the
 	// rooms go, which stops anything still being sent.
 	s.hub.end(id)
+	s.endGroupRooms(ctx, id, gs)
 	for _, room := range []string{id, stageRoom(id)} {
 		if err := s.media.EndRoom(ctx, room); err != nil && !errors.Is(err, media.ErrNotInRoom) {
 			s.log.Warn("ending media room", "session", id, "room", room, "err", err)
@@ -564,6 +659,9 @@ func (s *Service) SetPermissions(ctx context.Context, p authn.Person, id string,
 	}
 	if !in.All && len(in.UserIDs) == 0 {
 		return 0, web.Invalid(map[string]string{"user_ids": "choose students, or everyone"})
+	}
+	if err := s.checkStudentShares(ctx, sess, in); err != nil {
+		return 0, err
 	}
 	rows, _ := s.pool.Query(ctx, `UPDATE tutoring.participants SET allow_mic=coalesce($3, allow_mic), allow_camera=coalesce($4, allow_camera),
 		allow_screen=coalesce($5, allow_screen), hand_at=CASE WHEN $6 THEN NULL ELSE hand_at END

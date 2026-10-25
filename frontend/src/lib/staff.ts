@@ -60,7 +60,7 @@ export function roleLabel(u: Person): string {
 	return u.manager && u.role !== 'manager' ? r + ' · manager' : r;
 }
 
-export type ConsoleTab = 'users' | 'usage' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'managers';
+export type ConsoleTab = 'users' | 'usage' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
 
 /** The admin console's tabs this person can open, in order. */
 export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
@@ -75,6 +75,8 @@ export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
 	if (can(u, 'audit')) tabs.push('audit');
 	if (can(u, 'storage') || can(u, 'cleanup')) tabs.push('storage');
 	if (can(u, 'backups')) tabs.push('backups');
+	// Every tutoring recording, and their space (D-80): admins only.
+	if (isAdmin(u)) tabs.push('recordings');
 	if (isAdmin(u)) tabs.push('managers');
 	return tabs;
 }

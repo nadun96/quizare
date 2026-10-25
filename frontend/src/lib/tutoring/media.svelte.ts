@@ -1,6 +1,8 @@
-// The session's media through LiveKit (D-58, D-60). Two rooms: the broadcast
-// everyone watches, where only the broadcaster publishes, and backstage,
-// where allowed students and co-teachers publish and only teachers watch.
+// The session's media through LiveKit (D-58, D-60, D-79). The broadcast
+// everyone watches, where only the broadcaster publishes; backstage, where
+// allowed students and co-teachers publish and only teachers watch; and,
+// while breakout groups are open, the person's group, whose members see and
+// hear each other.
 // LiveKit enforces both from the tokens; this file only follows them.
 // livekit-client is loaded only on the tutoring page (NFR-09). Devices start
 // only after the person's own click and the browser's prompt (PO-3).
@@ -16,12 +18,14 @@ export type Tile = {
 	local: boolean;
 	/** From backstage: seen by the teachers only. */
 	backstage: boolean;
+	/** From the breakout group's room (D-79). */
+	group: boolean;
 };
 
 export type MediaState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
-export type Tokens = { url: string; main: string; stage?: string };
+export type Tokens = { url: string; main: string; stage?: string; group?: string; group_room?: string };
 type LK = typeof import('livekit-client');
-type Which = 'main' | 'stage';
+type Which = 'main' | 'stage' | 'group';
 
 /** How long to wait before joining the video again after the connection is lost for good: 2 s, doubling, at most 30 s. */
 export function rejoinDelay(attempt: number): number {
@@ -42,6 +46,8 @@ export class SessionMedia {
 	/** The browser blocked sound until a click (autoplay rules). */
 	needsClick = $state(false);
 	hasStage = $state(false);
+	/** The breakout group room joined, if any. */
+	groupRoom = $state('');
 	private lk: LK | null = null;
 	private rooms: Partial<Record<Which, Room>> = {};
 	private audio = new Map<string, HTMLMediaElement>();
@@ -88,8 +94,9 @@ export class SessionMedia {
 		} else {
 			room.on(E.Disconnected, () => {
 				if (!current()) return;
-				delete this.rooms.stage;
-				this.hasStage = false;
+				delete this.rooms[which];
+				if (which === 'stage') this.hasStage = false;
+				else this.groupRoom = '';
 				this.refresh();
 			});
 		}
@@ -105,6 +112,7 @@ export class SessionMedia {
 		const old = Object.values(this.rooms);
 		this.rooms = {};
 		this.hasStage = false;
+		this.groupRoom = '';
 		for (const r of old) await r?.disconnect();
 		this.state = 'connecting';
 		this.error = '';
@@ -113,6 +121,10 @@ export class SessionMedia {
 			const main = await this.room('main', t.url, t.main);
 			if (t.stage) await this.room('stage', t.url, t.stage);
 			this.hasStage = !!this.rooms.stage;
+			if (t.group) {
+				await this.room('group', t.url, t.group);
+				this.groupRoom = t.group_room ?? '';
+			}
 			this.state = 'connected';
 			this.needsClick = !main.canPlaybackAudio;
 			this.readPermissions();
@@ -136,6 +148,17 @@ export class SessionMedia {
 		if (t.stage && !this.rooms.stage) {
 			await this.room('stage', t.url, t.stage);
 			this.hasStage = true;
+		}
+		// Into a group, out of one, or to another (D-79).
+		if ((t.group_room ?? '') !== this.groupRoom) {
+			const old = this.rooms.group;
+			delete this.rooms.group;
+			this.groupRoom = '';
+			if (old) await old.disconnect();
+			if (t.group) {
+				await this.room('group', t.url, t.group);
+				this.groupRoom = t.group_room ?? '';
+			}
 		}
 		this.readPermissions();
 	}
@@ -186,7 +209,7 @@ export class SessionMedia {
 	refresh() {
 		const tiles: Tile[] = [];
 		let mic = false;
-		for (const which of ['main', 'stage'] as const) {
+		for (const which of ['main', 'stage', 'group'] as const) {
 			const room = this.rooms[which];
 			if (!room) continue;
 			const add = (p: Participant, pub: TrackPublication, local: boolean) => {
@@ -200,7 +223,8 @@ export class SessionMedia {
 					source,
 					track: pub.track,
 					local,
-					backstage: which === 'stage'
+					backstage: which === 'stage',
+					group: which === 'group'
 				});
 			};
 			for (const pub of room.localParticipant.trackPublications.values()) {
@@ -226,11 +250,43 @@ export class SessionMedia {
 		this.refresh();
 	}
 
+	/** Screens are captured at 5 frames a second while the server is short of bandwidth (TS-FR-38, D-81). */
+	slowScreens = $state(false);
+
+	/**
+	 * Follows what the service switched off to stay within the budget: the
+	 * server has muted the tracks already; this stops sending them at all.
+	 */
+	async cutBack(step: string) {
+		const lp = this.rooms.main?.localParticipant;
+		if (!lp) return;
+		const pubs = [...lp.trackPublications.values()].filter((p) => p.kind === 'video' && p.track);
+		if (step === 'fps') {
+			this.slowScreens = true;
+			for (const p of pubs) if (p.source === 'screen_share') await p.track!.mediaStreamTrack.applyConstraints({ frameRate: { max: 5 } }).catch(() => {});
+			return;
+		}
+		// Keep the first screen and the first camera; or, for "camera", no camera.
+		const seen = new Set<string>();
+		for (const p of pubs) {
+			const extra = seen.has(p.source);
+			seen.add(p.source);
+			if ((step === 'extra_tracks' && extra) || (step === 'camera' && p.source === 'camera')) await this.stop({ key: 'main:' + p.trackSid, label: p.trackName, source: p.source as Tile['source'], backstage: false, group: false } as Tile);
+		}
+	}
+
+	/** The frame rate may go back up. */
+	async restoreFps() {
+		this.slowScreens = false;
+		const lp = this.rooms.main?.localParticipant;
+		for (const p of lp?.trackPublications.values() ?? []) if (p.source === 'screen_share' && p.kind === 'video' && p.track) await p.track.mediaStreamTrack.applyConstraints({ frameRate: { max: 15 } }).catch(() => {});
+	}
+
 	/** Adds one more screen, window or tab (TS-FR-10), with its sound where the browser offers it (TS-FR-12). */
 	async addScreen() {
 		const lk = this.lk!;
 		const lp = this.publisher;
-		const tracks: LocalTrack[] = await lk.createLocalScreenTracks({ audio: true, resolution: lk.ScreenSharePresets.h1080fps15.resolution });
+		const tracks: LocalTrack[] = await lk.createLocalScreenTracks({ audio: true, resolution: { ...lk.ScreenSharePresets.h1080fps15.resolution, frameRate: this.slowScreens ? 5 : 15 } });
 		const n = [...lp.trackPublications.values()].filter((p) => p.source === 'screen_share').length + 1;
 		for (const t of tracks) {
 			const pub = await lp.publishTrack(t, {
@@ -267,7 +323,7 @@ export class SessionMedia {
 
 	/** Stops one of this person's own tracks. */
 	async stop(tile: Tile) {
-		const room = this.rooms[tile.backstage ? 'stage' : 'main'];
+		const room = this.rooms[tile.group ? 'group' : tile.backstage ? 'stage' : 'main'];
 		const sid = tile.key.split(':')[1];
 		const pub = room?.localParticipant.trackPublications.get(sid);
 		if (room && pub?.track) {
@@ -287,6 +343,23 @@ export class SessionMedia {
 		this.refresh();
 	}
 
+	/**
+	 * What a recording keeps (D-80, TS-FR-77): the broadcaster's screen in the
+	 * broadcast, and their voice and screen sound there. Never cameras.
+	 */
+	presenterTracks(identity: string): { screen?: MediaStreamTrack; audio: MediaStreamTrack[] } {
+		const room = this.rooms.main;
+		const p = !room ? undefined : room.localParticipant.identity === identity ? room.localParticipant : room.remoteParticipants.get(identity);
+		const out: { screen?: MediaStreamTrack; audio: MediaStreamTrack[] } = { audio: [] };
+		for (const pub of p?.trackPublications.values() ?? []) {
+			const t = pub.track?.mediaStreamTrack;
+			if (!t || pub.isMuted || t.readyState !== 'live') continue;
+			if (pub.source === 'screen_share') out.screen ??= t;
+			else if (pub.source === 'microphone' || pub.source === 'screen_share_audio') out.audio.push(t);
+		}
+		return out;
+	}
+
 	/** Cameras the browser can see (labels appear once a permission was given). */
 	async cameras(): Promise<MediaDeviceInfo[]> {
 		const lk = (this.lk ??= await import('livekit-client'));
@@ -297,6 +370,7 @@ export class SessionMedia {
 		for (const r of Object.values(this.rooms)) await r?.disconnect();
 		this.rooms = {};
 		this.hasStage = false;
+		this.groupRoom = '';
 		this.clear();
 	}
 }

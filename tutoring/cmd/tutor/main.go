@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -58,6 +59,37 @@ func run(log *slog.Logger) error {
 	if err := svc.CloseOpenVisits(ctx); err != nil {
 		return err
 	}
+	// Groups whose countdown ran out while it was down close now, and then
+	// whenever one is missed (D-79); each countdown also has its own timer.
+	if err := svc.CloseDueGroups(ctx); err != nil {
+		return err
+	}
+	if err := svc.SetRecordings(cfg.RecordingsDir, cfg.Secret); err != nil {
+		return fmt.Errorf("TUTOR_RECORDINGS_DIR: %w", err)
+	}
+	if err := svc.SweepRecordings(ctx); err != nil {
+		return err
+	}
+	// What live sessions send, against the bandwidth budget (D-81).
+	go svc.Monitor(ctx)
+	go func() {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := svc.CloseDueGroups(ctx); err != nil {
+					log.Warn("closing groups", "err", err)
+				}
+				// Recordings 2 days past their end go; quiet recorders stop (D-80).
+				if err := svc.SweepRecordings(ctx); err != nil {
+					log.Warn("sweeping recordings", "err", err)
+				}
+			}
+		}
+	}()
 	srv := &http.Server{Addr: cfg.Listen, Handler: svc.Handler(keys, cfg.PlatformOrigin, pool), ReadHeaderTimeout: 10 * time.Second}
 	errCh := make(chan error, 1)
 	go func() {

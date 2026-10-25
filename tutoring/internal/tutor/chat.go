@@ -21,18 +21,19 @@ type Message struct {
 	UserID      string     `json:"user_id"`
 	Name        string     `json:"name"`
 	FromTeacher bool       `json:"from_teacher"`
-	Audience    string     `json:"audience"` // everyone, teachers (a student's question), one (a teacher's private reply)
+	Audience    string     `json:"audience"` // everyone, teachers (a student's question), one (a teacher's private reply), group
 	ToUser      *string    `json:"to_user,omitempty"`
+	GroupID     *int64     `json:"group_id,omitempty"` // a breakout group's chat (TS-FR-46)
 	Text        string     `json:"text"`
 	CreatedAt   time.Time  `json:"created_at"`
 	DeletedAt   *time.Time `json:"-"`
 }
 
-const messageCols = `id, user_id, name, from_teacher, audience, to_user, text, created_at, deleted_at`
+const messageCols = `id, user_id, name, from_teacher, audience, to_user, group_id, text, created_at, deleted_at`
 
 func scanMessage(row pgx.Row) (Message, error) {
 	var m Message
-	err := row.Scan(&m.ID, &m.UserID, &m.Name, &m.FromTeacher, &m.Audience, &m.ToUser, &m.Text, &m.CreatedAt, &m.DeletedAt)
+	err := row.Scan(&m.ID, &m.UserID, &m.Name, &m.FromTeacher, &m.Audience, &m.ToUser, &m.GroupID, &m.Text, &m.CreatedAt, &m.DeletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return m, web.ErrNotFound
 	}
@@ -51,7 +52,7 @@ func (m Message) visibleTo(userID, role string) bool {
 	case m.Audience == "one":
 		return m.ToUser != nil && *m.ToUser == userID
 	}
-	return false
+	return false // a group's messages go to its members separately (hub.chatGroup)
 }
 
 var (
@@ -64,6 +65,10 @@ type PostInput struct {
 	Text string `json:"text"`
 	// To: a teacher's private reply to one student (TS-FR-41).
 	To string `json:"to,omitempty"`
+	// Group: a student writes in their breakout group's chat; GroupID: a
+	// teacher writes in one group's chat (TS-FR-46).
+	Group   bool  `json:"group,omitempty"`
+	GroupID int64 `json:"group_id,omitempty"`
 }
 
 // Post sends a message within the session's chat mode.
@@ -82,6 +87,9 @@ func (s *Service) Post(ctx context.Context, p authn.Person, id string, in PostIn
 	text := strings.TrimSpace(in.Text)
 	if n := len([]rune(text)); n < 1 || n > 1000 {
 		return Message{}, web.Invalid(map[string]string{"text": "write 1 to 1,000 characters"})
+	}
+	if in.Group || in.GroupID != 0 {
+		return s.postGroup(ctx, sess, me, in, text)
 	}
 	audience := "everyone"
 	var to *string
@@ -141,7 +149,9 @@ func (s *Service) History(ctx context.Context, p authn.Person, id string, before
 		before = 1 << 62
 	}
 	rows, _ := s.pool.Query(ctx, `SELECT `+messageCols+` FROM tutoring.messages WHERE session_id=$1 AND id < $2 AND deleted_at IS NULL
-		AND ($3 OR audience='everyone' OR user_id=$4 OR to_user=$4) ORDER BY id DESC LIMIT $5`, id, before, me.Staff(), p.ID, limit)
+		AND ($3 OR audience='everyone' OR user_id=$4 OR to_user=$4
+			OR (audience='group' AND group_id = (SELECT group_id FROM tutoring.group_members WHERE session_id=$1 AND user_id=$4)))
+		ORDER BY id DESC LIMIT $5`, id, before, me.Staff(), p.ID, limit)
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Message, error) { return scanMessage(r) })
 	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
 		list[i], list[j] = list[j], list[i]
@@ -205,4 +215,59 @@ func (s *Service) MuteChat(ctx context.Context, p authn.Person, id, userID strin
 	s.logAction(ctx, id, p.ID, "chat_muted", &userID, map[string]bool{"muted": muted})
 	s.hub.changed(id)
 	return nil
+}
+
+// postGroup writes in a breakout group's chat (TS-FR-46, PO-14): a
+// student in their own group, on by default even when the main chat is
+// off, unless the lead teacher turned group chat off; a teacher in any
+// group. The group and the teachers see it, and students are told so.
+func (s *Service) postGroup(ctx context.Context, sess Session, me Participant, in PostInput, text string) (Message, error) {
+	if !sess.GroupsOpen {
+		return Message{}, errGroupsClosed
+	}
+	var gid int64
+	now := s.now()
+	if me.Staff() {
+		gid = in.GroupID
+		var ok bool
+		if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tutoring.groups WHERE session_id=$1 AND id=$2)`, sess.ID, gid).Scan(&ok); err != nil {
+			return Message{}, err
+		}
+		if !ok {
+			return Message{}, web.ErrNotFound
+		}
+	} else {
+		switch {
+		case me.Group == nil:
+			return Message{}, errNotInGroup
+		case !sess.GroupChat:
+			return Message{}, web.NewError(http.StatusForbidden, "group_chat_off", "chat in groups is off")
+		case me.ChatMuted:
+			return Message{}, errChatMuted
+		}
+		gid = *me.Group
+		var last *time.Time
+		if err := s.pool.QueryRow(ctx, `UPDATE tutoring.participants SET last_chat_at=$3 WHERE session_id=$1 AND user_id=$2
+			AND (last_chat_at IS NULL OR last_chat_at <= $3::timestamptz - make_interval(secs => $4::int)) RETURNING last_chat_at`, sess.ID, me.UserID, now, sess.SlowSeconds).Scan(&last); errors.Is(err, pgx.ErrNoRows) {
+			return Message{}, web.NewError(http.StatusTooManyRequests, "slow_mode", "slow mode is on: wait a moment before your next message")
+		} else if err != nil {
+			return Message{}, err
+		}
+	}
+	m, err := scanMessage(s.pool.QueryRow(ctx, `INSERT INTO tutoring.messages (session_id, user_id, name, from_teacher, audience, group_id, text, created_at)
+		VALUES ($1, $2, $3, $4, 'group', $5, $6, $7) RETURNING `+messageCols, sess.ID, me.UserID, me.Name, me.Staff(), gid, text, now))
+	if err != nil {
+		return m, err
+	}
+	rows, _ := s.pool.Query(ctx, `SELECT user_id::text FROM tutoring.group_members WHERE session_id=$1 AND group_id=$2`, sess.ID, gid)
+	members, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return m, err
+	}
+	set := map[string]bool{}
+	for _, u := range members {
+		set[u] = true
+	}
+	s.hub.chatGroup(sess.ID, m, set)
+	return m, nil
 }

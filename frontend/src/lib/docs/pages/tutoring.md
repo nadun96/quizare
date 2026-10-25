@@ -1,6 +1,6 @@
 # Tutoring sessions
 
-Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design), D-60 (backstage, the broadcaster, co-teachers).
+Code: `tutoring/` (a separate Go module and program, schema `tutoring`), `backend/internal/tutorlink` (the platform's side) and `frontend/src/lib/tutoring`, `frontend/src/routes/tutor`, `frontend/src/routes/t/tutoring`. Decisions: D-58 (LiveKit), D-59 (this design), D-60 (backstage, the broadcaster, co-teachers), D-79 (breakout groups), D-80 (recording).
 
 A tutoring session is a live online class in a desktop browser: the teacher broadcasts screens, cameras and voice to the class, students watch, chat and raise their hand, and speak or share only when the teacher allows it. It runs as its **own service** beside the quiz platform, so a busy or failing tutoring session can't slow down or stop a live quiz (ADR-18, PO-5).
 
@@ -71,6 +71,58 @@ LiveKit carries each change out at once: taking a source's permission away remov
 ## Co-teachers
 
 The lead teacher adds other teachers by their email (the platform confirms an active teacher account) (TS-FR-70). Co-teachers join with the link without being in the classroom, see the people panel and backstage, and admit, allow, mute, lower hands, moderate the chat and read attendance (TS-FR-71). Only the lead teacher starts and ends, locks, changes how students are admitted and the layout, removes students, chooses the broadcaster and adds or removes co-teachers. Co-teachers share backstage, where the teachers see them, and to the class only as the broadcaster (TS-FR-72). Students see who teaches: the lead teacher and co-teachers are named in the session's header (TS-FR-73).
+
+## Breakout groups
+
+The lead teacher makes groups (TS-FR-50): at random (a number of groups, or students per group), from the classroom's categories (the platform's `/internal/tutoring/categories`; a student in two goes to the first, the rest to "Others"), empty groups to fill by hand, or groups students choose themselves. Making groups again replaces them; they can be made before the session starts.
+
+Opening the groups (TS-FR-51) puts every placed student in their group's own media room (`{session}-g{group}`). Its members publish what they may in the main room plus what the lead teacher allows everyone in groups (microphones by default; cameras and screens when turned on, TS-FR-53), and they see and hear each other there, which TS-FR-37 allows within a group. Everyone stays in the main broadcast too, so the teacher can still speak to all groups at once; "Message to every group" also sends a chat announcement. Teachers visit a group by joining its room, where they are seen and heard (TS-FR-52), and move students between groups: the student leaves the old room at once (`RemoveParticipant`) and the page joins the new one. A student can ask for help (TS-FR-54); the teachers see it until they visit or dismiss it.
+
+Each group has its own chat (TS-FR-46, PO-14), on by default even when the main chat is off; the lead teacher can turn it off. A group's messages reach its members and the teachers, and students are told the teachers can read them.
+
+Closing brings everyone back, at once or after a countdown of up to 5 minutes that everyone sees; the group rooms then end. A countdown that runs out while the service is down is closed when it starts again (and a sweep every 30 s catches any missed one). Ending the session ends the group rooms too.
+
+## Recording
+
+The lead teacher or a co-teacher presses **Record** (TS-FR-75). The recording is made in that teacher's browser (`lib/tutoring/recorder.svelte.ts`), not on the server: every frame draws the current broadcaster's screen share onto a 1280×720 canvas (a card saying "isn't sharing a screen" when there is none), and their microphone and screen sound are mixed into one audio track, so it follows the broadcast as it changes hands (TS-FR-77). Cameras, other people's microphones, groups, chat and the whiteboard are never recorded. `MediaRecorder` makes WebM (or MP4) parts every 5 seconds, which are uploaded in order to `PUT /api/sessions/{id}/recordings/{rec}/chunks/{n}` (a retry of the same part is accepted). If that tab closes, what was uploaded is kept, and the service stops a recording that has been quiet for 2 minutes. The browser throttles a tab in the background, so the recording teacher should keep the session's tab in front.
+
+Everyone sees **● Recording** while it runs, including students in the waiting room, and the presenter is told their screen and voice are recorded (TS-FR-76); nobody is asked for consent (PO-21). Pause and resume keep the indicator.
+
+The service never re-encodes a recording. Each part is encrypted with AES-256-GCM (a key derived from the shared secret with HKDF; the recording's id and the part's number are bound in) and appended to `TUTOR_RECORDINGS_DIR/{id}.rec` (TS-NFR-24). Recordings play in the browser from 5-minute signed links (`/media/recordings/{id}?exp=…&sig=…`), since a `<video>` can't send a token; the platform's CSP needs the tutoring address in `media-src`. The session's teachers can watch; students only when the lead teacher chooses "Students too" (TS-FR-78). Only the lead teacher and the admin download. Students find recordings they may watch on their My page, and teachers find theirs on the Tutoring page.
+
+Each recording is deleted 2 days after it ends (PO-22), by a sweep every 30 s. All recordings together may use 5 GB by default; the admin's **Tutoring** tab shows the space and every recording, deletes any, and changes the limit, up to the free disk space (PO-24, TS-FR-79). Teachers are told at 80 %, and a recording stops when the space is full.
+
+## The bandwidth budget
+
+Live video costs the server upload: each track goes once to everyone who receives it. LiveKit doesn't report bandwidth per room, so the service estimates each live session's use every 2 seconds from what it publishes (`ListParticipants` on the broadcast, backstage and each group room) and how many receive it, at typical rates per receiver (D-81):
+
+| Track | Mbit/s per receiver |
+|---|---|
+| A readable screen (1080p, low frame rate) | 1.2 |
+| A smooth screen (higher frame rate) | 2.5 |
+| A camera | 0.4 |
+| A second screen or camera, as a thumbnail | 0.2 |
+| A voice | 0.04 |
+
+What students share backstage counts once per teacher; a group's tracks once per other member. Everything shown says "estimated".
+
+**The admin's budget** (the admin console's **Tutoring** tab, TS-FR-31): all sessions together (240 Mbit/s by default, PO-9), a hard limit nothing goes above (270), an optional share per session, how many screens and cameras the broadcaster may send (4), and how many students may share a camera or a screen at once (2, and never fewer, TS-FR-25). Changes apply at once. The tab also lists what each live session sends now.
+
+**Plans** (TS-FR-08). Each session has a plan: expected students, the broadcaster's screens and cameras, screen quality, students sharing and speaking at once, and cameras in groups. The default is a lecture: 30 students, one screen and a camera, two students sharing (about 56 Mbit/s). The Resources tab shows the forecast against what is free, with advice when it doesn't fit ("send no camera", "plan for at most 188 students"); teachers save plans they use often as presets.
+
+**Checks** (TS-FR-32). Starting a session, letting another student share a camera or screen, turning on video in open groups, and the broadcaster adding a screen or camera (`POST /api/sessions/{id}/budget/track`) are checked against the session's share of what's free. Over the budget, the teacher may go ahead anyway, up to the hard limit; each override is logged.
+
+**When it's over** (TS-FR-38). If all of tutoring stays over the budget for two checks in a row (over 3 s), the busiest session gives up one thing, then the next if it's still over, in this order:
+
+1. cameras and screens in breakout groups;
+2. students sharing a camera or screen, beyond the first two;
+3. the broadcaster's extra screens and cameras;
+4. the broadcaster's camera;
+5. the screen, down to 5 frames a second.
+
+LiveKit mutes the tracks at once, and the broadcaster's browser stops sending them. The teachers are told what was switched off and why, and the Resources tab lists it. Nothing comes back by itself (TS-FR-39): once tutoring is below 80 % of the budget, the teachers are told once, and turn each thing back on, which is checked against the budget again.
+
+The Resources tab (teachers, TS-FR-33) shows the session's use and its share, all of tutoring against the budget, what makes up the figure, and the plan.
 
 ## Layout
 
@@ -155,15 +207,16 @@ If Windows refuses the ports (`netsh interface ipv4 show excludedportrange proto
 | `LIVEKIT_PUBLIC_URL` | — | What browsers connect to, e.g. `wss://tutor.example.edu` |
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET_FILE` | — | LiveKit's key and its secret file: just the secret, or LiveKit's own `key: secret` key file |
 | `TUTOR_GENERATE_LIVEKIT_KEYS` | off | `1`: write the LiveKit key file on first start (containers) |
+| `TUTOR_RECORDINGS_DIR` | `data/recordings` | Where recordings are kept, encrypted (D-80); the systemd unit uses `/var/lib/quiz-tutoring/recordings`, containers `/var/lib/tutoring/recordings` |
 
 Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 show excludedportrange protocol=tcp`); run LiveKit on other ports then.
 
 ## Tests
 
-- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout.
+- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit).
 - `backend/internal/tutorlink`: tokens, the internal API and every way a service token is refused.
 - `loadtest/tutoring-media.mjs`: LiveKit's capacity on this machine (D-58). Run it with nothing else busy: the simulated viewers share the machine's cores.
 
 ## Not yet
 
-Later phases add: groups, recording, the bandwidth budget and admission control, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
+Later phases add: monitoring the server's measured CPU and bandwidth, scheduling and reminders, the whiteboard and polls inside a session, attendance reports for classrooms, and a TURN relay on port 443 for school firewalls.
