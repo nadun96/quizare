@@ -22,6 +22,8 @@ Environment=TUTOR_PLATFORM_ORIGIN=https://quiz.example.edu
 Environment=LIVEKIT_URL=http://127.0.0.1:7880
 Environment=LIVEKIT_PUBLIC_URL=wss://tutor.example.edu
 Environment=LIVEKIT_API_KEY=tutoring
+# LiveKit's Prometheus metrics (prometheus_port in livekit.yaml): measured bandwidth and CPU (D-82).
+Environment=LIVEKIT_METRICS_URL=http://127.0.0.1:6789/metrics
 # Recordings (D-80), encrypted; deleted 2 days after they end.
 StateDirectory=quiz-tutoring
 Environment=TUTOR_RECORDINGS_DIR=/var/lib/quiz-tutoring/recordings

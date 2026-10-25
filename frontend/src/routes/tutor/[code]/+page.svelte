@@ -229,6 +229,17 @@
 		}
 	}
 
+	// The video coming back after a drop counts as a reconnect, for the admin's monitoring (D-82).
+	let videoWasDown = false;
+	$effect(() => {
+		const st = media.state;
+		if (st === 'reconnecting' || st === 'disconnected' || st === 'error') videoWasDown = true;
+		else if (st === 'connected' && videoWasDown && view) {
+			videoWasDown = false;
+			client.post(`/api/sessions/${view.session.id}/media-reconnected`).catch(() => {});
+		}
+	});
+
 	// The video connection never came up, or LiveKit gave up reconnecting:
 	// join again, waiting longer each time (2 s doubling to 30 s).
 	let rejoins = 0;

@@ -12,3 +12,6 @@ rtc:
 key_file: /var/lib/tutoring/livekit-keys.yaml
 logging:
   level: info
+# Prometheus metrics for the tutoring service's monitoring (D-82); reached on
+# the compose network only (not published).
+prometheus_port: 6789

@@ -58,18 +58,9 @@
 		<h2 class="m-0 text-lg">Bandwidth</h2>
 		<p class="m-0">Live sessions send about <strong class="tabular">{mbps(ov.total_mbps)}</strong> of {mbps(ov.budget.total_mbps)} ({m.pct}%).{#if m.level === 'over'}{' '}<span class="text-error font-semibold">Over budget: the service is switching video off, starting with the busiest session.</span>{/if}</p>
 		<progress class="progress w-full" class:progress-warning={m.level === 'warn'} class:progress-error={m.level === 'over'} value={m.pct} max="100" aria-label="Tutoring against its budget"></progress>
-		{#if ov.sessions.length}
-			<table class="table table-sm">
-				<thead><tr><th>Session</th><th>Teacher</th><th class="text-right">Watching</th><th class="text-right">Sends (est.)</th><th>Switched off</th></tr></thead>
-				<tbody>
-					{#each ov.sessions as s (s.id)}
-						<tr><td>{s.title}</td><td>{s.teacher_name}</td><td class="tabular text-right">{s.viewers}</td><td class="tabular text-right">{mbps(s.mbps)}</td><td class="small">{s.auto_off.map((x) => STEP_LABELS[x]).join(', ')}</td></tr>
-					{/each}
-				</tbody>
-			</table>
-		{:else}
-			<p class="small muted m-0">No session is live.</p>
-		{/if}
+		{#each ov.sessions.filter((s) => s.auto_off.length) as s (s.id)}
+			<p class="small m-0"><strong>{s.title}</strong> ({s.teacher_name}): switched off {s.auto_off.map((x) => STEP_LABELS[x].toLowerCase()).join(', ')}.</p>
+		{/each}
 		<form class="budget" onsubmit={save}>
 			{#each fields as f (f.key)}
 				<label class="small">{f.label}
