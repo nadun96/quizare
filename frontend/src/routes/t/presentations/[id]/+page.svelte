@@ -6,7 +6,9 @@
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
 	import { fmtBytes } from '$lib/staff';
-	import { countPages, MAX_PDF_BYTES, slideAlt, uploadPdf, type Presentation, type Slide } from '$lib/presentation/presentation';
+	import { driveStatus, pickFiles } from '$lib/drive';
+	import PresentationAnalysis from '$lib/presentation/Analysis.svelte';
+	import { ACCEPT, countPages, deckToPdf, drivePdf, fileKind, MAX_PDF_BYTES, slideAlt, uploadPdf, type Presentation, type Slide } from '$lib/presentation/presentation';
 	import { duration, fromLocalInput, toLocalInput } from '$lib/tutorial/tutorial';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -16,20 +18,22 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { count } from '$lib/words';
 
-	type Student = { user_id: string; viewer_id?: string; name: string; student_number?: string; started: boolean; seen: number; seconds: number; current: number; finished: boolean };
-	type SlideViews = { n: number; text: string; viewers: number; median_seconds: number; total_seconds: number };
+	type Student = { user_id: string; viewer_id?: string; name: string; student_number?: string; started: boolean; seen: number; seconds: number; live_seconds: number; current: number; finished: boolean };
+	type SlideViews = { n: number; text: string; viewers: number; median_seconds: number; total_seconds: number; live_viewers: number; live_median_seconds: number };
 	type Report = { slides: SlideViews[]; students: Student[] };
-	type Detail = { viewer_id: string; name: string; slides: { n: number; seconds: number; first_at?: string }[] };
+	type Detail = { viewer_id: string; name: string; slides: { n: number; seconds: number; live_seconds: number; first_at?: string }[] };
 
 	const ready = requireRole('teacher');
 	const id = $derived(appPage.params.id ?? '');
 	let p = $state<Presentation | null>(null);
 	let slides = $state<Slide[]>([]);
-	let tab = $state<'slides' | 'settings' | 'students'>('slides');
+	let tab = $state<'slides' | 'settings' | 'students' | 'analysis'>('slides');
 	let errors = $state<Record<string, string>>({});
 
+	let liveNow = $state(false);
 	async function load() {
 		p = await api.get<Presentation>('/api/teacher/presentations/' + id);
+		liveNow = await api.get(`/api/teacher/presentations/${id}/live`).then(() => true, () => false);
 		slides = (await api.get<{ slides: Slide[] }>(`/api/teacher/presentations/${id}/slides`)).slides;
 	}
 	$effect(() => {
@@ -43,12 +47,46 @@
 	}
 
 	// ---- the file ----
+	// A PDF is turned into slides here; PowerPoint and Google Slides go
+	// through the teacher's Google Drive first (D-78).
 	let uploading = $state<{ done: number; total: number } | null>(null);
+	let converting = $state(false);
+	let drive = $state(false);
+	$effect(() => {
+		driveStatus().then((s) => (drive = s.connected && !s.reconnect), () => {});
+	});
 	async function choose(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		input.value = '';
-		if (!file || !p) return;
+		if (!file) return;
+		const kind = fileKind(file.name);
+		if (!kind) return toast('Choose a PDF, or a PowerPoint (.pptx, .ppt), OpenDocument or Keynote file', 'error');
+		if (kind === 'deck' && !drive) return toast('PowerPoint files go through Google Drive: connect it in Settings, or save the file as a PDF and upload that', 'error');
+		await convert(() => (kind === 'deck' ? deckToPdf(file) : Promise.resolve(file)));
+	}
+	async function fromDrive() {
+		try {
+			const [f] = await pickFiles({ kind: 'slides', title: 'Choose a presentation' });
+			if (f) await convert(() => drivePdf(f.id, f.name));
+		} catch (e) {
+			fail(e, 'Google Drive didn’t answer');
+		}
+	}
+	async function convert(get: () => Promise<File>) {
+		let file: File;
+		converting = true;
+		try {
+			file = await get();
+		} catch (e) {
+			return fail(e, 'Google Drive couldn’t convert it');
+		} finally {
+			converting = false;
+		}
+		await use(file);
+	}
+	async function use(file: File) {
+		if (!p) return;
 		if (file.size > MAX_PDF_BYTES) return toast('A PDF of at most 50 MB, please', 'error');
 		try {
 			if (p.slide_count) {
@@ -127,18 +165,22 @@
 			<h1 class="m-0">{p.title}</h1>
 			<span class="badge badge-soft" class:ok={p.status === 'published'}>{p.status === 'published' ? 'Published' : 'Draft'}</span>
 			<span class="spacer"></span>
+			{#if p.slide_count}<a class="btn" class:btn-error={liveNow} href={`/t/presentations/${id}/present`}><Icon name="play" size={16} />{liveNow ? 'Live now: back to presenting' : 'Present live'}</a>{/if}
 			{#if p.status === 'published'}<button class="btn" onclick={() => setStatus('draft')}>Unpublish</button>
 			{:else}<button class="btn btn-primary" disabled={!p.slide_count} onclick={() => setStatus('published')}><Icon name="check" size={16} />Publish to the class</button>{/if}
 		</div>
 		<div class="tabs tabs-border" role="tablist">
-			{#each [['slides', p.slide_count ? `Slides (${p.slide_count})` : 'Slides'], ['settings', 'Settings'], ['students', 'Students']] as [k, l] (k)}
+			{#each [['slides', p.slide_count ? `Slides (${p.slide_count})` : 'Slides'], ['settings', 'Settings'], ['students', 'Students'], ['analysis', 'Against marks']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
 
 		{#if tab === 'slides'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack gap-3">
-				{#if uploading}
+				{#if converting}
+					<p class="m-0 font-semibold"><span class="loading loading-spinner loading-xs"></span> Converting it in your Google Drive…</p>
+					<p class="small muted m-0">Google turns it into a PDF; the copy made in your Drive is deleted afterwards.</p>
+				{:else if uploading}
 					<p class="m-0 font-semibold">{uploading.total ? `Preparing slide ${Math.min(uploading.done + 1, uploading.total)} of ${uploading.total}…` : 'Reading the PDF…'}</p>
 					<progress class="progress progress-primary w-full" value={uploading.done} max={uploading.total || 1} aria-label="Upload progress"></progress>
 					<p class="small muted m-0">Keep this page open until it finishes. Students keep the current slides until then.</p>
@@ -148,12 +190,16 @@
 							<span class="flex-1 min-w-0"><Icon name="book" size={16} /> <strong>{p.file_name}</strong> <span class="small muted">· {count(p.slide_count, 'slide')} · {fmtBytes(p.file_bytes)}</span></span>
 							<a class="btn btn-sm btn-ghost" href={`/api/teacher/presentations/${id}/pdf`} download><Icon name="download" size={14} />PDF</a>
 						{:else}
-							<span class="flex-1">Upload a PDF. Each page becomes a slide. From PowerPoint or Google Slides, save or download it as a PDF first.</span>
+							<span class="flex-1">Upload a PDF{drive ? ' or PowerPoint file, or choose one in Google Drive' : ''}. Each page becomes a slide.</span>
 						{/if}
-						<label class="btn btn-sm" class:btn-primary={!p.slide_count}><Icon name="upload" size={14} />{p.slide_count ? 'Replace' : 'Upload a PDF'}
-							<input class="sr-only" type="file" accept=".pdf,application/pdf" onchange={choose} aria-label="Choose a PDF" /></label>
+						<label class="btn btn-sm" class:btn-primary={!p.slide_count}><Icon name="upload" size={14} />{p.slide_count ? 'Replace' : 'Upload'}
+							<input class="sr-only" type="file" accept={drive ? ACCEPT : '.pdf,application/pdf'} onchange={choose} aria-label="Choose a presentation file" /></label>
+						{#if drive}<button class="btn btn-sm" onclick={fromDrive}><Icon name="cloud" size={14} />From Drive</button>{/if}
 					</div>
-					<p class="small muted m-0">At most 50 MB and 300 pages. Your browser turns the pages into pictures, so this takes a moment for big files.</p>
+					<p class="small muted m-0">
+						PDF up to 50 MB and 300 pages; your browser turns the pages into pictures, so big files take a moment.
+						{#if drive}PowerPoint, OpenDocument, Keynote and Google Slides are converted in your Google Drive first.{:else}For PowerPoint or Google Slides, <a href="/t/settings">connect Google Drive</a>, or save the file as a PDF.{/if}
+					</p>
 				{/if}
 			</div>
 			{#if slides.length}
@@ -191,12 +237,14 @@
 				<p class="small muted m-0">Students are told that you see which slides they view and for how long.</p>
 				<div class="flex flex-wrap gap-2"><button class="btn btn-primary">Save settings</button><span class="spacer"></span><button type="button" class="btn btn-error btn-outline" onclick={remove}>Delete presentation</button></div>
 			</form>
+		{:else if tab === 'analysis'}
+			<PresentationAnalysis {id} />
 		{:else if tab === 'students'}
 			{#if !report}<Skeleton lines={4} />
 			{:else}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
-						<thead><tr><th>Student</th><th>Progress</th><th class="text-right">Slides seen</th><th class="text-right">Time</th><th><span class="sr-only">Actions</span></th></tr></thead>
+						<thead><tr><th>Student</th><th>Progress</th><th class="text-right">Slides seen</th><th class="text-right">Own pace</th><th class="text-right">Live</th><th><span class="sr-only">Actions</span></th></tr></thead>
 						<tbody>
 							{#each report.students as s (s.user_id)}
 								<tr>
@@ -204,9 +252,10 @@
 									<td><span class="badge badge-soft" class:ok={s.finished}>{progress(s)}</span></td>
 									<td class="text-right tabular">{s.started ? `${s.seen} of ${p.slide_count}` : '—'}</td>
 									<td class="text-right tabular">{s.started ? duration(s.seconds) : '—'}</td>
+									<td class="text-right tabular">{s.live_seconds ? duration(s.live_seconds) : '—'}</td>
 									<td>{#if s.viewer_id}<button class="btn btn-sm" onclick={() => openDetail(s)}>By slide</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="5" class="muted">No students in this classroom yet.</td></tr>{/each}
+							{:else}<tr><td colspan="6" class="muted">No students in this classroom yet.</td></tr>{/each}
 						</tbody>
 					</table>
 				</div>
@@ -215,10 +264,10 @@
 						<div class="flex items-center gap-2"><h3 class="m-0">{detail.name}, slide by slide</h3><span class="spacer"></span><IconBtn icon="x" label="Close" hint="Close the slide times" onclick={() => (detail = null)} /></div>
 						<div class="table-wrap">
 							<table class="table table-sm">
-								<thead><tr><th>Slide</th><th class="text-right">Time</th><th class="text-right">First seen</th></tr></thead>
+								<thead><tr><th>Slide</th><th class="text-right">Own pace</th><th class="text-right">Live</th><th class="text-right">First seen</th></tr></thead>
 								<tbody>
 									{#each detail.slides as st (st.n)}
-										<tr class:muted={!st.first_at}><td>{st.n}</td><td class="text-right tabular">{st.first_at ? duration(st.seconds) : '—'}</td>
+										<tr class:muted={!st.first_at}><td>{st.n}</td><td class="text-right tabular">{st.first_at ? duration(st.seconds) : '—'}</td><td class="text-right tabular">{st.live_seconds ? duration(st.live_seconds) : '—'}</td>
 											<td class="text-right small tabular">{st.first_at ? new Date(st.first_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not seen'}</td></tr>
 									{/each}
 								</tbody>
@@ -229,10 +278,10 @@
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table table-sm">
 						<caption class="text-left font-semibold pb-2">Each slide</caption>
-						<thead><tr><th>Slide</th><th class="text-right">Students</th><th class="text-right">Median time</th></tr></thead>
+						<thead><tr><th>Slide</th><th class="text-right">Students</th><th class="text-right">Median time</th><th class="text-right">Live: students</th><th class="text-right">Live: median</th></tr></thead>
 						<tbody>
 							{#each report.slides as sv (sv.n)}
-								<tr><td>{sv.n}{#if sv.text}<span class="small muted">{' · '}{sv.text.slice(0, 60)}</span>{/if}</td><td class="text-right tabular">{sv.viewers}</td><td class="text-right tabular">{sv.viewers ? duration(sv.median_seconds) : '—'}</td></tr>
+								<tr><td>{sv.n}{#if sv.text}<span class="small muted">{' · '}{sv.text.slice(0, 60)}</span>{/if}</td><td class="text-right tabular">{sv.viewers}</td><td class="text-right tabular">{sv.viewers ? duration(sv.median_seconds) : '—'}</td><td class="text-right tabular">{sv.live_viewers}</td><td class="text-right tabular">{sv.live_viewers ? duration(sv.live_median_seconds) : '—'}</td></tr>
 							{/each}
 						</tbody>
 					</table>

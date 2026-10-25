@@ -61,7 +61,9 @@ export const connectUrl = (next: string) => '/api/teacher/drive/connect?next=' +
 export const KINDS = {
 	any: '',
 	images: 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml',
-	questions: 'text/csv,application/vnd.google-apps.spreadsheet'
+	questions: 'text/csv,application/vnd.google-apps.spreadsheet',
+	// Presentations (D-78): Google Slides, PDFs, PowerPoint, OpenDocument.
+	slides: 'application/vnd.google-apps.presentation,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint,application/vnd.oasis.opendocument.presentation'
 } as const;
 export type PickKind = keyof typeof KINDS;
 

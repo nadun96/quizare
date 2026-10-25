@@ -1,12 +1,13 @@
 <script lang="ts">
-	// "Save to Drive" for a session's or a poll's results (D-71). Shown only
+	// "Save to Drive" for a session's or a poll's results (D-71), or a
+	// presentation's viewing records (D-78). Shown only
 	// to teachers who connected Drive; the last save is linked.
 	import { api, ApiError } from '../api';
 	import { driveStatus, type DriveExport } from '../drive';
 	import Icon from '../ui/Icon.svelte';
 	import { toast } from '../ui/toast.svelte';
 
-	let { kind, id, size = '' }: { kind: 'session' | 'poll'; id: string; size?: string } = $props();
+	let { kind, id, size = '' }: { kind: 'session' | 'poll' | 'presentation'; id: string; size?: string } = $props();
 	let connected = $state(false);
 	let saving = $state(false);
 	let last = $state<DriveExport | null>(null);
@@ -22,7 +23,7 @@
 	async function save() {
 		saving = true;
 		try {
-			last = await api.post<DriveExport>(`/api/teacher/${kind === 'poll' ? 'polls' : 'sessions'}/${id}/drive-export`);
+			last = await api.post<DriveExport>(`/api/teacher/${kind}s/${id}/drive-export`);
 			toast('Saved to Google Drive');
 		} catch (e) {
 			toast(e instanceof ApiError ? e.message : 'Could not save to Drive', 'error');
