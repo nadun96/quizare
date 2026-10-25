@@ -31,10 +31,11 @@ Without `QP_TEST_DATABASE_URL`, each test package starts its own embedded server
 .\scripts\start-local.ps1              # database, build, server: http://localhost:8080
 .\scripts\start-local.ps1 -Build       # also rebuild the frontend
 .\scripts\start-local.ps1 -Tutoring    # also LiveKit and the tutoring service (needs local\ set up)
+.\scripts\start-local.ps1 -Port 8180   # another port, when Windows has reserved 8080
 .\scripts\stop-local.ps1               # stop everything; -KeepDatabase leaves PostgreSQL running
 ```
 
-The app uses the `qp_demo` database by default (`-Database qp_dev` for another); it's created if missing. Running the start script again restarts the server on the new build. If PowerShell refuses to run scripts, use `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1`.
+The app uses the `qp_demo` database by default (`-Database qp_dev` for another); it's created if missing. Running the start script again restarts the server on the new build. If PowerShell refuses to run scripts, use `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1`. If the server stops with "bind: An attempt was made to access a socket in a way forbidden", Windows has reserved the port (often after a restart, for Hyper-V or WSL; `netsh interface ipv4 show excludedportrange protocol=tcp` lists the ranges): start it with `-Port 8180`.
 
 Or step by step:
 

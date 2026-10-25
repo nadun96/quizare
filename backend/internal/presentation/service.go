@@ -50,6 +50,7 @@ type Service struct {
 	users   Users
 	baseURL string
 	hub     *liveHub
+	marks   Marks
 	now     func() time.Time
 }
 

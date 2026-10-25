@@ -6,7 +6,9 @@
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
 	import { fmtBytes } from '$lib/staff';
-	import { countPages, MAX_PDF_BYTES, slideAlt, uploadPdf, type Presentation, type Slide } from '$lib/presentation/presentation';
+	import { driveStatus, pickFiles } from '$lib/drive';
+	import PresentationAnalysis from '$lib/presentation/Analysis.svelte';
+	import { ACCEPT, countPages, deckToPdf, drivePdf, fileKind, MAX_PDF_BYTES, slideAlt, uploadPdf, type Presentation, type Slide } from '$lib/presentation/presentation';
 	import { duration, fromLocalInput, toLocalInput } from '$lib/tutorial/tutorial';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -25,7 +27,7 @@
 	const id = $derived(appPage.params.id ?? '');
 	let p = $state<Presentation | null>(null);
 	let slides = $state<Slide[]>([]);
-	let tab = $state<'slides' | 'settings' | 'students'>('slides');
+	let tab = $state<'slides' | 'settings' | 'students' | 'analysis'>('slides');
 	let errors = $state<Record<string, string>>({});
 
 	let liveNow = $state(false);
@@ -45,12 +47,46 @@
 	}
 
 	// ---- the file ----
+	// A PDF is turned into slides here; PowerPoint and Google Slides go
+	// through the teacher's Google Drive first (D-78).
 	let uploading = $state<{ done: number; total: number } | null>(null);
+	let converting = $state(false);
+	let drive = $state(false);
+	$effect(() => {
+		driveStatus().then((s) => (drive = s.connected && !s.reconnect), () => {});
+	});
 	async function choose(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		input.value = '';
-		if (!file || !p) return;
+		if (!file) return;
+		const kind = fileKind(file.name);
+		if (!kind) return toast('Choose a PDF, or a PowerPoint (.pptx, .ppt), OpenDocument or Keynote file', 'error');
+		if (kind === 'deck' && !drive) return toast('PowerPoint files go through Google Drive: connect it in Settings, or save the file as a PDF and upload that', 'error');
+		await convert(() => (kind === 'deck' ? deckToPdf(file) : Promise.resolve(file)));
+	}
+	async function fromDrive() {
+		try {
+			const [f] = await pickFiles({ kind: 'slides', title: 'Choose a presentation' });
+			if (f) await convert(() => drivePdf(f.id, f.name));
+		} catch (e) {
+			fail(e, 'Google Drive didn’t answer');
+		}
+	}
+	async function convert(get: () => Promise<File>) {
+		let file: File;
+		converting = true;
+		try {
+			file = await get();
+		} catch (e) {
+			return fail(e, 'Google Drive couldn’t convert it');
+		} finally {
+			converting = false;
+		}
+		await use(file);
+	}
+	async function use(file: File) {
+		if (!p) return;
 		if (file.size > MAX_PDF_BYTES) return toast('A PDF of at most 50 MB, please', 'error');
 		try {
 			if (p.slide_count) {
@@ -134,14 +170,17 @@
 			{:else}<button class="btn btn-primary" disabled={!p.slide_count} onclick={() => setStatus('published')}><Icon name="check" size={16} />Publish to the class</button>{/if}
 		</div>
 		<div class="tabs tabs-border" role="tablist">
-			{#each [['slides', p.slide_count ? `Slides (${p.slide_count})` : 'Slides'], ['settings', 'Settings'], ['students', 'Students']] as [k, l] (k)}
+			{#each [['slides', p.slide_count ? `Slides (${p.slide_count})` : 'Slides'], ['settings', 'Settings'], ['students', 'Students'], ['analysis', 'Against marks']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
 
 		{#if tab === 'slides'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack gap-3">
-				{#if uploading}
+				{#if converting}
+					<p class="m-0 font-semibold"><span class="loading loading-spinner loading-xs"></span> Converting it in your Google Drive…</p>
+					<p class="small muted m-0">Google turns it into a PDF; the copy made in your Drive is deleted afterwards.</p>
+				{:else if uploading}
 					<p class="m-0 font-semibold">{uploading.total ? `Preparing slide ${Math.min(uploading.done + 1, uploading.total)} of ${uploading.total}…` : 'Reading the PDF…'}</p>
 					<progress class="progress progress-primary w-full" value={uploading.done} max={uploading.total || 1} aria-label="Upload progress"></progress>
 					<p class="small muted m-0">Keep this page open until it finishes. Students keep the current slides until then.</p>
@@ -151,12 +190,16 @@
 							<span class="flex-1 min-w-0"><Icon name="book" size={16} /> <strong>{p.file_name}</strong> <span class="small muted">· {count(p.slide_count, 'slide')} · {fmtBytes(p.file_bytes)}</span></span>
 							<a class="btn btn-sm btn-ghost" href={`/api/teacher/presentations/${id}/pdf`} download><Icon name="download" size={14} />PDF</a>
 						{:else}
-							<span class="flex-1">Upload a PDF. Each page becomes a slide. From PowerPoint or Google Slides, save or download it as a PDF first.</span>
+							<span class="flex-1">Upload a PDF{drive ? ' or PowerPoint file, or choose one in Google Drive' : ''}. Each page becomes a slide.</span>
 						{/if}
-						<label class="btn btn-sm" class:btn-primary={!p.slide_count}><Icon name="upload" size={14} />{p.slide_count ? 'Replace' : 'Upload a PDF'}
-							<input class="sr-only" type="file" accept=".pdf,application/pdf" onchange={choose} aria-label="Choose a PDF" /></label>
+						<label class="btn btn-sm" class:btn-primary={!p.slide_count}><Icon name="upload" size={14} />{p.slide_count ? 'Replace' : 'Upload'}
+							<input class="sr-only" type="file" accept={drive ? ACCEPT : '.pdf,application/pdf'} onchange={choose} aria-label="Choose a presentation file" /></label>
+						{#if drive}<button class="btn btn-sm" onclick={fromDrive}><Icon name="cloud" size={14} />From Drive</button>{/if}
 					</div>
-					<p class="small muted m-0">At most 50 MB and 300 pages. Your browser turns the pages into pictures, so this takes a moment for big files.</p>
+					<p class="small muted m-0">
+						PDF up to 50 MB and 300 pages; your browser turns the pages into pictures, so big files take a moment.
+						{#if drive}PowerPoint, OpenDocument, Keynote and Google Slides are converted in your Google Drive first.{:else}For PowerPoint or Google Slides, <a href="/t/settings">connect Google Drive</a>, or save the file as a PDF.{/if}
+					</p>
 				{/if}
 			</div>
 			{#if slides.length}
@@ -194,6 +237,8 @@
 				<p class="small muted m-0">Students are told that you see which slides they view and for how long.</p>
 				<div class="flex flex-wrap gap-2"><button class="btn btn-primary">Save settings</button><span class="spacer"></span><button type="button" class="btn btn-error btn-outline" onclick={remove}>Delete presentation</button></div>
 			</form>
+		{:else if tab === 'analysis'}
+			<PresentationAnalysis {id} />
 		{:else if tab === 'students'}
 			{#if !report}<Skeleton lines={4} />
 			{:else}

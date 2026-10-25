@@ -48,9 +48,13 @@ Both share the file with anyone who has the link, so students can open it withou
 
 On a quiz's **Import** tab, **Import from Google Drive** takes a CSV file or a Google Sheet, whose first sheet is read as CSV. The columns, checks and 2 MB limit are those of the CSV upload; rows with problems are listed.
 
+## Presentations
+
+On a presentation's **Slides** tab, teachers who connected Drive can upload a PowerPoint (.pptx, .ppt), OpenDocument (.odp) or Keynote file, or choose **From Drive** for Google Slides, a PDF or a PowerPoint file in their Drive (D-78). The platform puts an uploaded file in the teacher's Drive as Google Slides, exports it as a PDF, and deletes that copy; the browser then turns the PDF into slides as for any PDF. Files up to 100 MB go in; the PDF that comes out must be at most 50 MB. Exports over Drive's 10 MB export limit come through the file's export link instead. Without Drive, PowerPoint files must be saved as PDF first; nothing on the server converts them.
+
 ## Results
 
-**Save to Drive** on a session's results, or on a poll's results tab, uploads the same CSV as **Export CSV**, converted to a Google Sheet, into a folder named *Classroom Quiz results*. If that folder was deleted, the next save makes a new one.
+**Save to Drive** on a session's results, on a poll's results tab, or on a presentation's **Against marks** tab (its viewing records, D-78), uploads the same CSV as **Export CSV**, converted to a Google Sheet, into a folder named *Classroom Quiz results*. If that folder was deleted, the next save makes a new one.
 
 With **Results: After each session** in their Drive settings, a session's results are saved when it ends. The save is a background job that retries for about an hour if Google is unreachable, and saves once only. The settings page lists recent saves with links, including failed ones and why they failed.
 
