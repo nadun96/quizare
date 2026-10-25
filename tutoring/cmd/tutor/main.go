@@ -70,7 +70,9 @@ func run(log *slog.Logger) error {
 	if err := svc.SweepRecordings(ctx); err != nil {
 		return err
 	}
-	// What live sessions send, against the bandwidth budget (D-81).
+	// What live sessions send, against the bandwidth budget (D-81), with
+	// LiveKit's measured figures when its metrics are configured (D-82).
+	svc.SetMetrics(cfg.LiveKitMetricsURL)
 	go svc.Monitor(ctx)
 	go func() {
 		t := time.NewTicker(30 * time.Second)

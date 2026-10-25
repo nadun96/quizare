@@ -296,7 +296,36 @@ func (l *LiveKit) Calls(method string) []Call {
 	return out
 }
 
+// Metrics is a fake of LiveKit's Prometheus endpoint (D-82): counters a test moves on.
+type Metrics struct {
+	mu                         sync.Mutex
+	BytesIn, BytesOut, CPUSecs float64
+	Down                       bool // answers 503
+}
+
+// Add moves the counters on.
+func (m *Metrics) Add(in, out, cpu float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.BytesIn += in
+	m.BytesOut += out
+	m.CPUSecs += cpu
+}
+
+func (m *Metrics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Down {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	fmt.Fprintf(w, "# TYPE livekit_packet_bytes counter\nlivekit_packet_bytes{direction=\"incoming\",transmission=\"initial\"} %g\nlivekit_packet_bytes{direction=\"outgoing\",transmission=\"initial\"} %g\nprocess_cpu_seconds_total %g\n",
+		m.BytesIn, m.BytesOut, m.CPUSecs)
+}
+
 type Env struct {
+	// Metrics is LiveKit's Prometheus endpoint, as the monitor reads it (D-82).
+	Metrics  *Metrics
 	T        testing.TB
 	Pool     *pgxpool.Pool
 	Service  *tutor.Service
@@ -323,6 +352,10 @@ func New(t testing.TB) *Env {
 	keys := authn.Keys{Secret: Secret}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.Service = tutor.New(e.Pool, platform.New(plat.URL, keys), media.New(lk.URL, "devkey", e.LKSecret), "wss://tutor.example.edu", log)
+	e.Metrics = &Metrics{}
+	met := httptest.NewServer(e.Metrics)
+	t.Cleanup(met.Close)
+	e.Service.SetMetrics(met.URL + "/metrics")
 	e.RecordingsDir = t.TempDir()
 	if err := e.Service.SetRecordings(e.RecordingsDir, Secret); err != nil {
 		t.Fatal(err)

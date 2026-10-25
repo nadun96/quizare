@@ -69,9 +69,37 @@ type hub struct {
 	s     *Service
 	mu    sync.Mutex
 	rooms map[string]*room
+	// Who has connected to each session, and how often someone came back
+	// since the monitor last looked (D-82, TS-NFR-41).
+	seen       map[string]map[string]bool
+	reconnects map[string]int
 }
 
-func newHub(s *Service) *hub { return &hub{s: s, rooms: map[string]*room{}} }
+func newHub(s *Service) *hub {
+	return &hub{s: s, rooms: map[string]*room{}, seen: map[string]map[string]bool{}, reconnects: map[string]int{}}
+}
+
+// reconnected counts someone coming back: a new socket, or the page joining the video again.
+func (h *hub) reconnected(id string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.reconnects[id]++
+}
+
+// takeReconnects returns the reconnects since the last call, and forgets
+// sessions that aren't live any more.
+func (h *hub) takeReconnects(live map[string]bool) map[string]int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := h.reconnects
+	h.reconnects = map[string]int{}
+	for id := range h.seen {
+		if !live[id] {
+			delete(h.seen, id)
+		}
+	}
+	return out
+}
 
 const flushDelay = 200 * time.Millisecond
 
@@ -482,6 +510,13 @@ func (h *hub) register(id string, c *client) {
 	r := h.room(id)
 	old := r.clients[c.userID]
 	r.clients[c.userID] = c
+	if h.seen[id] == nil {
+		h.seen[id] = map[string]bool{}
+	}
+	if h.seen[id][c.userID] {
+		h.reconnects[id]++
+	}
+	h.seen[id][c.userID] = true
 	h.mu.Unlock()
 	if old != nil { // one connection per person: the newest wins
 		b, _ := json.Marshal(event{Type: "closed", Data: map[string]string{"reason": "replaced"}})

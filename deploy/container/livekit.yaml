@@ -8,7 +8,22 @@ rtc:
   udp_port: 7882
   # Finds the server's public address, so students' browsers can reach it.
   use_external_ip: true
+# The relay on 443 for students behind strict school firewalls (D-83,
+# TS-NFR-12). To use it: point a name (e.g. turn.example.edu) at the server,
+# set it here and as QP_TURN_DOMAIN in .env, and set enabled: true. Caddy
+# takes that name's connections on 443, ends TLS, and passes them to 5349 on
+# the compose network. Publish UDP 3478 too if you want plain TURN as well.
+turn:
+  enabled: false
+  domain: turn.example.edu
+  tls_port: 5349
+  external_tls: true
+  udp_port: 3478
 # Written by the tutoring service on first start ("tutoring: <secret>").
 key_file: /var/lib/tutoring/livekit-keys.yaml
 logging:
   level: info
+# Prometheus metrics for the tutoring service's monitoring (D-82); reached on
+# the compose network only (not published).
+prometheus:
+  port: 6789

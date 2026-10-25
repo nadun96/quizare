@@ -84,9 +84,10 @@ Tutoring (D-59) is a second service with LiveKit as its media server, on its own
   2. Create LiveKit's key file: `printf 'tutoring: %s\n' "$(openssl rand -hex 24)" > /etc/livekit/keys.yaml`, mode 0400. Run LiveKit 1.13.7 with `deploy/livekit.yaml`.
   3. Build `tutoring/` (`go build -o /srv/quiz-tutoring/tutor ./cmd/tutor`), create a `quiz-tutoring` user and database role, and install `deploy/quiz-tutoring.service`.
   4. Add the `tutor.example.edu` block of `deploy/Caddyfile`, and its address to the platform's `connect-src` and `media-src` (recordings play from it, D-80).
-  5. Open UDP 7882 and TCP 7881 in the firewall for media. Keep 7880 and 8090 closed: Caddy reaches them on loopback.
-- **Containers.** Set `QP_TUTORING_URL`, `QP_TUTORING_MEDIA_URL` (`wss://…`) and `QP_TUTOR_DOMAIN` in `.env`, then `docker compose --profile tls --profile tutoring up -d --build`. The app creates the shared secret in the `tutorsecrets` volume on first start and the tutoring service creates LiveKit's key file there; LiveKit starts once both exist. Caddy forwards `/rtc` to LiveKit and the rest to the tutoring service.
-- **Limits.** Tutoring and LiveKit have their own memory and CPU limits (TS-NFR-54); the bandwidth budget comes in a later phase.
+  5. Open UDP 7882 and TCP 7881 in the firewall for media (and UDP 3478 for plain TURN, if you like). Keep 7880, 8090, 5349 and LiveKit's metrics port 6789 closed: Caddy and the tutoring service reach them on loopback.
+  6. For students behind firewalls that let only HTTPS out: point `turn.example.edu` at the server, set it in `deploy/livekit.yaml`, and run Caddy built with the layer4 plugin (`xcaddy build v2.11.7 --with github.com/mholt/caddy-l4@v0.1.2`) so the top block of `deploy/Caddyfile` hands that name's connections to LiveKit's relay (D-83; see [Tutoring](tutoring.md)).
+- **Containers.** Set `QP_TUTORING_URL`, `QP_TUTORING_MEDIA_URL` (`wss://…`) and `QP_TUTOR_DOMAIN` in `.env`, then `docker compose --profile tls --profile tutoring up -d --build`. The app creates the shared secret in the `tutorsecrets` volume on first start and the tutoring service creates LiveKit's key file there; LiveKit starts once both exist. Caddy forwards `/rtc` to LiveKit and the rest to the tutoring service. Compose builds Caddy with the layer4 plugin; for the relay on 443, set `QP_TURN_DOMAIN` and enable `turn` in `deploy/container/livekit.yaml`.
+- **Limits.** Tutoring and LiveKit have their own memory and CPU limits (TS-NFR-54); the bandwidth budget (D-81) keeps video within the server's upload, and the admin's Tutoring tab shows what it uses (D-82).
 - **Capacity.** `node loadtest/tutoring-media.mjs` checks what LiveKit carries on the machine it runs on (D-58).
 
 ## Meetings

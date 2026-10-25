@@ -234,11 +234,72 @@ export type Resources = {
 	auto_off: AutoOffStep[];
 };
 
-export type BudgetOverview = {
-	budget: Budget;
-	total_mbps: number;
-	sessions: { id: string; title: string; teacher_name: string; mbps: number; viewers: number; auto_off: AutoOffStep[] }[];
+/** A live session's use now: estimated, with its share of the measured CPU (D-82). */
+export type LiveUse = {
+	id: string;
+	title: string;
+	teacher_name: string;
+	mbps: number;
+	down_mbps: number;
+	viewers: number;
+	tracks: number;
+	participants: number;
+	reconnects: number;
+	cpu?: number;
+	auto_off: AutoOffStep[];
 };
+
+export type BudgetOverview = { budget: Budget; total_mbps: number; sessions: LiveUse[] };
+
+/** The admin's monitoring (D-82, TS-NFR-41): now, and the last day or week. */
+export type MonitorView = {
+	total: {
+		up_mbps: number;
+		down_mbps: number;
+		cpu?: number;
+		tracks: number;
+		participants: number;
+		reconnects: number;
+		measured?: { up_mbps: number; down_mbps: number; cpu: number; at: string };
+		estimated_up_mbps: number;
+	};
+	sessions: LiveUse[];
+	budget_mbps: number;
+	range: '24h' | '7d';
+	step_seconds: number;
+	measuring: boolean;
+	points: { at: string; up_mbps: number; down_mbps: number; cpu?: number; participants: number; reconnects: number; measured: boolean }[];
+	history: {
+		id: string;
+		title: string;
+		teacher_name: string;
+		from: string;
+		to: string;
+		peak_up_mbps: number;
+		avg_up_mbps: number;
+		peak_down_mbps: number;
+		peak_participants: number;
+		peak_tracks: number;
+		reconnects: number;
+	}[];
+};
+
+/** Fills the gaps in a history with zeros, one point per step: no line is drawn across time nothing ran. */
+export function fillGaps<T extends { at: string }>(points: T[], stepSeconds: number, zero: (at: string) => T): T[] {
+	const out: T[] = [];
+	const step = stepSeconds * 1000;
+	for (const p of points) {
+		const prev = out[out.length - 1];
+		if (prev) {
+			const gap = Math.round((Date.parse(p.at) - Date.parse(prev.at)) / step);
+			// One zero just after the last point and one just before the next is enough.
+			if (gap > 1) out.push(zero(new Date(Date.parse(prev.at) + step).toISOString()));
+			if (gap > 2) out.push(zero(new Date(Date.parse(p.at) - step).toISOString()));
+		}
+		out.push(p);
+	}
+	return out;
+}
 
 /** What each switched-off step was, for "Turn back on". */
 export const STEP_LABELS: Record<AutoOffStep, string> = {

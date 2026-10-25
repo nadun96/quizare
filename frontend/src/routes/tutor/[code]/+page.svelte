@@ -32,6 +32,7 @@
 	let socketStatus = $state<'open' | 'reconnecting' | 'closed'>('reconnecting');
 	let audioHost = $state<HTMLDivElement>();
 	const media = new SessionMedia(() => audioHost, (m) => toast(m, 'error'));
+	media.forceRelay = page.url.searchParams.get('relay') === '1'; // checking the relay (D-83)
 	let socket: TutorSocket | null = null;
 	let side = $state<'chat' | 'people' | 'groups' | 'recordings' | 'attendance' | 'resources'>('chat');
 	// What the session sends now, pushed to the teachers every 2 s (D-81).
@@ -229,6 +230,17 @@
 		}
 	}
 
+	// The video coming back after a drop counts as a reconnect, for the admin's monitoring (D-82).
+	let videoWasDown = false;
+	$effect(() => {
+		const st = media.state;
+		if (st === 'reconnecting' || st === 'disconnected' || st === 'error') videoWasDown = true;
+		else if (st === 'connected' && videoWasDown && view) {
+			videoWasDown = false;
+			client.post(`/api/sessions/${view.session.id}/media-reconnected`).catch(() => {});
+		}
+	});
+
 	// The video connection never came up, or LiveKit gave up reconnecting:
 	// join again, waiting longer each time (2 s doubling to 30 s).
 	let rejoins = 0;
@@ -372,6 +384,7 @@
 			<span class="spacer"></span>
 			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
 			{#if !closed && (media.state === 'reconnecting' || media.state === 'error' || media.state === 'disconnected')}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
+			{#if media.forceRelay}<span class="badge badge-soft" title="Opened with ?relay=1: video goes only through the relay on port 443">Relay only</span>{/if}
 			{#if live}<span class="badge badge-soft danger">● Live</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">Not started</span>{/if}
 			{#if view.recording}<span class="badge badge-error gap-1" role="status" title="Only the presenter’s screen and voice are recorded">{view.recording.status === 'paused' ? '❚❚ Recording paused' : '● Recording'}</span>{/if}
 			{#if teacher && live}
