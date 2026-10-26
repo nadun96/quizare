@@ -240,7 +240,8 @@ If students sit behind school firewalls that let only HTTPS out, LiveKit's relay
 | What you see | Why, and what to do |
 |---|---|
 | **502 Bad Gateway** | The app isn't running. Check `journalctl -u quiz -n 50`. The port in `nginx.conf` must match `QP_LISTEN` in `quiz.env` |
-| **The login page loads without its style, or pages are blank** | aaPanel's static-file blocks are still in the site config (step 5). Remove them |
+| **The login page loads without its style, or pages are blank** | The `.js` and `.css` files get nginx's 404: aaPanel's static-file rules answer them. Remove the blocks from the site config (step 5), and make sure the app's block says `location ^~ /` (with `^~`): some aaPanel versions keep those rules in an included file you can't see in Config |
+| **The site goes through aaPanel's Reverse proxy** | Delete it in Website → the site → Reverse proxy and paste `nginx.conf` into Config instead. Its cache keys answers by address only and ignores `Set-Cookie`, so one person can be served another's page, and its `add_header` drops the security headers |
 | **"cross-site request rejected" at login** | `QP_BASE_URL` in `quiz.env` must be exactly the address people use: `https://`, with or without `www.` as they type it. Fix it and restart |
 | **Live quizzes keep "Reconnecting…"** | Nginx isn't passing WebSockets. Check the `Upgrade` and `Connection` lines from `nginx.conf` are in the site config |
 | **Install or update says it can't sign in to the database** | The password or user is wrong, or the database's access isn't "Local server". Check in aaPanel → Databases → PgSQL |
