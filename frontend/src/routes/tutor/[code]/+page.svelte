@@ -20,6 +20,11 @@
 	import RecordingsList from '$lib/tutoring/RecordingsList.svelte';
 	import ResourcesPanel from '$lib/tutoring/ResourcesPanel.svelte';
 	import SessionTiming from '$lib/tutoring/SessionTiming.svelte';
+	import BoardControls from '$lib/tutoring/BoardControls.svelte';
+	import SessionPolls from '$lib/tutoring/SessionPolls.svelte';
+	import PollTake from '$lib/poll/PollTake.svelte';
+	import Whiteboard from '$lib/board/Whiteboard.svelte';
+	import { BoardState, type BoardEvent, type BoardView, type NewStroke, type Stroke } from '$lib/board/strokes.svelte';
 	import { PresenterRecorder } from '$lib/tutoring/recorder.svelte';
 	import { sentence, withBudget } from '$lib/tutoring/budget';
 	import { broadcasterName, CHAT_MODES, groupNow, isBroadcaster, isStaffRole, LAYOUTS, publishTarget, secondsLeft, STEP_LABELS, type Attendee, type AutoOffStep, type ChatMessage, type Recording, type Resources, type TutoringSession, type TutoringView } from '$lib/tutoring/types';
@@ -35,7 +40,7 @@
 	const media = new SessionMedia(() => audioHost, (m) => toast(m, 'error'));
 	media.forceRelay = page.url.searchParams.get('relay') === '1'; // checking the relay (D-83)
 	let socket: TutorSocket | null = null;
-	let side = $state<'chat' | 'people' | 'groups' | 'recordings' | 'attendance' | 'resources'>('chat');
+	let side = $state<'chat' | 'people' | 'groups' | 'recordings' | 'attendance' | 'resources' | 'board' | 'poll'>('chat');
 	// What the session sends now, pushed to the teachers every 2 s (D-81).
 	let resources = $state<Resources | null>(null);
 	async function showResources() {
@@ -91,6 +96,30 @@
 	const main = $derived<Tile | undefined>(broadcast.find((t) => !t.local) ?? broadcast[0]);
 	const others = $derived(broadcast.filter((t) => t !== main));
 	const layout = $derived(myLayout ?? view?.session.layout ?? 'spotlight');
+	// The whiteboard (D-85): the platform's board, drawn through the tutoring
+	// API; the socket brings everyone's marks. Shown in the main room while open.
+	const board = new BoardState();
+	const boardShown = $derived(!!view?.session.board_open && !group);
+	let boardFor = '';
+	async function loadBoard() {
+		if (!view) return;
+		board.fetching();
+		board.load(await client.get<BoardView>(`/api/sessions/${view.session.id}/board`));
+	}
+	$effect(() => {
+		if (!view || view.me.state !== 'admitted') return;
+		const key = `${view.session.id}|${view.session.board_open}|${view.session.board_mode}`;
+		if (key === boardFor) return;
+		boardFor = key;
+		loadBoard().catch(() => {});
+	});
+	const boardClient = {
+		add: async (strokes: NewStroke[]) => (await client.post<{ strokes: Stroke[] }>(`/api/sessions/${sid()}/board/strokes`, { strokes })).strokes,
+		erase: async (ids: number[], gesture = '') => (await client.post<{ removed: number[] }>(`/api/sessions/${sid()}/board/erase`, { ids, gesture })).removed,
+		clear: async () => {
+			await client.post(`/api/sessions/${sid()}/board/clear`);
+		}
+	};
 	// The lead teacher keeps only the microphone while someone else broadcasts.
 	const sidelined = $derived(!!view && lead && !!view.session.broadcaster_id);
 	$effect(() => {
@@ -177,6 +206,15 @@
 				break;
 			case 'group_help':
 				toast(`${e.data.name} asks for help in their group`, 'error');
+				break;
+			case 'poll_shown':
+				if (!teacher) {
+					side = 'poll'; // students answer beside the broadcast (D-86)
+					toast(`A poll has started: ${e.data.title}`);
+				}
+				break;
+			case 'board':
+				if (board.apply(e.data as BoardEvent)) loadBoard().catch(() => {});
 				break;
 			// The bandwidth budget (D-81).
 			case 'resources':
@@ -446,7 +484,20 @@
 					{#if view.recording && isBroadcaster(view)}<p class="alert alert-soft alert-error py-2 m-0" role="status">You’re presenting: your screen and voice are being recorded.</p>{/if}
 					{#if media.needsClick}<button class="btn btn-primary" onclick={() => media.startAudio()}>Click to hear the session</button>{/if}
 					<div class="main-room" class:mini={!!group}>
-					{#if !main}
+					{#if boardShown}
+						<!-- The board with the broadcast, as the layout says (TS-FR-67). -->
+						{#snippet wb()}<div class="board-box"><Whiteboard {board} client={boardClient} teacher={teacher} title={view!.session.title + ' whiteboard'} /></div>{/snippet}
+						{#if layout === 'spotlight'}
+							{@render wb()}
+							{#if broadcast.length}<div class="thumbs">{#each broadcast as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>{/if}
+						{:else}
+							<div class={layout === 'side' ? 'side-by-side' : 'grid-view'}>
+								{@render wb()}
+								{#each layout === 'side' ? (main ? [main] : []) : broadcast as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}
+							</div>
+							{#if layout === 'side' && others.length}<div class="thumbs">{#each others as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>{/if}
+						{/if}
+					{:else if !main}
 						<div class="empty">{isBroadcaster(view) ? 'Share a screen or camera; everyone will see it here.' : `${broadcasterName(view)} isn’t sharing anything yet.`}{media.state === 'error' ? ' ' + media.error : ''}</div>
 					{:else if layout === 'spotlight'}
 						<TrackView tile={main} big onstop={main.local ? () => media.stop(main) : undefined} />
@@ -498,12 +549,14 @@
 				<aside class="side card card-border bg-base-100 p-3 vstack">
 					<div class="tabs tabs-border" role="tablist">
 						<button class="tab" role="tab" aria-selected={side === 'chat'} class:tab-active={side === 'chat'} onclick={() => (side = 'chat')}>Chat</button>
+						{#if view.session.poll_code}<button class="tab" role="tab" aria-selected={side === 'poll'} class:tab-active={side === 'poll'} onclick={() => (side = 'poll')}>{teacher ? 'Polls' : 'Poll'}{' '}<span class="badge badge-primary badge-xs">live</span></button>{:else if teacher}<button class="tab" role="tab" aria-selected={side === 'poll'} class:tab-active={side === 'poll'} onclick={() => (side = 'poll')}>Polls</button>{/if}
 						<button class="tab" role="tab" aria-selected={side === 'recordings'} class:tab-active={side === 'recordings'} onclick={loadRecordings}>Recordings</button>
 						{#if teacher}
 							<button class="tab" role="tab" aria-selected={side === 'people'} class:tab-active={side === 'people'} onclick={() => (side = 'people')}>People{#if view.waiting}{' '}({view.waiting}){/if}</button>
 							<button class="tab" role="tab" aria-selected={side === 'groups'} class:tab-active={side === 'groups'} onclick={() => (side = 'groups')}>Groups{#if view.groups.some((g) => g.help_at)}{' '}<span class="badge badge-warning badge-xs">help</span>{/if}</button>
 							<button class="tab" role="tab" aria-selected={side === 'attendance'} class:tab-active={side === 'attendance'} onclick={showAttendance}>Attendance</button>
-							<button class="tab" role="tab" aria-selected={side === 'resources'} class:tab-active={side === 'resources'} onclick={showResources}>Resources{#if view.session.auto_off.length}{' '}<span class="badge badge-warning badge-xs">{view.session.auto_off.length} off</span>{/if}</button>
+							<button class="tab" role="tab" aria-selected={side === 'board'} class:tab-active={side === 'board'} onclick={() => (side = 'board')}>Board{#if view.session.board_open}{' '}<span class="badge badge-soft badge-xs">on</span>{/if}</button>
+						<button class="tab" role="tab" aria-selected={side === 'resources'} class:tab-active={side === 'resources'} onclick={showResources}>Resources{#if view.session.auto_off.length}{' '}<span class="badge badge-warning badge-xs">{view.session.auto_off.length} off</span>{/if}</button>
 						{/if}
 					</div>
 					{#if side === 'chat'}
@@ -515,6 +568,14 @@
 					{:else if side === 'recordings'}
 						<RecordingsList {client} {recordings} meId={view.me.user_id} leadOf={(r) => r.lead} onchange={loadRecordings} />
 						{#if !recordings.length && !teacher}<p class="small muted m-0">Your teacher chooses whether students can watch recordings.</p>{/if}
+					{:else if side === 'poll' && teacher}
+						<SessionPolls {client} {view} />
+					{:else if side === 'poll' && view.session.poll_code}
+						{#key view.session.poll_code}<PollTake code={view.session.poll_code} compact />{/key}
+					{:else if side === 'poll'}
+						<p class="small muted m-0">The poll has ended.</p>
+					{:else if side === 'board' && teacher}
+						<BoardControls {client} {view} />
 					{:else if side === 'resources' && teacher}
 						<ResourcesPanel {client} {view} {resources} />
 					{:else if side === 'attendance' && teacher}
@@ -585,6 +646,7 @@
 	/* While in a breakout group, the group comes first and the main room shrinks (D-79). */
 	.main-room { display: grid; gap: 0.5rem; }
 	.main-room.mini { max-width: 22rem; }
+	.board-box { min-width: 0; }
 	.main-room.mini .empty { aspect-ratio: auto; padding: 0.75rem; }
 	.empty { aspect-ratio: 16 / 9; display: grid; place-items: center; text-align: center; padding: 1rem; border-radius: 0.75rem; background: var(--color-base-200); color: var(--color-muted); }
 	.thumbs { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }

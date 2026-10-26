@@ -155,26 +155,32 @@ if ($Tutoring) { $TutorPort = Select-Port $TutorPort 'TutorPort' (@(8190, 8290, 
 
 $dbUrl = "postgres://postgres:postgres@localhost:54329/$Database`?sslmode=disable"
 
-# 3. Tutoring: LiveKit on 7980 (Windows reserves 7820-7919 here), then the tutoring service.
+# 3. Tutoring: LiveKit on the ports in local\livekit.yaml, then the tutoring service.
 if ($Tutoring) {
 	foreach ($f in 'livekit.yaml', 'livekit-keys.yaml', 'tutoring.secret') {
 		if (-not (Test-Path (Join-Path $localDir $f))) { throw "Tutoring needs local\$f (see HOW-TO-RUN.local.md, section 6)" }
 	}
 	$livekit = Join-Path $root 'loadtest\.bin\livekit-server.exe'
 	if (-not (Test-Path $livekit)) { throw 'LiveKit is missing: run "node loadtest/tutoring-media.mjs" once to download it' }
-	if (Test-Port 7980) {
-		Write-Host '-> LiveKit already running on port 7980'
+	$lkConf = Get-Content (Join-Path $localDir 'livekit.yaml')
+	$lkPort = [int](($lkConf | Select-String '^port:\s*(\d+)' | Select-Object -First 1).Matches[0].Groups[1].Value)
+	$lkTcp = ($lkConf | Select-String '^\s+tcp_port:\s*(\d+)' | Select-Object -First 1)
+	if (Test-Port $lkPort) {
+		Write-Host "-> LiveKit already running on port $lkPort"
 	} else {
-		Write-Host '-> Starting LiveKit'
+		# Windows reserves ranges of ports, which can move after a restart: say so, rather than let LiveKit fail.
+		$taken = @($lkPort) + @(if ($lkTcp) { [int]$lkTcp.Matches[0].Groups[1].Value }) | Where-Object { -not (Test-Free $_) }
+		if ($taken) { throw "LiveKit can't use port $($taken -join ', '): it's taken or reserved by Windows (netsh interface ipv4 show excludedportrange protocol=tcp). Change port, rtc.tcp_port and rtc.udp_port in local\livekit.yaml." }
+		Write-Host "-> Starting LiveKit on port $lkPort"
 		$log = Start-Background $livekit @('--config', 'livekit.yaml') $localDir 'livekit'
-		Wait-Until { Test-Port 7980 } 30 'LiveKit' $log
+		Wait-Until { Test-Port $lkPort } 30 'LiveKit' $log
 	}
 	$env:TUTOR_DATABASE_URL = $dbUrl
 	$env:TUTOR_SECRET_FILE = Join-Path $localDir 'tutoring.secret'
 	$env:TUTOR_PLATFORM_URL = "http://127.0.0.1:$Port"
 	$env:TUTOR_PLATFORM_ORIGIN = "http://localhost:$Port"
-	$env:LIVEKIT_URL = 'http://127.0.0.1:7980'
-	$env:LIVEKIT_PUBLIC_URL = 'ws://127.0.0.1:7980'
+	$env:LIVEKIT_URL = "http://127.0.0.1:$lkPort"
+	$env:LIVEKIT_PUBLIC_URL = "ws://127.0.0.1:$lkPort"
 	$env:LIVEKIT_API_KEY = 'tutoring'
 	$env:LIVEKIT_API_SECRET_FILE = Join-Path $localDir 'livekit-keys.yaml'
 	$env:TUTOR_LISTEN = "127.0.0.1:$TutorPort"
