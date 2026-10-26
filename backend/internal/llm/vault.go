@@ -35,13 +35,14 @@ func NewVault(kek []byte) (*Vault, error) {
 
 // LoadKEK reads the master key from a file, never from an environment
 // variable (ADR-09). The file may hold 32 raw bytes, 64 hex characters or
-// standard base64. On Unix the file must not be readable by group or others.
+// standard base64. On Unix the file must not be readable by group or others,
+// except a systemd credential, which may be group-readable (see keyFileMask).
 func LoadKEK(path string) ([]byte, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("master key file: %w", err)
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+	if runtime.GOOS != "windows" && info.Mode().Perm()&KeyFileMask(path) != 0 {
 		return nil, fmt.Errorf("master key file %s must not be accessible to group/others (chmod 0400)", path)
 	}
 	raw, err := os.ReadFile(path)
@@ -59,6 +60,17 @@ func LoadKEK(path string) ([]byte, error) {
 		return b, nil
 	}
 	return nil, errors.New("master key file must contain 32 raw bytes, 64 hex characters or base64 of 32 bytes")
+}
+
+// KeyFileMask is the permission bits a key file must not have. A credential
+// systemd hands the service (LoadCredential=, in $CREDENTIALS_DIRECTORY)
+// lives in a directory only the service can open, and some systemd versions
+// make it group-readable (0440): only "others" are refused there (D-89).
+func KeyFileMask(path string) os.FileMode {
+	if dir := os.Getenv("CREDENTIALS_DIRECTORY"); dir != "" && filepath.Dir(filepath.Clean(path)) == filepath.Clean(dir) {
+		return 0o007
+	}
+	return 0o077
 }
 
 // EnsureKEK creates a new random master key at path if no file exists there
