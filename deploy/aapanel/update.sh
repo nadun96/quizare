@@ -10,6 +10,9 @@
 #
 # Sessions are kept in the database, so nobody is signed out. Live quizzes
 # and meetings reconnect by themselves after the few seconds of restart.
+# With tutoring on (tutoring.sh), its service restarts too, and LiveKit when
+# the release brings a new one: live tutoring sessions then drop, so update
+# between lessons.
 #
 # Usage: sudo bash update.sh quiz-<version>-linux-amd64.tar.gz
 set -euo pipefail
@@ -32,6 +35,7 @@ tar -xzf "$pkg" -C "$work"
 [ -f "$work/server" ] && [ -f "$work/frontend/index.html" ] && [ -f "$work/VERSION" ] || die "$pkg isn't a release package"
 # Packages built on Windows don't carry Unix permissions.
 chmod 755 "$work/server"
+for f in tutor livekit-server; do [ ! -f "$work/$f" ] || chmod 755 "$work/$f"; done
 find "$work" -name '*.sh' -exec chmod 755 {} +
 version=$(tr -dc 'A-Za-z0-9._-' <"$work/VERSION")
 dest="$APP/releases/$version"
@@ -63,7 +67,7 @@ trap - EXIT
 chmod 755 "$dest" "$dest/server"
 # The scripts beside the app are always the newest ones. Renamed into place,
 # never copied over: this very script may be one of them, still being read.
-for f in update.sh install.sh admin.sh lib.sh nginx.conf; do
+for f in update.sh install.sh admin.sh lib.sh tutoring.sh; do
 	if [ -f "$dest/$f" ]; then
 		cp "$dest/$f" "$APP/.$f.new"
 		mv -f "$APP/.$f.new" "$APP/$f"
@@ -71,11 +75,26 @@ for f in update.sh install.sh admin.sh lib.sh nginx.conf; do
 done
 ln -sfn "$dest" "$APP/current.new"
 mv -Tf "$APP/current.new" "$APP/current"
+# The Nginx configs to paste, from this release's samples.
+render_nginx
 say "Restarting the app (database changes are applied as it starts)"
 $SYSTEMCTL restart "$SERVICE"
 
+# Tutoring follows the release too. LiveKit restarts only when it changed,
+# since that drops the video of live sessions.
+restart_tutoring() {
+	tutoring_on || return 0
+	if [ -z "$previous" ] || ! cmp -s "$previous/livekit-server" "$APP/current/livekit-server"; then
+		say "Restarting LiveKit (a new version)"
+		$SYSTEMCTL restart quiz-livekit
+	fi
+	say "Restarting the tutoring service"
+	$SYSTEMCTL restart quiz-tutoring
+	tutor_healthy 60 || { warn "The tutoring service didn't start. Its log: journalctl -u quiz-tutoring -n 80"; return 1; }
+}
+
 # ---- 4. check, or go back ----
-if healthy 90; then
+if healthy 90 && restart_tutoring; then
 	say "Running $version"
 	# Keep the last 5 releases.
 	ls -1dt "$APP"/releases/*/ 2>/dev/null | tail -n +6 | while read -r old; do
@@ -87,7 +106,12 @@ warn "$version didn't start. The log: journalctl -u $SERVICE -n 80"
 if [ -n "$previous" ] && [ -d "$previous" ]; then
 	ln -sfn "$previous" "$APP/current.new"
 	mv -Tf "$APP/current.new" "$APP/current"
+	render_nginx
 	$SYSTEMCTL restart "$SERVICE"
+	if tutoring_on; then
+		$SYSTEMCTL restart quiz-livekit
+		$SYSTEMCTL restart quiz-tutoring
+	fi
 	if healthy 60; then
 		warn "Went back to $(basename "$previous"); it's running."
 		warn "If the new version changed the database before failing and the old one misbehaves, restore the backup: see the guide."

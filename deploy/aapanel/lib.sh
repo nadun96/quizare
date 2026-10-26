@@ -68,3 +68,70 @@ urlencode() {
 	done
 	printf '%s' "$out"
 }
+
+# ---- tutoring (tutoring.sh, D-91) ----
+
+tutoring_on() { [ -f "$APP/config/tutor.env" ]; }
+
+# Tutoring's settings, as its service sees them.
+tutor_env() {
+	set -a
+	# shellcheck disable=SC1091
+	. "$APP/config/tutor.env"
+	set +a
+}
+
+# Sets KEY="value" in quiz.env, replacing the line if there is one.
+set_env() {
+	local f="$APP/config/quiz.env" tmp
+	tmp=$(mktemp "$APP/config/.quiz.env.XXXXXX")
+	grep -v "^$1=" "$f" >"$tmp" || true
+	printf '%s="%s"\n' "$1" "$2" >>"$tmp"
+	chmod 600 "$tmp"
+	mv -f "$tmp" "$f"
+	printf -v "$1" '%s' "$2"
+	export "${1?}"
+}
+
+# LiveKit's media ports, "TCP UDP", from its settings.
+livekit_ports() {
+	local tcp udp
+	tcp=$(sed -n 's/^ *tcp_port: *\([0-9]*\).*/\1/p' "$APP/config/livekit.yaml" | head -1)
+	udp=$(sed -n 's/^ *udp_port: *\([0-9]*\).*/\1/p' "$APP/config/livekit.yaml" | head -1)
+	printf '%s %s' "$tcp" "$udp"
+}
+
+# Waits for the tutoring service's /healthz.
+tutor_healthy() {
+	local port i
+	tutor_env
+	port=${TUTOR_LISTEN##*:}
+	for i in $(seq 1 "${1:-60}"); do
+		if curl --max-time 3 -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then return 0; fi
+		sleep 1
+	done
+	return 1
+}
+
+# Writes the Nginx configs to paste into aaPanel from the running release's
+# samples: the app's with its port and, with tutoring on, tutoring's address
+# allowed (the pages call it and play recordings from it), and the tutoring
+# subdomain's.
+render_nginx() {
+	local tmp lk t
+	[ -f "$APP/current/nginx.conf" ] || return 0
+	tmp=$(mktemp "$APP/.nginx.conf.XXXXXX")
+	sed "s#127\.0\.0\.1:8080#127.0.0.1:$(app_port)#; s#Change 8080 if you chose another port in install.sh.#The app's port, from QP_LISTEN, is filled in by update.sh.#" "$APP/current/nginx.conf" >"$tmp"
+	if tutoring_on && [ -f "$APP/current/nginx-tutor.conf" ]; then
+		tutor_env
+		t="https://$TUTOR_DOMAIN"
+		sed -i "s#connect-src 'self' wss:#connect-src 'self' wss: $t#; s#object-src 'none'#media-src 'self' $t; object-src 'none'#" "$tmp"
+		lk=$(livekit_ports)
+		sed "s#__TUTOR_PORT__#${TUTOR_LISTEN##*:}#g; s#__LIVEKIT_PORT__#${LIVEKIT_URL##*:}#g; s#__LIVEKIT_TCP__#${lk% *}#g; s#__LIVEKIT_UDP__#${lk#* }#g" \
+			"$APP/current/nginx-tutor.conf" >"$APP/.nginx-tutor.conf.new"
+		chmod 644 "$APP/.nginx-tutor.conf.new"
+		mv -f "$APP/.nginx-tutor.conf.new" "$APP/nginx-tutor.conf"
+	fi
+	chmod 644 "$tmp"
+	mv -f "$tmp" "$APP/nginx.conf"
+}
