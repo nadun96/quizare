@@ -46,6 +46,10 @@ export type TutoringSession = {
 	board_open: boolean;
 	board_mode: 'teacher' | 'everyone' | 'selected';
 	board_users?: string[];
+	/** The platform poll running in the session (D-86). */
+	poll_id?: string;
+	poll_code?: string;
+	poll_title?: string;
 };
 
 /** How a schedule repeats (D-84): once, daily or weekly, until a date or a number of times. */

@@ -82,6 +82,8 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("POST", "/board/erase", h(s.hErase))
 			r.Method("POST", "/board/clear", h(s.hClearBoard))
 			r.Method("PUT", "/board/access", h(s.hBoardAccess))
+			// A poll in the session (D-86).
+			r.Method("PUT", "/poll", h(s.hShowPoll))
 		})
 		r.Method("POST", "/schedule", h(s.hSchedule))
 		r.Method("GET", "/calendar", h(s.hCalendar))
@@ -880,4 +882,12 @@ func (s *Service) hBoardAccess(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return noContent(w, s.SetBoardAccess(r.Context(), me(r), id(r), in))
+}
+
+func (s *Service) hShowPoll(w http.ResponseWriter, r *http.Request) error {
+	var in PollInput
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.ShowPoll(r.Context(), me(r), id(r), in))
 }
