@@ -133,7 +133,7 @@ Copy the new binary and `systemctl restart quiz`. Migrations run on start; each 
 
 ## aaPanel
 
-On a server managed with aaPanel, with aaPanel's PostgreSQL, see [Deploying on aaPanel](deploy-aapanel.md): a package built on your computer (`scripts/package.ps1`), installed and updated by scripts that back up the database first and go back on their own if a new version doesn't start.
+On a server managed with aaPanel, with aaPanel's PostgreSQL, see [Deploying on aaPanel](deploy-aapanel.md): a package built on your computer (`scripts/package.ps1`), installed and updated by scripts that back up the database first and go back on their own if a new version doesn't start. Tutoring and LiveKit come in the same package and are switched on with `tutoring.sh` (D-91).
 
 ## CI/CD
 

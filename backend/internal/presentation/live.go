@@ -82,6 +82,9 @@ func (s *Service) StartLive(ctx context.Context, teacherID, id string) (Live, er
 		}
 		return Live{}, err
 	}
+	if err := s.gate.Check(ctx, teacherID); err != nil {
+		return Live{}, err
+	}
 	tc, err := s.topics.TopicContext(ctx, teacherID, p.TopicID)
 	if err != nil {
 		return Live{}, err

@@ -23,6 +23,7 @@
 	import MonitorPanel from '$lib/admin/MonitorPanel.svelte';
 	import StoragePanel from '$lib/admin/StoragePanel.svelte';
 	import BackupsPanel from '$lib/admin/BackupsPanel.svelte';
+	import LivePanel from '$lib/admin/LivePanel.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
 
 	// The admin console, for admins and managers (D-56). A manager sees only
@@ -32,7 +33,7 @@
 	type Ev = { id: number; actor_name: string; actor_role?: string; action: string; target_type: string; target_id: string; details: unknown; created_at: string };
 	const ready = requireStaff();
 	const tabs = $derived(consoleTabs(auth.user));
-	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', settings: 'Platform settings', signin: 'Sign-in', drive: 'Google Drive', audit: 'Audit log', storage: 'Storage', backups: 'Backups', recordings: 'Tutoring', managers: 'Managers' };
+	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', live: 'Live activity', settings: 'Platform settings', signin: 'Sign-in', drive: 'Google Drive', audit: 'Audit log', storage: 'Storage', backups: 'Backups', recordings: 'Tutoring', managers: 'Managers' };
 	let tab = $state<ConsoleTab | null>(null);
 	let role = $state(Paged.fromUrl(urlState, 'role'));
 	let status = $state(Paged.fromUrl(urlState, 'status'));
@@ -204,6 +205,8 @@
 		<StoragePanel canStorage={can(auth.user, 'storage')} canCleanup={can(auth.user, 'cleanup')} />
 	{:else if tab === 'backups'}
 		<BackupsPanel />
+	{:else if tab === 'live'}
+		<LivePanel />
 	{:else if tab === 'signin'}
 		<div class="vstack">
 			<section class="vstack" aria-labelledby="sso-h"><h2 id="sso-h" class="m-0 text-lg">Other accounts (OpenID Connect)</h2><SsoPanel /></section>

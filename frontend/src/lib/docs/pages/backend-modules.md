@@ -138,6 +138,10 @@ The platform's side of tutoring (D-59, ADR-23). `tutorlink.go` signs 5-minute to
 
 Usage counts and the audit log for admins and managers given those features (filterable by person and by role acted in), plus `/api/my/data` (own-data export) for every user.
 
+## oversight (schema `oversight`)
+
+The admin's live activity (D-90), behind the `live_activity` feature. `Live` lists what's live across `live`, `poll`, `meet` and `presentation` in one read-only query; `End` calls that module's `ForceEnd`/`ForceClose`/`ForceEndLive` (which skip the ownership check), logs the reason and emails the teacher. `oversight.pauses` holds a pause for everyone (no teacher) and one per teacher; `Check` is installed in each module with `SetGate` and runs before anything starts, and `Paused` goes to tutoring in the `/internal/tutoring/access` answer (`paused`).
+
 ## apidocs (no schema)
 
 The embedded OpenAPI 3.1 document (`openapi.yaml`) and Swagger UI assets, served at `/api/docs`. See [HTTP API](api.md).
