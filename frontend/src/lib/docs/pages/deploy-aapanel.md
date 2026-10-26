@@ -189,9 +189,51 @@ To send password-reset and verification emails:
 
 Never delete `/www/quiz-app/config` or the `quiz` database in aaPanel. Uninstalling the site in aaPanel doesn't touch either; it only removes the Nginx site.
 
-## Tutoring's relay on port 443
+## Tutoring
 
-If you run tutoring (see [Deployment](deployment.md)) and students sit behind school firewalls that let only HTTPS out, LiveKit's relay has to share port 443 with your websites. With aaPanel's nginx, its stream module splits 443 by name: `deploy/aapanel/nginx-turn.conf` holds the configuration and the steps (D-83). It moves **every** HTTPS site on the server to an internal port, so plan a quiet moment, and check the sites' `listen` lines again after changing their SSL settings in aaPanel, which rewrites them. This configuration hasn't been tried on aaPanel itself; the same split was tested with Caddy.
+Tutoring (live video lessons) is off after `install.sh`: the admin console's Tutoring tab says "Tutoring isn't switched on". The package already holds what it needs: the tutoring service and LiveKit, its video server. `tutoring.sh` switches it on (D-91).
+
+**Before you start:**
+- **The server.** Video is sent from the server to every student. A lesson where 30 students watch a screen share uses about 40 Mbit/s of upload, so check your plan's bandwidth. LiveKit gets up to 1 GB of memory and the tutoring service 400 MB, on top of the app: 4 GB of memory and 2 CPUs or more.
+- **A subdomain** for tutoring, for example `tutor.school.edu`, with its DNS `A` record pointing at the server.
+
+**1. On the server**, once the app runs a version that has tutoring (v2.20.0 or later):
+
+```bash
+bash /www/quiz-app/tutoring.sh
+```
+
+It asks for the subdomain and four ports; the defaults suit most servers. Then it:
+
+| What | Where |
+|---|---|
+| The secret the app and tutoring share, and LiveKit's key | `/www/quiz-app/config/tutoring.secret`, `livekit-keys.yaml` (root only) |
+| Tutoring's settings, and LiveKit's | `/www/quiz-app/config/tutor.env`, `livekit.yaml` |
+| Two services that start at boot | `quiz-livekit`, `quiz-tutoring` |
+| Tutoring's address for the app | `QP_TUTORING_URL` in `quiz.env`, and the secret through `/etc/systemd/system/quiz.service.d/tutoring.conf` |
+| Recordings, encrypted | `/www/quiz-app/data/recordings` |
+
+Tutoring keeps its tables in the app's database, in their own `tutoring` schema: no second database. Running it again is safe; it keeps the secrets and settings.
+
+**2. In aaPanel:**
+1. **Website → Add site:** the tutoring subdomain, **Static**, no database. Its **SSL** tab: Let's Encrypt, **Force HTTPS**.
+2. Its **Config:** delete aaPanel's static-file blocks (as in step 5 above), and paste `/www/quiz-app/nginx-tutor.conf` below the SSL lines. To show it: `cat /www/quiz-app/nginx-tutor.conf`.
+3. **The app's site Config:** paste `/www/quiz-app/nginx.conf` again, replacing what you pasted before. It now lets the pages reach the tutoring address and play its recordings.
+4. **Security** (aaPanel's firewall): open **TCP 7881** and **UDP 7882**, the video, or the ports you chose. If your provider has a firewall in its own dashboard, open them there too. Keep the other ports closed: only Nginx, on this server, uses them.
+
+Then sign in as a teacher: the Tutoring page appears, and a classroom's sessions start from there.
+
+**Updating** needs nothing more: `update.sh` restarts the tutoring service with each release, and LiveKit only when the release brings a new one. Restarting LiveKit drops the video of live lessons for a few seconds, so update between lessons.
+
+| Task | Command |
+|---|---|
+| Are they running? | `systemctl status quiz-tutoring quiz-livekit` |
+| Their logs | `journalctl -u quiz-tutoring -f`, `journalctl -u quiz-livekit -f` |
+| Change a setting | edit `/www/quiz-app/config/tutor.env` (or `livekit.yaml`), then `systemctl restart quiz-tutoring` (or `quiz-livekit`) |
+
+### The relay on port 443
+
+If students sit behind school firewalls that let only HTTPS out, LiveKit's relay has to share port 443 with your websites. With aaPanel's nginx, its stream module splits 443 by name: `deploy/aapanel/nginx-turn.conf` holds the configuration and the steps (D-83). It moves **every** HTTPS site on the server to an internal port, so plan a quiet moment, and check the sites' `listen` lines again after changing their SSL settings in aaPanel, which rewrites them. This configuration hasn't been tried on aaPanel itself; the same split was tested with Caddy.
 
 ## Troubleshooting
 
@@ -206,4 +248,8 @@ If you run tutoring (see [Deployment](deployment.md)) and students sit behind sc
 | **The log says `master key file /run/credentials/quiz.service/kek must not be accessible to group/others`** | Versions before v2.19.2 refused the key as some systemd versions hand it over (readable by the service's group, in a folder only the service can open). Install v2.19.2 or later |
 | **The log says `extension "pgcrypto" is not available` or `permission denied to create extension "pgcrypto"`** | Versions before v2.19.1 asked for it; aaPanel's PostgreSQL often doesn't ship it. Install v2.19.1 or later, which doesn't need it on PostgreSQL 13 and newer |
 | **"pg_dump not found"** | Install PostgreSQL from aaPanel's App Store on this server. If the database is elsewhere, install the matching client tools and set `QP_PG_BIN` to their folder |
+| **"Tutoring isn't switched on"** in the admin console | Run `tutoring.sh` (see Tutoring). If you did, `QP_TUTORING_URL` is missing from `quiz.env` or the app wasn't restarted: `systemctl restart quiz` |
+| **`tutoring.sh` says the release has no tutoring service** | The running version predates it. Build a new package, run `update.sh` with it, then `tutoring.sh` |
+| **Teachers see the Tutoring page, but sessions never connect** | The browser can't reach the video. Check TCP 7881 and UDP 7882 are open in aaPanel → Security **and** your provider's firewall, and that the tutoring site's config has the `location /rtc` block |
+| **Tutoring pages say they can't reach the tutoring service** | The app's site still has its old config: paste `/www/quiz-app/nginx.conf` again (it allows the tutoring address). Check the tutoring subdomain has its SSL certificate |
 | **An update went back to the old version** | It printed why; the log is in `journalctl -u quiz -n 80`. Your data is as it was, and there's a backup from just before |

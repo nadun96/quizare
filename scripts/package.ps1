@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
   Builds a release to upload to a Linux server (aaPanel or any other):
-  the server for Linux, the frontend, and the install and update scripts,
-  in one .tar.gz under dist\.
+  the server for Linux, the frontend, the tutoring service with LiveKit,
+  and the install and update scripts, in one .tar.gz under dist\.
 
 .DESCRIPTION
   The server needs neither Go nor Node: everything is built here. Upload
@@ -45,10 +45,41 @@ $saved = @{ GOOS = $env:GOOS; GOARCH = $env:GOARCH; CGO_ENABLED = $env:CGO_ENABL
 try {
 	$env:GOOS = 'linux'; $env:GOARCH = $Arch; $env:CGO_ENABLED = '0'
 	Invoke-Step "Building the server for Linux ($Arch)" { go build -trimpath -ldflags '-s -w' -o (Join-Path $stage 'server') ./cmd/server }
+	# The tutoring service (D-59), switched on with tutoring.sh (D-91).
+	Push-Location (Join-Path $root 'tutoring')
+	try {
+		Invoke-Step "Building the tutoring service for Linux ($Arch)" { go build -trimpath -ldflags "-s -w -X main.Version=$version" -o (Join-Path $stage 'tutor') ./cmd/tutor }
+	} finally { Pop-Location }
 } finally {
 	foreach ($k in $saved.Keys) { Set-Item "env:$k" $saved[$k] }
 	Pop-Location
 }
+
+# LiveKit, tutoring's media server: the pinned release, checked against the
+# SHA-256 from its checksums.txt, downloaded once into dist\.cache.
+$liveKit = '1.13.7'
+$liveKitSums = @{
+	amd64 = '6634aeeb2fb1366b6723708ae4320b9d5408106a4c63457c5e845ae3979c90e2'
+	arm64 = '5d167fdf52cf43c0c72972f25325364479f41f854bfef651056eab2504da5de9'
+}
+$cache = Join-Path $dist '.cache'
+New-Item -ItemType Directory -Force $cache | Out-Null
+$lkName = "livekit_${liveKit}_linux_$Arch.tar.gz"
+$lkFile = Join-Path $cache $lkName
+if (-not (Test-Path $lkFile)) {
+	Write-Host "-> Downloading LiveKit $liveKit"
+	Invoke-WebRequest -UseBasicParsing "https://github.com/livekit/livekit/releases/download/v$liveKit/$lkName" -OutFile $lkFile
+}
+if ((Get-FileHash $lkFile -Algorithm SHA256).Hash.ToLower() -ne $liveKitSums[$Arch]) {
+	Remove-Item $lkFile
+	throw "$lkName doesn't match its checksum: deleted, run again"
+}
+$lkDir = Join-Path $cache "livekit-$liveKit-$Arch"
+if (-not (Test-Path (Join-Path $lkDir 'livekit-server'))) {
+	New-Item -ItemType Directory -Force $lkDir | Out-Null
+	Invoke-Step 'Unpacking LiveKit' { tar -xzf $lkFile -C $lkDir livekit-server }
+}
+Copy-Item (Join-Path $lkDir 'livekit-server') $stage
 
 Copy-Item -Recurse (Join-Path $root 'frontend\build') (Join-Path $stage 'frontend')
 Copy-Item (Join-Path $root 'deploy\aapanel\*') $stage
@@ -71,3 +102,4 @@ Write-Host "  SHA-256 $hash"
 Write-Host '  Upload it to the server, then:'
 Write-Host "    first time:  sudo bash install.sh $name.tar.gz   (extract install.sh from it first)"
 Write-Host "    updates:     sudo bash /www/quiz-app/update.sh $name.tar.gz"
+Write-Host '    tutoring:    sudo bash /www/quiz-app/tutoring.sh   (once, after an update)'
