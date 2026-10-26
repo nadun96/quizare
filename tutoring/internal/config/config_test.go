@@ -69,3 +69,14 @@ func TestKeysAndGeneratedLiveKitKeys(t *testing.T) {
 		t.Fatalf("plain secret: %v", err)
 	}
 }
+
+// A systemd credential may be group-readable; any other key file may not (D-89).
+func TestKeyFileMask(t *testing.T) {
+	t.Setenv("CREDENTIALS_DIRECTORY", "/run/credentials/quiz-tutoring.service")
+	if m := keyFileMask("/run/credentials/quiz-tutoring.service/tutoring_secret"); m != 0o007 {
+		t.Fatalf("credential mask = %o", m)
+	}
+	if m := keyFileMask("/etc/quiz/tutoring.secret"); m != 0o077 {
+		t.Fatalf("other mask = %o", m)
+	}
+}

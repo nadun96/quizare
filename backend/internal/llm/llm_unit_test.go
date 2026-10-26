@@ -230,3 +230,20 @@ func TestAnthropicAdapter(t *testing.T) {
 		t.Fatalf("529 overloaded should be retryable: %v", err)
 	}
 }
+
+// A systemd credential may be group-readable; any other key file may not (D-89).
+func TestKeyFileMask(t *testing.T) {
+	t.Setenv("CREDENTIALS_DIRECTORY", "/run/credentials/quiz.service")
+	if m := KeyFileMask("/run/credentials/quiz.service/kek"); m != 0o007 {
+		t.Fatalf("credential mask = %o", m)
+	}
+	for _, p := range []string{"/www/quiz-app/config/kek.key", "/run/credentials/quiz.service/sub/kek", "/run/credentials/other.service/kek"} {
+		if m := KeyFileMask(p); m != 0o077 {
+			t.Fatalf("%s mask = %o", p, m)
+		}
+	}
+	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	if m := KeyFileMask("/run/credentials/quiz.service/kek"); m != 0o077 {
+		t.Fatalf("without systemd mask = %o", m)
+	}
+}
