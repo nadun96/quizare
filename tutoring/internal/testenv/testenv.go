@@ -132,6 +132,7 @@ type Platform struct {
 	Teachers map[string]string          // classroom → teacher
 	Enrolled map[string]map[string]bool // classroom → students
 	Archived map[string]bool
+	Paused   map[string]string // teacher → why the admin paused new activities (D-90)
 	Accounts map[string]platform.Person // teacher accounts by email
 	// Categories of each classroom, with their students (D-79).
 	Categories map[string][]platform.Category
@@ -242,7 +243,7 @@ func (p *Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		_, _ = w.Write([]byte(`{"code":"not_found","message":"resource not found"}`))
 	case teacher == in.UserID:
-		_ = json.NewEncoder(w).Encode(platform.Access{ClassroomID: in.ClassroomID, ClassroomName: "Room " + in.ClassroomID[:4], TeacherID: teacher, Archived: p.Archived[in.ClassroomID], Role: "teacher"})
+		_ = json.NewEncoder(w).Encode(platform.Access{ClassroomID: in.ClassroomID, ClassroomName: "Room " + in.ClassroomID[:4], TeacherID: teacher, Archived: p.Archived[in.ClassroomID], Role: "teacher", Paused: p.Paused[teacher]})
 	case p.Enrolled[in.ClassroomID][in.UserID]:
 		_ = json.NewEncoder(w).Encode(platform.Access{ClassroomID: in.ClassroomID, ClassroomName: "Room " + in.ClassroomID[:4], TeacherID: teacher, Role: "student"})
 	default:
@@ -382,7 +383,7 @@ type Env struct {
 // New starts the service with fakes around it.
 func New(t testing.TB) *Env {
 	t.Helper()
-	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}, Accounts: map[string]platform.Person{},
+	e := &Env{T: t, Pool: newDB(t), Platform: &Platform{Teachers: map[string]string{}, Enrolled: map[string]map[string]bool{}, Archived: map[string]bool{}, Paused: map[string]string{}, Accounts: map[string]platform.Person{},
 		Categories: map[string][]platform.Category{}},
 		LiveKit: &LiveKit{Tracks: map[string][]media.Track{}}, Origin: "https://quiz.example.edu", LKSecret: []byte("livekit-secret-of-at-least-32-chars!!")}
 	plat := httptest.NewServer(e.Platform)

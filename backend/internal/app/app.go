@@ -33,6 +33,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/meet"
 	"github.com/nadun96/quizplatform/internal/oidc"
+	"github.com/nadun96/quizplatform/internal/oversight"
 	"github.com/nadun96/quizplatform/internal/platform/config"
 	"github.com/nadun96/quizplatform/internal/platform/db"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
@@ -74,6 +75,7 @@ type App struct {
 	Tutorial  *tutorial.Service     // interactive tutorials (D-74)
 	Slides    *presentation.Service // presentations (D-76)
 	Tutor     *tutorlink.Service    // nil when tutoring is off
+	Oversight *oversight.Service    // the admin's live activity (D-90)
 }
 
 // Options let tests swap infrastructure.
@@ -265,6 +267,19 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.LLM.SetTutorials(a.Tutorial)
 	a.Slides = presentation.NewService(pool, a.Content, a.Auth, cfg.BaseURL)
 	a.Slides.SetMarks(presentationMarks{a}) // time on slides against marks (D-78)
+	// The admin's live activity: ending anything live, and pausing new
+	// activities (D-90).
+	a.Oversight = oversight.NewService(pool, map[string]oversight.Kind{
+		oversight.KindSession:      {End: a.Live.ForceEnd},
+		oversight.KindPoll:         {End: a.Poll.ForceClose},
+		oversight.KindMeeting:      {End: a.Meet.ForceEnd, Online: a.Meet.Online},
+		oversight.KindPresentation: {End: a.Slides.ForceEndLive, Online: a.Slides.Online},
+	}, tutorMail)
+	a.Live.SetGate(a.Oversight.Check)
+	a.Poll.SetGate(a.Oversight.Check)
+	a.Meet.SetGate(a.Oversight.Check)
+	a.Slides.SetGate(a.Oversight.Check)
+	a.Tutor.SetPauses(a.Oversight.Paused)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
@@ -305,6 +320,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.OIDC.AdminRoutes(ad)
 			a.Drive.AdminRoutes(ad)
 			a.Meet.AdminRoutes(ad, a.Auth)
+			a.Oversight.AdminRoutes(ad, a.Auth)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
@@ -484,7 +500,7 @@ type ClassroomStudentResult struct {
 	UserID        string             `json:"user_id"`
 	Name          string             `json:"name"`
 	StudentNumber *string            `json:"student_number,omitempty"`
-	Scores        map[string]float64 `json:"scores"` // quiz id → best %
+	Scores        map[string]float64 `json:"scores"`            // quiz id → best %
 	Average       *float64           `json:"average,omitempty"` // of the quizzes they took
 }
 

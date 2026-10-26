@@ -62,6 +62,7 @@ type Service struct {
 	hooks      Hooks
 	hub        *Hub
 	now        func() time.Time
+	gate       Gate // pausing new activities (D-90)
 
 	mu       sync.Mutex
 	sessions map[string]*Session // in-process cache of live sessions (ADR-05)
@@ -117,6 +118,9 @@ func validateSessionSettings(o *settings.Overrides) error {
 // CreateSession generates a session with its own QR/short link (FR-SS-01, FR-SS-02).
 func (s *Service) CreateSession(ctx context.Context, teacherID, quizID string, in SessionInput) (*Session, error) {
 	if err := validateSessionSettings(in.Settings); err != nil {
+		return nil, err
+	}
+	if err := s.gate.Check(ctx, teacherID); err != nil {
 		return nil, err
 	}
 	qz, err := s.quizzes.GetQuiz(ctx, teacherID, quizID)

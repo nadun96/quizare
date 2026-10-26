@@ -38,6 +38,9 @@ const (
 	// backup holds all the platform's data, so it is never given by default
 	// and the admin is warned when giving it (PO-28).
 	FeatBackups Feature = "backups"
+	// FeatLive sees what is live across the platform, ends it and pauses
+	// new activities (D-90).
+	FeatLive Feature = "live_activity"
 
 	// featAdmin is never given: routes behind it are for admins only
 	// (making and changing managers, PL-FR-13).
@@ -46,12 +49,12 @@ const (
 
 // Features lists what can be given, in the order the admin sees them.
 // Recordings and tutoring resources join the list with tutoring.
-var Features = []Feature{FeatViewUsers, FeatManageUsers, FeatApprovalPolicy, FeatSettings, FeatUsage, FeatAudit, FeatStorage, FeatCleanup, FeatBackups}
+var Features = []Feature{FeatViewUsers, FeatManageUsers, FeatApprovalPolicy, FeatSettings, FeatUsage, FeatAudit, FeatStorage, FeatCleanup, FeatBackups, FeatLive}
 
 var featureLabels = map[Feature]string{
 	FeatViewUsers: "View users", FeatManageUsers: "Manage users", FeatApprovalPolicy: "Teacher approval policy",
 	FeatSettings: "Platform settings", FeatUsage: "Usage", FeatAudit: "Audit log",
-	FeatStorage: "Storage", FeatCleanup: "Clean-up", FeatBackups: "Backups",
+	FeatStorage: "Storage", FeatCleanup: "Clean-up", FeatBackups: "Backups", FeatLive: "Live activity",
 }
 
 // Manager is what a manager may do in the admin console.

@@ -23,6 +23,8 @@ type Access struct {
 	TeacherID     string `json:"teacher_id"`
 	Archived      bool   `json:"archived"`
 	Role          string `json:"role"`
+	// Paused, for a teacher, is why the admin has paused new activities (D-90).
+	Paused string `json:"paused,omitempty"`
 }
 
 type Client struct {
