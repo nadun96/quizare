@@ -16,6 +16,9 @@
 	import ClassroomFiles from '$lib/drive/ClassroomFiles.svelte';
 
 	import StudentsPanel, { type Enrolment } from '$lib/StudentsPanel.svelte';
+	import ClassroomResults from '$lib/ClassroomResults.svelte';
+	import ClassroomAttendance from '$lib/tutoring/ClassroomAttendance.svelte';
+	import { tutoringConfig } from '$lib/tutoring/client';
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
 	let c = $state<Classroom | null>(null);
@@ -23,7 +26,10 @@
 	const modules = new Paged<Module>(() => '/api/teacher/classrooms/' + id + '/modules', 'modules', { url: urlState, prefix: 'mod', sort: 'position' });
 	let studentCount = $state(0);
 	// ?tab=files: back from connecting Google Drive (D-71).
-	let tab = $state<'content' | 'students' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
+	let tab = $state<'content' | 'students' | 'results' | 'attendance' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
+	// Attendance at tutoring sessions, when tutoring is on (D-87).
+	let tutoring = $state(false);
+	tutoringConfig().then((c) => (tutoring = c.enabled), () => {});
 	let newModule = $state('');
 	let errors = $state<Record<string, string>>({});
 	let notice = $state('');
@@ -108,7 +114,7 @@ if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules,
 		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}</div>
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['files', 'Files'], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
+			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ...(tutoring ? [['attendance', 'Attendance']] : []), ['files', 'Files'], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -131,6 +137,10 @@ if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules,
 			</form>
 		{:else if tab === 'students'}
 			<StudentsPanel classroomId={id} bind:count={studentCount} oneditnumber={editNumber} onstatus={setEnrolment} />
+		{:else if tab === 'results'}
+			<ClassroomResults classroomId={id} classroomName={c.name} />
+		{:else if tab === 'attendance' && tutoring}
+			<ClassroomAttendance classroomId={id} classroomName={c.name} />
 		{:else if tab === 'files'}
 			<ClassroomFiles classroomId={id} />
 		{:else if tab === 'settings'}
