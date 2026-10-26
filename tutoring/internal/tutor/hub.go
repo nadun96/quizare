@@ -383,7 +383,8 @@ func (sn snap) viewFor(userID, mediaURL string) (View, bool) {
 			}
 			v.Groups = append(v.Groups, pub)
 		}
-		v.Session.JoinCode = "" // teachers share the code
+		v.Session.JoinCode = ""    // teachers share the code
+		v.Session.BoardUsers = nil // who else may draw is the teachers' business
 		if o := sn.sess.BroadcastOffer; o == nil || *o != userID {
 			v.Session.BroadcastOffer = nil // only the person asked sees an offer
 		}

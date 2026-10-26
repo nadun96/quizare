@@ -76,6 +76,12 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("PUT", "/timing", h(s.hSetTiming))
 			r.Method("POST", "/cancel", h(s.hCancel))
 			r.Method("GET", "/calendar.ics", h(s.hSessionICS))
+			// The whiteboard (D-85).
+			r.Method("GET", "/board", h(s.hBoard))
+			r.Method("POST", "/board/strokes", h(s.hAddStrokes))
+			r.Method("POST", "/board/erase", h(s.hErase))
+			r.Method("POST", "/board/clear", h(s.hClearBoard))
+			r.Method("PUT", "/board/access", h(s.hBoardAccess))
 		})
 		r.Method("POST", "/schedule", h(s.hSchedule))
 		r.Method("GET", "/calendar", h(s.hCalendar))
@@ -815,4 +821,63 @@ func (s *Service) hNewFeed(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Service) hRevokeFeed(w http.ResponseWriter, r *http.Request) error {
 	return noContent(w, s.RevokeFeed(r.Context(), me(r)))
+}
+
+// ---------- the whiteboard (D-85) ----------
+
+func (s *Service) hBoard(w http.ResponseWriter, r *http.Request) error {
+	v, err := s.Board(r.Context(), me(r), id(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, v)
+	return nil
+}
+
+func (s *Service) hAddStrokes(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Strokes []Stroke `json:"strokes"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	out, err := s.AddStrokes(r.Context(), me(r), id(r), in.Strokes)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"strokes": out})
+	return nil
+}
+
+func (s *Service) hErase(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		IDs     []int64 `json:"ids"`
+		Gesture string  `json:"gesture"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	removed, err := s.EraseStrokes(r.Context(), me(r), id(r), in.IDs, in.Gesture)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"removed": removed})
+	return nil
+}
+
+func (s *Service) hClearBoard(w http.ResponseWriter, r *http.Request) error {
+	upto, err := s.ClearBoard(r.Context(), me(r), id(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]int64{"upto": upto})
+	return nil
+}
+
+func (s *Service) hBoardAccess(w http.ResponseWriter, r *http.Request) error {
+	var in BoardAccessInput
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.SetBoardAccess(r.Context(), me(r), id(r), in))
 }

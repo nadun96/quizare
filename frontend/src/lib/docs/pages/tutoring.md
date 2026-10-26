@@ -154,6 +154,12 @@ Video normally travels over UDP 7882 (TCP 7881 as a fallback). Some school netwo
 
 Tested on one computer with Caddy 2.11.7 and caddy-l4 0.1.2 in front of LiveKit 1.13.7: with `?relay=1`, Chrome watched the teacher's screen through `turns:…:443` over TLS (`tutor-relay.mjs`). The aaPanel config was not tried on aaPanel.
 
+## The whiteboard
+
+Each session has one whiteboard, the teachers' (D-85, TS-FR-66, TS-FR-67): the platform's board (the tools, colours and sizes of the poll and meeting boards, D-47, D-72) on the fixed 1600×900 sheet. The lead teacher shows or hides it for everyone from the **Board** tab and decides who draws besides the teachers: nobody, everyone, or students they tick. Teachers and co-teachers always draw, erase anything and clear it; students who may draw erase and undo only their own marks.
+
+While it's shown, the board takes the main room's layout: large with the broadcast as thumbnails (spotlight), beside the main track (side by side), or as one tile of the grid. Students in a breakout group don't see it there; groups have no board of their own (PO-17). Anyone can make it full screen or save it as a PNG. Marks go through the API and are kept with the session, so a restart of the service loses nothing; the socket carries them to everyone, and students get them only while the board is shown.
+
 ## Layout
 
 The lead teacher chooses what students see: spotlight (the main track large, the others small), side by side, or a grid; the choice reaches students at once. A student can pick another layout for themself until the teacher changes it again (TS-FR-13).
@@ -244,11 +250,11 @@ Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 s
 
 ## Tests
 
-- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit); monitoring, with a fake of LiveKit's metrics whose counters the test moves on (`metrics_api_test.go`); scheduling: series, joining early, moving and cancelling with their emails, reminders falling due (the test moves the service's clock), calendars, `.ics` files and feeds (`schedule_api_test.go`), and how schedules repeat across a change of daylight saving time (`schedule_test.go`).
+- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit); monitoring, with a fake of LiveKit's metrics whose counters the test moves on (`metrics_api_test.go`); scheduling: series, joining early, moving and cancelling with their emails, reminders falling due (the test moves the service's clock), calendars, `.ics` files and feeds (`schedule_api_test.go`), and how schedules repeat across a change of daylight saving time (`schedule_test.go`); the whiteboard: who draws in each mode, checked marks, erasing one's own or anything, clearing, and the events (`board_api_test.go`).
 - `backend/internal/tutorlink`: also the classrooms someone teaches or studies in, and emails to a classroom's people, once each, active accounts only.
 - `backend/internal/tutorlink`: tokens, the internal API and every way a service token is refused.
 - `loadtest/tutoring-media.mjs`: LiveKit's capacity on this machine (D-58). Run it with nothing else busy: the simulated viewers share the machine's cores.
 
 ## Not yet
 
-Later phases add: the whiteboard and polls inside a session, attendance reports for classrooms, and a device check before joining.
+Later phases add: polls inside a session, attendance reports for classrooms, and a device check before joining.

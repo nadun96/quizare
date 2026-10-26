@@ -42,6 +42,10 @@ export type TutoringSession = {
 	open_early_min: number;
 	reminders: number[];
 	cancelled_at?: string;
+	/** The whiteboard (D-85): shown, who draws, and the chosen students (teachers only). */
+	board_open: boolean;
+	board_mode: 'teacher' | 'everyone' | 'selected';
+	board_users?: string[];
 };
 
 /** How a schedule repeats (D-84): once, daily or weekly, until a date or a number of times. */
