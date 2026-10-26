@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -40,6 +41,9 @@ type Config struct {
 	// optional; D-82): with it, the monitor shows measured bandwidth and CPU
 	// for the whole media server, not only estimates.
 	LiveKitMetricsURL string
+	// RetentionDays is how long ended sessions are kept, with their chat and
+	// attendance (TUTOR_RETENTION_DAYS, default 365; PO-16, D-87).
+	RetentionDays int
 }
 
 // generateKeys writes a LiveKit key file ("key: secret", LiveKit's key_file
@@ -101,6 +105,14 @@ func FromEnv() (Config, error) {
 	if len(missing) > 0 {
 		sort.Strings(missing)
 		return c, fmt.Errorf("set %s", strings.Join(missing, ", "))
+	}
+	c.RetentionDays = 365
+	if v := os.Getenv("TUTOR_RETENTION_DAYS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 30 || n > 3650 {
+			return c, fmt.Errorf("TUTOR_RETENTION_DAYS: 30 to 3650 days")
+		}
+		c.RetentionDays = n
 	}
 	var err error
 	if os.Getenv("TUTOR_GENERATE_LIVEKIT_KEYS") == "1" {

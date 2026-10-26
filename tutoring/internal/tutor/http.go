@@ -85,6 +85,10 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			// A poll in the session (D-86).
 			r.Method("PUT", "/poll", h(s.hShowPoll))
 		})
+		// Attendance reports (D-87).
+		r.Method("GET", "/classrooms/{classroom}/attendance", h(s.hClassroomAttendance))
+		r.Method("PUT", "/classrooms/{classroom}/attendance/settings", h(s.hAttendanceSettings))
+		r.Method("GET", "/my/attendance", h(s.hMyAttendance))
 		r.Method("POST", "/schedule", h(s.hSchedule))
 		r.Method("GET", "/calendar", h(s.hCalendar))
 		r.Method("GET", "/my/feed", h(s.hFeed))
@@ -890,4 +894,40 @@ func (s *Service) hShowPoll(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return noContent(w, s.ShowPoll(r.Context(), me(r), id(r), in))
+}
+
+// ---------- attendance reports (D-87) ----------
+
+func (s *Service) hClassroomAttendance(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	from, err1 := time.Parse(time.RFC3339, q.Get("from"))
+	to, err2 := time.Parse(time.RFC3339, q.Get("to"))
+	if err1 != nil || err2 != nil {
+		return web.Invalid(map[string]string{"from": "from and to, as RFC 3339 times"})
+	}
+	rep, err := s.ClassroomAttendance(r.Context(), me(r), chi.URLParam(r, "classroom"), from, to)
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, rep)
+	return nil
+}
+
+func (s *Service) hAttendanceSettings(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		CountsInResults bool `json:"counts_in_results"`
+	}
+	if err := web.Decode(w, r, &in); err != nil {
+		return err
+	}
+	return noContent(w, s.SetCountsInResults(r.Context(), me(r), chi.URLParam(r, "classroom"), in.CountsInResults))
+}
+
+func (s *Service) hMyAttendance(w http.ResponseWriter, r *http.Request) error {
+	list, err := s.MyAttendance(r.Context(), me(r))
+	if err != nil {
+		return err
+	}
+	web.JSON(w, http.StatusOK, map[string]any{"classrooms": list})
+	return nil
 }
