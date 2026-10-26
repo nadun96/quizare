@@ -71,6 +71,17 @@ urlencode() {
 
 # ---- tutoring (tutoring.sh, D-91) ----
 
+# Whether nothing listens on a port: port_free 8090 tcp (or udp).
+port_free() {
+	command -v ss >/dev/null || return 0
+	[ -z "$(ss -Hln --"$2" "sport = :$1" 2>/dev/null)" ]
+}
+
+# Which program listens on a port, for the message.
+port_user() {
+	ss -Hlnp --"$2" "sport = :$1" 2>/dev/null | sed -n 's/.*users:((\("[^"]*"\).*/\1/p' | head -1
+}
+
 tutoring_on() { [ -f "$APP/config/tutor.env" ]; }
 
 # Tutoring's settings, as its service sees them.
