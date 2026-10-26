@@ -78,6 +78,7 @@ func run(log *slog.Logger) error {
 	go func() {
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
+		sweeps := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -93,6 +94,15 @@ func run(log *slog.Logger) error {
 				// Reminders of scheduled sessions that are due (D-84).
 				if err := svc.SendReminders(ctx); err != nil {
 					log.Warn("sending reminders", "err", err)
+				}
+				// Once an hour: sessions past the retention period go, with
+				// their chat and attendance (PO-16, D-87).
+				if sweeps++; sweeps%120 == 1 {
+					if n, err := svc.SweepRetention(ctx, time.Duration(cfg.RetentionDays)*24*time.Hour); err != nil {
+						log.Warn("retention", "err", err)
+					} else if n > 0 {
+						log.Info("retention: old sessions deleted", "sessions", n)
+					}
 				}
 			}
 		}
