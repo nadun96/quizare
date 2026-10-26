@@ -25,6 +25,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/mail"
+	"github.com/nadun96/quizplatform/internal/oversight"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 )
 
@@ -75,6 +76,18 @@ type Service struct {
 	teachers   Teachers
 	mail       Mailer
 	now        func() time.Time
+	pauses     Pauses
+}
+
+// Pauses says why new activities are paused for a teacher (D-90).
+type Pauses func(ctx context.Context, teacherID string) (reason string, paused bool, err error)
+
+// SetPauses lets tutoring refuse new sessions while the admin has paused
+// new activities; a nil service (tutoring off) ignores it.
+func (s *Service) SetPauses(p Pauses) {
+	if s != nil {
+		s.pauses = p
+	}
 }
 
 // New returns nil when tutoring isn't configured: the platform then shows no
@@ -248,6 +261,8 @@ type AccessResult struct {
 	TeacherID     string `json:"teacher_id"`
 	Archived      bool   `json:"archived"`
 	Role          string `json:"role"`
+	// Paused, for a teacher, is why they may not start sessions now (D-90).
+	Paused string `json:"paused,omitempty"`
 }
 
 // handleTeacher finds an active teacher by email: their id and name only.
@@ -315,6 +330,16 @@ func (s *Service) handleAccess(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err // "not enrolled", "pending" and the like keep their codes for tutoring to show
 	}
-	httpx.JSON(w, 200, AccessResult{ClassroomID: c.ID, ClassroomName: c.Name, TeacherID: c.TeacherID, Archived: c.Archived, Role: role})
+	res := AccessResult{ClassroomID: c.ID, ClassroomName: c.Name, TeacherID: c.TeacherID, Archived: c.Archived, Role: role}
+	if role != "student" && s.pauses != nil {
+		reason, paused, err := s.pauses(r.Context(), in.UserID)
+		if err != nil {
+			return err
+		}
+		if paused {
+			res.Paused = oversight.PausedMessage(reason)
+		}
+	}
+	httpx.JSON(w, 200, res)
 	return nil
 }

@@ -292,6 +292,35 @@ paths:
       summary: Save the Google app (admins only, D-71)
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }
       responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/live-activity:
+    get:
+      operationId: getAdminLiveActivity
+      tags: [admin]
+      summary: Everything live across the platform, and the pauses on new activities (admins, or managers with the live activity feature; D-90)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { activities: { type: array, items: { $ref: '#/components/schemas/LiveActivity' } }, pauses: { type: array, items: { $ref: '#/components/schemas/ActivityPause' } } } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/admin/live-activity/{kind}/{id}/end:
+    post:
+      operationId: postAdminLiveActivityEnd
+      tags: [admin]
+      summary: End a quiz session, poll, meeting or live presentation now; logged with the reason, which the teacher is emailed (D-90)
+      parameters: [{ name: kind, in: path, required: true, schema: { type: string, enum: [quiz_session, poll, meeting, presentation] } }, { $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses: { '204': { description: 'Ended' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/live-activity/pauses:
+    post:
+      operationId: postAdminActivityPause
+      tags: [admin]
+      summary: Pause new activities for one teacher (by id or email) or, with neither, for everyone; again changes the reason (D-90)
+      description: What's already live carries on. Paused teachers get 409 `activities_paused` with the reason when they start a quiz session, open a poll, open a meeting, present live or start a tutoring session.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { teacher_id: { type: string, format: uuid }, teacher_email: { type: string }, reason: { type: string, maxLength: 500 } } } } } }
+      responses: { '200': { description: 'Paused', content: { application/json: { schema: { $ref: '#/components/schemas/ActivityPause' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/live-activity/pauses/{id}:
+    delete:
+      operationId: deleteAdminActivityPause
+      tags: [admin]
+      summary: Lift a pause (D-90)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Resumed' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/admin/meeting-limits:
     get:
       operationId: getAdminMeetingLimits
@@ -2556,6 +2585,28 @@ components:
         pages: { type: array, items: { type: object, properties: { title: { type: string }, questions: { type: integer }, done: { type: boolean }, open: { type: boolean } } } }
         page: { type: object }
         score: { type: object, properties: { score: { type: number }, max: { type: number }, pending: { type: integer } } }
+    LiveActivity:
+      type: object
+      properties:
+        kind: { type: string, enum: [quiz_session, poll, meeting, presentation] }
+        id: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: string }
+        teacher_id: { type: string, format: uuid }
+        teacher_name: { type: string }
+        teacher_email: { type: string }
+        classroom: { type: string }
+        started_at: { type: string, format: date-time }
+        people: { type: integer, description: 'Students in a quiz session, a poll''s participants, those in a meeting or live presentation now' }
+    ActivityPause:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        teacher_id: { type: string, format: uuid, nullable: true, description: 'null: everyone' }
+        teacher_name: { type: string }
+        teacher_email: { type: string }
+        reason: { type: string }
+        created_at: { type: string, format: date-time }
     MeetingLimits:
       type: object
       properties:
@@ -2715,7 +2766,7 @@ components:
     Feature:
       type: string
       description: An admin feature a manager can be given (PL-FR-10)
-      enum: [view_users, manage_users, approval_policy, settings, usage, audit, storage, cleanup, backups]
+      enum: [view_users, manage_users, approval_policy, settings, usage, audit, storage, cleanup, backups, live_activity]
     StorageLimits:
       type: object
       properties:

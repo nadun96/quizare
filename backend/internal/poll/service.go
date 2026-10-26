@@ -49,6 +49,7 @@ type Service struct {
 	uploads   *auth.Limiter // per participant
 	bc        *boardCache   // whiteboard access and stroke counts
 	reads     boardReads    // whiteboard loads that share a read
+	gate      Gate          // pausing new activities (D-90)
 }
 
 func NewService(pool *pgxpool.Pool, classes Classrooms, users Users, baseURL string, log *slog.Logger) *Service {
@@ -403,6 +404,11 @@ func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string) (
 	}
 	switch status {
 	case "open":
+		if p.Status != "open" {
+			if err := s.gate.Check(ctx, teacherID); err != nil {
+				return nil, err
+			}
+		}
 		var n int
 		if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM poll.questions WHERE poll_id=$1`, id).Scan(&n); err != nil {
 			return nil, err
@@ -421,7 +427,6 @@ func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string) (
 	if err != nil {
 		return nil, err
 	}
-	_ = p
 	s.hub.stateChanged(id)
 	return s.GetPoll(ctx, teacherID, id)
 }
