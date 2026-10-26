@@ -134,10 +134,21 @@ func checkPerm(path string) error {
 	if err != nil {
 		return err
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+	if runtime.GOOS != "windows" && info.Mode().Perm()&keyFileMask(path) != 0 {
 		return fmt.Errorf("%s must not be readable by group or others (chmod 0400)", path)
 	}
 	return nil
+}
+
+// keyFileMask is the permission bits a key file must not have. A systemd
+// credential (LoadCredential=, in $CREDENTIALS_DIRECTORY) lives in a
+// directory only the service can open, and some systemd versions make it
+// group-readable (0440): only "others" are refused there (D-89).
+func keyFileMask(path string) os.FileMode {
+	if dir := os.Getenv("CREDENTIALS_DIRECTORY"); dir != "" && filepath.Dir(filepath.Clean(path)) == filepath.Clean(dir) {
+		return 0o007
+	}
+	return 0o077
 }
 
 // LoadKey reads a 32-byte key: raw, 64 hex characters or base64, as the
