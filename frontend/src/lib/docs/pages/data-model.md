@@ -4,7 +4,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 
 | Migration | Creates |
 |-----------|---------|
-| `0001_init.sql` | `audit` schema, `pgcrypto` |
+| `0001_init.sql` | `audit` schema (and `pgcrypto`, only on PostgreSQL before 13, for `gen_random_uuid()`) |
 | `0002_auth.sql` | `auth.users`, `auth.sessions`, `auth.tokens`, `auth.policy` |
 | `0003_settings_content.sql` | `settings.platform`, `settings.teacher`, `content.*` |
 | `0004_quiz.sql` | `quiz.quizzes`, `quiz.questions`, `quiz.resources` |

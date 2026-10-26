@@ -202,6 +202,6 @@ If you run tutoring (see [Deployment](deployment.md)) and students sit behind sc
 | **"cross-site request rejected" at login** | `QP_BASE_URL` in `quiz.env` must be exactly the address people use: `https://`, with or without `www.` as they type it. Fix it and restart |
 | **Live quizzes keep "Reconnecting…"** | Nginx isn't passing WebSockets. Check the `Upgrade` and `Connection` lines from `nginx.conf` are in the site config |
 | **Install or update says it can't sign in to the database** | The password or user is wrong, or the database's access isn't "Local server". Check in aaPanel → Databases → PgSQL |
-| **The log says `permission denied to create extension "pgcrypto"`** | Create it once as PostgreSQL's administrator, then restart: `sudo -u postgres /www/server/pgsql/bin/psql -d quiz -c 'CREATE EXTENSION IF NOT EXISTS pgcrypto'` |
+| **The log says `extension "pgcrypto" is not available` or `permission denied to create extension "pgcrypto"`** | Versions before v2.19.1 asked for it; aaPanel's PostgreSQL often doesn't ship it. Install v2.19.1 or later, which doesn't need it on PostgreSQL 13 and newer |
 | **"pg_dump not found"** | Install PostgreSQL from aaPanel's App Store on this server. If the database is elsewhere, install the matching client tools and set `QP_PG_BIN` to their folder |
 | **An update went back to the old version** | It printed why; the log is in `journalctl -u quiz -n 80`. Your data is as it was, and there's a backup from just before |

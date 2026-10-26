@@ -1,4 +1,13 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- gen_random_uuid() is built in from PostgreSQL 13; before that it came with
+-- pgcrypto. Nothing else of pgcrypto is used, so it's only asked for on older
+-- servers: some builds (aaPanel's, for one) don't ship it at all.
+DO $$
+BEGIN
+    IF current_setting('server_version_num')::int < 130000 THEN
+        CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    END IF;
+END
+$$;
 
 CREATE SCHEMA IF NOT EXISTS audit;
 
