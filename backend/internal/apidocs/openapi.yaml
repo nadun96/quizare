@@ -1189,6 +1189,24 @@ paths:
       security: []
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [classroom_id, teacher_id], properties: { classroom_id: { type: string, format: uuid }, teacher_id: { type: string, format: uuid } } } } } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { categories: { type: array, items: { type: object, properties: { name: { type: string }, color: { type: integer }, user_ids: { type: array, items: { type: string, format: uuid } } } } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /internal/tutoring/classrooms:
+    post:
+      operationId: postInternalTutoringClassrooms
+      tags: [tutoring]
+      summary: 'For the tutoring service only: the classrooms someone teaches or is actively enrolled in, for their calendar (D-84)'
+      description: Same protection as /internal/tutoring/access. Archived classrooms are left out.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [user_id], properties: { user_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classrooms: { type: array, items: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string }, role: { type: string, enum: [teacher, student] } } } } } } } } } }
+  /internal/tutoring/notify:
+    post:
+      operationId: postInternalTutoringNotify
+      tags: [tutoring]
+      summary: 'For the tutoring service only: email a reminder or a change to a classroom''s people (D-84, TS-FR-87)'
+      description: Same protection as /internal/tutoring/access. Goes to the classroom's teacher, its active students when students is true, and the people named (co-teachers), once each and to active accounts only, as email jobs.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [classroom_id, subject], properties: { classroom_id: { type: string, format: uuid }, students: { type: boolean }, user_ids: { type: array, items: { type: string, format: uuid } }, subject: { type: string, maxLength: 200 }, body: { type: string, maxLength: 4000 } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { sent: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
 
   # ---------------- teacher settings ----------------
   /api/teacher/settings:
@@ -1254,6 +1272,33 @@ paths:
       summary: Students enrolled in a classroom
       parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, name, number, status] } }, { name: category, in: query, description: 'Only students in this category', schema: { type: string, format: uuid } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
+  /api/teacher/classrooms/{id}/results:
+    get:
+      operationId: getTeacherClassroomsResults
+      tags: [classrooms]
+      summary: Each active student's best mark on each quiz run in the classroom (D-87, TS-FR-82)
+      description: Quizzes in the order first run; scores are percentages of the best attempt that wasn't invalidated; average is over the quizzes the student took. Attendance comes from the tutoring service.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quizzes: { type: array, items: { type: object, properties: { id: { type: string, format: uuid }, title: { type: string } } } }
+                  students:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id: { type: string, format: uuid }
+                        name: { type: string }
+                        student_number: { type: string, nullable: true }
+                        scores: { type: object, additionalProperties: { type: number } }
+                        average: { type: number, nullable: true }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/teacher/enrolments/{id}:
     patch:
       operationId: patchTeacherEnrolmentsById

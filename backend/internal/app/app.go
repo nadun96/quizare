@@ -7,8 +7,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -318,6 +320,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Drive.TeacherRoutes(t)
 			a.Tutorial.TeacherRoutes(t)
 			a.Slides.TeacherRoutes(t)
+			// A classroom's results: each student's best mark on each quiz (D-87, TS-FR-82).
+			t.Method("GET", "/classrooms/{id}/results", httpx.Handler(a.classroomResults))
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole())
@@ -473,4 +477,48 @@ func (d driveResults) PollCSV(ctx context.Context, teacherID, pollID string) (st
 func (d driveResults) SessionTeacher(ctx context.Context, sessionID string) (string, error) {
 	info, err := d.a.Live.SessionInfo(ctx, "", sessionID)
 	return info.TeacherID, err
+}
+
+// ClassroomStudentResult is one active student's row in a classroom's results.
+type ClassroomStudentResult struct {
+	UserID        string             `json:"user_id"`
+	Name          string             `json:"name"`
+	StudentNumber *string            `json:"student_number,omitempty"`
+	Scores        map[string]float64 `json:"scores"` // quiz id → best %
+	Average       *float64           `json:"average,omitempty"` // of the quizzes they took
+}
+
+// classroomResults is GET /api/teacher/classrooms/{id}/results (D-87,
+// TS-FR-82): the roster from content (which checks the classroom is the
+// teacher's) with the marks from eval. Attendance comes from the tutoring
+// service; the page sets it beside these.
+func (a *App) classroomResults(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	roster, err := a.Content.ListEnrolments(r.Context(), auth.MustUser(r.Context()).ID, id, "active")
+	if err != nil {
+		return err
+	}
+	quizzes, best, err := a.Eval.ClassroomScores(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	students := []ClassroomStudentResult{}
+	for _, e := range roster {
+		row := ClassroomStudentResult{UserID: e.UserID, Name: e.StudentName, StudentNumber: e.StudentNumber, Scores: best[e.UserID]}
+		if row.Scores == nil {
+			row.Scores = map[string]float64{}
+		}
+		if n := len(row.Scores); n > 0 {
+			var sum float64
+			for _, v := range row.Scores {
+				sum += v
+			}
+			avg := math.Round(sum/float64(n)*10) / 10
+			row.Average = &avg
+		}
+		students = append(students, row)
+	}
+	sort.Slice(students, func(i, j int) bool { return strings.ToLower(students[i].Name) < strings.ToLower(students[j].Name) })
+	httpx.JSON(w, http.StatusOK, map[string]any{"quizzes": quizzes, "students": students})
+	return nil
 }

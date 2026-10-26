@@ -197,6 +197,12 @@ Teachers can reply to one student privately, delete a message for everyone, mute
 
 Attendance counts the time each person was connected while the session was live: first joined, last left, how many times they connected, and their total minutes. The teacher sees it in the Attendance tab and downloads it as CSV (formula-like names are escaped). A restart of the tutoring service closes the visits that were open; people reconnect and open new ones.
 
+**Reports** (D-87, TS-FR-81 to TS-FR-83). The classroom page has an **Attendance** tab (when tutoring is on): between two dates, each active student's sessions attended, rate and minutes present, students who never came included (the tutoring service knows who came; the page sets that beside the classroom's roster), and the sessions; it downloads as CSV, per student or as a student-by-session table. A session counts once it has started. Students see their own attendance, per classroom over the last year, on their My page.
+
+**Toward marks** (TS-FR-82). The classroom's **Results** tab shows each active student's best mark on each quiz run in the classroom and their average (`GET /api/teacher/classrooms/{id}/results`). When the teacher ticks "Count attendance in the classroom's results", it also shows their attendance rate over the last year, and the results CSV carries it.
+
+**Kept a year** (PO-16). Sessions that ended or were cancelled more than a year ago are deleted every hour, with their chat, attendance and log (`TUTOR_RETENTION_DAYS`, 30 to 3650, default 365).
+
 ## Running it locally
 
 Run the platform with tutoring on, the tutoring service, and LiveKit:
@@ -250,17 +256,18 @@ If Windows refuses the ports (`netsh interface ipv4 show excludedportrange proto
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET_FILE` | — | LiveKit's key and its secret file: just the secret, or LiveKit's own `key: secret` key file |
 | `TUTOR_GENERATE_LIVEKIT_KEYS` | off | `1`: write the LiveKit key file on first start (containers) |
 | `LIVEKIT_METRICS_URL` | — | LiveKit's Prometheus endpoint (`prometheus: port:` in its config), e.g. `http://127.0.0.1:6789/metrics`: measured bandwidth and CPU for monitoring (D-82) |
+| `TUTOR_RETENTION_DAYS` | `365` | How long ended sessions are kept, with their chat and attendance (D-87) |
 | `TUTOR_RECORDINGS_DIR` | `data/recordings` | Where recordings are kept, encrypted (D-80); the systemd unit uses `/var/lib/quiz-tutoring/recordings`, containers `/var/lib/tutoring/recordings` |
 
 Windows sometimes reserves a range of ports around 7880 (`netsh interface ipv4 show excludedportrange protocol=tcp`); run LiveKit on other ports then.
 
 ## Tests
 
-- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit); monitoring, with a fake of LiveKit's metrics whose counters the test moves on (`metrics_api_test.go`); scheduling: series, joining early, moving and cancelling with their emails, reminders falling due (the test moves the service's clock), calendars, `.ics` files and feeds (`schedule_api_test.go`), and how schedules repeat across a change of daylight saving time (`schedule_test.go`); the whiteboard: who draws in each mode, checked marks, erasing one's own or anything, clearing, and the events (`board_api_test.go`); polls: who may show one, what's checked, and students being told (`poll_api_test.go`).
+- `tutoring/internal/tutor`: the service against PostgreSQL, a fake platform and a fake LiveKit: creating and listing, joining, admitting, refusing, locking, removing, starting and ending; the sources and watching rights in each room's token; permission changes reaching LiveKit in both rooms; hands, mute; every chat mode, private replies, deletion, pinning, slow mode; sockets (one per person, origins, the first message) and attendance; co-teachers' rights and limits; handing the broadcast over, declining and taking it back; answers to requests; the layout; breakout groups; recording; plans and presets, the admin's budget, the checks before starting and sharing, and the monitor switching things off in order and turning them back on (`budget_api_test.go`, with tracks set per room in the fake LiveKit); monitoring, with a fake of LiveKit's metrics whose counters the test moves on (`metrics_api_test.go`); scheduling: series, joining early, moving and cancelling with their emails, reminders falling due (the test moves the service's clock), calendars, `.ics` files and feeds (`schedule_api_test.go`), and how schedules repeat across a change of daylight saving time (`schedule_test.go`); the whiteboard: who draws in each mode, checked marks, erasing one's own or anything, clearing, and the events (`board_api_test.go`); polls: who may show one, what's checked, and students being told (`poll_api_test.go`); attendance reports, who may see them, the setting for results, a student's own, and retention (`reports_api_test.go`).
 - `backend/internal/tutorlink`: also the classrooms someone teaches or studies in, and emails to a classroom's people, once each, active accounts only.
 - `backend/internal/tutorlink`: tokens, the internal API and every way a service token is refused.
 - `loadtest/tutoring-media.mjs`: LiveKit's capacity on this machine (D-58). Run it with nothing else busy: the simulated viewers share the machine's cores.
 
 ## Not yet
 
-Later phases add: attendance reports for classrooms, and a device check before joining.
+Later phases add: a device check before joining.

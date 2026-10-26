@@ -439,3 +439,57 @@ export function deletedIn(expiresAt: string | undefined, now = Date.now()): stri
 	if (h >= 1) return `in ${Math.round(h)} hours`;
 	return 'within the hour';
 }
+
+// ---------- attendance reports (D-87) ----------
+
+export type ReportSession = { id: string; title: string; started_at: string; ended_at?: string; seconds: number };
+export type ClassroomReport = {
+	sessions: ReportSession[];
+	students: { user_id: string; name: string; attended: string[]; seconds: number }[];
+	counts_in_results: boolean;
+};
+export type MyClassroomAttendance = {
+	classroom_id: string;
+	classroom_name: string;
+	sessions: number;
+	attended: number;
+	seconds: number;
+	recent: { title: string; started_at: string; attended: boolean; seconds: number }[];
+};
+export type RosterEntry = { user_id: string; student_name?: string; student_number?: string | null };
+export type AttendanceRow = { user_id: string; name: string; number: string; attended: number; of: number; rate: number | null; minutes: number };
+
+/**
+ * The report beside the classroom's roster: every active student, those who
+ * never came included (the tutoring service only knows who came). Rate is a
+ * percentage of the sessions, or null when there were none.
+ */
+export function attendanceRows(report: ClassroomReport, roster: RosterEntry[]): AttendanceRow[] {
+	const of = report.sessions.length;
+	const came = new Map(report.students.map((s) => [s.user_id, s]));
+	const rows = roster.map((r) => {
+		const s = came.get(r.user_id);
+		const attended = s?.attended.length ?? 0;
+		return { user_id: r.user_id, name: r.student_name || s?.name || 'Student', number: r.student_number ?? '', attended, of, rate: of ? Math.round((attended / of) * 100) : null, minutes: Math.round((s?.seconds ?? 0) / 60) };
+	});
+	return rows.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** One CSV cell: quoted when needed, and never a spreadsheet formula. */
+export function csvCell(v: string | number | null | undefined): string {
+	let s = v == null ? '' : String(v);
+	if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+	return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export const toCSV = (rows: (string | number | null | undefined)[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+
+/** Saves text as a file, from the browser. */
+export function saveFile(name: string, text: string, type = 'text/csv;charset=utf-8') {
+	const url = URL.createObjectURL(new Blob(['\ufeff' + text], { type }));
+	const a = Object.assign(document.createElement('a'), { href: url, download: name });
+	document.body.append(a);
+	a.click();
+	a.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
