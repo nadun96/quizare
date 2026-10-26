@@ -125,13 +125,17 @@ type Session struct {
 	BoardMode    string   `json:"board_mode"`
 	BoardUsers   []string `json:"board_users,omitempty"`
 	boardCleared int64
+	// The poll running in the session (D-86): one of the teacher's platform polls.
+	PollID    *string `json:"poll_id,omitempty"`
+	PollCode  *string `json:"poll_code,omitempty"`
+	PollTitle *string `json:"poll_title,omitempty"`
 }
 
 const sessionCols = `id, teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, status, admit_mode, locked, chat_mode,
 	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, groups_open, groups_close_at, groups_choose, group_chat,
 	group_mic, group_camera, group_screen, scheduled_at, created_at, started_at, ended_at, plan, auto_off,
 	series_id, duration_min, time_zone, open_early_min, reminders, cancelled_at,
-	board_open, board_mode, board_users::text[], board_cleared`
+	board_open, board_mode, board_users::text[], board_cleared, poll_id::text, poll_code, poll_title`
 
 func scanSession(row pgx.Row) (Session, error) { return scanSessionWith(row) }
 
@@ -143,7 +147,7 @@ func scanSessionWith(row pgx.Row, extra ...any) (Session, error) {
 		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout,
 		&s.GroupsOpen, &s.GroupsCloseAt, &s.GroupsChoose, &s.GroupChat, &s.GroupMic, &s.GroupCamera, &s.GroupScreen, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt,
 		&plan, &s.AutoOff, &s.SeriesID, &s.DurationMin, &s.TimeZone, &s.OpenEarlyMin, &s.Reminders, &s.CancelledAt,
-		&s.BoardOpen, &s.BoardMode, &s.BoardUsers, &s.boardCleared}, extra...)
+		&s.BoardOpen, &s.BoardMode, &s.BoardUsers, &s.boardCleared, &s.PollID, &s.PollCode, &s.PollTitle}, extra...)
 	err := row.Scan(dest...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s, web.ErrNotFound

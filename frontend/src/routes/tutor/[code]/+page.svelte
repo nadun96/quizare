@@ -21,6 +21,8 @@
 	import ResourcesPanel from '$lib/tutoring/ResourcesPanel.svelte';
 	import SessionTiming from '$lib/tutoring/SessionTiming.svelte';
 	import BoardControls from '$lib/tutoring/BoardControls.svelte';
+	import SessionPolls from '$lib/tutoring/SessionPolls.svelte';
+	import PollTake from '$lib/poll/PollTake.svelte';
 	import Whiteboard from '$lib/board/Whiteboard.svelte';
 	import { BoardState, type BoardEvent, type BoardView, type NewStroke, type Stroke } from '$lib/board/strokes.svelte';
 	import { PresenterRecorder } from '$lib/tutoring/recorder.svelte';
@@ -38,7 +40,7 @@
 	const media = new SessionMedia(() => audioHost, (m) => toast(m, 'error'));
 	media.forceRelay = page.url.searchParams.get('relay') === '1'; // checking the relay (D-83)
 	let socket: TutorSocket | null = null;
-	let side = $state<'chat' | 'people' | 'groups' | 'recordings' | 'attendance' | 'resources' | 'board'>('chat');
+	let side = $state<'chat' | 'people' | 'groups' | 'recordings' | 'attendance' | 'resources' | 'board' | 'poll'>('chat');
 	// What the session sends now, pushed to the teachers every 2 s (D-81).
 	let resources = $state<Resources | null>(null);
 	async function showResources() {
@@ -204,6 +206,12 @@
 				break;
 			case 'group_help':
 				toast(`${e.data.name} asks for help in their group`, 'error');
+				break;
+			case 'poll_shown':
+				if (!teacher) {
+					side = 'poll'; // students answer beside the broadcast (D-86)
+					toast(`A poll has started: ${e.data.title}`);
+				}
 				break;
 			case 'board':
 				if (board.apply(e.data as BoardEvent)) loadBoard().catch(() => {});
@@ -541,6 +549,7 @@
 				<aside class="side card card-border bg-base-100 p-3 vstack">
 					<div class="tabs tabs-border" role="tablist">
 						<button class="tab" role="tab" aria-selected={side === 'chat'} class:tab-active={side === 'chat'} onclick={() => (side = 'chat')}>Chat</button>
+						{#if view.session.poll_code}<button class="tab" role="tab" aria-selected={side === 'poll'} class:tab-active={side === 'poll'} onclick={() => (side = 'poll')}>{teacher ? 'Polls' : 'Poll'}{' '}<span class="badge badge-primary badge-xs">live</span></button>{:else if teacher}<button class="tab" role="tab" aria-selected={side === 'poll'} class:tab-active={side === 'poll'} onclick={() => (side = 'poll')}>Polls</button>{/if}
 						<button class="tab" role="tab" aria-selected={side === 'recordings'} class:tab-active={side === 'recordings'} onclick={loadRecordings}>Recordings</button>
 						{#if teacher}
 							<button class="tab" role="tab" aria-selected={side === 'people'} class:tab-active={side === 'people'} onclick={() => (side = 'people')}>People{#if view.waiting}{' '}({view.waiting}){/if}</button>
@@ -559,6 +568,12 @@
 					{:else if side === 'recordings'}
 						<RecordingsList {client} {recordings} meId={view.me.user_id} leadOf={(r) => r.lead} onchange={loadRecordings} />
 						{#if !recordings.length && !teacher}<p class="small muted m-0">Your teacher chooses whether students can watch recordings.</p>{/if}
+					{:else if side === 'poll' && teacher}
+						<SessionPolls {client} {view} />
+					{:else if side === 'poll' && view.session.poll_code}
+						{#key view.session.poll_code}<PollTake code={view.session.poll_code} compact />{/key}
+					{:else if side === 'poll'}
+						<p class="small muted m-0">The poll has ended.</p>
 					{:else if side === 'board' && teacher}
 						<BoardControls {client} {view} />
 					{:else if side === 'resources' && teacher}
