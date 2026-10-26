@@ -284,6 +284,9 @@ func (s *Service) Create(ctx context.Context, p authn.Person, in CreateInput) (S
 	if a.Archived {
 		return Session{}, web.Conflict("this classroom is archived")
 	}
+	if a.Paused != "" {
+		return Session{}, web.NewError(http.StatusConflict, "activities_paused", a.Paused)
+	}
 	for range 5 {
 		sess, err := scanSession(s.pool.QueryRow(ctx, `INSERT INTO tutoring.sessions (teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, admit_mode, scheduled_at, plan)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+sessionCols, p.ID, p.Name, a.ClassroomID, a.ClassroomName, in.Title, newCode(), in.AdmitMode, in.ScheduledAt, planRaw))
@@ -527,6 +530,12 @@ func (s *Service) Start(ctx context.Context, p authn.Person, id string, force bo
 	}
 	if sess.Status != "open" {
 		return web.Conflict("the session has already started or ended")
+	}
+	// The admin may have paused new activities since it was made (D-90).
+	if a, err := s.platform.Access(ctx, sess.ClassroomID, p.ID); err != nil {
+		return err
+	} else if a.Paused != "" {
+		return web.NewError(http.StatusConflict, "activities_paused", a.Paused)
 	}
 	pv, err := s.planView(ctx, sess, sess.Plan)
 	if err != nil {

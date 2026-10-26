@@ -52,6 +52,7 @@ type Service struct {
 	hub     *liveHub
 	marks   Marks
 	now     func() time.Time
+	gate    Gate // pausing new activities (D-90)
 }
 
 func NewService(pool *pgxpool.Pool, topics Topics, users Users, baseURL string) *Service {

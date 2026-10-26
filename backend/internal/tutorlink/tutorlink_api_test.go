@@ -113,6 +113,16 @@ func TestInternalAccessAPI(t *testing.T) {
 	if code, _ = access(t, c, good, "not-a-uuid", student.User.ID); code != 404 {
 		t.Fatalf("unknown classroom: %d", code)
 	}
+	// While the admin pauses new activities, the teacher is told why;
+	// students aren't (D-90).
+	admin := e.NewUser(auth.RoleAdmin)
+	admin.Call("POST", "/api/admin/live-activity/pauses", map[string]string{"reason": "Exams"}, 200, nil)
+	if code, out = access(t, c, good, open.ID, teacher.User.ID); code != 200 || !strings.Contains(out, `"paused":"the admin has paused new activities for now: Exams"`) {
+		t.Fatalf("paused teacher: %d %s", code, out)
+	}
+	if code, out = access(t, c, good, open.ID, student.User.ID); code != 200 || strings.Contains(out, "paused") {
+		t.Fatalf("paused student: %d %s", code, out)
+	}
 
 	// Refused: no token, a wrong key, a wrong issuer or audience, a long-lived token, an expired one.
 	for name, tok := range map[string]string{

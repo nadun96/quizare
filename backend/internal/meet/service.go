@@ -85,6 +85,7 @@ type Service struct {
 	log        *slog.Logger
 	hub        *hub
 	now        func() time.Time
+	gate       Gate // pausing new activities (D-90)
 }
 
 // Options are the ICE settings (STUN, and TURN with a coturn shared secret).
@@ -215,6 +216,9 @@ func (s *Service) Create(ctx context.Context, host auth.User, in MeetingInput) (
 	f := map[string]string{}
 	if n := len([]rune(in.Title)); n < 1 || n > 120 {
 		f["title"] = "give the meeting a title (at most 120 characters)"
+	}
+	if err := s.gate.Check(ctx, host.ID); err != nil {
+		return Meeting{}, err
 	}
 	lim, err := s.Limits(ctx)
 	if err != nil {
