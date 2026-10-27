@@ -212,7 +212,6 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	quizWorker.Service = a.Quiz
 	a.Live = live.NewService(pool, a.Quiz, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Quiz.SetSessionGuard(a.Live.HasSessions) // BR-16: run quizzes are archived, not deleted
-	a.Content.SetDeleteGuard(a.Live.ClassroomHasSessions)
 	a.Eval = eval.NewService(pool, a.Live, rc)
 	evalWorker.Service = a.Eval
 	vault, err := llm.NewVault(opt.KEK)

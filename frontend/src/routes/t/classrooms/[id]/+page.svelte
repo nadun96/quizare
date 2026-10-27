@@ -17,6 +17,7 @@
 
 	import StudentsPanel, { type Enrolment } from '$lib/StudentsPanel.svelte';
 	import ClassroomResults from '$lib/ClassroomResults.svelte';
+	import { deleteWithContents } from '$lib/deleting';
 	import ClassroomAttendance from '$lib/tutoring/ClassroomAttendance.svelte';
 	import { tutoringConfig } from '$lib/tutoring/client';
 	const ready = requireRole('teacher');
@@ -58,10 +59,8 @@
 		}
 	}
 	async function remove(kind: 'modules' | 'topics', itemId: string) {
-if (!(await confirmDialog({ title: 'Delete this ' + kind.slice(0, -1) + '?', body: 'Everything inside it is deleted too.', confirm: 'Delete', danger: true }))) return;
 		try {
-			await api.del('/api/teacher/' + kind + '/' + itemId);
-			modules.load();
+			if (await deleteWithContents(kind === 'modules' ? 'module' : 'topic', itemId)) modules.load();
 		} catch (e) {
 			notice = e instanceof ApiError ? e.message : 'Delete failed';
 		}
@@ -97,10 +96,8 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 		load();
 	}
 	async function del() {
-if (!(await confirmDialog({ title: 'Delete this classroom?', body: 'Its modules, topics, quizzes and enrolments are deleted too.', confirm: 'Delete classroom', danger: true }))) return;
 		try {
-			await api.del('/api/teacher/classrooms/' + id);
-			goto('/t');
+			if (await deleteWithContents('classroom', id)) goto('/t');
 		} catch (e) {
 			notice = e instanceof ApiError ? e.message : 'Delete failed';
 		}
