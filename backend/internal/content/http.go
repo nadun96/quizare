@@ -17,6 +17,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("GET", "/classrooms/{id}", httpx.Handler(s.hGetClassroom))
 	r.Method("PATCH", "/classrooms/{id}", httpx.Handler(s.hUpdateClassroom))
 	r.Method("DELETE", "/classrooms/{id}", httpx.Handler(s.hDeleteClassroom))
+	r.Method("GET", "/classrooms/{id}/delete-preview", httpx.Handler(s.hDeletePreview("classroom")))
 	r.Method("POST", "/classrooms/{id}/archive", httpx.Handler(s.hArchive(true)))
 	r.Method("POST", "/classrooms/{id}/unarchive", httpx.Handler(s.hArchive(false)))
 	r.Method("POST", "/classrooms/{id}/join-code", httpx.Handler(s.hRegenerateCode))
@@ -32,11 +33,13 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("POST", "/classrooms/{id}/modules", httpx.Handler(s.hCreateModule))
 	r.Method("PATCH", "/modules/{id}", httpx.Handler(s.hUpdateModule))
 	r.Method("DELETE", "/modules/{id}", httpx.Handler(s.hDeleteModule))
+	r.Method("GET", "/modules/{id}/delete-preview", httpx.Handler(s.hDeletePreview("module")))
 	r.Method("GET", "/modules/{id}/topics", httpx.Handler(s.hListTopics))
 	r.Method("POST", "/modules/{id}/topics", httpx.Handler(s.hCreateTopic))
 	r.Method("GET", "/topics/{id}", httpx.Handler(s.hGetTopic))
 	r.Method("PATCH", "/topics/{id}", httpx.Handler(s.hUpdateTopic))
 	r.Method("DELETE", "/topics/{id}", httpx.Handler(s.hDeleteTopic))
+	r.Method("GET", "/topics/{id}/delete-preview", httpx.Handler(s.hDeletePreview("topic")))
 }
 
 // StudentRoutes mounts endpoints for any logged-in user (enrolment is by code).
@@ -94,7 +97,7 @@ func (s *Service) hUpdateClassroom(w http.ResponseWriter, r *http.Request) error
 }
 
 func (s *Service) hDeleteClassroom(w http.ResponseWriter, r *http.Request) error {
-	if err := s.DeleteClassroom(r.Context(), uid(r), chi.URLParam(r, "id")); err != nil {
+	if err := s.DeleteNode(r.Context(), uid(r), "classroom", chi.URLParam(r, "id"), r.URL.Query().Get("confirm")); err != nil {
 		return err
 	}
 	w.WriteHeader(204)
@@ -183,7 +186,7 @@ func (s *Service) hUpdateModule(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) hDeleteModule(w http.ResponseWriter, r *http.Request) error {
-	if err := s.DeleteModule(r.Context(), uid(r), chi.URLParam(r, "id")); err != nil {
+	if err := s.DeleteNode(r.Context(), uid(r), "module", chi.URLParam(r, "id"), r.URL.Query().Get("confirm")); err != nil {
 		return err
 	}
 	w.WriteHeader(204)
@@ -235,7 +238,7 @@ func (s *Service) hUpdateTopic(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) hDeleteTopic(w http.ResponseWriter, r *http.Request) error {
-	if err := s.DeleteTopic(r.Context(), uid(r), chi.URLParam(r, "id")); err != nil {
+	if err := s.DeleteNode(r.Context(), uid(r), "topic", chi.URLParam(r, "id"), r.URL.Query().Get("confirm")); err != nil {
 		return err
 	}
 	w.WriteHeader(204)
@@ -331,4 +334,17 @@ func (s *Service) hAssignCategory(w http.ResponseWriter, r *http.Request) error 
 	}
 	httpx.JSON(w, 200, map[string]int{"affected": n})
 	return nil
+}
+
+// hDeletePreview says what deleting a classroom, module or topic takes with
+// it, and whether its name must be typed (D-92).
+func (s *Service) hDeletePreview(level string) httpx.Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		c, err := s.DeletePreview(r.Context(), uid(r), level, chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, c)
+		return nil
+	}
 }

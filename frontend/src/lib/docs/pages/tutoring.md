@@ -135,6 +135,10 @@ LiveKit mutes the tracks at once, and the broadcaster's browser stops sending th
 
 The Resources tab (teachers, TS-FR-33) shows the session's use and its share, all of tutoring against the budget, what makes up the figure, and the plan.
 
+## Ending a session for the admin
+
+The admin console's **Live activity** tab (D-90) lists tutoring sessions open or live beside the platform's activities, for admins. **End now** ends one for everyone, as its lead teacher would, with a reason that goes in the session's log (`ended_by_admin`) and to the teacher by email (`GET /api/admin/live`, `POST /api/admin/sessions/{id}/end`).
+
 ## Monitoring
 
 The admin console's **Tutoring** tab shows upload, download, CPU, tracks, participants and reconnects, in total and for each live session, now and over the last 24 hours or 7 days (D-82, TS-NFR-41).
@@ -179,6 +183,18 @@ Nothing, by default (TS-FR-20). The teacher allows the microphone, camera and sc
 - **Raised hands** queue in order. "Allow mic" in the queue grants the microphone, asks the student and lowers the hand in one step.
 - **Mute** mutes a student's published tracks of the chosen kind, or everyone's microphones at once.
 - What students share goes backstage, to the teachers only, unless they are the broadcaster (above).
+
+## The teacher's grid and the device check
+
+What students share backstage reaches the teachers in a grid of pages of 25, where any tile can be enlarged (TS-FR-35). Backstage is joined without subscribing to anything: the teacher's browser takes all its sound, and only the videos of the visible page and the enlarged tile (`SessionMedia.showStage`), so with 200 students sharing it receives 26 videos at most; LiveKit's adaptive stream sends small tiles their small versions. Turning a page drops the last page's videos.
+
+**Devices** opens the device check (TS-FR-05), also offered in the waiting room: speakers (where the browser can choose them) with a test sound, and for those who may share, the microphone and camera with a preview and a level meter that start only on "Try my microphone and camera" and the browser's prompt (PO-3). The choice is kept in this browser and used for the microphone, new cameras and the session's sound.
+
+## Quick reactions and zoom
+
+Students tap **👍 👏 🐢 ❓** (thumbs up, clap, "slower please", "I'm confused") beside Raise hand; the teachers see how many people sent each in the last minute, a person counting once per kind (TS-FR-26). Reactions need no permission and no media: the service keeps them in memory only (`POST /api/sessions/{id}/react`, `GET …/reactions`, the `reactions` socket event to staff).
+
+Anyone watching a shared screen can zoom into it up to 600 %, around the pointer: the − / % / + buttons, Ctrl + wheel, a pinch, a double click, or + − 0 on the keyboard, then drag to look around (TS-FR-14). Full screen works as before.
 
 ## Chat
 

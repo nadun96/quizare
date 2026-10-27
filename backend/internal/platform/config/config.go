@@ -57,6 +57,11 @@ type Config struct {
 
 	SMTPAddr, SMTPFrom, SMTPUser string
 	SMTPPasswordFile             string // secret read from a file, like the KEK
+
+	// ResultsRetentionDays deletes quiz sessions, with their results, this
+	// long after they ended (QP_RESULTS_RETENTION_DAYS; 0, the default,
+	// keeps them; D-94). The admin's clean-up does it on demand.
+	ResultsRetentionDays int
 }
 
 func FromEnv() (Config, error) {
@@ -91,6 +96,13 @@ func FromEnv() (Config, error) {
 	}
 	if _, err := httpx.ParseProxies(c.TrustedProxies); err != nil {
 		return c, fmt.Errorf("QP_TRUSTED_PROXIES: %w", err)
+	}
+	if v := os.Getenv("QP_RESULTS_RETENTION_DAYS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || (n != 0 && (n < 30 || n > 3650)) {
+			return c, fmt.Errorf("QP_RESULTS_RETENTION_DAYS: 0 (keep) or 30 to 3650 days")
+		}
+		c.ResultsRetentionDays = n
 	}
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("QP_DATABASE_URL is required")

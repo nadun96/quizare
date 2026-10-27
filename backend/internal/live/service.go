@@ -333,13 +333,6 @@ func (s *Service) HasSessions(ctx context.Context, quizID string) (bool, error) 
 	return ok, err
 }
 
-// ClassroomHasSessions reports whether a classroom has session results.
-func (s *Service) ClassroomHasSessions(ctx context.Context, classroomID string) (bool, error) {
-	var ok bool
-	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM live.sessions WHERE classroom_id=$1)`, classroomID).Scan(&ok)
-	return ok, err
-}
-
 func (s *Service) event(ctx context.Context, tx pgx.Tx, sessionID, attemptID, actorID, kind string, details any) error {
 	b, err := json.Marshal(details)
 	if err != nil {

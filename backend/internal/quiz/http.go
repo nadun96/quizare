@@ -125,7 +125,7 @@ func (s *Service) hUpdateQuiz(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) hDeleteQuiz(w http.ResponseWriter, r *http.Request) error {
-	archived, err := s.DeleteQuiz(r.Context(), uid(r), id(r))
+	archived, err := s.DeleteQuizConfirmed(r.Context(), uid(r), id(r), r.URL.Query().Get("confirm"))
 	if err != nil {
 		return err
 	}

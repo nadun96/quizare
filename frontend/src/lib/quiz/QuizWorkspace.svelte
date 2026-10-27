@@ -11,6 +11,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { describeKey } from '$lib/answerText';
 	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
+	import { confirmTitle } from '$lib/deleting';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { requireRole } from '$lib/guard.svelte';
 	import QuestionEditor from '$lib/QuestionEditor.svelte';
@@ -179,10 +180,25 @@ if (!(await confirmDialog({ title: 'Delete question ' + q.code + '?', confirm: '
 		if (t) quiz = await api.patch<Quiz>('/api/teacher/quizzes/' + id, { title: t });
 	}
 	async function delQuiz() {
+		// Archived because it has results: deleting now takes them too.
+		if (quiz?.status === 'archived') return delWithResults();
 if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results it is archived instead, so the results stay.', confirm: 'Delete quiz', danger: true }))) return;
 		const r = await api.del<{ archived: boolean }>('/api/teacher/quizzes/' + id);
-		if (r?.archived) load();
-		else goto('/t/topics/' + quiz!.topic_id);
+		if (r?.archived) {
+			load();
+			toast('It has results, so it was archived. Delete it again to remove it with its results too.');
+		} else goto('/t/topics/' + quiz!.topic_id);
+	}
+	/** An archived quiz keeps its results; this deletes them with it (D-92). */
+	async function delWithResults() {
+		const typed = await confirmTitle('quiz', quiz!.title, "its sessions and every student's results in them");
+		if (!typed) return;
+		try {
+			await api.del('/api/teacher/quizzes/' + id + '?confirm=' + encodeURIComponent(typed));
+			goto('/t/topics/' + quiz!.topic_id);
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Could not delete', 'error');
+		}
 	}
 	async function newSession() {
 		try {

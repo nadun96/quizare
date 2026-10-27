@@ -45,10 +45,12 @@ type Freed struct {
 // Area is one kind of data a clean-up can delete (PL-FR-06). Preview and
 // Run must count the same rows, so the preview matches what goes.
 type Area struct {
-	ID      string                                                                     `json:"id"`
-	Label   string                                                                     `json:"label"`
-	Preview func(ctx context.Context, before time.Time) (Freed, error)                 `json:"-"`
-	Run     func(ctx context.Context, actorID string, before time.Time) (Freed, error) `json:"-"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	// RetainDays, when set, deletes what is older every hour, unasked (D-94).
+	RetainDays int                                                                        `json:"retain_days,omitempty"`
+	Preview    func(ctx context.Context, before time.Time) (Freed, error)                 `json:"-"`
+	Run        func(ctx context.Context, actorID string, before time.Time) (Freed, error) `json:"-"`
 }
 
 type Service struct {
@@ -820,12 +822,33 @@ type SnapshotWorker struct {
 func (w *SnapshotWorker) Work(ctx context.Context, _ *river.Job[SnapshotArgs]) error {
 	s := w.Service
 	s.scanNightly(ctx)
+	s.RunRetention(ctx)
 	if _, err := s.TakeSnapshot(ctx); err != nil {
 		return err
 	}
 	_, _ = s.pool.Exec(ctx, `DELETE FROM storage.snapshots WHERE taken_at < $1`, s.now().AddDate(0, 0, -90))
 	_, err := s.pool.Exec(ctx, `DELETE FROM storage.download_links WHERE expires_at < $1`, s.now().Add(-24*time.Hour))
 	return err
+}
+
+// RunRetention runs the areas that have a retention period (D-94), logged as the
+// system's own clean-ups.
+func (s *Service) RunRetention(ctx context.Context) {
+	for _, a := range s.areas {
+		if a.RetainDays <= 0 {
+			continue
+		}
+		before := s.now().AddDate(0, 0, -a.RetainDays)
+		f, err := a.Run(ctx, "", before)
+		if err != nil {
+			s.log.Warn("retention", "area", a.ID, "err", err)
+			continue
+		}
+		if f.Items > 0 {
+			_ = audit.Log(ctx, s.pool, "", "retention_run", "storage", a.ID, map[string]any{"before": before.Format(time.DateOnly), "items": f.Items, "bytes": f.Bytes, "days": a.RetainDays})
+			s.log.Info("retention: old data deleted", "area", a.ID, "items", f.Items)
+		}
+	}
 }
 
 // Periodic is the hourly snapshot, also run when the server starts.

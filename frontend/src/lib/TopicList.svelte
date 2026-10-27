@@ -6,7 +6,8 @@
 	import { api, ApiError } from './api';
 	import { Paged } from './paged.svelte';
 	import type { Topic } from './types';
-	import { confirmDialog, promptDialog } from './ui/dialog.svelte';
+	import { deleteWithContents } from './deleting';
+	import { promptDialog } from './ui/dialog.svelte';
 	import Pager from './ui/Pager.svelte';
 	import { toast } from './ui/toast.svelte';
 
@@ -32,10 +33,8 @@
 		}
 	}
 	async function remove(t: Topic) {
-		if (!(await confirmDialog({ title: 'Delete this topic?', body: 'Everything inside it is deleted too.', confirm: 'Delete', danger: true }))) return;
 		try {
-			await api.del('/api/teacher/topics/' + t.id);
-			list.load();
+			if (await deleteWithContents('topic', t.id)) list.load();
 		} catch (e) {
 			toast(e instanceof ApiError ? e.message : 'Delete failed', 'error');
 		}

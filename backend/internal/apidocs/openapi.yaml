@@ -750,8 +750,8 @@ paths:
     delete:
       operationId: deleteTeacherTutorial
       tags: [tutorials]
-      summary: Delete a tutorial nobody has started (409 `tutorial_has_runs` otherwise; unpublish it instead)
-      parameters: [{ $ref: '#/components/parameters/id' }]
+      summary: Delete a tutorial; once students have worked on it, `confirm` must be its title, and their work goes too (409 `tutorial_has_runs` otherwise; D-92)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: confirm, in: query, schema: { type: string }, description: 'The name (or title), when results would be deleted (D-92)' }]
       responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/teacher/tutorials/{id}/status:
     post:
@@ -1281,8 +1281,30 @@ paths:
     delete:
       operationId: deleteTeacherClassroomsById
       tags: [classrooms]
-      summary: Delete a classroom (refused when it has session results; archive instead)
+      summary: Delete a classroom with everything inside (D-92); with results, `confirm` must be its name (409 `confirm_needed`); refused while a quiz session is open (409 `session_live`)
+      parameters: [{ name: confirm, in: query, schema: { type: string }, description: 'The name (or title), when results would be deleted (D-92)' }]
       responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/teacher/classrooms/{id}/delete-preview:
+    get:
+      operationId: getTeacherClassroomDeletePreview
+      tags: [classrooms]
+      summary: What deleting it takes with it, and whether its name must be typed (D-92)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/DeleteContents' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/modules/{id}/delete-preview:
+    get:
+      operationId: getTeacherModuleDeletePreview
+      tags: [classrooms]
+      summary: What deleting it takes with it, and whether its name must be typed (D-92)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/DeleteContents' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/topics/{id}/delete-preview:
+    get:
+      operationId: getTeacherTopicDeletePreview
+      tags: [classrooms]
+      summary: What deleting it takes with it, and whether its name must be typed (D-92)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/DeleteContents' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/classrooms/{id}/archive:
     post: { operationId: postTeacherClassroomsArchive, tags: [classrooms], summary: Archive a classroom, parameters: [{ $ref: '#/components/parameters/id' }], responses: { '204': { description: 'Archived' } } }
   /api/teacher/classrooms/{id}/unarchive:
@@ -1392,7 +1414,7 @@ paths:
       summary: Rename, reorder or configure a module
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NodeInput' } } } }
       responses: { '204': { description: 'Updated' } }
-    delete: { operationId: deleteTeacherModulesById, tags: [classrooms], summary: Delete a module, responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } } }
+    delete: { operationId: deleteTeacherModulesById, tags: [classrooms], summary: 'Delete a module with everything inside (D-92), as for a classroom', parameters: [{ name: confirm, in: query, schema: { type: string }, description: 'The name (or title), when results would be deleted (D-92)' }], responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /api/teacher/modules/{id}/topics:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -1420,7 +1442,7 @@ paths:
       summary: Rename, reorder or configure a topic
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NodeInput' } } } }
       responses: { '204': { description: 'Updated' } }
-    delete: { operationId: deleteTeacherTopicsById, tags: [classrooms], summary: Delete a topic (refused while it has quizzes), responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } } }
+    delete: { operationId: deleteTeacherTopicsById, tags: [classrooms], summary: 'Delete a topic with everything inside (D-92), as for a classroom', parameters: [{ name: confirm, in: query, schema: { type: string }, description: 'The name (or title), when results would be deleted (D-92)' }], responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } } }
 
   # ---------------- quizzes ----------------
   /api/teacher/topics/{id}/quizzes:
@@ -1453,7 +1475,8 @@ paths:
     delete:
       operationId: deleteTeacherQuizzesById
       tags: [quizzes]
-      summary: Delete a quiz, or archive it if it has session results (BR-16)
+      summary: Delete a quiz, or archive it if it has session results (BR-16); with `confirm` set to its title, delete it with its sessions and results instead (D-92; 409 `session_live` while one is open)
+      parameters: [{ name: confirm, in: query, schema: { type: string } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { deleted: { type: boolean }, archived: { type: boolean } } } } } } }
   /api/teacher/quizzes/{id}/status:
     post:
@@ -2585,6 +2608,21 @@ components:
         pages: { type: array, items: { type: object, properties: { title: { type: string }, questions: { type: integer }, done: { type: boolean }, open: { type: boolean } } } }
         page: { type: object }
         score: { type: object, properties: { score: { type: number }, max: { type: number }, pending: { type: integer } } }
+    DeleteContents:
+      type: object
+      properties:
+        name: { type: string }
+        modules: { type: integer }
+        topics: { type: integer }
+        quizzes: { type: integer }
+        tutorials: { type: integer }
+        presentations: { type: integer }
+        sessions: { type: integer, description: Quiz sessions, with their results }
+        attempts: { type: integer }
+        tutorial_runs: { type: integer, description: Students' work on tutorials }
+        enrolments: { type: integer }
+        live_sessions: { type: integer, description: 'Open or live: deleting waits for them' }
+        needs_confirm: { type: boolean }
     LiveActivity:
       type: object
       properties:
