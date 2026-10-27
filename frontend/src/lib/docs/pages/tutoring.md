@@ -184,6 +184,12 @@ Nothing, by default (TS-FR-20). The teacher allows the microphone, camera and sc
 - **Mute** mutes a student's published tracks of the chosen kind, or everyone's microphones at once.
 - What students share goes backstage, to the teachers only, unless they are the broadcaster (above).
 
+## The teacher's grid and the device check
+
+What students share backstage reaches the teachers in a grid of pages of 25, where any tile can be enlarged (TS-FR-35). Backstage is joined without subscribing to anything: the teacher's browser takes all its sound, and only the videos of the visible page and the enlarged tile (`SessionMedia.showStage`), so with 200 students sharing it receives 26 videos at most; LiveKit's adaptive stream sends small tiles their small versions. Turning a page drops the last page's videos.
+
+**Devices** opens the device check (TS-FR-05), also offered in the waiting room: speakers (where the browser can choose them) with a test sound, and for those who may share, the microphone and camera with a preview and a level meter that start only on "Try my microphone and camera" and the browser's prompt (PO-3). The choice is kept in this browser and used for the microphone, new cameras and the session's sound.
+
 ## Quick reactions and zoom
 
 Students tap **👍 👏 🐢 ❓** (thumbs up, clap, "slower please", "I'm confused") beside Raise hand; the teachers see how many people sent each in the last minute, a person counting once per kind (TS-FR-26). Reactions need no permission and no media: the service keeps them in memory only (`POST /api/sessions/{id}/react`, `GET …/reactions`, the `reactions` socket event to staff).

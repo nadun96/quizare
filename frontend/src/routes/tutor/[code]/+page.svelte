@@ -18,6 +18,7 @@
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
 	import ReactionsBar from '$lib/tutoring/ReactionsBar.svelte';
 	import DeviceCheck from '$lib/tutoring/DeviceCheck.svelte';
+	import StageGrid from '$lib/tutoring/StageGrid.svelte';
 	import type { ReactionCounts } from '$lib/tutoring/reactions';
 	import GroupsPanel from '$lib/tutoring/GroupsPanel.svelte';
 	import RecordingsList from '$lib/tutoring/RecordingsList.svelte';
@@ -522,8 +523,12 @@
 						<div class={layout === 'side' ? 'side-by-side' : 'grid-view'}>{#each broadcast as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
 					</div>
-					{#if stageTiles.length}
-						<h2 class="m-0 text-sm">{teacher ? 'Shared with the teachers only' : 'What you share: only your teachers see it'}</h2>
+					{#if teacher}
+						<StageGrid {media} />
+						{@const mine = stageTiles.filter((t) => t.local)}
+						{#if mine.length}<div class="thumbs">{#each mine as t (t.key)}<TrackView tile={t} onstop={() => media.stop(t)} />{/each}</div>{/if}
+					{:else if stageTiles.length}
+						<h2 class="m-0 text-sm">What you share: only your teachers see it</h2>
 						<div class="thumbs">{#each stageTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
 
