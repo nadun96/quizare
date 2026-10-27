@@ -73,7 +73,7 @@ export async function deleteWithContents(level: Level, id: string): Promise<bool
 	}
 	const typed = await promptDialog({
 		title: `Delete "${c.name}" and its results?`,
-		body: `This also deletes ${resultsList(c)}. Nothing can bring them back; archiving keeps them instead.${inside}`,
+		body: `This also deletes ${resultsList(c)}. Nothing can bring them back; archiving keeps them instead.${inside} Type its name below to confirm.`,
 		label: `Type ${c.name} to confirm`,
 		placeholder: c.name,
 		confirm: 'Delete for good',
@@ -93,7 +93,7 @@ export async function deleteWithContents(level: Level, id: string): Promise<bool
 export async function confirmTitle(kind: 'quiz' | 'tutorial', title: string, results: string): Promise<string | null> {
 	const typed = await promptDialog({
 		title: `Delete this ${kind} and its results?`,
-		body: `This also deletes ${results}. Nothing can bring ${results.includes(' and ') ? 'them' : 'it'} back.`,
+		body: `This also deletes ${results}. Nothing can bring ${results.includes(' and ') ? 'them' : 'it'} back. Type its title below to confirm.`,
 		label: `Type ${title} to confirm`,
 		placeholder: title,
 		confirm: 'Delete for good',
