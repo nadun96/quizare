@@ -240,7 +240,8 @@ If students sit behind school firewalls that let only HTTPS out, LiveKit's relay
 | What you see | Why, and what to do |
 |---|---|
 | **502 Bad Gateway** | The app isn't running. Check `journalctl -u quiz -n 50`. The port in `nginx.conf` must match `QP_LISTEN` in `quiz.env` |
-| **The login page loads without its style, or pages are blank** | aaPanel's static-file blocks are still in the site config (step 5). Remove them |
+| **The login page loads without its style, or pages are blank** | The `.js` and `.css` files get nginx's 404: aaPanel's static-file rules answer them. Remove the blocks from the site config (step 5), and make sure the app's block says `location ^~ /` (with `^~`): some aaPanel versions keep those rules in an included file you can't see in Config |
+| **The site goes through aaPanel's Reverse proxy** | Delete it in Website → the site → Reverse proxy and paste `nginx.conf` into Config instead. Its cache keys answers by address only and ignores `Set-Cookie`, so one person can be served another's page, and its `add_header` drops the security headers |
 | **"cross-site request rejected" at login** | `QP_BASE_URL` in `quiz.env` must be exactly the address people use: `https://`, with or without `www.` as they type it. Fix it and restart |
 | **Live quizzes keep "Reconnecting…"** | Nginx isn't passing WebSockets. Check the `Upgrade` and `Connection` lines from `nginx.conf` are in the site config |
 | **Install or update says it can't sign in to the database** | The password or user is wrong, or the database's access isn't "Local server". Check in aaPanel → Databases → PgSQL |
@@ -250,6 +251,8 @@ If students sit behind school firewalls that let only HTTPS out, LiveKit's relay
 | **"pg_dump not found"** | Install PostgreSQL from aaPanel's App Store on this server. If the database is elsewhere, install the matching client tools and set `QP_PG_BIN` to their folder |
 | **"Tutoring isn't switched on"** in the admin console | Run `tutoring.sh` (see Tutoring). If you did, `QP_TUTORING_URL` is missing from `quiz.env` or the app wasn't restarted: `systemctl restart quiz` |
 | **`tutoring.sh` says the release has no tutoring service** | The running version predates it. Build a new package, run `update.sh` with it, then `tutoring.sh` |
+| **After updating from v2.19.2 or older: `tutoring.sh: No such file`, then "no tutoring service"** | That update ran the old `update.sh`, which neither copies `tutoring.sh` nor marks the new programs executable. Once: `cp /www/quiz-app/current/tutoring.sh /www/quiz-app/ && chmod 755 /www/quiz-app/current/tutor /www/quiz-app/current/livekit-server`, then `tutoring.sh`. Later updates do it themselves |
+| **`quiz-tutoring` keeps restarting with `address already in use`** | Another program has its port (8090 is common). Set a free one, for example `TUTOR_LISTEN="127.0.0.1:8091"` in `/www/quiz-app/config/tutor.env`, and run `tutoring.sh` again; it rewrites `nginx-tutor.conf`. Newer versions of `tutoring.sh` check the ports first |
 | **Teachers see the Tutoring page, but sessions never connect** | The browser can't reach the video. Check TCP 7881 and UDP 7882 are open in aaPanel → Security **and** your provider's firewall, and that the tutoring site's config has the `location /rtc` block |
 | **Tutoring pages say they can't reach the tutoring service** | The app's site still has its old config: paste `/www/quiz-app/nginx.conf` again (it allows the tutoring address). Check the tutoring subdomain has its SSL certificate |
 | **An update went back to the old version** | It printed why; the log is in `journalctl -u quiz -n 80`. Your data is as it was, and there's a backup from just before |

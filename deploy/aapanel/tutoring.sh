@@ -63,6 +63,10 @@ if [ ! -f "$APP/config/tutor.env" ]; then
 		[[ $p =~ ^[0-9]+$ ]] && [ "$p" -ge 1024 ] && [ "$p" -le 65535 ] || die "$p isn't a port from 1024 to 65535"
 	done
 	metrics=$((lkport + 909)) # 7880 → 8789: LiveKit's Prometheus metrics, on loopback only
+	# Another program on the port would stop the service from starting.
+	for p in "$tport/tcp" "$lkport/tcp" "$lktcp/tcp" "$lkudp/udp" "$metrics/tcp"; do
+		port_free "${p%/*}" "${p#*/}" || die "port ${p%/*} (${p#*/}) is used by another program ($(port_user "${p%/*}" "${p#*/}")): run this again and choose another"
+	done
 	umask 077
 	cat >"$APP/config/tutor.env" <<EOF
 # Settings for tutoring (D-59), written by tutoring.sh. Root only: it holds
