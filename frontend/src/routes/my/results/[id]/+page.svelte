@@ -4,16 +4,26 @@
 	import { describeKey, describeResponse } from '$lib/answerText';
 	import type { Key, Resource, Response, StudentQuestion } from '$lib/types';
 	import RichText from '$lib/richtext/RichText.svelte';
+	import Celebration from '$lib/progress/Celebration.svelte';
+	import { news, progress, quizXP, type Badge } from '$lib/progress/progress.svelte';
 
 	type Q = { question: StudentQuestion; response?: Response; correct_answer?: Key; score: number | null; max_score: number; status: string; correct: boolean | null; feedback?: string; ai_feedback?: string; ai_marked: boolean; feedback_resources?: Resource[] };
 	type Team = { name: string; color: number; rank: number; of: number; pct: number; members: number; finished: number; complete: boolean };
 	type Result = { session_title: string; score: number; max_score: number; pct: number; pass_mark_pct: number; passed: boolean; complete: boolean; state: string; questions: Q[]; team?: Team };
 	let res = $state<Result | null>(null);
 	let error = $state('');
+	let celebrate = $state<{ levelUp: boolean; badges: Badge[] } | null>(null);
 
 	$effect(() => {
 		api.get<Result>('/api/my/attempts/' + page.params.id + '/result')
-			.then((r) => (res = r))
+			.then((r) => {
+				res = r;
+				// A released result may have brought a level or a badge (D-97).
+				if (r.complete && r.state !== 'invalidated')
+					progress.load(true).then(() => {
+						if (progress.current) celebrate = news(progress.current);
+					});
+			})
 			.catch((e) => (error = e instanceof ApiError ? e.message : 'Could not load results'));
 	});
 </script>
@@ -28,7 +38,8 @@
 			<span class="spacer"></span>
 			{#if res.state === 'invalidated'}<span class="badge badge-soft badge-error">Attempt invalidated</span>
 			{:else if !res.complete}<span class="badge badge-soft badge-warning">Marking in progress</span>
-			{:else}<span class="badge badge-soft {res.passed ? 'ok' : 'danger'}">{res.passed ? 'Passed' : 'Not passed'} (pass mark {res.pass_mark_pct}%)</span>{/if}
+			{:else}<span class="badge badge-soft {res.passed ? 'ok' : 'danger'}">{res.passed ? 'Passed' : 'Not passed'} (pass mark {res.pass_mark_pct}%)</span>
+				<a class="xp-gain" href="/my" title="XP: 10 for taking part, your percentage, and 20 for passing">+{quizXP(res.pct, res.passed)} XP</a>{/if}
 		</div>
 		{#if res.team}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" aria-label="Your team">
@@ -61,4 +72,11 @@
 
 <style>
 	.team-dot { width: 1.1rem; height: 1.1rem; border-radius: 999px; flex: none; }
+	.xp-gain { display: inline-flex; align-items: center; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 700; font-size: 0.85rem; text-decoration: none;
+		background: var(--color-accent); color: var(--color-accent-content); }
 </style>
+
+{#if celebrate && progress.current && (celebrate.levelUp || celebrate.badges.length)}
+	<Celebration p={progress.current} levelUp={celebrate.levelUp} badges={celebrate.badges} onclose={() => (celebrate = null)} />
+{/if}
+
