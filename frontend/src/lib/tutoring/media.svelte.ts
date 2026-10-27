@@ -6,6 +6,7 @@
 // LiveKit enforces both from the tokens; this file only follows them.
 // livekit-client is loaded only on the tutoring page (NFR-09). Devices start
 // only after the person's own click and the browser's prompt (PO-3).
+import { loadChoice, type DeviceChoice } from './devices';
 import type { LocalTrack, Participant, Room, Track, TrackPublication } from 'livekit-client';
 
 export type Tile = {
@@ -185,6 +186,21 @@ export class SessionMedia {
 		this.refresh();
 	}
 
+	/** The devices chosen in the device check (TS-FR-05). */
+	devices: DeviceChoice = loadChoice();
+
+	/** Uses newly chosen devices: the session's sound moves to the speakers at once. */
+	useDevices(c: DeviceChoice) {
+		this.devices = c;
+		for (const el of this.audio.values()) this.sink(el);
+	}
+
+	private sink(el: HTMLMediaElement) {
+		const id = this.devices.speaker;
+		const m = el as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+		if (id && m.setSinkId) m.setSinkId(id).catch(() => {});
+	}
+
 	async startAudio() {
 		for (const r of Object.values(this.rooms)) await r?.startAudio();
 		this.needsClick = !(this.rooms.main?.canPlaybackAudio ?? true);
@@ -193,6 +209,7 @@ export class SessionMedia {
 	private attach(t: Track) {
 		if (t.kind === 'audio') {
 			const el = t.attach();
+			this.sink(el);
 			this.audio.set(t.sid ?? crypto.randomUUID(), el);
 			this.audioHost()?.append(el);
 		}
@@ -252,7 +269,7 @@ export class SessionMedia {
 	}
 
 	async setMic(on: boolean) {
-		await this.publisher.setMicrophoneEnabled(on);
+		await this.publisher.setMicrophoneEnabled(on, this.devices.mic ? { deviceId: this.devices.mic } : undefined);
 		this.refresh();
 	}
 
@@ -311,7 +328,7 @@ export class SessionMedia {
 	async addCamera(deviceId?: string, label?: string) {
 		const lk = this.lk!;
 		const lp = this.publisher;
-		const t = await lk.createLocalVideoTrack({ deviceId, resolution: lk.VideoPresets.h720.resolution });
+		const t = await lk.createLocalVideoTrack({ deviceId: deviceId ?? this.devices.camera, resolution: lk.VideoPresets.h720.resolution });
 		const n = [...lp.trackPublications.values()].filter((p) => p.source === 'camera').length + 1;
 		const name = label || (n === 1 ? 'Camera' : `Camera ${n}`);
 		const pub = await lp.publishTrack(t, { name, simulcast: true });

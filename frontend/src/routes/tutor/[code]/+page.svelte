@@ -17,6 +17,7 @@
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
 	import ReactionsBar from '$lib/tutoring/ReactionsBar.svelte';
+	import DeviceCheck from '$lib/tutoring/DeviceCheck.svelte';
 	import type { ReactionCounts } from '$lib/tutoring/reactions';
 	import GroupsPanel from '$lib/tutoring/GroupsPanel.svelte';
 	import RecordingsList from '$lib/tutoring/RecordingsList.svelte';
@@ -170,6 +171,9 @@
 			problem = e instanceof ApiError ? e.message : 'Could not open the session';
 		}
 	}
+
+	// The device check (TS-FR-05): before joining, or any time.
+	let checking = $state(false);
 
 	// Quick reactions of the last minute, for the teachers (TS-FR-26).
 	let reactions = $state<ReactionCounts | null>(null);
@@ -456,11 +460,12 @@
 				<button class="btn btn-error btn-outline btn-sm" onclick={end}>End</button>
 			{/if}
 		</header>
+		<DeviceCheck bind:open={checking} canPublish={teacher || media.canMic || media.canCamera || media.canScreen} onsave={(c) => media.useDevices(c)} />
 
 		{#if !admitted}
-			<div class="card card-border bg-base-100 p-6"><p class="m-0">Waiting for the teacher to let you in…</p></div>
+			<div class="card card-border bg-base-100 p-6 vstack"><p class="m-0">Waiting for the teacher to let you in…</p><div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div></div>
 		{:else if !teacher && !live}
-			<div class="card card-border bg-base-100 p-6"><p class="m-0">You're in. The session starts when the teacher starts it.</p></div>
+			<div class="card card-border bg-base-100 p-6 vstack"><p class="m-0">You're in. The session starts when the teacher starts it.</p><div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div></div>
 		{:else}
 			<div class="layout">
 				<div class="stage vstack">
@@ -523,6 +528,7 @@
 					{/if}
 
 					<div class="controls row">
+						<button class="btn btn-sm btn-ghost" onclick={() => (checking = true)} title="Speakers, microphone and camera">Devices</button>
 						{#if media.canMic}
 							<button class="btn btn-sm" class:btn-primary={media.micOn} onclick={() => deviceAct(() => media.setMic(!media.micOn))} disabled={media.state !== 'connected'}>{media.micOn ? 'Mute mic' : 'Turn mic on'}</button>
 						{:else}
