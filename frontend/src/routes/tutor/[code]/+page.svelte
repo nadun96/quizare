@@ -16,6 +16,8 @@
 	import TrackView from '$lib/tutoring/TrackView.svelte';
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
+	import ReactionsBar from '$lib/tutoring/ReactionsBar.svelte';
+	import type { ReactionCounts } from '$lib/tutoring/reactions';
 	import GroupsPanel from '$lib/tutoring/GroupsPanel.svelte';
 	import RecordingsList from '$lib/tutoring/RecordingsList.svelte';
 	import ResourcesPanel from '$lib/tutoring/ResourcesPanel.svelte';
@@ -169,10 +171,19 @@
 		}
 	}
 
+	// Quick reactions of the last minute, for the teachers (TS-FR-26).
+	let reactions = $state<ReactionCounts | null>(null);
+
 	function onEvent(e: SocketEvent) {
 		switch (e.type) {
-			case 'state':
+			case 'state': {
+				const first = !view;
 				view = e.data as TutoringView;
+				if (first && view.me.role !== 'student') client.call<ReactionCounts>('GET', `/api/sessions/${view.session.id}/reactions`).then((r) => (reactions = r)).catch(() => {});
+				break;
+			}
+			case 'reactions':
+				reactions = e.data as ReactionCounts;
 				break;
 			case 'chat':
 				if (!messages.some((m) => m.id === e.data.id)) messages = [...messages, e.data];
@@ -537,8 +548,10 @@
 						{:else}
 							<button class="btn btn-sm" disabled title="Your teacher hasn't allowed this">Camera</button>
 						{/if}
+						{#if teacher}<ReactionsBar {client} sessionId={view.session.id} teacher counts={reactions} />{/if}
 						{#if !teacher}
 							<button class="btn btn-sm" class:btn-warning={!!view.me.hand_at} onclick={() => hand(!view?.me.hand_at)}>{view.me.hand_at ? 'Lower hand' : 'Raise hand'}</button>
+							{#if view.me.state === 'admitted'}<ReactionsBar {client} sessionId={view.session.id} teacher={false} />{/if}
 							{#if !media.canMic && !media.canCamera && !media.canScreen}<span class="small muted">Your teacher hasn't allowed you to share anything.</span>{/if}
 							{#if media.tiles.some((t) => t.local && t.backstage)}<span class="badge badge-soft">Your teachers can see what you share</span>{/if}
 						{/if}

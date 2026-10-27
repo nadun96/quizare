@@ -184,6 +184,12 @@ Nothing, by default (TS-FR-20). The teacher allows the microphone, camera and sc
 - **Mute** mutes a student's published tracks of the chosen kind, or everyone's microphones at once.
 - What students share goes backstage, to the teachers only, unless they are the broadcaster (above).
 
+## Quick reactions and zoom
+
+Students tap **👍 👏 🐢 ❓** (thumbs up, clap, "slower please", "I'm confused") beside Raise hand; the teachers see how many people sent each in the last minute, a person counting once per kind (TS-FR-26). Reactions need no permission and no media: the service keeps them in memory only (`POST /api/sessions/{id}/react`, `GET …/reactions`, the `reactions` socket event to staff).
+
+Anyone watching a shared screen can zoom into it up to 600 %, around the pointer: the − / % / + buttons, Ctrl + wheel, a pinch, a double click, or + − 0 on the keyboard, then drag to look around (TS-FR-14). Full screen works as before.
+
 ## Chat
 
 Plain text up to 1,000 characters, with links shown as links and never as HTML (TS-FR-43). The teacher chooses the mode, and can change it at any time:

@@ -61,11 +61,14 @@ type Service struct {
 	// What each live session sends now, as the monitor last measured it (D-81).
 	loadMu sync.Mutex
 	load   map[string]Load
-	mon    monitorState
+	// Quick reactions of the last minute, in memory only (TS-FR-26).
+	reactMu sync.Mutex
+	reacts  map[string]map[string]map[string]time.Time // session → person → kind → when
+	mon     monitorState
 }
 
 func New(pool *pgxpool.Pool, p Platform, m Media, mediaURL string, log *slog.Logger) *Service {
-	s := &Service{pool: pool, platform: p, media: m, mediaURL: mediaURL, log: log, now: time.Now, load: map[string]Load{}, mon: monitorState{offered: map[string]bool{}}}
+	s := &Service{pool: pool, platform: p, media: m, mediaURL: mediaURL, log: log, now: time.Now, load: map[string]Load{}, reacts: map[string]map[string]map[string]time.Time{}, mon: monitorState{offered: map[string]bool{}}}
 	s.hub = newHub(s)
 	return s
 }
