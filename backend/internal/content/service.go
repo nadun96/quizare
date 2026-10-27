@@ -66,27 +66,18 @@ type Users interface {
 	UsersByID(ctx context.Context, ids []string) (map[string]auth.User, error)
 }
 
-// DeleteGuard reports whether a classroom has results that must be kept;
-// such classrooms can be archived but not deleted (BR-16 spirit).
-type DeleteGuard func(ctx context.Context, classroomID string) (bool, error)
-
 type Service struct {
 	pool     *pgxpool.Pool
 	settings *settings.Store
 	users    Users
-	guard    DeleteGuard
 }
 
 func NewService(pool *pgxpool.Pool, st *settings.Store, users Users) *Service {
 	return &Service{pool: pool, settings: st, users: users}
 }
 
-// SetDeleteGuard is wired by the app once the live-session module exists.
-func (s *Service) SetDeleteGuard(g DeleteGuard) { s.guard = g }
-
 var (
 	errArchived = httpx.NewError(http.StatusConflict, "classroom_archived", "this classroom is archived")
-	errHasData  = httpx.NewError(http.StatusConflict, "has_results", "this classroom has quiz results; archive it instead")
 )
 
 // ---------- validation helpers ----------
@@ -253,21 +244,10 @@ func (s *Service) SetArchived(ctx context.Context, teacherID, id string, archive
 	return err
 }
 
+// DeleteClassroom deletes a classroom with everything inside; one with
+// results needs DeleteNode and its name (D-92).
 func (s *Service) DeleteClassroom(ctx context.Context, teacherID, id string) error {
-	if _, err := s.GetClassroom(ctx, teacherID, id); err != nil {
-		return err
-	}
-	if s.guard != nil {
-		has, err := s.guard(ctx, id)
-		if err != nil {
-			return err
-		}
-		if has {
-			return errHasData
-		}
-	}
-	_, err := s.pool.Exec(ctx, `DELETE FROM content.classrooms WHERE id=$1 AND teacher_id=$2`, id, teacherID)
-	return err
+	return s.DeleteNode(ctx, teacherID, "classroom", id, "")
 }
 
 func (s *Service) RegenerateJoinCode(ctx context.Context, teacherID, id string) (string, error) {
@@ -379,12 +359,7 @@ func (s *Service) UpdateModule(ctx context.Context, teacherID, id string, in Nod
 }
 
 func (s *Service) DeleteModule(ctx context.Context, teacherID, id string) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM content.modules m USING content.classrooms c
-		WHERE c.id=m.classroom_id AND m.id=$1 AND c.teacher_id=$2`, id, teacherID)
-	if err == nil && tag.RowsAffected() == 0 {
-		return httpx.ErrNotFound
-	}
-	return err
+	return s.DeleteNode(ctx, teacherID, "module", id, "")
 }
 
 func (s *Service) CreateTopic(ctx context.Context, teacherID, moduleID string, in NodeInput) (Topic, error) {
@@ -479,12 +454,7 @@ func (s *Service) UpdateTopic(ctx context.Context, teacherID, id string, in Node
 }
 
 func (s *Service) DeleteTopic(ctx context.Context, teacherID, id string) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM content.topics t USING content.modules m, content.classrooms c
-		WHERE m.id=t.module_id AND c.id=m.classroom_id AND t.id=$1 AND c.teacher_id=$2`, id, teacherID)
-	if err == nil && tag.RowsAffected() == 0 {
-		return httpx.ErrNotFound
-	}
-	return err
+	return s.DeleteNode(ctx, teacherID, "topic", id, "")
 }
 
 // TopicContext is what downstream modules (quiz, live sessions) need to know

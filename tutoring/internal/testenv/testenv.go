@@ -132,7 +132,7 @@ type Platform struct {
 	Teachers map[string]string          // classroom → teacher
 	Enrolled map[string]map[string]bool // classroom → students
 	Archived map[string]bool
-	Paused   map[string]string // teacher → why the admin paused new activities (D-90)
+	Paused   map[string]string          // teacher → why the admin paused new activities (D-90)
 	Accounts map[string]platform.Person // teacher accounts by email
 	// Categories of each classroom, with their students (D-79).
 	Categories map[string][]platform.Category

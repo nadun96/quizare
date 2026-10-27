@@ -269,7 +269,7 @@ func TestReadinessAndPreviewHideKeys(t *testing.T) {
 	}
 }
 
-func TestQuizIsolationAndTopicDeleteProtection(t *testing.T) {
+func TestQuizIsolationAndTopicDelete(t *testing.T) {
 	e, alice, q, topic := setup(t)
 	bob := e.NewUser(auth.RoleTeacher)
 	bob.Call("GET", "/api/teacher/quizzes/"+q.ID, nil, 404, nil)
@@ -281,12 +281,8 @@ func TestQuizIsolationAndTopicDeleteProtection(t *testing.T) {
 	if len(list.Questions) != 0 {
 		t.Fatal("another teacher imported into this quiz")
 	}
-	// A topic with quizzes cannot be deleted.
-	alice.Call("DELETE", "/api/teacher/topics/"+topic.ID, nil, 409, nil)
-	var del map[string]bool
-	alice.Call("DELETE", "/api/teacher/quizzes/"+q.ID, nil, 200, &del)
-	if !del["deleted"] {
-		t.Fatalf("delete = %v", del)
-	}
+	// A topic without results is deleted with its quizzes (D-92), and only by its teacher.
+	bob.Call("DELETE", "/api/teacher/topics/"+topic.ID, nil, 404, nil)
 	alice.Call("DELETE", "/api/teacher/topics/"+topic.ID, nil, 204, nil)
+	alice.Call("GET", "/api/teacher/quizzes/"+q.ID, nil, 404, nil)
 }

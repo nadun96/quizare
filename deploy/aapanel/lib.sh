@@ -104,6 +104,16 @@ set_env() {
 	export "${1?}"
 }
 
+# Removes KEY from quiz.env.
+unset_env() {
+	local f="$APP/config/quiz.env" tmp
+	tmp=$(mktemp "$APP/config/.quiz.env.XXXXXX")
+	grep -v "^#\?$1=" "$f" >"$tmp" || true
+	chmod 600 "$tmp"
+	mv -f "$tmp" "$f"
+	unset "$1"
+}
+
 # LiveKit's media ports, "TCP UDP", from its settings.
 livekit_ports() {
 	local tcp udp

@@ -17,6 +17,7 @@
 	import { CHECKPOINTS, duration, FEEDBACK, fromLocalInput, LEAVING, move, toLocalInput, type Editor, type Leaving, type Page, type Tutorial } from '$lib/tutorial/tutorial';
 	import type { Question, Response } from '$lib/types';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
+	import { confirmTitle } from '$lib/deleting';
 	import Icon from '$lib/ui/Icon.svelte';
 	import IconBtn from '$lib/ui/IconBtn.svelte';
 	import OptionGroup from '$lib/ui/OptionGroup.svelte';
@@ -225,6 +226,18 @@
 			await api.del('/api/teacher/tutorials/' + id);
 			goto('/t/topics/' + ed.tutorial.topic_id);
 		} catch (e) {
+			// Students have worked on it: their work goes only once the title is typed (D-92).
+			if (e instanceof ApiError && e.code === 'tutorial_has_runs') {
+				const typed = await confirmTitle('tutorial', ed.tutorial.title, "every student's work on it");
+				if (!typed) return;
+				try {
+					await api.del('/api/teacher/tutorials/' + id + '?confirm=' + encodeURIComponent(typed));
+					goto('/t/topics/' + ed.tutorial.topic_id);
+				} catch (e2) {
+					fail(e2, 'Could not delete');
+				}
+				return;
+			}
 			fail(e, 'Could not delete');
 		}
 	}

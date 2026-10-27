@@ -6,6 +6,8 @@
 // LiveKit enforces both from the tokens; this file only follows them.
 // livekit-client is loaded only on the tutoring page (NFR-09). Devices start
 // only after the person's own click and the browser's prompt (PO-3).
+import { loadChoice, type DeviceChoice } from './devices';
+import type { StageEntry } from './stage';
 import type { LocalTrack, Participant, Room, Track, TrackPublication } from 'livekit-client';
 
 export type Tile = {
@@ -36,6 +38,13 @@ export class SessionMedia {
 	state = $state<MediaState>('idle');
 	error = $state('');
 	tiles = $state.raw<Tile[]>([]);
+	/**
+	 * Everything students share backstage, received or not, for the
+	 * teacher's grid (TS-FR-35): backstage video is received only when the
+	 * grid shows it (showStage), audio always.
+	 */
+	stage = $state.raw<(StageEntry & { track: Track | null })[]>([]);
+	private stageWant = new Set<string>();
 	micOn = $state(false);
 	/** What this person may publish in the room they publish to. */
 	canMic = $state(false);
@@ -85,7 +94,10 @@ export class SessionMedia {
 			.on(E.ParticipantDisconnected, () => this.refresh())
 			// A track taken away by the server (a permission revoked) arrives as unpublished.
 			.on(E.TrackUnpublished, () => this.refresh())
-			.on(E.TrackPublished, () => this.refresh())
+			.on(E.TrackPublished, (pub) => {
+				if (which === 'stage') this.follow(pub);
+				this.refresh();
+			})
 			.on(E.ParticipantPermissionsChanged, () => this.readPermissions())
 			.on(E.AudioPlaybackStatusChanged, () => (this.needsClick = !room.canPlaybackAudio));
 		if (which === 'main') {
@@ -106,9 +118,14 @@ export class SessionMedia {
 				this.refresh();
 			});
 		}
-		await room.connect(url, token, { autoSubscribe: true, ...(this.forceRelay ? { rtcConfig: { iceTransportPolicy: 'relay' as const } } : {}) });
+		// Backstage is subscribed to by hand: all its sound, and only the videos the grid shows (TS-FR-35).
+		await room.connect(url, token, { autoSubscribe: which !== 'stage', ...(this.forceRelay ? { rtcConfig: { iceTransportPolicy: 'relay' as const } } : {}) });
 		this.rooms[which] = room;
-		for (const p of room.remoteParticipants.values()) for (const pub of p.trackPublications.values()) if (pub.track) this.attach(pub.track);
+		for (const p of room.remoteParticipants.values())
+			for (const pub of p.trackPublications.values()) {
+				if (which === 'stage') this.follow(pub);
+				if (pub.track) this.attach(pub.track);
+			}
 		return room;
 	}
 
@@ -185,6 +202,21 @@ export class SessionMedia {
 		this.refresh();
 	}
 
+	/** The devices chosen in the device check (TS-FR-05). */
+	devices: DeviceChoice = loadChoice();
+
+	/** Uses newly chosen devices: the session's sound moves to the speakers at once. */
+	useDevices(c: DeviceChoice) {
+		this.devices = c;
+		for (const el of this.audio.values()) this.sink(el);
+	}
+
+	private sink(el: HTMLMediaElement) {
+		const id = this.devices.speaker;
+		const m = el as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+		if (id && m.setSinkId) m.setSinkId(id).catch(() => {});
+	}
+
 	async startAudio() {
 		for (const r of Object.values(this.rooms)) await r?.startAudio();
 		this.needsClick = !(this.rooms.main?.canPlaybackAudio ?? true);
@@ -193,6 +225,7 @@ export class SessionMedia {
 	private attach(t: Track) {
 		if (t.kind === 'audio') {
 			const el = t.attach();
+			this.sink(el);
 			this.audio.set(t.sid ?? crypto.randomUUID(), el);
 			this.audioHost()?.append(el);
 		}
@@ -209,6 +242,23 @@ export class SessionMedia {
 		this.audio.clear();
 		this.tiles = [];
 		this.micOn = false;
+	}
+
+	/** Receives a backstage track if it's sound, or a video the grid shows. */
+	private follow(pub: TrackPublication) {
+		const rp = pub as TrackPublication & { setSubscribed?: (on: boolean) => void; isSubscribed?: boolean };
+		const stage = this.rooms.stage;
+		if (!rp.setSubscribed || (stage && stage.localParticipant.permissions && !stage.localParticipant.permissions.canSubscribe)) return;
+		const on = pub.kind === 'audio' || this.stageWant.has('stage:' + pub.trackSid);
+		if (rp.isSubscribed !== on) rp.setSubscribed(on);
+	}
+
+	/** The grid's visible page and enlarged tile: only those videos are received. */
+	showStage(keys: Set<string>) {
+		this.stageWant = keys;
+		const stage = this.rooms.stage;
+		if (!stage) return;
+		for (const p of stage.remoteParticipants.values()) for (const pub of p.trackPublications.values()) this.follow(pub);
 	}
 
 	/** Rebuilds the list of video tiles from both rooms. */
@@ -239,6 +289,15 @@ export class SessionMedia {
 			}
 			for (const p of room.remoteParticipants.values()) for (const pub of p.trackPublications.values()) add(p, pub, false);
 		}
+		const stage: (StageEntry & { track: Track | null })[] = [];
+		for (const p of this.rooms.stage?.remoteParticipants.values() ?? [])
+			for (const pub of p.trackPublications.values()) {
+				if (pub.kind !== 'video' || pub.isMuted) continue;
+				const source = pub.source === 'screen_share' ? 'screen_share' : 'camera';
+				const label = this.labels.get(pub.trackSid) ?? pub.trackName ?? (source === 'screen_share' ? 'Screen' : 'Camera');
+				stage.push({ key: 'stage:' + pub.trackSid, participant: p.identity, name: p.name || p.identity, label, source, track: pub.track ?? null });
+			}
+		this.stage = stage;
 		// The broadcast first, screens before cameras: what students read (TS-FR-13 spotlight).
 		tiles.sort((a, b) => Number(a.backstage) - Number(b.backstage) || (a.source === b.source ? 0 : a.source === 'screen_share' ? -1 : 1));
 		this.tiles = tiles;
@@ -252,7 +311,7 @@ export class SessionMedia {
 	}
 
 	async setMic(on: boolean) {
-		await this.publisher.setMicrophoneEnabled(on);
+		await this.publisher.setMicrophoneEnabled(on, this.devices.mic ? { deviceId: this.devices.mic } : undefined);
 		this.refresh();
 	}
 
@@ -311,7 +370,7 @@ export class SessionMedia {
 	async addCamera(deviceId?: string, label?: string) {
 		const lk = this.lk!;
 		const lp = this.publisher;
-		const t = await lk.createLocalVideoTrack({ deviceId, resolution: lk.VideoPresets.h720.resolution });
+		const t = await lk.createLocalVideoTrack({ deviceId: deviceId ?? this.devices.camera, resolution: lk.VideoPresets.h720.resolution });
 		const n = [...lp.trackPublications.values()].filter((p) => p.source === 'camera').length + 1;
 		const name = label || (n === 1 ? 'Camera' : `Camera ${n}`);
 		const pub = await lp.publishTrack(t, { name, simulcast: true });

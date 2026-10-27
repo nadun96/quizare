@@ -1,7 +1,7 @@
 // The admin's live activity (D-90): what's live across the platform, and
 // the pauses on new activities.
 
-export type ActivityKind = 'quiz_session' | 'poll' | 'meeting' | 'presentation';
+export type ActivityKind = 'quiz_session' | 'poll' | 'meeting' | 'presentation' | 'tutoring';
 
 export type Activity = {
 	kind: ActivityKind;
@@ -29,8 +29,16 @@ export const KINDS: { id: ActivityKind; label: string; people: [string, string] 
 	{ id: 'quiz_session', label: 'Quiz session', people: ['student', 'students'] },
 	{ id: 'poll', label: 'Poll', people: ['participant', 'participants'] },
 	{ id: 'meeting', label: 'Meeting', people: ['in it now', 'in it now'] },
-	{ id: 'presentation', label: 'Live presentation', people: ['watching now', 'watching now'] }
+	{ id: 'presentation', label: 'Live presentation', people: ['watching now', 'watching now'] },
+	{ id: 'tutoring', label: 'Tutoring session', people: ['in it now', 'in it now'] }
 ];
+
+/** A tutoring session, from the tutoring service (admins only), as an activity. */
+export type TutoringLive = { id: string; title: string; status: string; teacher_id: string; teacher_name: string; classroom_name: string; started_at: string; people: number };
+export const fromTutoring = (t: TutoringLive): Activity => ({
+	kind: 'tutoring', id: t.id, title: t.title, status: t.status, teacher_id: t.teacher_id, teacher_name: t.teacher_name,
+	teacher_email: '', classroom: t.classroom_name, started_at: t.started_at, people: t.people
+});
 
 export const kindLabel = (k: string) => KINDS.find((x) => x.id === k)?.label ?? k;
 
