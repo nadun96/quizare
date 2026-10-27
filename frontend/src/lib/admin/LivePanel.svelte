@@ -6,7 +6,19 @@
 	import { api, ApiError } from '../api';
 	import { confirmDialog, promptDialog } from '../ui/dialog.svelte';
 	import { toast } from '../ui/toast.svelte';
-	import { everyonePause, kindLabel, liveFor, peopleText, summary, type Activity, type ActivityKind, type Pause } from './live';
+	import { everyonePause, fromTutoring, kindLabel, liveFor, peopleText, summary, type Activity, type ActivityKind, type Pause, type TutoringLive } from './live';
+	import { auth } from '../session.svelte';
+	import { isAdmin } from '../staff';
+	import { TutorClient, tutoringConfig } from '../tutoring/client';
+
+	// Tutoring sessions come from the tutoring service, for admins only.
+	const tutor = new TutorClient();
+	let tutoringOn = $state(false);
+	if (isAdmin(auth.user))
+		tutoringConfig().then((c) => {
+			tutoringOn = c.enabled;
+			if (tutoringOn) load();
+		});
 
 	let activities = $state<Activity[] | null>(null);
 	let pauses = $state<Pause[]>([]);
@@ -19,7 +31,15 @@
 
 	async function load() {
 		const r = await api.get<{ activities: Activity[]; pauses: Pause[] }>('/api/admin/live-activity');
-		activities = r.activities;
+		let tutoring: Activity[] = [];
+		if (tutoringOn) {
+			try {
+				tutoring = (await tutor.call<{ sessions: TutoringLive[] }>('GET', '/api/admin/live')).sessions.map(fromTutoring);
+			} catch {
+				// The tutoring service is down: show the rest.
+			}
+		}
+		activities = [...r.activities, ...tutoring].sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at));
 		pauses = r.pauses;
 		now = Date.now();
 	}
@@ -48,7 +68,8 @@
 		});
 		if (why === null) return;
 		try {
-			await api.post(`/api/admin/live-activity/${a.kind}/${a.id}/end`, { reason: why });
+			if (a.kind === 'tutoring') await tutor.call('POST', `/api/admin/sessions/${a.id}/end`, { reason: why });
+			else await api.post(`/api/admin/live-activity/${a.kind}/${a.id}/end`, { reason: why });
 			toast(`${kindLabel(a.kind)} ended`);
 		} catch (err) {
 			fail(err, 'Could not end it');
@@ -192,6 +213,6 @@
 				</table>
 			</div>
 		{/if}
-		<p class="small muted m-0">Tutoring sessions are on the Tutoring tab. Polls stay live while open, which can be days.</p>
+		<p class="small muted m-0">Polls stay live while open, which can be days. Tutoring sessions are listed for admins, when tutoring is on.</p>
 	</section>
 </div>

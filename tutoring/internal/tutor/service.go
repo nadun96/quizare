@@ -564,6 +564,12 @@ func (s *Service) End(ctx context.Context, p authn.Person, id string) error {
 	if err != nil {
 		return err
 	}
+	return s.endSession(ctx, sess)
+}
+
+// endSession ends a session for everyone: its teacher's End, or the admin's (D-90).
+func (s *Service) endSession(ctx context.Context, sess Session) error {
+	id := sess.ID
 	if sess.Status == "ended" {
 		return nil
 	}

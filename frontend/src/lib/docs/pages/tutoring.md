@@ -135,6 +135,10 @@ LiveKit mutes the tracks at once, and the broadcaster's browser stops sending th
 
 The Resources tab (teachers, TS-FR-33) shows the session's use and its share, all of tutoring against the budget, what makes up the figure, and the plan.
 
+## Ending a session for the admin
+
+The admin console's **Live activity** tab (D-90) lists tutoring sessions open or live beside the platform's activities, for admins. **End now** ends one for everyone, as its lead teacher would, with a reason that goes in the session's log (`ended_by_admin`) and to the teacher by email (`GET /api/admin/live`, `POST /api/admin/sessions/{id}/end`).
+
 ## Monitoring
 
 The admin console's **Tutoring** tab shows upload, download, CPU, tracks, participants and reconnects, in total and for each live session, now and over the last 24 hours or 7 days (D-82, TS-NFR-41).

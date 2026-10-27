@@ -101,6 +101,8 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 		r.Method("GET", "/admin/budget", h(s.hAdminBudget))
 		r.Method("PUT", "/admin/budget", h(s.hSetBudget))
 		r.Method("GET", "/admin/monitor", h(s.hMonitor))
+		r.Method("GET", "/admin/live", h(s.hAdminLive))
+		r.Method("POST", "/admin/sessions/{id}/end", h(s.hAdminEnd))
 		r.Method("GET", "/my/recordings", h(s.hMyRecordings))
 		r.Method("POST", "/recordings/{rec}/link", h(s.hRecordingLink))
 		r.Method("DELETE", "/recordings/{rec}", h(s.hDeleteRecording))
