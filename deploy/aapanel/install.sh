@@ -76,6 +76,8 @@ QP_LISTEN="127.0.0.1:$port"
 QP_STATIC_DIR="$APP/current/frontend"
 QP_BACKUP_DIR="$APP/data/backups"
 GOMEMLIMIT="700MiB"
+# Quiz results are kept until deleted; to delete them N days after their
+# session ended (30 to 3650), set QP_RESULTS_RETENTION_DAYS (D-94).
 # Email (password resets, verification, reminders): set up with mail.sh.
 # The meetings' relay: meet-turn.sh. Tutoring: tutoring.sh.
 EOF

@@ -249,6 +249,17 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		})
 	}
 	a.Tutor = tutorlink.New(opt.TutoringSecret, cfg.TutoringURL, a.Content, a.Auth, tutorMail)
+	// Old quiz results (D-94): on demand, and every hour when a retention
+	// period is set.
+	a.Storage.AddArea(storage.Area{ID: "quiz_sessions", Label: "Quiz sessions that ended before the date, with their results", RetainDays: cfg.ResultsRetentionDays,
+		Preview: func(ctx context.Context, before time.Time) (storage.Freed, error) {
+			n, b, err := a.Live.PreviewOldSessions(ctx, before)
+			return storage.Freed{Items: n, Bytes: b}, err
+		},
+		Run: func(ctx context.Context, _ string, before time.Time) (storage.Freed, error) {
+			n, b, err := a.Live.DeleteOldSessions(ctx, before)
+			return storage.Freed{Items: n, Bytes: b}, err
+		}})
 	a.Storage.AddArea(storage.Area{ID: "poll_files", Label: "Uploaded files of polls closed before the date",
 		Preview: func(ctx context.Context, before time.Time) (storage.Freed, error) {
 			n, b, err := a.Poll.PreviewOldFiles(ctx, before)
