@@ -17,6 +17,18 @@
 	import { urlState } from '$lib/urlstate';
 	import ListSearch from '$lib/ui/ListSearch.svelte';
 	import Pager from '$lib/ui/Pager.svelte';
+	import ProgressCard from '$lib/progress/ProgressCard.svelte';
+	import Celebration from '$lib/progress/Celebration.svelte';
+	import { news, progress, type Badge } from '$lib/progress/progress.svelte';
+
+	// Their progress (D-97), and a celebration for what's new since they last looked.
+	let celebrate = $state<{ levelUp: boolean; badges: Badge[] } | null>(null);
+	$effect(() => {
+		if (auth.user?.role !== 'student') return;
+		progress.load(true).then(() => {
+			if (progress.current) celebrate = news(progress.current);
+		});
+	});
 
 	type Attempt = { attempt_id: string; session_title: string; quiz_title: string; state: string; released: boolean; created_at: string };
 	type Cls = { classroom_id: string; name: string; status: string; student_number: string | null };
@@ -42,6 +54,7 @@
 
 <div class="page-container vstack">
 	<div class="row"><h1 style="margin:0">My quizzes</h1><span class="spacer"></span><a class="btn btn-primary" href="/join">Join with a code</a></div>
+	{#if auth.user?.role === 'student' && progress.current}<ProgressCard p={progress.current} />{/if}
 	<UpcomingTutoring />
 	{#each liveNow as a (a.attempt_id)}
 		<a class="card card-border interactive live-card p-4 text-inherit no-underline shadow-sm sm:p-5" href={'/attempt/' + a.attempt_id} in:flyIn>
@@ -108,6 +121,10 @@
 		<Pager list={classes} label="My classrooms" />
 	</div>
 </div>
+
+{#if celebrate && progress.current && (celebrate.levelUp || celebrate.badges.length)}
+	<Celebration p={progress.current} levelUp={celebrate.levelUp} badges={celebrate.badges} onclose={() => (celebrate = null)} />
+{/if}
 
 <style>
 	.attempts { list-style: none; margin: 0; padding: 0; }

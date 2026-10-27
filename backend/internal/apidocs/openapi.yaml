@@ -2019,6 +2019,12 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ViolationInput' } } } }
       responses: { '204': { description: 'Recorded' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/progress:
+    get:
+      operationId: getMyProgress
+      tags: [students]
+      summary: The student's own XP, level, weekly streak and badges, from released results and finished tutorials (D-97); 404 for other roles
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Progress' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/my/attempts:
     get:
       operationId: getMyAttempts
@@ -2608,6 +2614,20 @@ components:
         pages: { type: array, items: { type: object, properties: { title: { type: string }, questions: { type: integer }, done: { type: boolean }, open: { type: boolean } } } }
         page: { type: object }
         score: { type: object, properties: { score: { type: number }, max: { type: number }, pending: { type: integer } } }
+    Progress:
+      type: object
+      properties:
+        xp: { type: integer }
+        level: { type: integer }
+        level_xp: { type: integer, description: Where this level starts }
+        next_level_xp: { type: integer }
+        streak_weeks: { type: integer }
+        best_streak_weeks: { type: integer }
+        active_this_week: { type: boolean }
+        quizzes: { type: integer }
+        tutorials: { type: integer }
+        badges: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, description: { type: string }, earned: { type: boolean }, earned_at: { type: string, format: date-time }, have: { type: integer }, need: { type: integer } } } }
+        recent: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, tutorial] }, title: { type: string }, at: { type: string, format: date-time }, xp: { type: integer } } } }
     DeleteContents:
       type: object
       properties:
