@@ -76,11 +76,8 @@ QP_LISTEN="127.0.0.1:$port"
 QP_STATIC_DIR="$APP/current/frontend"
 QP_BACKUP_DIR="$APP/data/backups"
 GOMEMLIMIT="700MiB"
-# Optional: an SMTP relay for password-reset and verification emails.
-#QP_SMTP_ADDR="smtp.example.edu:587"
-#QP_SMTP_FROM="quiz@example.edu"
-#QP_SMTP_USER="quiz"
-#QP_SMTP_PASSWORD_FILE="$APP/config/smtp_password"
+# Email (password resets, verification, reminders): set up with mail.sh.
+# The meetings' relay: meet-turn.sh. Tutoring: tutoring.sh.
 EOF
 	umask 022
 	chmod 600 "$APP/config/quiz.env"
@@ -141,4 +138,4 @@ say "Installed. Next steps (see the guide for details):"
 echo "  1. aaPanel → Website → $( printf '%s' "${QP_BASE_URL#https://}" ): SSL (Let's Encrypt), then paste $APP/nginx.conf into its config."
 echo "  2. Make the first admin:  sudo bash $APP/admin.sh you@school.edu \"Your Name\""
 echo "  3. Back up $APP/config/kek.key, off this server."
-echo "  Tutoring (video lessons) is off. To switch it on later: sudo bash $APP/tutoring.sh"
+echo "  Later, as you need them: email (sudo bash $APP/mail.sh), the meetings' relay (meet-turn.sh), tutoring (tutoring.sh)."

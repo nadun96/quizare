@@ -182,10 +182,30 @@ Keep more than the dumps taken before updates:
 | Restart | `systemctl restart quiz` |
 | Change a setting | edit `/www/quiz-app/config/quiz.env`, then restart |
 
-To send password-reset and verification emails:
-1. Uncomment the `QP_SMTP_*` lines in `quiz.env` and fill them in.
-2. Put the SMTP password in `/www/quiz-app/config/smtp_password` (mode 600).
-3. Restart.
+## Email
+
+Until it's set up, the app writes its emails to its log instead of sending them: password resets, verification, tutoring reminders, and the notices of Live activity. Pick a mail provider:
+
+- **A transactional service** (Brevo, Mailgun, Amazon SES, Resend): recommended. It sends as `no-reply@your-domain` and stays out of spam once you add the SPF and DKIM records it gives you to your domain's DNS.
+- **Gmail**, with an *app password* (Google Account → Security → 2-step verification → App passwords): quick to try. The server is `smtp.gmail.com`, and the sender must be that Gmail address.
+
+Then, on the server:
+
+```bash
+bash /www/quiz-app/mail.sh
+```
+
+It asks for the SMTP server, port (**587**: port 465 isn't supported), login, sender and password, checks the server can reach the provider, and restarts the app. The password stays in a root-only file and reaches the app as a systemd credential, like the master key (D-93). Test it with **Forgot password** on the login page. `mail.sh off` goes back to the log.
+
+## Meetings' relay
+
+Meetings send video straight between browsers. Mobile data and some school or office networks block that, and the others' tiles say **Can't connect**. A relay on your server (coturn) carries the video for them:
+
+```bash
+bash /www/quiz-app/meet-turn.sh
+```
+
+It installs coturn, shares a secret with the app (people get relay credentials that expire after 6 hours), and restarts the app. Then open **UDP and TCP 3478** and **UDP 49160-49200** in aaPanel → Security and in your provider's firewall; type the range with a plain hyphen. People already in a meeting leave and join again. The relay uses your server's bandwidth only for those who need it, about 0.5 Mbit/s per video.
 
 Never delete `/www/quiz-app/config` or the `quiz` database in aaPanel. Uninstalling the site in aaPanel doesn't touch either; it only removes the Nginx site.
 
@@ -249,6 +269,8 @@ If students sit behind school firewalls that let only HTTPS out, LiveKit's relay
 | **The log says `master key file /run/credentials/quiz.service/kek must not be accessible to group/others`** | Versions before v2.19.2 refused the key as some systemd versions hand it over (readable by the service's group, in a folder only the service can open). Install v2.19.2 or later |
 | **The log says `extension "pgcrypto" is not available` or `permission denied to create extension "pgcrypto"`** | Versions before v2.19.1 asked for it; aaPanel's PostgreSQL often doesn't ship it. Install v2.19.1 or later, which doesn't need it on PostgreSQL 13 and newer |
 | **"pg_dump not found"** | Install PostgreSQL from aaPanel's App Store on this server. If the database is elsewhere, install the matching client tools and set `QP_PG_BIN` to their folder |
+| **Emails don't arrive** | Without `mail.sh`, they're only in the log (`journalctl -u quiz \| grep -i mail`). With it: check spam, the provider's SPF and DKIM records, and that the sender is allowed by the provider. Never point `QP_SMTP_PASSWORD_FILE` in `quiz.env` at `/www/quiz-app/config/`: the app can't read that folder and won't start |
+| **Meetings say "Can't connect"** | One side's network blocks direct connections. Run `meet-turn.sh` and open its ports (see Meetings' relay) |
 | **"Tutoring isn't switched on"** in the admin console | Run `tutoring.sh` (see Tutoring). If you did, `QP_TUTORING_URL` is missing from `quiz.env` or the app wasn't restarted: `systemctl restart quiz` |
 | **`tutoring.sh` says the release has no tutoring service** | The running version predates it. Build a new package, run `update.sh` with it, then `tutoring.sh` |
 | **After updating from v2.19.2 or older: `tutoring.sh: No such file`, then "no tutoring service"** | That update ran the old `update.sh`, which neither copies `tutoring.sh` nor marks the new programs executable. Once: `cp /www/quiz-app/current/tutoring.sh /www/quiz-app/ && chmod 755 /www/quiz-app/current/tutor /www/quiz-app/current/livekit-server`, then `tutoring.sh`. Later updates do it themselves |
