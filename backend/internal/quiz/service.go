@@ -17,6 +17,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/imageurl"
+	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/jobs"
 	"github.com/nadun96/quizplatform/internal/platform/page"
@@ -253,11 +254,41 @@ func (s *Service) UpdateQuiz(ctx context.Context, teacherID, id string, in QuizI
 // DeleteQuiz deletes a quiz, or archives it when sessions have results (BR-16).
 // It reports whether the quiz was archived instead.
 func (s *Service) DeleteQuiz(ctx context.Context, teacherID, id string) (archived bool, err error) {
+	return s.DeleteQuizConfirmed(ctx, teacherID, id, "")
+}
+
+// DeleteQuizConfirmed deletes a quiz. One with results is archived instead,
+// unless confirm is its title: then its sessions and results go too (D-92).
+// Nothing goes while one of its sessions is open or live.
+func (s *Service) DeleteQuizConfirmed(ctx context.Context, teacherID, id, confirm string) (archived bool, err error) {
 	if err := s.notAQuiz(ctx, id); err != nil {
 		return false, err
 	}
-	if _, err := s.GetQuiz(ctx, teacherID, id); err != nil {
+	qz, err := s.GetQuiz(ctx, teacherID, id)
+	if err != nil {
 		return false, err
+	}
+	if confirm != "" {
+		if strings.TrimSpace(confirm) != strings.TrimSpace(qz.Title) {
+			return false, httpx.NewError(http.StatusConflict, "confirm_needed", "type the quiz's title to delete it with its results")
+		}
+		var live bool
+		if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM live.sessions WHERE quiz_id=$1 AND status <> 'ended')`, id).Scan(&live); err != nil {
+			return false, err
+		}
+		if live {
+			return false, httpx.NewError(http.StatusConflict, "session_live", "a session of this quiz is still open or live: end it first")
+		}
+		return false, pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+			var n int
+			if err := tx.QueryRow(ctx, `WITH d AS (DELETE FROM live.sessions WHERE quiz_id=$1 RETURNING 1) SELECT count(*) FROM d`, id).Scan(&n); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `DELETE FROM quiz.quizzes WHERE id=$1 AND teacher_id=$2`, id, teacherID); err != nil {
+				return err
+			}
+			return audit.Log(ctx, tx, teacherID, "quiz_deleted", "quiz", id, map[string]any{"title": qz.Title, "sessions": n})
+		})
 	}
 	if s.guard != nil {
 		has, err := s.guard(ctx, id)

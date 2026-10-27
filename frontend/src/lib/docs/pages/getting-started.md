@@ -87,6 +87,7 @@ Open <http://localhost:5173>, register a teacher and a student (use two browsers
 | `QP_KEK_GENERATE` | off | `1` creates the KEK file (0400) on first start if it is missing; never overwrites (containers) |
 | `QP_DB_WAIT_SECONDS` | 60 | How long startup keeps retrying an unreachable database |
 | `QP_BACKUP_DIR` | `data/backups` | Where backups made from the admin console are written (D-57) |
+| `QP_RESULTS_RETENTION_DAYS` | `0` (keep) | Quiz sessions, with their results, are deleted this many days after they ended, checked hourly (30 to 3650; D-94). The admin's Storage → Clean-up does the same on demand, with a preview |
 | `QP_NIGHTLY_BACKUP_DIR` | none | `deploy/backup.sh`'s folder, so the console can show the nightly job |
 | `QP_TUTORING_URL` | none | The tutoring service's public address (D-59); tutoring is off without it |
 | `QP_TUTORING_SECRET_FILE` | none | The secret file shared with the tutoring service; `QP_TUTORING_SECRET_GENERATE=1` creates it on first start (containers) |

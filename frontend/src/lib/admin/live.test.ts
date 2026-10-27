@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { everyonePause, kindLabel, liveFor, peopleText, summary, type Activity } from './live';
+import { everyonePause, fromTutoring, kindLabel, liveFor, peopleText, summary, type Activity } from './live';
 
 const act = (kind: Activity['kind'], people: number): Activity => ({
 	kind, people, id: kind + people, title: 't', status: 'open', teacher_id: 'x', teacher_name: 'X', teacher_email: 'x@e', classroom: '', started_at: ''
@@ -17,7 +17,7 @@ describe('live activity', () => {
 
 	it('counts each kind and its people, every kind shown', () => {
 		const s = summary([act('poll', 3), act('poll', 4), act('meeting', 2)]);
-		expect(s.map((x) => [x.kind, x.count, x.people])).toEqual([['quiz_session', 0, 0], ['poll', 2, 7], ['meeting', 1, 2], ['presentation', 0, 0]]);
+		expect(s.map((x) => [x.kind, x.count, x.people])).toEqual([['quiz_session', 0, 0], ['poll', 2, 7], ['meeting', 1, 2], ['presentation', 0, 0], ['tutoring', 0, 0]]);
 	});
 
 	it('names kinds and finds the pause for everyone', () => {
@@ -25,6 +25,8 @@ describe('live activity', () => {
 		expect(peopleText('quiz_session', 1)).toBe('1 student');
 		expect(peopleText('poll', 3)).toBe('3 participants');
 		expect(peopleText('meeting', 1)).toBe('1 in it now');
+		const t = fromTutoring({ id: 's', title: 'Algebra', status: 'live', teacher_id: 'x', teacher_name: 'Ms P', classroom_name: '7B', started_at: '', people: 3 });
+		expect([t.kind, t.classroom, t.people, kindLabel(t.kind)]).toEqual(['tutoring', '7B', 3, 'Tutoring session']);
 		expect(everyonePause([{ id: '1', teacher_id: 't', reason: '', created_at: '' }])).toBeNull();
 		expect(everyonePause([{ id: '1', teacher_id: 't', reason: '', created_at: '' }, { id: '2', teacher_id: null, reason: 'x', created_at: '' }])?.id).toBe('2');
 	});

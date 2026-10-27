@@ -97,7 +97,7 @@
 	// go to the strip whenever something else has the stage.
 	const stage = $derived(showBoard ? 'board' : screens.length ? 'screens' : 'people');
 	const count = $derived(call.people.length + 1);
-	const linkLabel: Record<string, string> = { new: 'Connecting…', connecting: 'Connecting…', disconnected: 'Reconnecting…', failed: 'Can’t connect' };
+	const linkLabel: Record<string, string> = { new: 'Connecting…', connecting: 'Connecting…', disconnected: 'Reconnecting…', failed: 'Can’t connect: a network blocks it' };
 	// A link only comes up once one side has something to send.
 	const sending = (p: { mic: boolean; cam: boolean; screen: boolean }) => p.mic || p.cam || p.screen || call.mic || call.cam || call.screen;
 	const hands = $derived(call.people.filter((p) => p.hand).length + (call.hand ? 1 : 0));

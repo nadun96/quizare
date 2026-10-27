@@ -54,7 +54,7 @@ func NewService(pool *pgxpool.Pool, topics Topics, questions Questions, users Us
 }
 
 var (
-	errHasRuns   = httpx.NewError(http.StatusConflict, "tutorial_has_runs", "students have worked on this tutorial; unpublish it instead, so their results stay")
+	errHasRuns   = httpx.NewError(http.StatusConflict, "tutorial_has_runs", "students have worked on this tutorial: type its title to delete their work too, or unpublish it to keep it")
 	errNoPages   = httpx.NewError(http.StatusConflict, "tutorial_empty", "add a page before publishing")
 	errArchived  = httpx.Conflict("the classroom is archived")
 	errFeedbackX = httpx.Invalid(map[string]string{"feedback": "some pages need correct answers, which shows whether answers are right: keep feedback as students go, or change those pages"})
@@ -237,6 +237,12 @@ func (s *Service) Release(ctx context.Context, teacherID, id string, released bo
 
 // Delete removes a tutorial nobody has started; one with runs is unpublished instead.
 func (s *Service) Delete(ctx context.Context, teacherID, id string) error {
+	return s.DeleteConfirmed(ctx, teacherID, id, "")
+}
+
+// DeleteConfirmed deletes a tutorial. One students have worked on needs
+// confirm to be its title: their work goes too (D-92).
+func (s *Service) DeleteConfirmed(ctx context.Context, teacherID, id, confirm string) error {
 	t, err := s.owned(ctx, teacherID, id)
 	if err != nil {
 		return err
@@ -245,7 +251,7 @@ func (s *Service) Delete(ctx context.Context, teacherID, id string) error {
 	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tutorial.runs WHERE tutorial_id=$1)`, id).Scan(&runs); err != nil {
 		return err
 	}
-	if runs {
+	if runs && strings.TrimSpace(confirm) != strings.TrimSpace(t.Title) {
 		return errHasRuns
 	}
 	if err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {

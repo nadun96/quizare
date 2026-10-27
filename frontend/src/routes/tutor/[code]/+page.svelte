@@ -16,6 +16,10 @@
 	import TrackView from '$lib/tutoring/TrackView.svelte';
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
 	import PeoplePanel from '$lib/tutoring/PeoplePanel.svelte';
+	import ReactionsBar from '$lib/tutoring/ReactionsBar.svelte';
+	import DeviceCheck from '$lib/tutoring/DeviceCheck.svelte';
+	import StageGrid from '$lib/tutoring/StageGrid.svelte';
+	import type { ReactionCounts } from '$lib/tutoring/reactions';
 	import GroupsPanel from '$lib/tutoring/GroupsPanel.svelte';
 	import RecordingsList from '$lib/tutoring/RecordingsList.svelte';
 	import ResourcesPanel from '$lib/tutoring/ResourcesPanel.svelte';
@@ -169,10 +173,22 @@
 		}
 	}
 
+	// The device check (TS-FR-05): before joining, or any time.
+	let checking = $state(false);
+
+	// Quick reactions of the last minute, for the teachers (TS-FR-26).
+	let reactions = $state<ReactionCounts | null>(null);
+
 	function onEvent(e: SocketEvent) {
 		switch (e.type) {
-			case 'state':
+			case 'state': {
+				const first = !view;
 				view = e.data as TutoringView;
+				if (first && view.me.role !== 'student') client.call<ReactionCounts>('GET', `/api/sessions/${view.session.id}/reactions`).then((r) => (reactions = r)).catch(() => {});
+				break;
+			}
+			case 'reactions':
+				reactions = e.data as ReactionCounts;
 				break;
 			case 'chat':
 				if (!messages.some((m) => m.id === e.data.id)) messages = [...messages, e.data];
@@ -445,11 +461,12 @@
 				<button class="btn btn-error btn-outline btn-sm" onclick={end}>End</button>
 			{/if}
 		</header>
+		<DeviceCheck bind:open={checking} canPublish={teacher || media.canMic || media.canCamera || media.canScreen} onsave={(c) => media.useDevices(c)} />
 
 		{#if !admitted}
-			<div class="card card-border bg-base-100 p-6"><p class="m-0">Waiting for the teacher to let you in…</p></div>
+			<div class="card card-border bg-base-100 p-6 vstack"><p class="m-0">Waiting for the teacher to let you in…</p><div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div></div>
 		{:else if !teacher && !live}
-			<div class="card card-border bg-base-100 p-6"><p class="m-0">You're in. The session starts when the teacher starts it.</p></div>
+			<div class="card card-border bg-base-100 p-6 vstack"><p class="m-0">You're in. The session starts when the teacher starts it.</p><div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div></div>
 		{:else}
 			<div class="layout">
 				<div class="stage vstack">
@@ -506,12 +523,17 @@
 						<div class={layout === 'side' ? 'side-by-side' : 'grid-view'}>{#each broadcast as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
 					</div>
-					{#if stageTiles.length}
-						<h2 class="m-0 text-sm">{teacher ? 'Shared with the teachers only' : 'What you share: only your teachers see it'}</h2>
+					{#if teacher}
+						<StageGrid {media} />
+						{@const mine = stageTiles.filter((t) => t.local)}
+						{#if mine.length}<div class="thumbs">{#each mine as t (t.key)}<TrackView tile={t} onstop={() => media.stop(t)} />{/each}</div>{/if}
+					{:else if stageTiles.length}
+						<h2 class="m-0 text-sm">What you share: only your teachers see it</h2>
 						<div class="thumbs">{#each stageTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
 
 					<div class="controls row">
+						<button class="btn btn-sm btn-ghost" onclick={() => (checking = true)} title="Speakers, microphone and camera">Devices</button>
 						{#if media.canMic}
 							<button class="btn btn-sm" class:btn-primary={media.micOn} onclick={() => deviceAct(() => media.setMic(!media.micOn))} disabled={media.state !== 'connected'}>{media.micOn ? 'Mute mic' : 'Turn mic on'}</button>
 						{:else}
@@ -537,8 +559,10 @@
 						{:else}
 							<button class="btn btn-sm" disabled title="Your teacher hasn't allowed this">Camera</button>
 						{/if}
+						{#if teacher}<ReactionsBar {client} sessionId={view.session.id} teacher counts={reactions} />{/if}
 						{#if !teacher}
 							<button class="btn btn-sm" class:btn-warning={!!view.me.hand_at} onclick={() => hand(!view?.me.hand_at)}>{view.me.hand_at ? 'Lower hand' : 'Raise hand'}</button>
+							{#if view.me.state === 'admitted'}<ReactionsBar {client} sessionId={view.session.id} teacher={false} />{/if}
 							{#if !media.canMic && !media.canCamera && !media.canScreen}<span class="small muted">Your teacher hasn't allowed you to share anything.</span>{/if}
 							{#if media.tiles.some((t) => t.local && t.backstage)}<span class="badge badge-soft">Your teachers can see what you share</span>{/if}
 						{/if}

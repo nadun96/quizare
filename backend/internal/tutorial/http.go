@@ -48,7 +48,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		return s.Update(r.Context(), uid(r), chi.URLParam(r, "id"), in)
 	}))
 	r.Method("DELETE", "/tutorials/{id}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
-		if err := s.Delete(r.Context(), uid(r), chi.URLParam(r, "id")); err != nil {
+		if err := s.DeleteConfirmed(r.Context(), uid(r), chi.URLParam(r, "id"), r.URL.Query().Get("confirm")); err != nil {
 			return err
 		}
 		w.WriteHeader(http.StatusNoContent)

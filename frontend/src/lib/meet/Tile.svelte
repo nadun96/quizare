@@ -79,7 +79,7 @@
 	.tile:fullscreen { border-radius: 0; aspect-ratio: auto; }
 	.face { flex: 1; display: grid; place-items: center; }
 	.face span { display: grid; place-items: center; width: clamp(3rem, 22%, 6rem); aspect-ratio: 1; border-radius: 50%; background: var(--color-primary); color: var(--color-primary-content); font-size: clamp(1.1rem, 4vw, 2rem); font-weight: 600; }
-	.status { position: absolute; top: 0.5rem; left: 0.5rem; }
+	.status { position: absolute; top: 0.5rem; left: 0.5rem; white-space: nowrap; max-width: calc(100% - 1rem); }
 	.cap { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; color: #fff; background: linear-gradient(transparent, rgb(0 0 0 / 0.7)); }
 	.cap :global(.btn-ghost) { color: #fff; }
 	.raised { display: inline-grid; place-items: center; padding: 0.15rem; border-radius: 0.35rem; background: var(--color-warning); color: var(--color-warning-content); }
