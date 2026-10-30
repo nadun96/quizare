@@ -67,7 +67,8 @@ trap - EXIT
 chmod 755 "$dest" "$dest/server"
 # The scripts beside the app are always the newest ones. Renamed into place,
 # never copied over: this very script may be one of them, still being read.
-for f in update.sh install.sh admin.sh lib.sh tutoring.sh mail.sh meet-turn.sh; do
+# Every script the release brings, so one added later is never left behind.
+for f in $(cd "$dest" && ls -1 -- *.sh 2>/dev/null); do
 	if [ -f "$dest/$f" ]; then
 		cp "$dest/$f" "$APP/.$f.new"
 		mv -f "$APP/.$f.new" "$APP/$f"
