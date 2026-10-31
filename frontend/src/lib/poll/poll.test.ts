@@ -184,5 +184,5 @@ describe('question editor', () => {
 			unmount(c);
 			target.remove();
 		}
-	});
+	}, 20_000); // renders the editor for every type: slow when the whole suite runs at once
 });

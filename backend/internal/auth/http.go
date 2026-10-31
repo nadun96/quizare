@@ -108,6 +108,7 @@ func (s *Service) Routes(r chi.Router) {
 	r.Method("GET", "/me", httpx.Handler(s.handleMe))
 	r.Method("DELETE", "/me", httpx.Handler(s.handleDeleteMe))
 	s.accountRoutes(r)
+	s.emailRoutes(r)
 	r.Method("POST", "/verify-email", httpx.Handler(s.handleVerifyEmail))
 	r.Method("POST", "/password-reset/request", httpx.Handler(s.handleResetRequest))
 	r.Method("POST", "/password-reset/confirm", httpx.Handler(s.handleResetConfirm))

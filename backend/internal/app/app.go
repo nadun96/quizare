@@ -24,6 +24,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/apidocs"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
+	"github.com/nadun96/quizplatform/internal/dashboard"
 	"github.com/nadun96/quizplatform/internal/directory"
 	"github.com/nadun96/quizplatform/internal/drive"
 	"github.com/nadun96/quizplatform/internal/eval"
@@ -78,6 +79,7 @@ type App struct {
 	Tutor     *tutorlink.Service    // nil when tutoring is off
 	Oversight *oversight.Service    // the admin's live activity (D-90)
 	Progress  *progress.Service     // students' own XP, levels and badges (D-97)
+	Dashboard *dashboard.Service    // each person's own overview (D-99)
 }
 
 // Options let tests swap infrastructure.
@@ -288,6 +290,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		oversight.KindPresentation: {End: a.Slides.ForceEndLive, Online: a.Slides.Online},
 	}, tutorMail)
 	a.Progress = progress.NewService(pool)
+	a.Dashboard = dashboard.NewService(pool)
 	a.Live.SetGate(a.Oversight.Check)
 	a.Poll.SetGate(a.Oversight.Check)
 	a.Meet.SetGate(a.Oversight.Check)
@@ -357,6 +360,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Content.StudentRoutes(s)
 			a.Admin.UserRoutes(s)
 			a.Progress.StudentRoutes(s)
+			a.Dashboard.Routes(s)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 			a.Meet.UserRoutes(s)
 			a.Drive.UserRoutes(s)

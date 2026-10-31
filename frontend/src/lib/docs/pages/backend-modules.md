@@ -142,6 +142,10 @@ Usage counts and the audit log for admins and managers given those features (fil
 
 The admin's live activity (D-90), behind the `live_activity` feature. `Live` lists what's live across `live`, `poll`, `meet` and `presentation` in one read-only query; `End` calls that module's `ForceEnd`/`ForceClose`/`ForceEndLive` (which skip the ownership check), logs the reason and emails the teacher. `oversight.pauses` holds a pause for everyone (no teacher) and one per teacher; `Check` is installed in each module with `SetGate` and runs before anything starts, and `Paused` goes to tutoring in the `/internal/tutoring/access` answer (`paused`).
 
+## dashboard (no schema)
+
+Each person's own dashboard (D-99), read-only across the modules. For a student: quiz sessions open in their classrooms that they haven't finished, presentations being presented and meetings open there (live); tutorials and presentations by their dates and the student's progress (opening later or due: coming up; past due and unfinished: overdue; no date: to do); and quizzes they missed, ended in the last 60 days after they joined without an attempt that got going. For a teacher: their live sessions, polls, meetings and presentations; their tutorials and presentations opening or due, or past due within 30 days with students still to finish; and what waits on them (answers to mark in quizzes and tutorials, students asking to join). `GET /api/my/dashboard` counts each list, `GET /api/my/dashboard/{list}` pages one. Tutoring sessions come from the tutoring service, asked by the page.
+
 ## progress (no schema)
 
 A student's own progress (D-97), worked out on each request from released, fully marked quiz results and finished tutorials; nothing is stored. `progress.go` is pure: points (10 for taking part, the percentage, 20 for passing; 60 a tutorial), levels starting at 0, 100, 300, 600… XP, a weekly streak (Monday weeks, UTC; it holds until the current week ends) and seven badges with when each was earned. `GET /api/my/progress` serves students only; there is no ranking between students.

@@ -180,6 +180,37 @@ paths:
         '204': { description: 'Deleted' }
         '400': { description: 'Admin accounts cannot self-delete' }
         '401': { $ref: '#/components/responses/Error' }
+  /api/auth/me/email:
+    get:
+      operationId: getMyEmail
+      tags: [auth]
+      summary: Your email address, whether it's verified, and a change waiting to be confirmed (D-98)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailStatus' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+    put:
+      operationId: putMyEmail
+      tags: [auth]
+      summary: Ask to change your email address; a link goes to the new one, which takes over once followed, and the old one is told (D-98)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } } } } }
+      responses: { '204': { description: 'Link sent' }, '400': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Invalid' }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/auth/me/email/verify:
+    post:
+      operationId: postMyEmailVerify
+      tags: [auth]
+      summary: Send the verification link again (three times in ten minutes at most; earlier links stop working; D-98)
+      responses: { '204': { description: 'Sent' }, '409': { $ref: '#/components/responses/Conflict' }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/auth/me/email/pending:
+    delete:
+      operationId: deleteMyEmailPending
+      tags: [auth]
+      summary: Cancel a change of email address not yet confirmed (D-98)
+      responses: { '204': { description: 'Cancelled' } }
+  /api/auth/me/profile:
+    put:
+      operationId: putMyProfile
+      tags: [auth]
+      summary: Change your name (D-98); school-directory accounts can't
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 100 } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { type: object, properties: { name: { type: string } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/auth/me/password:
     post:
       operationId: postAuthMePassword
@@ -2019,6 +2050,22 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ViolationInput' } } } }
       responses: { '204': { description: 'Recorded' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/dashboard:
+    get:
+      operationId: getMyDashboard
+      tags: [students]
+      summary: How many items each dashboard list has, for students and teachers (D-99)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { role: { type: string }, counts: { type: object, additionalProperties: { type: integer } } } } } } } }
+  /api/my/dashboard/{list}:
+    get:
+      operationId: getMyDashboardList
+      tags: [students]
+      summary: One page of a dashboard list (D-99)
+      parameters:
+        - { name: list, in: path, required: true, schema: { type: string, enum: [live, upcoming, overdue, pending] } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/DashboardItem' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/my/progress:
     get:
       operationId: getMyProgress
@@ -2614,6 +2661,24 @@ components:
         pages: { type: array, items: { type: object, properties: { title: { type: string }, questions: { type: integer }, done: { type: boolean }, open: { type: boolean } } } }
         page: { type: object }
         score: { type: object, properties: { score: { type: number }, max: { type: number }, pending: { type: integer } } }
+    EmailStatus:
+      type: object
+      properties:
+        email: { type: string }
+        verified: { type: boolean }
+        pending_email: { type: string }
+        can_change: { type: boolean, description: 'False for school-directory accounts' }
+    DashboardItem:
+      type: object
+      properties:
+        kind: { type: string, enum: [quiz, tutorial, presentation, meeting, poll, marking, enrolment] }
+        id: { type: string }
+        title: { type: string }
+        classroom: { type: string }
+        at: { type: string, format: date-time, description: 'When it opens, is due, started or ended' }
+        status: { type: string, enum: [live, opens, due, due_soon, overdue, missed, in_progress, not_started, to_mark, to_approve] }
+        detail: { type: string }
+        href: { type: string, description: 'The page to open, if any' }
     Progress:
       type: object
       properties:
