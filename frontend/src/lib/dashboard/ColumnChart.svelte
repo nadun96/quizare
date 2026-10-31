@@ -4,6 +4,8 @@
 	// their value; every column has its own hover and focus tooltip, and the
 	// table gives them all.
 	type Col = { label: string; sub: string; value: number; lines: string[] };
+	import { grow } from '../ui/motion';
+	import { t } from '../i18n/i18n.svelte';
 	let { cols, title, unit = '%' }: { cols: Col[]; title: string; unit?: string } = $props();
 
 	let width = $state(560);
@@ -31,7 +33,7 @@
 
 <div class="vstack gap-2">
 	<div class="relative" bind:clientWidth={width}>
-		<svg viewBox="0 0 {W} {H}" width={W} height={H} class="chart" role="group" aria-label={title}>
+		<svg viewBox="0 0 {W} {H}" width={W} height={H} class="chart" role="group" aria-label={title} use:grow={cols}>
 			{#each [0, 50, 100] as t (t)}
 				<line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} class={t === 0 ? 'axis' : 'grid'} />
 				<text x={pad.l - 8} y={y(t)} class="tick" text-anchor="end" dominant-baseline="middle">{t}{unit}</text>
@@ -41,7 +43,7 @@
 				<g class="col" class:on={active === i} tabindex="0" role="img" aria-label="{c.label}, {c.sub}: {c.value}{unit}. {c.lines.join('. ')}"
 					onpointerenter={() => (active = i)} onpointerleave={() => (active = null)} onfocus={() => (active = i)} onblur={() => (active = null)}>
 					<rect x={cx(i) - band / 2} y={pad.t} width={band} height={ih} class="hit" />
-					{#if c.value > 0}<path d={bar(i, c.value)} class="bar" />{:else}<line x1={cx(i) - bw / 2} x2={cx(i) + bw / 2} y1={y(0)} y2={y(0)} class="zero" />{/if}
+					{#if c.value > 0}<path d={bar(i, c.value)} class="bar" data-grow="y" />{:else}<line x1={cx(i) - bw / 2} x2={cx(i) + bw / 2} y1={y(0)} y2={y(0)} class="zero" />{/if}
 					{#if labelled.has(i)}<text x={cx(i)} y={y(c.value) - 6} class="val" text-anchor="middle">{c.value}{unit}</text>{/if}
 				</g>
 			{/each}
@@ -61,7 +63,7 @@
 		{/if}
 	</div>
 	<details class="small">
-		<summary>Show as a table</summary>
+		<summary>{t('common.showTable')}</summary>
 		<div class="table-wrap">
 			<table class="table table-sm">
 				<thead><tr><th>Quiz</th><th>When</th><th>Average</th><th>Details</th></tr></thead>

@@ -39,9 +39,9 @@
 	--color-warning-content: #ffffff;
 	--color-error: #b91c1c;
 	--color-error-content: #ffffff;
-	--radius-selector: 0.5rem;
-	--radius-field: 0.5rem;
-	--radius-box: 0.875rem;
+	--radius-selector: 0;
+	--radius-field: 0;
+	--radius-box: 0;
 	--size-selector: 0.25rem;
 	--size-field: 0.25rem;
 	--border: 1px;
@@ -74,9 +74,9 @@
 	--color-warning-content: #2b1a00;
 	--color-error: #f87171;
 	--color-error-content: #2a0505;
-	--radius-selector: 0.5rem;
-	--radius-field: 0.5rem;
-	--radius-box: 0.875rem;
+	--radius-selector: 0;
+	--radius-field: 0;
+	--radius-box: 0;
 	--size-selector: 0.25rem;
 	--size-field: 0.25rem;
 	--border: 1px;
@@ -314,3 +314,18 @@ html[data-motion='reduce'] *::after {
 	--viz-good: #0ca30c;
 	--viz-critical: #d03b3b;
 }
+
+/* Square corners everywhere (D-106): every theme, daisyUI's components and
+   our own. Only what must stay round to mean what it means keeps its shape:
+   radio buttons (round says "pick one"), loading spinners and status dots. */
+:root, [data-theme] { --radius-selector: 0; --radius-field: 0; --radius-box: 0; }
+:where(*:not(.radio, .loading, .status, .round)),
+:where(*:not(.radio, .loading, .status, .round))::before,
+:where(*:not(.radio, .loading, .status, .round))::after { border-radius: 0 !important; }
+
+/* Sinhala and Tamil (D-109): the system's own faces, from Windows (Nirmala
+   UI, Iskoola Pota, Latha), Android and Linux (Noto), and Apple's. Their
+   letters sit taller, so lines get a little more room. */
+html:lang(si) { --font-sans: system-ui, 'Noto Sans Sinhala', 'Nirmala UI', 'Iskoola Pota', 'Sinhala Sangam MN', 'Segoe UI', sans-serif; }
+html:lang(ta) { --font-sans: system-ui, 'Noto Sans Tamil', 'Nirmala UI', 'Latha', 'Tamil Sangam MN', 'Segoe UI', sans-serif; }
+html:lang(si) body, html:lang(ta) body { line-height: 1.65; }

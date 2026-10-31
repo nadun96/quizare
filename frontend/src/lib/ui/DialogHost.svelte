@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n/i18n.svelte';
 	// The single confirmation and prompt dialog (lib/ui/dialog.svelte.ts). A
 	// native modal <dialog>: focus moves into it (the field, for prompts),
 	// Enter saves, Escape cancels, and focus returns afterwards.
@@ -57,8 +58,8 @@
 				</form>
 			{/if}
 			<div class="modal-action">
-				<button class="btn" bind:this={cancelBtn} onclick={() => dialogs.close(false)}>{c.cancel ?? 'Cancel'}</button>
-				<button class="btn {c.danger ? 'btn-error' : 'btn-primary'}" bind:this={confirmBtn} disabled={c.prompt && !c.allowEmpty && !dialogs.value.trim()} onclick={() => dialogs.close(true)}>{c.confirm ?? 'OK'}</button>
+				<button class="btn" bind:this={cancelBtn} onclick={() => dialogs.close(false)}>{c.cancel ?? t('common.cancel')}</button>
+				<button class="btn {c.danger ? 'btn-error' : 'btn-primary'}" bind:this={confirmBtn} disabled={c.prompt && !c.allowEmpty && !dialogs.value.trim()} onclick={() => dialogs.close(true)}>{c.confirm ?? t('common.ok')}</button>
 			</div>
 		</div>
 		<div class="modal-backdrop"><button tabindex="-1" aria-label="Close" onclick={() => dialogs.close(false)}>close</button></div>

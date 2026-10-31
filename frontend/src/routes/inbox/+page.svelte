@@ -12,6 +12,7 @@
 	import Messages from '$lib/inbox/Messages.svelte';
 	import { urlState } from '$lib/urlstate';
 	import { toast } from '$lib/ui/toast.svelte';
+	import { t } from '$lib/i18n/i18n.svelte';
 
 	const q = page.url.searchParams;
 	let tab = $state<'announcements' | 'messages'>(q.get('tab') === 'messages' || q.get('c') ? 'messages' : 'announcements');
@@ -57,20 +58,20 @@
 	<div class="page-container vstack py-6">
 		<div class="flex flex-wrap items-end gap-3">
 			<div class="grow">
-				<h1 class="m-0">Inbox</h1>
-				<p class="m-0 muted">{teacher ? 'Announcements to your classrooms, and messages with your students.' : 'Announcements from your classrooms, and messages with your teachers.'}</p>
+				<h1 class="m-0">{t('inbox.title')}</h1>
+				<p class="m-0 muted">{teacher ? t('inbox.subT') : t('inbox.subS')}</p>
 			</div>
 			{#if inbox.current}
-				<label class="flex items-center gap-2 small"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={inbox.current.email} onchange={(e) => setEmail(e.currentTarget.checked)} />Email me new ones</label>
+				<label class="flex items-center gap-2 small"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={inbox.current.email} onchange={(e) => setEmail(e.currentTarget.checked)} />{t('inbox.emailMe')}</label>
 			{/if}
 		</div>
 
-		<div role="tablist" class="tabs tabs-box w-fit" aria-label="Inbox">
+		<div role="tablist" class="tabs tabs-box w-fit" aria-label={t('inbox.title')}>
 			<button class="tab gap-2" role="tab" aria-selected={tab === 'announcements'} class:tab-active={tab === 'announcements'} onclick={() => show('announcements')}>
-				Announcements{#if !teacher && inbox.current?.announcements}<span class="badge badge-primary badge-sm" aria-label="{inbox.current.announcements} unread">{badge(inbox.current.announcements)}</span>{/if}
+				{t('inbox.announcements')}{#if !teacher && inbox.current?.announcements}<span class="badge badge-primary badge-sm" aria-label="{inbox.current.announcements} unread">{badge(inbox.current.announcements)}</span>{/if}
 			</button>
 			<button class="tab gap-2" role="tab" aria-selected={tab === 'messages'} class:tab-active={tab === 'messages'} onclick={() => show('messages')}>
-				Messages{#if inbox.current?.messages}<span class="badge badge-primary badge-sm" aria-label="{inbox.current.messages} unread">{badge(inbox.current.messages)}</span>{/if}
+				{t('inbox.messages')}{#if inbox.current?.messages}<span class="badge badge-primary badge-sm" aria-label="{inbox.current.messages} unread">{badge(inbox.current.messages)}</span>{/if}
 			</button>
 		</div>
 

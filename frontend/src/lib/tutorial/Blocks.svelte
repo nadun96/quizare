@@ -13,7 +13,7 @@
 <div class="blocks">
 	{#each blocks as b, i (i)}
 		{#if b.type === 'text'}
-			<div class="text"><RichText text={b.text ?? ''} format="markdown" /></div>
+			<div class="text" class:long={(b.text ?? '').length > 900}><RichText text={b.text ?? ''} format="markdown" /></div>
 		{:else if b.type === 'image'}
 			<figure>
 				<img src={b.embed} alt={b.alt ?? ''} loading="lazy" referrerpolicy="no-referrer" />

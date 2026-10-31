@@ -3,6 +3,8 @@
 	// before, coloured by whether that way is good, with an arrow and words
 	// so colour never carries it alone.
 	import Icon from '../ui/Icon.svelte';
+	import { countTo } from '../ui/motion';
+	import { t } from '../i18n/i18n.svelte';
 	import { compact, delta, deltaText, type KPI } from './insights';
 
 	let { label, kpi, unit = '', deltaUnit = '', upIsGood = true, versus, hint = '' }: { label: string; kpi?: KPI; unit?: string; deltaUnit?: string; upIsGood?: boolean; versus: string; hint?: string } = $props();
@@ -12,11 +14,11 @@
 
 <div class="tile">
 	<p class="label">{label}</p>
-	<p class="value">{kpi ? compact(kpi.value) : '—'}{#if kpi && unit}<span class="unit">{unit}</span>{/if}</p>
+	<p class="value">{#if kpi && Math.abs(kpi.value) < 10000}<span use:countTo={kpi.value}>{compact(kpi.value)}</span>{:else}{kpi ? compact(kpi.value) : '—'}{/if}{#if kpi && unit}<span class="unit">{unit}</span>{/if}</p>
 	{#if d !== null}
 		<p class="delta" class:good={good === true} class:bad={good === false} title="Against {versus}">
 			{#if d !== 0}<Icon name={d > 0 ? 'arrow-up' : 'arrow-down'} size={13} />{/if}
-			<span>{deltaText(d, deltaUnit)}</span><span class="vs">vs {versus}</span>
+			<span>{deltaText(d, deltaUnit)}</span><span class="vs">{t('ins.vs', { prev: versus })}</span>
 		</p>
 	{:else}
 		<p class="delta vs">{hint || ' '}</p>

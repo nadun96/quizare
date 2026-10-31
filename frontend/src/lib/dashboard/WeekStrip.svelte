@@ -4,6 +4,8 @@
 	// Each cell says its week and counts on hover and focus; a Less–More key
 	// reads the ramp, and the table gives every number.
 	import { step, weekLabel, type Week } from './insights';
+	import { cascade } from '../ui/motion';
+	import { t } from '../i18n/i18n.svelte';
 
 	let { weeks, measure, title, detail = (w: Week) => `${w.quizzes} quizzes, ${w.tutorials} tutorials` }: { weeks: Week[]; measure: (w: Week) => number; title: string; detail?: (w: Week) => string } = $props();
 	const max = $derived(Math.max(0, ...weeks.map(measure)));
@@ -13,30 +15,30 @@
 </script>
 
 <div class="vstack gap-2">
-	<p class="m-0 small muted"><strong class="text-base-content">{total}</strong> in 12 weeks · active {activeWeeks} of 12 weeks</p>
+	<p class="m-0 small muted">{t('ins.inWeeks', { n: total, weeks: activeWeeks })}</p>
 	<div class="relative">
-		<ol class="strip" aria-label={title}>
+		<ol class="strip" aria-label={title} use:cascade={{ y: 8, stagger: 0.03 }}>
 			{#each weeks as w, i (w.week)}
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<li class="cell s{step(measure(w), max)}" class:now={i === weeks.length - 1} tabindex="0" aria-label="Week of {weekLabel(w.week)}: {detail(w)}"
+				<li class="cell s{step(measure(w), max)}" class:now={i === weeks.length - 1} tabindex="0" aria-label="{t('ins.weekOf', { week: weekLabel(w.week) })}: {detail(w)}"
 					onpointerenter={() => (active = i)} onpointerleave={() => (active = null)} onfocus={() => (active = i)} onblur={() => (active = null)}></li>
 			{/each}
 		</ol>
 		{#if active !== null && weeks[active]}
 			<div class="tip small" style="left: {((active + 0.5) / weeks.length) * 100}%" aria-hidden="true">
 				<p class="m-0"><strong class="text-base">{measure(weeks[active])}</strong></p>
-				<p class="m-0 muted">Week of {weekLabel(weeks[active].week)}</p>
+				<p class="m-0 muted">{t('ins.weekOf', { week: weekLabel(weeks[active].week) })}</p>
 				<p class="m-0 muted">{detail(weeks[active])}</p>
 			</div>
 		{/if}
 	</div>
 	<div class="flex items-center justify-between gap-2 small muted">
 		<span>{weeks.length ? weekLabel(weeks[0].week) : ''}</span>
-		<span class="key" aria-hidden="true">Less <i class="cell s0"></i><i class="cell s1"></i><i class="cell s3"></i><i class="cell s5"></i> More</span>
-		<span>This week</span>
+		<span class="key" aria-hidden="true">{t('ins.less')} <i class="cell s0"></i><i class="cell s1"></i><i class="cell s3"></i><i class="cell s5"></i> {t('ins.more')}</span>
+		<span>{t('ins.thisWeek')}</span>
 	</div>
 	<details class="small">
-		<summary>Show as a table</summary>
+		<summary>{t('common.showTable')}</summary>
 		<table class="table table-sm">
 			<thead><tr><th>Week of</th><th>Count</th><th>Details</th></tr></thead>
 			<tbody>{#each weeks as w (w.week)}<tr><td>{weekLabel(w.week)}</td><td class="tabular">{measure(w)}</td><td>{detail(w)}</td></tr>{/each}</tbody>

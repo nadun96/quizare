@@ -13,6 +13,7 @@
 	import Pager from '../ui/Pager.svelte';
 	import { toast } from '../ui/toast.svelte';
 	import { inbox, when, type Announcement } from './inbox.svelte';
+	import { t } from '../i18n/i18n.svelte';
 
 	let { teacher, classroom = '', compose = false }: { teacher: boolean; classroom?: string; compose?: boolean } = $props();
 
@@ -146,12 +147,12 @@
 				</div>
 			</form>
 		{:else}
-			<div><button class="btn btn-primary" onclick={() => (open = true)} disabled={rooms.length === 0}><Icon name="plus" size={16} />New announcement</button></div>
+			<div><button class="btn btn-primary" onclick={() => (open = true)} disabled={rooms.length === 0}><Icon name="plus" size={16} />{t('inbox.newAnnouncement')}</button></div>
 		{/if}
 	{/if}
 
 	<div class="row">
-		<ListSearch {list} placeholder="Search announcements" label="Search announcements" />
+		<ListSearch {list} placeholder={t('inbox.searchAnnouncements')} label={t('inbox.searchAnnouncements')} />
 		{#if teacher && rooms.length > 1}
 			<select class="select select-sm w-auto" aria-label="Classroom" bind:value={filter} onchange={() => list.refilter()}>
 				<option value="">All classrooms</option>
@@ -165,7 +166,7 @@
 			<div class="flex items-start gap-3">
 				<Avatar id={a.author_id ?? a.id} name={a.author || 'Teacher'} avatar={a.avatar} size={36} />
 				<div class="grow min-w-0">
-					<h3 id="an-{a.id}" class="m-0 text-base">{a.title}{#if fresh.has(a.id)}{' '}<span class="badge badge-primary badge-sm">New</span>{/if}</h3>
+					<h3 id="an-{a.id}" class="m-0 text-base">{a.title}{#if fresh.has(a.id)}{' '}<span class="badge badge-primary badge-sm">{t('inbox.new')}</span>{/if}</h3>
 					<p class="m-0 small muted">{a.author} · {a.classroom} · <time datetime={a.created_at} title={new Date(a.created_at).toLocaleString()}>{when(a.created_at)}</time>{#if a.updated_at !== a.created_at && new Date(a.updated_at).getTime() - new Date(a.created_at).getTime() > 1000}{' · edited'}{/if}{#if a.emailed}{' · emailed'}{/if}</p>
 				</div>
 			</div>
@@ -191,7 +192,7 @@
 		</article>
 	{:else}
 		<div class="card card-border bg-base-100 p-6 text-center muted">
-			{#if !list.loaded}Loading…{:else if list.q}No announcements match “{list.q}”.{:else if teacher}Nothing posted yet. Announcements reach every student of the classroom.{:else}No announcements from your teachers yet.{/if}
+			{#if !list.loaded}{t('common.loading')}{:else if list.q}No announcements match “{list.q}”.{:else if teacher}{t('inbox.noAnnouncementsT')}{:else}{t('inbox.noAnnouncementsS')}{/if}
 		</div>
 	{/each}
 	<Pager {list} label="Announcements" />
