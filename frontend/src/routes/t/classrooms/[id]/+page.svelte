@@ -20,6 +20,7 @@
 	import { deleteWithContents } from '$lib/deleting';
 	import ClassroomAttendance from '$lib/tutoring/ClassroomAttendance.svelte';
 	import { tutoringConfig } from '$lib/tutoring/client';
+	import Icon from '$lib/ui/Icon.svelte';
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
 	let c = $state<Classroom | null>(null);
@@ -108,7 +109,8 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 <div class="page-container vstack">
 	{#if c}
 		<div class="row"><a href="/t">← Classrooms</a></div>
-		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}</div>
+		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}<span class="spacer"></span>
+			{#if !c.archived}<a class="btn btn-sm" href="/inbox?tab=announcements&classroom={c.id}&new=1"><Icon name="mail" size={16} />Announce</a>{/if}</div>
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
 			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ...(tutoring ? [['attendance', 'Attendance']] : []), ['files', 'Files'], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
