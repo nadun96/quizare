@@ -24,7 +24,7 @@
 <div class="vstack">
 	<!-- Language (D-109): each name in its own script, so anyone can find theirs. -->
 	<fieldset class="m-0 border-0 p-0">
-		<legend class="small font-semibold mb-1 p-0">{t('lang.label')} · Language</legend>
+		<legend class="small font-semibold mb-1 p-0">{t('lang.label')}{i18n.locale !== 'en' ? ' · Language' : ''}</legend>
 		<div class="join w-full" role="radiogroup" aria-label="Language">
 			{#each LOCALES as l (l.id)}
 				<button type="button" role="radio" lang={l.id} aria-checked={i18n.locale === l.id} title={l.english} class="join-item btn btn-sm flex-1" class:btn-primary={i18n.locale === l.id} onclick={() => i18n.set(l.id)}>{l.name}</button>

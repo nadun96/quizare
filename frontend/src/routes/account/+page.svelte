@@ -21,11 +21,16 @@
 	}
 </script>
 
-<div class="page-container vstack" style="max-width:640px">
-	<h1>Your account</h1>
+<div class="page-container vstack">
+	<h1 class="m-0">Your account</h1>
 	{#if auth.user}
+	<!-- Two columns on wide screens (D-110): who you are on the left, how the app behaves on the right. -->
+	<div class="acct">
+		<div class="vstack">
 		<ProfileCard />
 		<AccountSecurity />
+		</div>
+		<div class="vstack">
 		<ConnectedSignIns />
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 			<h2 class="mt-0">Display</h2>
@@ -47,7 +52,14 @@
 				{/if}
 			</div>
 		{/if}
+		</div>
+	</div>
 	{:else if auth.loaded}
 		<p><a href="/login?next=/account">Log in</a> to manage your account.</p>
 	{/if}
 </div>
+
+<style>
+	.acct { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr)); align-items: start; max-width: 76rem; }
+	.acct > :global(*) { margin: 0; }
+</style>

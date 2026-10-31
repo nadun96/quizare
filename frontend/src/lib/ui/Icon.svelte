@@ -20,6 +20,7 @@
 		play: 'M5 3l14 9-14 9V3z',
 		'chevron-left': 'm15 18-6-6 6-6',
 		'chevron-right': 'm9 18 6-6-6-6',
+		'chevron-down': 'm6 9 6 6 6-6',
 		'chevrons-left': 'm11 17-5-5 5-5M18 17l-5-5 5-5',
 		'chevrons-right': 'm6 17 5-5-5-5M13 17l5-5-5-5',
 		search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
