@@ -7,6 +7,7 @@
 	import Pager from '../ui/Pager.svelte';
 	import Skeleton from '../ui/Skeleton.svelte';
 	import { KIND, tone, when, type Item, type ListName } from './dashboard';
+	import { t } from '../i18n/i18n.svelte';
 
 	let { name, title, empty }: { name: ListName; title: string; empty: string } = $props();
 	// A list keeps its name for its life; its page sits under that name in the address.
@@ -32,7 +33,7 @@
 					<span class="min-w-0 flex-1">
 						{#if it.href}<a class="title" href={it.href}>{it.title}</a>{:else}<span class="title">{it.title}</span>{/if}
 						<span class="meta small">
-							<span class="sr-only">{KIND[it.kind].label}.</span>
+							<span class="sr-only">{t(KIND[it.kind].label)}.</span>
 							<span class="when tone-{tone(it.status)}">{when(it, now)}</span>
 							{#if it.classroom}<span class="muted">{it.classroom}</span>{/if}
 							{#if it.detail}<span class="muted">{it.detail}</span>{/if}

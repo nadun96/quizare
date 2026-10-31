@@ -6,9 +6,10 @@
 	import Icon, { type IconName } from './Icon.svelte';
 	import { daisyTheme, prefs, themeValue, type TextSize } from './prefs.svelte';
 	import { DAISY_THEMES } from './themes.gen';
+	import { LOCALES, i18n, t } from '../i18n/i18n.svelte';
 
 	let { idPrefix = 'disp' }: { idPrefix?: string } = $props();
-	const own: [string, string, IconName][] = [['system', 'System', 'monitor'], ['light', 'Light', 'sun'], ['dark', 'Dark', 'moon']];
+	const own = $derived<[string, string, IconName][]>([['system', t('display.system'), 'monitor'], ['light', t('display.light'), 'sun'], ['dark', t('display.dark'), 'moon']]);
 	const sizes: [TextSize, string, string][] = [['md', 'A', 'Normal'], ['lg', 'A+', 'Larger'], ['xl', 'A++', 'Largest']];
 	// Main-colour presets; each is tuned to the theme when applied.
 	const COLORS: [string, string][] = [['#1f5aa6', 'Blue'], ['#0f766e', 'Teal'], ['#15803d', 'Green'], ['#6d28d9', 'Purple'], ['#be185d', 'Pink'], ['#c2410c', 'Orange'], ['#b91c1c', 'Red'], ['#334155', 'Slate']];
@@ -21,15 +22,25 @@
 </script>
 
 <div class="vstack">
+	<!-- Language (D-109): each name in its own script, so anyone can find theirs. -->
 	<fieldset class="m-0 border-0 p-0">
-		<legend class="small font-semibold mb-1 p-0">Theme</legend>
+		<legend class="small font-semibold mb-1 p-0">{t('lang.label')} · Language</legend>
+		<div class="join w-full" role="radiogroup" aria-label="Language">
+			{#each LOCALES as l (l.id)}
+				<button type="button" role="radio" lang={l.id} aria-checked={i18n.locale === l.id} title={l.english} class="join-item btn btn-sm flex-1" class:btn-primary={i18n.locale === l.id} onclick={() => i18n.set(l.id)}>{l.name}</button>
+			{/each}
+		</div>
+		{#if i18n.locale !== 'en'}<p class="small muted m-0 mt-1">{t('lang.hint')}</p>{/if}
+	</fieldset>
+	<fieldset class="m-0 border-0 p-0">
+		<legend class="small font-semibold mb-1 p-0">{t('display.theme')}</legend>
 		<div class="join w-full" role="radiogroup" aria-label="Our themes">
 			{#each own as [v, l, icon] (v)}
 				<button type="button" role="radio" aria-checked={prefs.theme === v} class="join-item btn btn-sm flex-1 gap-1" class:btn-primary={prefs.theme === v} onclick={() => prefs.set('theme', v)}><Icon name={icon} size={15} />{l}</button>
 			{/each}
 		</div>
 		<details class="collapse collapse-arrow mt-2 border border-base-300 bg-base-100" open={!own.some(([v]) => v === prefs.theme)}>
-			<summary class="collapse-title min-h-0 py-2 text-sm font-semibold">More themes{#if !own.some(([v]) => v === prefs.theme)}<span class="badge badge-soft badge-primary badge-sm ml-2">{title(daisyTheme(prefs.theme)?.name ?? '')}</span>{/if}</summary>
+			<summary class="collapse-title min-h-0 py-2 text-sm font-semibold">{t('display.moreThemes')}{#if !own.some(([v]) => v === prefs.theme)}<span class="badge badge-soft badge-primary badge-sm ml-2">{title(daisyTheme(prefs.theme)?.name ?? '')}</span>{/if}</summary>
 			<div class="collapse-content themes">
 				{#each groups as g (g.label)}
 					<p class="small muted m-0 mt-1">{g.label}</p>
@@ -49,7 +60,7 @@
 	</fieldset>
 
 	<fieldset class="m-0 border-0 p-0">
-		<legend class="small font-semibold mb-1 p-0">Main colour</legend>
+		<legend class="small font-semibold mb-1 p-0">{t('display.mainColour')}</legend>
 		<div class="flex flex-wrap items-center gap-1.5">
 			<span class="tooltip" data-tip="The theme's own colour">
 				<button type="button" class="swatch none" aria-label="Theme colour" aria-pressed={!prefs.color} onclick={() => prefs.set('color', '')}><Icon name="x" size={12} /></button>
@@ -68,12 +79,12 @@
 	</fieldset>
 
 	<label class="flex items-center justify-between gap-3 font-normal m-0">
-		<span><span class="small font-semibold block">Always show button labels</span><span class="small muted">Otherwise they appear when you point at or tab to an icon.</span></span>
+		<span><span class="small font-semibold block">{t('display.labels')}</span><span class="small muted">{t('display.labelsHint')}</span></span>
 		<input type="checkbox" class="toggle toggle-sm toggle-primary" checked={prefs.labels === 'always'} onchange={(e) => prefs.set('labels', e.currentTarget.checked ? 'always' : 'hover')} />
 	</label>
 
 	<div role="radiogroup" aria-labelledby="{idPrefix}-text">
-		<p id="{idPrefix}-text" class="small font-semibold m-0 mb-1">Text size</p>
+		<p id="{idPrefix}-text" class="small font-semibold m-0 mb-1">{t('display.textSize')}</p>
 		<div class="join w-full">
 			{#each sizes as [v, l, name] (v)}
 				<button type="button" role="radio" aria-checked={prefs.text === v} aria-label="{name} text" class="join-item btn btn-sm flex-1" class:btn-primary={prefs.text === v} onclick={() => prefs.set('text', v)}>{l}</button>
@@ -81,10 +92,10 @@
 		</div>
 	</div>
 	<label class="flex items-center justify-between gap-3 font-normal m-0">
-		<span class="small font-semibold">Reduce motion</span>
+		<span class="small font-semibold">{t('display.reduceMotion')}</span>
 		<input type="checkbox" class="toggle toggle-sm toggle-primary" checked={prefs.motion === 'reduce'} onchange={(e) => prefs.set('motion', e.currentTarget.checked ? 'reduce' : 'system')} />
 	</label>
-	<button type="button" class="btn btn-ghost btn-xs w-fit" onclick={() => prefs.reset()}><Icon name="undo" size={13} />Reset display settings</button>
+	<button type="button" class="btn btn-ghost btn-xs w-fit" onclick={() => prefs.reset()}><Icon name="undo" size={13} />{t('display.reset')}</button>
 </div>
 
 <style>

@@ -10,7 +10,9 @@
 	import QuestionView from '$lib/QuestionView.svelte';
 	import { auth, loginUrl } from '$lib/session.svelte';
 	import Blocks from '$lib/tutorial/Blocks.svelte';
-	import { changed, checkpointNote, leavingNote, type RunView } from '$lib/tutorial/tutorial';
+	import { changed, checkpointNote, leavingNote, readingMinutes, type RunView } from '$lib/tutorial/tutorial';
+	import { cascade } from '$lib/ui/motion';
+	import { i18n, t } from '$lib/i18n/i18n.svelte';
 	import { PageWatch } from '$lib/tutorial/watch';
 	import type { Response } from '$lib/types';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -128,30 +130,38 @@
 <div class="page-container learn">
 	{#if problem}
 		<div class="card card-border bg-base-100 shadow-sm p-6 text-center vstack" role="alert">
-			<h1 class="m-0">Can’t open this tutorial</h1>
+			<h1 class="m-0">{t('read.cantOpen')}</h1>
 			<p class="muted m-0">{problem}</p>
-			<a class="btn mx-auto" href="/my">Back to my page</a>
+			<a class="btn mx-auto" href="/my">{t('read.backToMy')}</a>
 		</div>
 	{:else if !v || !p}
-		{#if v && !v.pages.length}<p class="muted">This tutorial has no pages yet.</p>{:else}<Skeleton lines={8} />{/if}
+		{#if v && !v.pages.length}<p class="muted">{t('read.noPages')}</p>{:else}<Skeleton lines={8} />{/if}
 	{:else}
 		<header class="vstack gap-2">
-			<p class="small m-0"><a href="/my">← My page</a></p>
-			<div class="flex flex-wrap items-baseline gap-3">
-				<h1 class="m-0">{v.tutorial.title}</h1>
-				{#if v.score}<span class="badge badge-soft tabular">{v.score.score} / {v.score.max}{v.score.pending ? ` · ${v.score.pending} waiting for your teacher` : ''}</span>{/if}
+			<p class="small m-0"><a href="/my">{t('read.myPage')}</a></p>
+			<!-- A newspaper's masthead (D-107): kicker, headline, standfirst, byline, double rule. -->
+			<div class="masthead">
+				{#if v.tutorial.classroom || v.tutorial.topic}<p class="kicker">{[v.tutorial.classroom, v.tutorial.topic].filter(Boolean).join(' · ')}</p>{/if}
+				<h1 class="headline">{v.tutorial.title}</h1>
+				{#if v.tutorial.description}<p class="standfirst">{v.tutorial.description}</p>{/if}
+				<p class="byline">
+					{#if v.tutorial.teacher}<span>{t('read.by', { name: v.tutorial.teacher })}</span>{/if}
+					{#if v.tutorial.published_at}<time datetime={v.tutorial.published_at}>{new Date(v.tutorial.published_at).toLocaleDateString(i18n.tag, { day: 'numeric', month: 'long', year: 'numeric' })}</time>{/if}
+					<span>{t('read.minutes', { n: readingMinutes(p.blocks) })}</span>
+					{#if v.score}<span class="tabular">{t('read.score', { score: v.score.score, max: v.score.max })}{v.score.pending ? ` · ${v.score.pending} waiting for your teacher` : ''}</span>{/if}
+				</p>
 			</div>
 			<div class="progress-row">
 				<progress class="progress progress-primary flex-1" value={pct} max="100" aria-label="Progress: {pct}%"></progress>
-				<span class="small muted tabular">{v.finished ? 'Finished' : `Page ${p.index + 1} of ${v.pages.length}`}</span>
+				<span class="small muted tabular">{v.finished ? t('read.finished') : t('read.pageOf', { page: p.index + 1, pages: v.pages.length })}</span>
 			</div>
-			<nav class="steps-nav" aria-label="Pages">
+			<nav class="steps-nav" aria-label={t('read.pages')}>
 				{#each v.pages as s, i (i)}
 					<button class="dot" class:here={i === p.index} class:done={s.done && s.questions} disabled={!s.open || busy} aria-current={i === p.index ? 'step' : undefined}
 						title={(s.title || `Page ${i + 1}`) + (s.open ? '' : ' (not open yet)')} onclick={() => visit(i)}>{i + 1}</button>
 				{/each}
 			</nav>
-			{#if v.past_due && !v.finished}<p class="alert alert-soft alert-warning m-0">This tutorial is past its due date: you can read it, but not answer.</p>{/if}
+			{#if v.past_due && !v.finished}<p class="alert alert-soft alert-warning m-0">{t('read.pastDue')}</p>{/if}
 			{#if v.finished}
 				<p class="alert alert-soft alert-success m-0"><Icon name="check-circle" size={18} />
 					{v.score ? `Finished. Your score: ${v.score.score} out of ${v.score.max}.` : v.tutorial.feedback === 'release' ? 'Finished. Your teacher will release your marks.' : 'Finished.'}
@@ -159,8 +169,9 @@
 			{/if}
 		</header>
 
-		<article class="card card-border bg-base-100 shadow-sm p-4 sm:p-7 vstack gap-5">
-			{#if p.title}<h2 class="m-0">{p.title}</h2>{/if}
+		{#key p.index}
+		<article class="paper vstack gap-5" use:cascade={{ y: 12, stagger: 0.05 }}>
+			{#if p.title}<h2 class="page-title">{p.title}</h2>{/if}
 			{#if leaveNote}
 				<p class="alert alert-soft m-0" class:alert-error={p.locked} class:alert-warning={!p.locked && p.leaving === 'blocked'} class:alert-info={!p.locked && p.leaving === 'recorded'} role={p.locked ? 'alert' : undefined}>
 					<Icon name={p.locked || p.leaving === 'blocked' ? 'alert' : 'eye'} size={18} />{leaveNote}</p>
@@ -187,33 +198,58 @@
 				</section>
 			{/each}
 		</article>
+		{/key}
 
 		<div class="controls">
 			{#if p.index > 0 && (v.tutorial.allow_back || v.read_only)}
-				<button class="btn" disabled={busy} onclick={() => (v!.read_only ? read(p.index - 1) : go(p.index - 1))}><Icon name="arrow-left" size={16} />Back</button>
+				<button class="btn" disabled={busy} onclick={() => (v!.read_only ? read(p.index - 1) : go(p.index - 1))}><Icon name="arrow-left" size={16} />{t('read.back')}</button>
 			{/if}
 			<span class="spacer"></span>
 			{#if note && !v.read_only}<span class="small muted">{note}</span>{/if}
 			{#if !v.read_only && p.questions.some((q) => !q.locked) && unchecked > 0}
-				<button class="btn btn-primary" disabled={busy} onclick={check}><Icon name="check" size={16} />{v.tutorial.feedback === 'page' ? 'Check answers' : 'Save answers'}</button>
+				<button class="btn btn-primary" disabled={busy} onclick={check}><Icon name="check" size={16} />{v.tutorial.feedback === 'page' ? t('read.check') : t('read.saveAnswers')}</button>
 			{:else if !last}
-				<button class="btn btn-primary" disabled={busy || !canGoOn} onclick={() => (v!.read_only ? read(p.index + 1) : go(p.index + 1))}>Next<Icon name="arrow-right" size={16} /></button>
+				<button class="btn btn-primary" disabled={busy || !canGoOn} onclick={() => (v!.read_only ? read(p.index + 1) : go(p.index + 1))}>{t('read.next')}<Icon name="arrow-right" size={16} /></button>
 			{:else if !v.finished && !v.read_only}
-				<button class="btn btn-primary" disabled={busy || !canGoOn} onclick={finish}><Icon name="flag" size={16} />Finish</button>
+				<button class="btn btn-primary" disabled={busy || !canGoOn} onclick={finish}><Icon name="flag" size={16} />{t('read.finish')}</button>
 			{/if}
 		</div>
 	{/if}
 </div>
 
 <style>
-	.learn { max-width: 860px; display: grid; gap: 1rem; }
+	.learn { max-width: 1040px; display: grid; gap: 1rem; }
+	/* Newspaper style (D-107): serif type, a masthead, ruled columns for long
+	   text on wide screens, a drop cap, square everything. Sinhala and Tamil
+	   fall back to their own serif faces. */
+	.learn { --paper-serif: 'Iowan Old Style', 'Charter', 'Georgia', 'Cambria', 'Noto Serif Sinhala', 'Iskoola Pota', 'Noto Serif Tamil', 'Latha', serif; }
+	.masthead { border-top: 4px solid var(--color-base-content); border-bottom: 1px solid var(--color-base-content); box-shadow: 0 3px 0 var(--color-base-200), 0 4px 0 var(--color-base-content); padding: 0.9rem 0 0.8rem; margin-bottom: 0.4rem; display: grid; gap: 0.45rem; }
+	.kicker { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-primary); }
+	.headline { margin: 0; font-family: var(--paper-serif); font-size: clamp(1.9rem, 4.2vw, 3.1rem); line-height: 1.08; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
+	.standfirst { margin: 0; font-family: var(--paper-serif); font-size: clamp(1.05rem, 1.8vw, 1.3rem); line-height: 1.45; font-style: italic; color: color-mix(in oklab, var(--color-base-content) 78%, transparent); max-width: 46rem; text-wrap: pretty; }
+	.byline { margin: 0; display: flex; flex-wrap: wrap; gap: 0 1rem; font-size: 0.82rem; color: color-mix(in oklab, var(--color-base-content) 70%, transparent); text-transform: uppercase; letter-spacing: 0.06em; }
+	.byline > :global(* + *)::before { content: '·'; margin-right: 1rem; opacity: 0.6; }
+	.paper { background: var(--color-base-100); border: 1px solid var(--color-base-300); padding: clamp(1rem, 3vw, 2.5rem); }
+	.page-title { margin: 0; font-family: var(--paper-serif); font-size: clamp(1.4rem, 2.6vw, 1.9rem); line-height: 1.2; padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-base-300); }
+	.paper :global(.text .rich) { font-family: var(--paper-serif); font-size: 1.12rem; line-height: 1.72; hyphens: auto; text-align: start; text-wrap: pretty; }
+	.paper :global(.text .rich :is(h1, h2, h3, h4)) { font-family: var(--paper-serif); line-height: 1.2; text-align: left; break-after: avoid; }
+	.paper :global(.text .rich h2) { font-size: 1.45rem; border-top: 2px solid var(--color-base-content); padding-top: 0.4rem; }
+	.paper :global(.text .rich h3) { font-size: 1.2rem; font-variant: small-caps; letter-spacing: 0.03em; }
+	.paper :global(.text .rich :is(ul, ol, pre, table, img, figure)) { break-inside: avoid; text-align: left; }
+	.paper :global(.text .rich blockquote) { margin: 1.2rem 0; padding: 0.8rem 0; border: 0; border-top: 3px solid var(--color-base-content); border-bottom: 1px solid var(--color-base-content); font-size: 1.35rem; line-height: 1.4; font-style: italic; text-align: left; break-inside: avoid; }
+	/* The drop cap: the page's first paragraph. */
+	.paper :global(.blocks > .text:first-child .rich > p:first-child::first-letter) { float: left; font-family: var(--paper-serif); font-size: 3.6em; line-height: 0.82; font-weight: 700; padding: 0.06em 0.12em 0 0; color: var(--color-primary); }
+	@media (min-width: 900px) {
+		.paper :global(.text.long .rich) { column-count: 2; column-gap: 2.5rem; column-rule: 1px solid var(--color-base-300); }
+	}
+	.paper :global(figcaption) { text-align: left; font-family: var(--paper-serif); font-style: italic; font-size: 0.9rem; border-bottom: 1px solid var(--color-base-300); padding-bottom: 0.35rem; }
 	.progress-row { display: flex; align-items: center; gap: 0.75rem; }
 	.steps-nav { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-	.dot { width: 2rem; height: 2rem; border-radius: 999px; border: 1px solid var(--color-base-300); background: var(--color-base-100); font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+	.dot { width: 2rem; height: 2rem; border: 1px solid var(--color-base-300); background: var(--color-base-100); font-size: 0.8rem; font-weight: 700; cursor: pointer; }
 	.dot.done { background: color-mix(in oklab, var(--color-success) 18%, var(--color-base-100)); border-color: var(--color-success); }
 	.dot.here { background: var(--color-primary); color: var(--color-primary-content); border-color: var(--color-primary); }
 	.dot:disabled { opacity: 0.45; cursor: not-allowed; }
-	.question { display: grid; gap: 0.6rem; padding-top: 1rem; border-top: 1px solid var(--color-base-300); }
+	.question { display: grid; gap: 0.6rem; padding-top: 1rem; border-top: 2px solid var(--color-base-content); }
 	.mark { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.75rem 0.9rem; border-radius: 0.75rem; background: color-mix(in oklab, var(--color-error) 10%, var(--color-base-100)); }
 	.mark.right { background: color-mix(in oklab, var(--color-success) 12%, var(--color-base-100)); }
 	.mark.pending { background: var(--color-base-200); }

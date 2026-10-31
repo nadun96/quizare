@@ -15,6 +15,8 @@
 	import DashboardList from '$lib/dashboard/DashboardList.svelte';
 	import { LISTS, type Summary } from '$lib/dashboard/dashboard';
 	import UpcomingTutoring from '$lib/tutoring/UpcomingTutoring.svelte';
+	import InsightsPanel from '$lib/dashboard/InsightsPanel.svelte';
+	import { t } from '$lib/i18n/i18n.svelte';
 	import LevelRing from '$lib/progress/LevelRing.svelte';
 	import { levelFraction, progress } from '$lib/progress/progress.svelte';
 
@@ -36,7 +38,7 @@
 	const teacher = $derived(auth.user?.role === 'teacher');
 	const greeting = $derived.by(() => {
 		const h = new Date().getHours();
-		return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+		return h < 12 ? t('dash.morning') : h < 17 ? t('dash.afternoon') : t('dash.evening');
 	});
 
 	// "Amaya" from "Amaya Silva", but "Ms Perera" whole: a title alone isn't a name.
@@ -49,7 +51,7 @@
 	async function resend() {
 		try {
 			await api.post('/api/auth/me/email/verify');
-			toast('Link sent. Check your inbox and spam.');
+			toast(t('dash.linkSent'));
 		} catch (err) {
 			toast(err instanceof ApiError ? err.message : 'Could not send the link', 'error');
 		}
@@ -72,50 +74,52 @@
 			{/if}
 			<div class="min-w-0 flex-1">
 				<h1 class="m-0 truncate">{greeting}, {callName(auth.user.name)}</h1>
-				<p class="m-0 small muted truncate">{auth.user.email}{' · '}<a href="/account">Edit profile</a></p>
+				<p class="m-0 small muted truncate">{auth.user.email}{' · '}<a href="/account">{t('dash.editProfile')}</a></p>
 			</div>
-			{#if teacher}<a class="btn btn-primary" href="/t">Classrooms</a>{:else}<a class="btn btn-primary" href="/join">Join with a code</a>{/if}
+			{#if teacher}<a class="btn btn-primary" href="/t">{t('nav.classrooms')}</a>{:else}<a class="btn btn-primary" href="/join">{t('dash.joinCode')}</a>{/if}
 		</header>
 
 		{#if !auth.user.email_verified}
 			<div class="alert alert-soft alert-warning" role="status">
 				<Icon name="alert" size={18} />
-				<span class="flex-1">Your email address isn't verified yet, so password resets and reminders can't reach you.</span>
-				<button class="btn btn-sm" onclick={resend}>Send the link again</button>
+				<span class="flex-1">{t('dash.unverified')}</span>
+				<button class="btn btn-sm" onclick={resend}>{t('dash.sendAgain')}</button>
 			</div>
 		{/if}
 
 		{#if summary}
-			<nav class="counts" aria-label="Summary">
+			<nav class="counts" aria-label={t('dash.summary')}>
 				{#each LISTS as l (l.id)}
 					<a href="#dash-{l.id}" class="count" class:alert-count={l.id === 'overdue' && summary.counts.overdue > 0}>
-						<strong>{summary.counts[l.id] ?? 0}</strong><span>{teacher ? l.teacherTitle : l.title}</span>
+						<strong>{summary.counts[l.id] ?? 0}</strong><span>{t(teacher ? l.teacherTitle : l.title)}</span>
 					</a>
 				{/each}
 			</nav>
 		{/if}
 
+		<InsightsPanel {teacher} />
+
 		<UpcomingTutoring />
 
 		<div class="grid-2">
 			{#each LISTS as l (l.id)}
-				<DashboardList name={l.id} title={teacher ? l.teacherTitle : l.title} empty={teacher ? l.teacherEmpty : l.empty} />
+				<DashboardList name={l.id} title={t(teacher ? l.teacherTitle : l.title)} empty={t(teacher ? l.teacherEmpty : l.empty)} />
 			{/each}
 		</div>
 
 		<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-5 vstack gap-2" aria-labelledby="dash-classes">
-			<h2 id="dash-classes" class="m-0 text-lg">{teacher ? 'Your classrooms' : 'Your classes'}</h2>
+			<h2 id="dash-classes" class="m-0 text-lg">{teacher ? t('dash.yourClassrooms') : t('dash.yourClasses')}</h2>
 			{#if !classes || !classes.loaded}
 				<Skeleton card={false} lines={2} />
 			{:else if !classes.rows.length}
-				<p class="m-0 small muted">{teacher ? 'No classrooms yet. Create one to start.' : "You aren't in a class yet. Join one with the code your teacher gives you."}</p>
+				<p class="m-0 small muted">{teacher ? t('dash.noClassrooms') : t('dash.noClasses')}</p>
 			{:else}
 				<ul class="classes">
 					{#each classes.rows as c (c.id ?? c.classroom_id)}
 						<li>
 							{#if teacher}<a href={'/t/classrooms/' + c.id}>{c.name}</a>{:else}<span>{c.name}</span>{/if}
-							{#if c.status === 'pending'}<span class="badge badge-soft badge-warning badge-sm">Waiting for approval</span>{/if}
-							{#if c.archived}<span class="badge badge-soft badge-sm">Archived</span>{/if}
+							{#if c.status === 'pending'}<span class="badge badge-soft badge-warning badge-sm">{t('dash.waitingApproval')}</span>{/if}
+							{#if c.archived}<span class="badge badge-soft badge-sm">{t('dash.archived')}</span>{/if}
 						</li>
 					{/each}
 				</ul>

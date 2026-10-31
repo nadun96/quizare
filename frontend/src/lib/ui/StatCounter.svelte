@@ -1,17 +1,11 @@
 <script lang="ts">
 	// A dashboard number that counts to its new value (readable from across the
 	// room; motion explains that something changed). Tabular figures, no jitter.
-	import { Tween } from 'svelte/motion';
-	import { cubicOut } from 'svelte/easing';
 	import Icon, { type IconName } from './Icon.svelte';
-	import { reduced } from './motion';
+	import { countTo, reduced } from './motion';
 
 	let { label, value, icon, tone = '', sub = '' }: { label: string; value: number; icon: IconName; tone?: '' | 'primary' | 'success' | 'warning' | 'error'; sub?: string } = $props();
 
-	const shown = new Tween(0, { duration: 400, easing: cubicOut });
-	$effect(() => {
-		shown.set(value, reduced() ? { duration: 0 } : undefined);
-	});
 	let bump = $state(false);
 	let prev: number | null = null;
 	$effect(() => {
@@ -26,7 +20,7 @@
 <div class="stat stat-card rounded-box border bg-base-100 {tone}" class:bump role="listitem">
 	<div class="stat-figure"><span class="stat-icon" aria-hidden="true"><Icon name={icon} size={18} /></span></div>
 	<div class="stat-title">{label}</div>
-	<div class="stat-value tabular" aria-hidden="true">{Math.round(shown.current)}</div>
+	<div class="stat-value tabular" aria-hidden="true" use:countTo={value}>{value}</div>
 	{#if sub}<div class="stat-desc">{sub}</div>{/if}
 	<span class="sr-only">{label}: {value}{sub ? `, ${sub}` : ''}</span>
 </div>

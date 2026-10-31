@@ -5,7 +5,7 @@
 	import { goto, afterNavigate } from '$app/navigation';
 	import { auth } from '$lib/session.svelte';
 	import { prefs } from '$lib/ui/prefs.svelte';
-	import { flyIn } from '$lib/ui/motion';
+	import { glide, pageIn } from '$lib/ui/motion';
 	import Icon from '$lib/ui/Icon.svelte';
 	import DisplayMenu from '$lib/ui/DisplayMenu.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
@@ -14,15 +14,16 @@
 	import { tutoringConfig } from '$lib/tutoring/client';
 	import LevelRing from '$lib/progress/LevelRing.svelte';
 	import { levelFraction, progress } from '$lib/progress/progress.svelte';
-	import { reduced } from '$lib/ui/motion';
 	import type { IconName } from '$lib/ui/Icon.svelte';
 	import { badge, inbox } from '$lib/inbox/inbox.svelte';
+	import { t, i18n } from '$lib/i18n/i18n.svelte';
 
 	let { children } = $props();
 
 	prefs.load();
 	let tutoring = $state(false); // the Tutoring link shows only when tutoring is on (TS-NFR-55)
 	onMount(() => {
+		i18n.apply();
 		auth.load();
 	});
 	$effect(() => {
@@ -47,24 +48,24 @@
 	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
 
 	type Link = { href: string; label: string; icon: IconName; count?: number };
-	const inboxLink = $derived<Link>({ href: '/inbox', label: 'Inbox', icon: 'mail', count: inbox.unread });
+	const inboxLink = $derived<Link>({ href: '/inbox', label: t('nav.inbox'), icon: 'mail', count: inbox.unread });
 	const links = $derived<Link[]>(
 		auth.user?.role === 'teacher'
 			? [
-					{ href: '/dashboard', label: 'Dashboard', icon: 'list' },
+					{ href: '/dashboard', label: t('nav.dashboard'), icon: 'list' },
 					inboxLink,
-					{ href: '/t', label: 'Classrooms', icon: 'users' },
-					{ href: '/t/bank', label: 'Question bank', icon: 'book' },
-					{ href: '/t/polls', label: 'Polls', icon: 'chart' },
-					{ href: '/t/meetings', label: 'Meetings', icon: 'video' },
-					...(tutoring ? [{ href: '/t/tutoring', label: 'Tutoring', icon: 'monitor' as const }] : []),
+					{ href: '/t', label: t('nav.classrooms'), icon: 'users' },
+					{ href: '/t/bank', label: t('nav.bank'), icon: 'book' },
+					{ href: '/t/polls', label: t('nav.polls'), icon: 'chart' },
+					{ href: '/t/meetings', label: t('nav.meetings'), icon: 'video' },
+					...(tutoring ? [{ href: '/t/tutoring', label: t('nav.tutoring'), icon: 'monitor' as const }] : []),
 				]
 			: auth.user?.role === 'student'
-				? [{ href: '/dashboard', label: 'Dashboard', icon: 'list' }, inboxLink, { href: '/my', label: 'My quizzes', icon: 'star' }, { href: '/join', label: 'Join', icon: 'qr' }]
+				? [{ href: '/dashboard', label: t('nav.dashboard'), icon: 'list' }, inboxLink, { href: '/my', label: t('nav.myQuizzes'), icon: 'star' }, { href: '/join', label: t('nav.join'), icon: 'qr' }]
 				: auth.user?.role === 'admin'
-					? [{ href: '/admin', label: 'Admin', icon: 'flag' }]
+					? [{ href: '/admin', label: t('nav.admin'), icon: 'flag' }]
 					: auth.user?.role === 'manager'
-						? [{ href: '/admin', label: 'Manage', icon: 'flag' }]
+						? [{ href: '/admin', label: t('nav.manage'), icon: 'flag' }]
 						: []
 	);
 	// Phones: the first four in a tab bar along the bottom, the rest under More.
@@ -113,7 +114,7 @@
 
 <svelte:window onkeydown={menuKeys} onclick={menuClicks} />
 
-<a class="skip-link btn btn-primary btn-sm" href="#main">Skip to content</a>
+<a class="skip-link btn btn-primary btn-sm" href="#main">{t('nav.skip')}</a>
 
 {#if !bare}
 	<header class="topbar sticky top-0 z-30">
@@ -123,25 +124,25 @@
 				<span class="brand-name">Classroom Quiz</span>
 			</a>
 			{#if links.length}
-				<nav class="pill ml-3 hidden sm:flex" aria-label="Main" bind:this={pill}>
-					{#if mark}<span class="pill-mark" class:glide={!reduced()} style:transform="translateX({mark.left}px)" style:width="{mark.width}px" aria-hidden="true"></span>{/if}
+				<nav class="pill ml-3 hidden sm:flex" aria-label={t('nav.main')} bind:this={pill}>
+					{#if mark}<span class="pill-mark" use:glide={mark} aria-hidden="true"></span>{/if}
 					{#each links as l (l.href)}
 						<a class="pill-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-							<Icon name={l.icon} size={16} /><span class="pill-label">{l.label}</span>{#if l.count}<span class="count" aria-label="{l.count} unread">{badge(l.count)}</span>{/if}
+							<Icon name={l.icon} size={16} /><span class="pill-label">{l.label}</span>{#if l.count}<span class="count" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}
 						</a>
 					{/each}
 				</nav>
 			{/if}
 			<span class="spacer"></span>
 			<details class="dropdown dropdown-end" bind:this={menus[1]} ontoggle={closeOthers}>
-				<summary class="btn btn-ghost btn-circle" aria-label="Display settings"><Icon name="sun" size={20} /></summary>
+				<summary class="btn btn-ghost btn-circle" aria-label={t('nav.display')}><Icon name="sun" size={20} /></summary>
 				<div class="dropdown-content z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain rounded-box border border-base-300 bg-base-100 p-4 shadow-lg">
 					<DisplayMenu idPrefix="nav" />
 				</div>
 			</details>
 			{#if auth.user}
 				<details class="dropdown dropdown-end" bind:this={menus[2]} ontoggle={closeOthers}>
-					<summary class="btn btn-ghost h-auto min-h-0 gap-2 rounded-full px-1.5 py-1" aria-label={auth.user.role === 'student' && progress.current ? `Account menu, level ${progress.current.level}` : 'Account menu'}>
+					<summary class="btn btn-ghost h-auto min-h-0 gap-2 rounded-full px-1.5 py-1" aria-label={auth.user.role === 'student' && progress.current ? t('nav.accountLevel', { level: progress.current.level }) : t('nav.account')}>
 						{#if auth.user.role === 'student' && progress.current}
 							<LevelRing fraction={levelFraction(progress.current)} level={progress.current.level} size={38}>
 								<Avatar id={auth.user.id} name={auth.user.name} avatar={auth.user.avatar} size={30} />
@@ -154,32 +155,32 @@
 					<ul class="menu dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
 						<li class="menu-title truncate">{auth.user.email}</li>
 						{#if auth.user.role === 'student' && progress.current}
-							<li><a href="/my"><Icon name="sparkles" size={16} />Level {progress.current.level}, {progress.current.xp} XP</a></li>
+							<li><a href="/my"><Icon name="sparkles" size={16} />{t('nav.level', { level: progress.current.level, xp: progress.current.xp })}</a></li>
 						{/if}
-						<li><a href="/account"><Icon name="user" size={16} />Profile and account</a></li>
+						<li><a href="/account"><Icon name="user" size={16} />{t('nav.profile')}</a></li>
 						{#if auth.user.role === 'teacher'}
-							<li><a href="/t/settings"><Icon name="pencil" size={16} />Teaching settings</a></li>
-							{#if auth.user.manager}<li><a href="/admin"><Icon name="flag" size={16} />Manage the platform</a></li>{/if}
+							<li><a href="/t/settings"><Icon name="pencil" size={16} />{t('nav.teaching')}</a></li>
+							{#if auth.user.manager}<li><a href="/admin"><Icon name="flag" size={16} />{t('nav.managePlatform')}</a></li>{/if}
 						{/if}
-						<li><button onclick={logout}><Icon name="logout" size={16} />Log out</button></li>
+						<li><button onclick={logout}><Icon name="logout" size={16} />{t('nav.logout')}</button></li>
 					</ul>
 				</details>
 			{:else if auth.loaded}
-				<a class="btn btn-ghost btn-sm" href="/login">Log in</a>
-				<a class="btn btn-primary btn-sm" href="/register">Sign up</a>
+				<a class="btn btn-ghost btn-sm" href="/login">{t('nav.login')}</a>
+				<a class="btn btn-primary btn-sm" href="/register">{t('nav.signup')}</a>
 			{/if}
 		</div>
 	</header>
 	{#if links.length}
-		<nav class="tabbar" aria-label="Main">
+		<nav class="tabbar" aria-label={t('nav.main')}>
 			{#each tabs as l (l.href)}
 				<a class="tab-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-					<span class="tab-icon"><Icon name={l.icon} size={20} />{#if l.count}<span class="count dot" aria-label="{l.count} unread">{badge(l.count)}</span>{/if}</span><span class="tab-label">{l.label}</span>
+					<span class="tab-icon"><Icon name={l.icon} size={20} />{#if l.count}<span class="count dot" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}</span><span class="tab-label">{l.label}</span>
 				</a>
 			{/each}
 			{#if more.length}
 				<details class="dropdown dropdown-top dropdown-end tab-more" bind:this={menus[0]} ontoggle={closeOthers}>
-					<summary class="tab-link" class:on={more.some((l) => current(l.href))}><span class="tab-icon"><Icon name="more" size={20} /></span><span class="tab-label">More</span></summary>
+					<summary class="tab-link" class:on={more.some((l) => current(l.href))}><span class="tab-icon"><Icon name="more" size={20} /></span><span class="tab-label">{t('nav.more')}</span></summary>
 					<ul class="menu dropdown-content z-40 mb-2 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
 						{#each more as l (l.href)}<li><a href={l.href} aria-current={current(l.href) ? 'page' : undefined} class:menu-active={current(l.href)}><Icon name={l.icon} size={16} />{l.label}</a></li>{/each}
 					</ul>
@@ -194,14 +195,14 @@
 		{@render children()}
 	{:else}
 		{#key page.url.pathname}
-			<div in:flyIn={{ y: 6, duration: 200 }}>{@render children()}</div>
+			<div use:pageIn>{@render children()}</div>
 		{/key}
 	{/if}
 </main>
 
 {#if !bare && !isDocs && auth.user?.role === 'admin'}
 	<footer class="page-container small muted pb-8 pt-8">
-		<a href="/docs/overview">Developer docs</a> · <a href="/api/docs" target="_blank" rel="noopener">API reference</a> · <a href="/docs/ux-research">Design rules</a>
+		<a href="/docs/overview">{t('nav.devDocs')}</a> · <a href="/api/docs" target="_blank" rel="noopener">{t('nav.apiDocs')}</a> · <a href="/docs/ux-research">{t('nav.designRules')}</a>
 	</footer>
 {/if}
 
@@ -220,7 +221,6 @@
 	.pill { position: relative; align-items: center; gap: 0.125rem; padding: 0.25rem; border-radius: 9999px; background: var(--color-base-200); border: 1px solid color-mix(in oklab, var(--color-base-300) 60%, transparent); }
 	.pill-mark { position: absolute; top: 0.25rem; bottom: 0.25rem; left: 0; border-radius: 9999px; background: var(--color-base-100);
 		box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px color-mix(in oklab, var(--color-primary) 22%, transparent); }
-	.pill-mark.glide { transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), width 280ms cubic-bezier(0.22, 1, 0.36, 1); }
 	.pill-link { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.8rem; border-radius: 9999px;
 		font-size: 0.875rem; font-weight: 600; text-decoration: none; color: color-mix(in oklab, var(--color-base-content) 75%, transparent); white-space: nowrap; }
 	.pill-link:hover { color: var(--color-base-content); }

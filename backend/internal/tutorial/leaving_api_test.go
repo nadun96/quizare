@@ -66,6 +66,10 @@ func TestLeavingAndTime(t *testing.T) {
 	if v.Page.Leaving != "allowed" || v.Page.Locked {
 		t.Fatalf("page 0 = %+v", v.Page)
 	}
+	// The reader's byline (D-107).
+	if v.Tutorial.Teacher != f.teacher.User.Name || v.Tutorial.Classroom == "" || v.Tutorial.Topic == "" || v.Tutorial.PublishedAt == nil {
+		t.Fatalf("byline = %+v", v.Tutorial)
+	}
 	run := runID(t, f, tu.ID, 0)
 
 	// Time: a report adds no more than has passed since the last one, and at most a minute.

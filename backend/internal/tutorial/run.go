@@ -302,6 +302,11 @@ type RunView struct {
 		AllowBack   bool       `json:"allow_back"`
 		Feedback    string     `json:"feedback"`
 		DueAt       *time.Time `json:"due_at,omitempty"`
+		// The byline, for the newspaper-style reader (D-107).
+		Teacher     string     `json:"teacher"`
+		Classroom   string     `json:"classroom"`
+		Topic       string     `json:"topic"`
+		PublishedAt *time.Time `json:"published_at,omitempty"`
 	} `json:"tutorial"`
 	Current  int           `json:"current"`
 	Reached  int           `json:"reached"`
@@ -662,4 +667,19 @@ func (s *Service) Mine(ctx context.Context, userID string) ([]MyTutorial, error)
 		out = []MyTutorial{}
 	}
 	return out, err
+}
+
+// withByline adds who wrote the tutorial and where it sits, for the reader's
+// masthead (D-107). A view that failed passes through untouched.
+func (s *Service) withByline(ctx context.Context) func(RunView, error) (RunView, error) {
+	return func(v RunView, err error) (RunView, error) {
+		if err != nil || v.Tutorial.ID == "" {
+			return v, err
+		}
+		_ = s.pool.QueryRow(ctx, `SELECT coalesce(u.name, ''), c.name, tp.name, t.published_at FROM tutorial.tutorials t
+			JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
+			JOIN content.classrooms c ON c.id = m.classroom_id LEFT JOIN auth.users u ON u.id = t.teacher_id
+			WHERE t.id = $1`, v.Tutorial.ID).Scan(&v.Tutorial.Teacher, &v.Tutorial.Classroom, &v.Tutorial.Topic, &v.Tutorial.PublishedAt)
+		return v, nil
+	}
 }

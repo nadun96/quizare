@@ -2333,6 +2333,13 @@ paths:
       tags: [students]
       summary: How many items each dashboard list has, for students and teachers (D-99)
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { role: { type: string }, counts: { type: object, additionalProperties: { type: integer } } } } } } } }
+  /api/my/dashboard/insights:
+    get:
+      operationId: getMyDashboardInsights
+      tags: [students]
+      summary: The dashboard's charts over the last 30, 90 or 365 days with the period before to compare - a student's scores against each quiz's class average, weeks of activity and classrooms; a teacher's sessions, active students and classroom participation (D-105)
+      parameters: [{ name: days, in: query, schema: { type: integer, enum: [30, 90, 365], default: 90 } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Insights' } } } } }
   /api/my/dashboard/{list}:
     get:
       operationId: getMyDashboardList
@@ -2929,7 +2936,7 @@ components:
       type: object
       description: A student's state; marks, feedback and the score appear when the tutorial's feedback setting allows
       properties:
-        tutorial: { type: object }
+        tutorial: { type: object, description: 'id, title, description, allow_back, feedback, due_at, and the byline (D-107): teacher, classroom, topic, published_at' }
         current: { type: integer }
         reached: { type: integer }
         finished: { type: boolean }
@@ -3121,6 +3128,16 @@ components:
           properties:
             source: { type: string, enum: [console, config, log] }
             config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
+    Insights:
+      type: object
+      properties:
+        role: { type: string }
+        days: { type: integer }
+        kpis: { type: object, description: 'avg_score, quizzes, tutorials, pass_rate (student); students, active_students, sessions, avg_score, pass_rate (teacher)', additionalProperties: { type: object, properties: { value: { type: number }, prev: { type: number, nullable: true } } } }
+        scores: { type: array, items: { type: object, properties: { at: { type: string, format: date-time }, title: { type: string }, classroom: { type: string }, pct: { type: number }, class_avg: { type: number, nullable: true }, passed: { type: boolean } } } }
+        sessions: { type: array, items: { type: object, properties: { at: { type: string, format: date-time }, title: { type: string }, classroom: { type: string }, avg: { type: number }, pass_rate: { type: number }, results: { type: integer } } } }
+        weeks: { type: array, items: { type: object, properties: { week: { type: string, format: date }, quizzes: { type: integer }, tutorials: { type: integer }, students: { type: integer } } } }
+        classrooms: { type: array, items: { type: object, properties: { name: { type: string }, avg: { type: number, nullable: true }, quizzes: { type: integer }, students: { type: integer }, participation: { type: number, nullable: true } } } }
     DeleteContents:
       type: object
       properties:
