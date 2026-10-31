@@ -421,6 +421,7 @@ func (s *Service) Routes(r chi.Router) {
 		httpx.JSON(w, http.StatusOK, sum)
 		return nil
 	}))
+	r.Method("GET", "/my/dashboard/insights", httpx.Handler(s.insightsRoute)) // charts (D-105)
 	r.Method("GET", "/my/dashboard/{list}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		u := auth.MustUser(r.Context())
 		list := chi.URLParam(r, "list")

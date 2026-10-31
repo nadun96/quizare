@@ -150,14 +150,14 @@ func (s *Service) StudentRoutes(r chi.Router) {
 		return map[string]any{"tutorials": list}, err
 	}))
 	r.Method("POST", "/tutorials/{id}/open", reply(200, func(w http.ResponseWriter, r *http.Request) (RunView, error) {
-		return s.Open(r.Context(), uid(r), chi.URLParam(r, "id"))
+		return s.withByline(r.Context())(s.Open(r.Context(), uid(r), chi.URLParam(r, "id")))
 	}))
 	r.Method("GET", "/tutorials/{id}/pages/{n}", reply(200, func(w http.ResponseWriter, r *http.Request) (RunView, error) {
 		n, err := strconv.Atoi(chi.URLParam(r, "n"))
 		if err != nil {
 			return RunView{}, httpx.ErrNotFound
 		}
-		return s.Page(r.Context(), uid(r), chi.URLParam(r, "id"), n)
+		return s.withByline(r.Context())(s.Page(r.Context(), uid(r), chi.URLParam(r, "id"), n))
 	}))
 	r.Method("POST", "/tutorials/{id}/go", reply(200, func(w http.ResponseWriter, r *http.Request) (RunView, error) {
 		var in struct {
@@ -166,14 +166,14 @@ func (s *Service) StudentRoutes(r chi.Router) {
 		if err := httpx.Decode(w, r, &in); err != nil {
 			return RunView{}, err
 		}
-		return s.Go(r.Context(), uid(r), chi.URLParam(r, "id"), in.To)
+		return s.withByline(r.Context())(s.Go(r.Context(), uid(r), chi.URLParam(r, "id"), in.To))
 	}))
 	r.Method("POST", "/tutorials/{id}/answers", reply(200, func(w http.ResponseWriter, r *http.Request) (RunView, error) {
 		var in AnswerInput
 		if err := httpx.Decode(w, r, &in); err != nil {
 			return RunView{}, err
 		}
-		return s.Answer(r.Context(), uid(r), chi.URLParam(r, "id"), in)
+		return s.withByline(r.Context())(s.Answer(r.Context(), uid(r), chi.URLParam(r, "id"), in))
 	}))
 	r.Method("POST", "/tutorials/{id}/time", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in struct {
@@ -194,9 +194,9 @@ func (s *Service) StudentRoutes(r chi.Router) {
 		if err := httpx.Decode(w, r, &in); err != nil {
 			return RunView{}, err
 		}
-		return s.Leave(r.Context(), uid(r), chi.URLParam(r, "id"), in)
+		return s.withByline(r.Context())(s.Leave(r.Context(), uid(r), chi.URLParam(r, "id"), in))
 	}))
 	r.Method("POST", "/tutorials/{id}/finish", reply(200, func(w http.ResponseWriter, r *http.Request) (RunView, error) {
-		return s.Finish(r.Context(), uid(r), chi.URLParam(r, "id"))
+		return s.withByline(r.Context())(s.Finish(r.Context(), uid(r), chi.URLParam(r, "id")))
 	}))
 }

@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/session.svelte';
 	import { flyIn } from '$lib/ui/motion';
+	import { t } from '$lib/i18n/i18n.svelte';
 
 	$effect(() => {
 		if (auth.loaded && auth.user) goto(auth.home(), { replaceState: true });
@@ -29,23 +30,23 @@
 
 	const joined = ['AS', 'KF', 'NJ', 'RP', 'TD', 'MW'];
 
-	const steps: [string, string][] = [
-		['Show the code', 'Open a session and put its QR code on the projector. Students scan it or type the code. There’s no app to install.'],
-		['Students answer', 'Each phone gets one question at a time. Timers run on the server, so reloading never buys time, and you can pause or add minutes.'],
-		['Release results', 'Answer keys mark themselves. Essays wait for you or for your own AI key. Students see their results when you release them.']
-	];
+	const steps = $derived<[string, string][]>([
+		[t('home.step1'), t('home.step1Body')],
+		[t('home.step2'), t('home.step2Body')],
+		[t('home.step3'), t('home.step3Body')]
+	]);
 </script>
 
 <section class="page-container landing">
 	<div class="intro">
 		<div class="pitch" in:flyIn>
-			<h1 class="hero-title">Put a code on the board. Every phone in the room takes the quiz.</h1>
-			<p class="lead">Students scan and start in seconds. You watch each answer arrive, pause or add time, and release results once they’re marked.</p>
+			<h1 class="hero-title">{t('home.title')}</h1>
+			<p class="lead">{t('home.lead')}</p>
 			<div class="mt-6 flex flex-wrap gap-3">
-				<a class="btn btn-primary btn-lg" href="/register">Create an account</a>
-				<a class="btn btn-lg" href="/login">Log in</a>
+				<a class="btn btn-primary btn-lg" href="/register">{t('auth.createAccount')}</a>
+				<a class="btn btn-lg" href="/login">{t('auth.login')}</a>
 			</div>
-			<p class="small muted mt-4 mb-0">Got a code from your teacher? <a href="/join">Join a quiz</a></p>
+			<p class="small muted mt-4 mb-0">{t('home.gotCode')} <a href="/join">{t('home.joinQuiz')}</a></p>
 		</div>
 
 		<div class="scene" role="img" aria-label="A projector shows the join code K7Q2XM with a QR code and 24 students joined; a phone shows question 3 of 8 with “Carbon dioxide” chosen.">
@@ -79,7 +80,7 @@
 		</div>
 	</div>
 
-	<h2 class="lesson-title">How a lesson goes</h2>
+	<h2 class="lesson-title">{t('home.how')}</h2>
 	<ol class="lesson">
 		{#each steps as [title, body] (title)}
 			<li>
