@@ -16,6 +16,7 @@
 	import { levelFraction, progress } from '$lib/progress/progress.svelte';
 	import { reduced } from '$lib/ui/motion';
 	import type { IconName } from '$lib/ui/Icon.svelte';
+	import { badge, inbox } from '$lib/inbox/inbox.svelte';
 
 	let { children } = $props();
 
@@ -32,16 +33,26 @@
 		if (auth.user?.role === 'student') progress.load();
 		else progress.clear();
 	});
+	// Unread announcements and messages on the Inbox link (D-103).
+	$effect(() => {
+		if (auth.user?.role === 'student' || auth.user?.role === 'teacher') inbox.start();
+		else inbox.clear();
+	});
+	afterNavigate(() => {
+		if (auth.user?.role === 'student' || auth.user?.role === 'teacher') inbox.load();
+	});
 
 	// The live quiz and the projector are full-screen experiences without the nav.
 	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/') || page.url.pathname.startsWith('/live/') || page.url.pathname.startsWith('/m/'));
 	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
 
-	type Link = { href: string; label: string; icon: IconName };
+	type Link = { href: string; label: string; icon: IconName; count?: number };
+	const inboxLink = $derived<Link>({ href: '/inbox', label: 'Inbox', icon: 'mail', count: inbox.unread });
 	const links = $derived<Link[]>(
 		auth.user?.role === 'teacher'
 			? [
 					{ href: '/dashboard', label: 'Dashboard', icon: 'list' },
+					inboxLink,
 					{ href: '/t', label: 'Classrooms', icon: 'users' },
 					{ href: '/t/bank', label: 'Question bank', icon: 'book' },
 					{ href: '/t/polls', label: 'Polls', icon: 'chart' },
@@ -49,7 +60,7 @@
 					...(tutoring ? [{ href: '/t/tutoring', label: 'Tutoring', icon: 'monitor' as const }] : []),
 				]
 			: auth.user?.role === 'student'
-				? [{ href: '/dashboard', label: 'Dashboard', icon: 'list' }, { href: '/my', label: 'My quizzes', icon: 'star' }, { href: '/join', label: 'Join', icon: 'qr' }]
+				? [{ href: '/dashboard', label: 'Dashboard', icon: 'list' }, inboxLink, { href: '/my', label: 'My quizzes', icon: 'star' }, { href: '/join', label: 'Join', icon: 'qr' }]
 				: auth.user?.role === 'admin'
 					? [{ href: '/admin', label: 'Admin', icon: 'flag' }]
 					: auth.user?.role === 'manager'
@@ -94,6 +105,7 @@
 
 	async function logout() {
 		progress.clear();
+		inbox.clear();
 		await auth.logout();
 		goto('/login');
 	}
@@ -115,7 +127,7 @@
 					{#if mark}<span class="pill-mark" class:glide={!reduced()} style:transform="translateX({mark.left}px)" style:width="{mark.width}px" aria-hidden="true"></span>{/if}
 					{#each links as l (l.href)}
 						<a class="pill-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-							<Icon name={l.icon} size={16} /><span class="pill-label">{l.label}</span>
+							<Icon name={l.icon} size={16} /><span class="pill-label">{l.label}</span>{#if l.count}<span class="count" aria-label="{l.count} unread">{badge(l.count)}</span>{/if}
 						</a>
 					{/each}
 				</nav>
@@ -162,7 +174,7 @@
 		<nav class="tabbar" aria-label="Main">
 			{#each tabs as l (l.href)}
 				<a class="tab-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-					<span class="tab-icon"><Icon name={l.icon} size={20} /></span><span class="tab-label">{l.label}</span>
+					<span class="tab-icon"><Icon name={l.icon} size={20} />{#if l.count}<span class="count dot" aria-label="{l.count} unread">{badge(l.count)}</span>{/if}</span><span class="tab-label">{l.label}</span>
 				</a>
 			{/each}
 			{#if more.length}
@@ -225,6 +237,10 @@
 	.tab-icon { display: grid; place-items: center; width: 3rem; height: 1.75rem; border-radius: 9999px; }
 	.tab-link.on { color: var(--color-primary); }
 	.tab-link.on .tab-icon { background: color-mix(in oklab, var(--color-primary) 14%, transparent); }
+	/* Unread count on Inbox (D-103). */
+	.count { min-width: 1.15rem; height: 1.15rem; padding: 0 0.3rem; border-radius: 9999px; display: inline-grid; place-items: center; font-size: 0.68rem; font-weight: 700; line-height: 1; background: var(--color-error); color: var(--color-error-content); }
+	.tab-icon { position: relative; }
+	.count.dot { position: absolute; top: -0.2rem; right: 0.5rem; }
 	.tab-label { font-size: 0.7rem; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	@media (min-width: 640px) { .tabbar { display: none; } }
 	@media (max-width: 639px) { main.with-tabbar { padding-bottom: 5.5rem; } }

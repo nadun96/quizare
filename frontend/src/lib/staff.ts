@@ -1,7 +1,7 @@
 // Admins and managers (PL-FR-10 to PL-FR-17, D-56). The server checks every
 // feature on every request; these helpers only decide what to show.
 
-export type Feature = 'view_users' | 'manage_users' | 'approval_policy' | 'settings' | 'usage' | 'audit' | 'storage' | 'cleanup' | 'backups' | 'live_activity' | 'manage_classes';
+export type Feature = 'view_users' | 'manage_users' | 'approval_policy' | 'settings' | 'usage' | 'audit' | 'storage' | 'cleanup' | 'backups' | 'live_activity' | 'manage_classes' | 'send_email';
 
 /** The features an admin can give a manager, in the order they're offered. */
 export const FEATURES: { id: Feature; label: string; hint: string; warn?: string }[] = [
@@ -21,7 +21,8 @@ export const FEATURES: { id: Feature; label: string; hint: string; warn?: string
 		warn: "A backup holds all the platform's data: every account, answer, result and uploaded file. Give this only to someone you'd trust with all of it."
 	},
 	{ id: 'live_activity', label: 'Live activity', hint: "See what's live, end it, and pause new activities for everyone or one teacher." },
-	{ id: 'manage_classes', label: 'Classes', hint: 'See every classroom with its teacher and students; add, approve and remove students; rename, archive, delete, or move a classroom to another teacher. Never quiz content or answers.' }
+	{ id: 'manage_classes', label: 'Classes', hint: 'See every classroom with its teacher and students; add, approve and remove students; rename, archive, delete, or move a classroom to another teacher. Never quiz content or answers.' },
+	{ id: 'send_email', label: 'Email', hint: "Write email templates and send email to everyone, a role, a classroom's students or a list of addresses." }
 ];
 
 export const featureLabel = (f: string) => FEATURES.find((x) => x.id === f)?.label ?? f;
@@ -62,13 +63,14 @@ export function roleLabel(u: Person): string {
 	return u.manager && u.role !== 'manager' ? r + ' · manager' : r;
 }
 
-export type ConsoleTab = 'users' | 'classes' | 'usage' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
+export type ConsoleTab = 'users' | 'classes' | 'email' | 'usage' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
 
 /** The admin console's tabs this person can open, in order. */
 export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
 	const tabs: ConsoleTab[] = [];
 	if (can(u, 'view_users')) tabs.push('users');
 	if (can(u, 'manage_classes')) tabs.push('classes');
+	if (can(u, 'send_email')) tabs.push('email');
 	if (can(u, 'usage')) tabs.push('usage');
 	if (can(u, 'live_activity')) tabs.push('live');
 	if (can(u, 'approval_policy') || can(u, 'settings')) tabs.push('settings');
