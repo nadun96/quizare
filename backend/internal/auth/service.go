@@ -98,6 +98,7 @@ type Service struct {
 
 	ipLimiter    *Limiter
 	emailLimiter *Limiter
+	mailLimiter  *Limiter                          // verification and change-of-email emails a person may ask for (D-98)
 	relations    Relations                         // who may see whose profile picture (D-49)
 	dir          Directory                         // school sign-in (D-64); nil = off
 	sso          func(context.Context) []SSOOption // outside sign-in buttons (D-70); nil = none
@@ -126,6 +127,7 @@ func NewService(pool *pgxpool.Pool, hasher *Hasher, inserter jobs.Inserter, base
 		// the per-account bucket is what stops password guessing.
 		ipLimiter:    NewLimiter(300, 200*time.Millisecond),
 		emailLimiter: NewLimiter(10, 30*time.Second),
+		mailLimiter:  NewLimiter(3, 10*time.Minute),
 		cache:        map[string]cachedSession{},
 	}
 }
@@ -225,6 +227,9 @@ func (s *Service) issueTokenTx(ctx context.Context, tx pgx.Tx, u User, purpose s
 	case "verify_email":
 		msg.Subject = "Verify your email"
 		msg.Body = fmt.Sprintf("Hi %s,\n\nConfirm your email address:\n%s/verify-email?token=%s\n\nThe link expires in 48 hours.", u.Name, s.baseURL, token)
+	case "change_email":
+		msg.Subject = "Confirm your new email address"
+		msg.Body = fmt.Sprintf("Hi %s,\n\nConfirm this is your new email address for %s:\n%s/verify-email?token=%s\n\nThe link expires in 48 hours. Until you confirm, you keep logging in with your old address. If you did not ask for this, ignore this email.", u.Name, s.baseURL, s.baseURL, token)
 	case "reset_password":
 		msg.Subject = "Reset your password"
 		msg.Body = fmt.Sprintf("Hi %s,\n\nReset your password:\n%s/reset-password?token=%s\n\nThe link expires in 1 hour. If you did not ask for this, ignore this email.", u.Name, s.baseURL, token)
@@ -426,6 +431,9 @@ func consumeToken(ctx context.Context, tx pgx.Tx, token, purpose string, now tim
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		id, err := consumeToken(ctx, tx, token, "verify_email", s.now())
+		if errors.Is(err, errBadToken) {
+			return s.confirmEmailChange(ctx, tx, token) // a link to a new address (D-98)
+		}
 		if err != nil {
 			return err
 		}

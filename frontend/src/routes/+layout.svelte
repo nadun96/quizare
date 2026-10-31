@@ -41,16 +41,15 @@
 	const links = $derived<Link[]>(
 		auth.user?.role === 'teacher'
 			? [
+					{ href: '/dashboard', label: 'Dashboard', icon: 'list' },
 					{ href: '/t', label: 'Classrooms', icon: 'users' },
 					{ href: '/t/bank', label: 'Question bank', icon: 'book' },
 					{ href: '/t/polls', label: 'Polls', icon: 'chart' },
 					{ href: '/t/meetings', label: 'Meetings', icon: 'video' },
 					...(tutoring ? [{ href: '/t/tutoring', label: 'Tutoring', icon: 'monitor' as const }] : []),
-					{ href: '/t/settings', label: 'Settings', icon: 'pencil' },
-					...(auth.user.manager ? [{ href: '/admin', label: 'Manage', icon: 'flag' as const }] : [])
 				]
 			: auth.user?.role === 'student'
-				? [{ href: '/my', label: 'My quizzes', icon: 'star' }, { href: '/join', label: 'Join', icon: 'qr' }]
+				? [{ href: '/dashboard', label: 'Dashboard', icon: 'list' }, { href: '/my', label: 'My quizzes', icon: 'star' }, { href: '/join', label: 'Join', icon: 'qr' }]
 				: auth.user?.role === 'admin'
 					? [{ href: '/admin', label: 'Admin', icon: 'flag' }]
 					: auth.user?.role === 'manager'
@@ -145,7 +144,11 @@
 						{#if auth.user.role === 'student' && progress.current}
 							<li><a href="/my"><Icon name="sparkles" size={16} />Level {progress.current.level}, {progress.current.xp} XP</a></li>
 						{/if}
-						<li><a href="/account"><Icon name="user" size={16} />Account</a></li>
+						<li><a href="/account"><Icon name="user" size={16} />Profile and account</a></li>
+						{#if auth.user.role === 'teacher'}
+							<li><a href="/t/settings"><Icon name="pencil" size={16} />Teaching settings</a></li>
+							{#if auth.user.manager}<li><a href="/admin"><Icon name="flag" size={16} />Manage the platform</a></li>{/if}
+						{/if}
 						<li><button onclick={logout}><Icon name="logout" size={16} />Log out</button></li>
 					</ul>
 				</details>
