@@ -187,7 +187,7 @@
 	{/if}
 </main>
 
-{#if !bare && !isDocs}
+{#if !bare && !isDocs && auth.user?.role === 'admin'}
 	<footer class="page-container small muted pb-8 pt-8">
 		<a href="/docs/overview">Developer docs</a> · <a href="/api/docs" target="_blank" rel="noopener">API reference</a> · <a href="/docs/ux-research">Design rules</a>
 	</footer>

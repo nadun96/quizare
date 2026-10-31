@@ -1,7 +1,6 @@
 package app_test
 
 import (
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/apidocs"
 	"github.com/nadun96/quizplatform/internal/app/apptest"
+	"github.com/nadun96/quizplatform/internal/auth"
 )
 
 type spec struct {
@@ -124,7 +124,15 @@ func TestOpenAPIRefsResolve(t *testing.T) {
 
 func TestDocsServed(t *testing.T) {
 	e := apptest.New(t)
-	c := e.Server.Client()
+	admin := e.NewUser(auth.RoleAdmin)
+	// Admins only (D-100): nobody else, signed in or not.
+	for _, c := range []*apptest.Client{e.Client(), e.NewUser(auth.RoleTeacher), e.NewUser(auth.RoleStudent)} {
+		for _, path := range []string{"/api/docs", "/api/docs/openapi.yaml"} {
+			if code, _, _ := c.Get(path, nil); code != 401 && code != 403 {
+				t.Errorf("%s open to a non-admin: %d", path, code)
+			}
+		}
+	}
 	for path, want := range map[string]string{
 		"/api/docs":                         "swagger-ui-bundle.js",
 		"/api/docs/openapi.yaml":            "openapi: 3.1.0",
@@ -132,19 +140,13 @@ func TestDocsServed(t *testing.T) {
 		"/api/docs/ui/init.js":              "SwaggerUIBundle",
 		"/api/docs/ui/swagger-ui-bundle.js": "SwaggerUIBundle",
 	} {
-		resp, err := c.Get(e.Server.URL + path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode != 200 || !strings.Contains(string(body), want) {
-			t.Errorf("%s: %d, missing %q", path, resp.StatusCode, want)
+		code, _, body := admin.Get(path, nil)
+		if code != 200 || !strings.Contains(string(body), want) {
+			t.Errorf("%s: %d, missing %q", path, code, want)
 		}
 	}
 	// The page uses no inline script, so it works under the strict CSP.
-	resp, _ := c.Get(e.Server.URL + "/api/docs")
-	body, _ := io.ReadAll(resp.Body)
+	_, _, body := admin.Get("/api/docs", nil)
 	if strings.Contains(string(body), "<script>") {
 		t.Error("docs page contains an inline script")
 	}

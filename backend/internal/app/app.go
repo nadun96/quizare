@@ -323,7 +323,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		// Polls: anyone with the code; the poll decides whether login is needed (D-40).
 		api.Route("/polls", a.Poll.PublicRoutes)
 		if cfg.APIDocs {
-			api.Route("/docs", apidocs.Routes)
+			// The API reference is for admins only (D-100).
+			api.With(auth.RequireRole(auth.RoleAdmin)).Route("/docs", apidocs.Routes)
 		}
 		api.Route("/admin", func(ad chi.Router) {
 			// Admins and managers; each route checks its own feature (PL-NFR-06, D-56).
@@ -337,6 +338,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Drive.AdminRoutes(ad)
 			a.Meet.AdminRoutes(ad, a.Auth)
 			a.Oversight.AdminRoutes(ad, a.Auth)
+			a.Content.OverseeRoutes(ad, a.Auth) // every classroom (D-101)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
