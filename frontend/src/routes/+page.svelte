@@ -63,7 +63,7 @@
 					</div>
 				</div>
 				<div class="board-foot">
-					{#each joined as j (j)}<span class="face">{j}</span>{/each}<span class="more">+18</span>
+					{#each joined as j (j)}<span class="face round">{j}</span>{/each}<span class="more">+18</span>
 				</div>
 			</div>
 			<div class="phone" aria-hidden="true" in:flyIn={{ delay: 180, y: 24 }}>
