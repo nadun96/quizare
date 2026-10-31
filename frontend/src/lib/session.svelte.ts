@@ -29,12 +29,11 @@ class Auth {
 	home(): string {
 		switch (this.user?.role) {
 			case 'teacher':
-				return '/t';
+			case 'student':
+				return '/dashboard'; // D-99
 			case 'admin':
 			case 'manager':
 				return '/admin';
-			case 'student':
-				return '/my';
 			default:
 				return '/login';
 		}

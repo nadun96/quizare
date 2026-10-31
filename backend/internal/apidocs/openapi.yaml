@@ -180,6 +180,37 @@ paths:
         '204': { description: 'Deleted' }
         '400': { description: 'Admin accounts cannot self-delete' }
         '401': { $ref: '#/components/responses/Error' }
+  /api/auth/me/email:
+    get:
+      operationId: getMyEmail
+      tags: [auth]
+      summary: Your email address, whether it's verified, and a change waiting to be confirmed (D-98)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailStatus' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+    put:
+      operationId: putMyEmail
+      tags: [auth]
+      summary: Ask to change your email address; a link goes to the new one, which takes over once followed, and the old one is told (D-98)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } } } } }
+      responses: { '204': { description: 'Link sent' }, '400': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Invalid' }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/auth/me/email/verify:
+    post:
+      operationId: postMyEmailVerify
+      tags: [auth]
+      summary: Send the verification link again (three times in ten minutes at most; earlier links stop working; D-98)
+      responses: { '204': { description: 'Sent' }, '409': { $ref: '#/components/responses/Conflict' }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/auth/me/email/pending:
+    delete:
+      operationId: deleteMyEmailPending
+      tags: [auth]
+      summary: Cancel a change of email address not yet confirmed (D-98)
+      responses: { '204': { description: 'Cancelled' } }
+  /api/auth/me/profile:
+    put:
+      operationId: putMyProfile
+      tags: [auth]
+      summary: Change your name (D-98); school-directory accounts can't
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 100 } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { type: object, properties: { name: { type: string } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/auth/me/password:
     post:
       operationId: postAuthMePassword
@@ -292,6 +323,78 @@ paths:
       summary: Save the Google app (admins only, D-71)
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }
       responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/DriveConfig' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/users/{id}/role:
+    post:
+      operationId: postAdminUserRole
+      tags: [admin]
+      summary: Change a user's role (D-101). Admins set anyone but themself to student, teacher or admin; managers with "Manage users" switch students and teachers only
+      description: 409 `owns_classrooms` for a teacher who still owns classrooms (move them first), 409 `is_manager` for a manager leaving the teacher role; the last active admin stays one.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: [student, teacher, admin] } } } } } }
+      responses: { '204': { description: 'Changed' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/admin/classrooms:
+    get:
+      operationId: getAdminClassrooms
+      tags: [admin, classrooms]
+      summary: Every classroom with its teacher and student counts, searched by its name or its teacher's (admins, or managers with Classes; D-101)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [name, created, teacher, students] } }, { name: archived, in: query, schema: { type: string, enum: ['1'] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classrooms: { type: array, items: { $ref: '#/components/schemas/OverseenClassroom' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/admin/classrooms/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getAdminClassroom
+      tags: [admin, classrooms]
+      summary: One classroom, for the admin (D-101)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/OverseenClassroom' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      operationId: patchAdminClassroom
+      tags: [admin, classrooms]
+      summary: Rename or archive a classroom (D-101)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string }, archived: { type: boolean } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/OverseenClassroom' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteAdminClassroom
+      tags: [admin, classrooms]
+      summary: Delete a classroom with everything inside, as its teacher would (D-92, D-101); with results, `confirm` must be its name
+      parameters: [{ name: confirm, in: query, schema: { type: string } }]
+      responses: { '204': { description: 'Deleted' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/admin/classrooms/{id}/delete-preview:
+    get:
+      operationId: getAdminClassroomDeletePreview
+      tags: [admin, classrooms]
+      summary: What deleting the classroom takes with it (D-92, D-101)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/DeleteContents' } } } } }
+  /api/admin/classrooms/{id}/students:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getAdminClassroomStudents
+      tags: [admin, classrooms]
+      summary: A classroom's students, waiting ones first (D-101)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { name: status, in: query, schema: { type: string, enum: [active, pending] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { students: { type: array, items: { $ref: '#/components/schemas/OverseenEnrolment' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+    post:
+      operationId: postAdminClassroomStudent
+      tags: [admin, classrooms]
+      summary: Enrol an active student by email, at once (D-101)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string } } } } } }
+      responses: { '204': { description: 'Enrolled' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/classrooms/{id}/students/{enrolment}:
+    put:
+      operationId: putAdminClassroomStudent
+      tags: [admin, classrooms]
+      summary: Approve (active) or remove a student (D-101)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: enrolment, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, removed] } } } } } }
+      responses: { '204': { description: 'Saved' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/admin/classrooms/{id}/owner:
+    post:
+      operationId: postAdminClassroomOwner
+      tags: [admin, classrooms]
+      summary: Move a classroom to another teacher, with its quizzes, tutorials, presentations and past sessions (D-101); refused while a quiz session is open
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [teacher_email], properties: { teacher_email: { type: string } } } } } }
+      responses: { '200': { description: 'Moved', content: { application/json: { schema: { type: object, properties: { classroom: { $ref: '#/components/schemas/OverseenClassroom' }, quizzes: { type: integer }, bank_quizzes: { type: integer, description: 'Quizzes drawing from a question bank: now the new teacher''s' } } } } } }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/admin/live-activity:
     get:
       operationId: getAdminLiveActivity
@@ -2019,6 +2122,22 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ViolationInput' } } } }
       responses: { '204': { description: 'Recorded' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/dashboard:
+    get:
+      operationId: getMyDashboard
+      tags: [students]
+      summary: How many items each dashboard list has, for students and teachers (D-99)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { role: { type: string }, counts: { type: object, additionalProperties: { type: integer } } } } } } } }
+  /api/my/dashboard/{list}:
+    get:
+      operationId: getMyDashboardList
+      tags: [students]
+      summary: One page of a dashboard list (D-99)
+      parameters:
+        - { name: list, in: path, required: true, schema: { type: string, enum: [live, upcoming, overdue, pending] } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/DashboardItem' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/my/progress:
     get:
       operationId: getMyProgress
@@ -2614,6 +2733,24 @@ components:
         pages: { type: array, items: { type: object, properties: { title: { type: string }, questions: { type: integer }, done: { type: boolean }, open: { type: boolean } } } }
         page: { type: object }
         score: { type: object, properties: { score: { type: number }, max: { type: number }, pending: { type: integer } } }
+    EmailStatus:
+      type: object
+      properties:
+        email: { type: string }
+        verified: { type: boolean }
+        pending_email: { type: string }
+        can_change: { type: boolean, description: 'False for school-directory accounts' }
+    DashboardItem:
+      type: object
+      properties:
+        kind: { type: string, enum: [quiz, tutorial, presentation, meeting, poll, marking, enrolment] }
+        id: { type: string }
+        title: { type: string }
+        classroom: { type: string }
+        at: { type: string, format: date-time, description: 'When it opens, is due, started or ended' }
+        status: { type: string, enum: [live, opens, due, due_soon, overdue, missed, in_progress, not_started, to_mark, to_approve] }
+        detail: { type: string }
+        href: { type: string, description: 'The page to open, if any' }
     Progress:
       type: object
       properties:
@@ -2628,6 +2765,29 @@ components:
         tutorials: { type: integer }
         badges: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, description: { type: string }, earned: { type: boolean }, earned_at: { type: string, format: date-time }, have: { type: integer }, need: { type: integer } } } }
         recent: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, tutorial] }, title: { type: string }, at: { type: string, format: date-time }, xp: { type: integer } } } }
+    OverseenClassroom:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        join_code: { type: string }
+        archived: { type: boolean }
+        created_at: { type: string, format: date-time }
+        teacher_id: { type: string, format: uuid }
+        teacher_name: { type: string }
+        teacher_email: { type: string }
+        students: { type: integer }
+        pending: { type: integer }
+    OverseenEnrolment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        student_number: { type: string, nullable: true }
+        status: { type: string, enum: [active, pending, rejected] }
+        created_at: { type: string, format: date-time }
     DeleteContents:
       type: object
       properties:
@@ -2824,7 +2984,7 @@ components:
     Feature:
       type: string
       description: An admin feature a manager can be given (PL-FR-10)
-      enum: [view_users, manage_users, approval_policy, settings, usage, audit, storage, cleanup, backups, live_activity]
+      enum: [view_users, manage_users, approval_policy, settings, usage, audit, storage, cleanup, backups, live_activity, manage_classes]
     StorageLimits:
       type: object
       properties:

@@ -1,9 +1,18 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { auth, loginUrl } from '$lib/session.svelte';
 	import { NAV, PAGES } from '$lib/docs';
 	import { plainText } from '$lib/docs/render';
 
 	let { children } = $props();
+	// The developer docs are for admins only (D-100).
+	const allowed = $derived(auth.user?.role === 'admin');
+	$effect(() => {
+		if (!auth.loaded) return;
+		if (!auth.user) goto(loginUrl(page.url.pathname));
+		else if (auth.user.role !== 'admin') goto(auth.home(), { replaceState: true });
+	});
 	let query = $state('');
 	let menuOpen = $state(false);
 	const index = PAGES.map((p) => ({ ...p, text: plainText(p.source) }));
@@ -30,6 +39,7 @@
 
 <svelte:head><title>Developer docs · Classroom Quiz</title></svelte:head>
 
+{#if allowed}
 <div class="docs">
 	<button class="docs-menu btn btn-sm" onclick={() => (menuOpen = !menuOpen)} aria-expanded={menuOpen} aria-controls="docs-nav">☰ Contents</button>
 	<aside id="docs-nav" class:open={menuOpen}>
@@ -59,6 +69,7 @@
 	</aside>
 	<div class="main">{@render children()}</div>
 </div>
+{/if}
 
 <style>
 	.docs { display: grid; grid-template-columns: 260px minmax(0, 1fr); max-width: 1400px; margin: 0 auto; }

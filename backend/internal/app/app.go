@@ -24,6 +24,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/apidocs"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
+	"github.com/nadun96/quizplatform/internal/dashboard"
 	"github.com/nadun96/quizplatform/internal/directory"
 	"github.com/nadun96/quizplatform/internal/drive"
 	"github.com/nadun96/quizplatform/internal/eval"
@@ -78,6 +79,7 @@ type App struct {
 	Tutor     *tutorlink.Service    // nil when tutoring is off
 	Oversight *oversight.Service    // the admin's live activity (D-90)
 	Progress  *progress.Service     // students' own XP, levels and badges (D-97)
+	Dashboard *dashboard.Service    // each person's own overview (D-99)
 }
 
 // Options let tests swap infrastructure.
@@ -288,6 +290,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		oversight.KindPresentation: {End: a.Slides.ForceEndLive, Online: a.Slides.Online},
 	}, tutorMail)
 	a.Progress = progress.NewService(pool)
+	a.Dashboard = dashboard.NewService(pool)
 	a.Live.SetGate(a.Oversight.Check)
 	a.Poll.SetGate(a.Oversight.Check)
 	a.Meet.SetGate(a.Oversight.Check)
@@ -320,7 +323,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		// Polls: anyone with the code; the poll decides whether login is needed (D-40).
 		api.Route("/polls", a.Poll.PublicRoutes)
 		if cfg.APIDocs {
-			api.Route("/docs", apidocs.Routes)
+			// The API reference is for admins only (D-100).
+			api.With(auth.RequireRole(auth.RoleAdmin)).Route("/docs", apidocs.Routes)
 		}
 		api.Route("/admin", func(ad chi.Router) {
 			// Admins and managers; each route checks its own feature (PL-NFR-06, D-56).
@@ -334,6 +338,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Drive.AdminRoutes(ad)
 			a.Meet.AdminRoutes(ad, a.Auth)
 			a.Oversight.AdminRoutes(ad, a.Auth)
+			a.Content.OverseeRoutes(ad, a.Auth) // every classroom (D-101)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
@@ -357,6 +362,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Content.StudentRoutes(s)
 			a.Admin.UserRoutes(s)
 			a.Progress.StudentRoutes(s)
+			a.Dashboard.Routes(s)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 			a.Meet.UserRoutes(s)
 			a.Drive.UserRoutes(s)

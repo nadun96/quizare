@@ -24,6 +24,7 @@
 	import StoragePanel from '$lib/admin/StoragePanel.svelte';
 	import BackupsPanel from '$lib/admin/BackupsPanel.svelte';
 	import LivePanel from '$lib/admin/LivePanel.svelte';
+	import ClassesPanel from '$lib/admin/ClassesPanel.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
 
 	// The admin console, for admins and managers (D-56). A manager sees only
@@ -33,7 +34,7 @@
 	type Ev = { id: number; actor_name: string; actor_role?: string; action: string; target_type: string; target_id: string; details: unknown; created_at: string };
 	const ready = requireStaff();
 	const tabs = $derived(consoleTabs(auth.user));
-	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', live: 'Live activity', settings: 'Platform settings', signin: 'Sign-in', drive: 'Google Drive', audit: 'Audit log', storage: 'Storage', backups: 'Backups', recordings: 'Tutoring', managers: 'Managers' };
+	const labels: Record<ConsoleTab, string> = { users: 'Users', usage: 'Usage', classes: 'Classes', live: 'Live activity', settings: 'Platform settings', signin: 'Sign-in', drive: 'Google Drive', audit: 'Audit log', storage: 'Storage', backups: 'Backups', recordings: 'Tutoring', managers: 'Managers' };
 	let tab = $state<ConsoleTab | null>(null);
 	let role = $state(Paged.fromUrl(urlState, 'role'));
 	let status = $state(Paged.fromUrl(urlState, 'status'));
@@ -82,6 +83,31 @@
 		} catch (e) {
 			notice = e instanceof ApiError ? e.message : '';
 		}
+	}
+	// Changing a role (D-101): admins any but their own; managers students and teachers only.
+	const ROLE_WORDS: Record<string, string> = {
+		student: 'They lose their teacher pages. A teacher who still owns classrooms stays a teacher until those move to another teacher (Classes tab).',
+		teacher: 'They can create classrooms, quizzes, polls and meetings. Their own enrolments as a student stay.',
+		admin: 'They get the whole admin console, every setting and every account. Give this only to someone you trust with all of it.'
+	};
+	async function changeRole(u: U, to: 'student' | 'teacher' | 'admin') {
+		if (!(await confirmDialog({ title: `Make ${u.name} ${to === 'admin' ? 'an' : 'a'} ${to}?`, body: ROLE_WORDS[to], confirm: `Make ${to}`, danger: to === 'admin' }))) return;
+		try {
+			await api.post('/api/admin/users/' + u.id + '/role', { role: to });
+			notice = '';
+			loadUsers();
+		} catch (e) {
+			notice = e instanceof ApiError ? e.message : '';
+		}
+	}
+	function roleActions(u: U) {
+		if (!canActOn(auth.user, u)) return [];
+		const out: { label: string; icon: 'user' | 'book' | 'flag'; onclick: () => void; danger?: boolean }[] = [];
+		if (u.role !== 'student' && u.role !== 'admin' && !u.manager) out.push({ label: 'Make student', icon: 'user', onclick: () => changeRole(u, 'student') });
+		if (u.role !== 'teacher') out.push({ label: 'Make teacher', icon: 'book', onclick: () => changeRole(u, 'teacher') });
+		if (isAdmin(auth.user) && u.role !== 'admin') out.push({ label: 'Make admin', icon: 'flag', danger: true, onclick: () => changeRole(u, 'admin') });
+		if (isAdmin(auth.user) && u.role === 'admin') out.push({ label: 'Make student', icon: 'user', onclick: () => changeRole(u, 'student') });
+		return out;
 	}
 	function makeManager(u: U) {
 		makeTeacher = u;
@@ -147,6 +173,7 @@
 								{#if canActOn(auth.user, u) || (isAdmin(auth.user) && u.role === 'teacher' && u.status === 'active' && !u.manager)}
 									<RowMenu hint="More actions for {u.name}" actions={[
 										...(isAdmin(auth.user) && u.role === 'teacher' && u.status === 'active' && !u.manager ? [{ label: 'Make manager', icon: 'users' as const, onclick: () => makeManager(u) }] : []),
+										...roleActions(u),
 										...(canActOn(auth.user, u)
 											? [
 													u.status === 'suspended'
@@ -207,6 +234,8 @@
 		<BackupsPanel />
 	{:else if tab === 'live'}
 		<LivePanel />
+	{:else if tab === 'classes'}
+		<ClassesPanel />
 	{:else if tab === 'signin'}
 		<div class="vstack">
 			<section class="vstack" aria-labelledby="sso-h"><h2 id="sso-h" class="m-0 text-lg">Other accounts (OpenID Connect)</h2><SsoPanel /></section>
