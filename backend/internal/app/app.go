@@ -29,9 +29,11 @@ import (
 	"github.com/nadun96/quizplatform/internal/drive"
 	"github.com/nadun96/quizplatform/internal/eval"
 	"github.com/nadun96/quizplatform/internal/imageurl"
+	"github.com/nadun96/quizplatform/internal/inbox"
 	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
+	"github.com/nadun96/quizplatform/internal/mailing"
 	"github.com/nadun96/quizplatform/internal/meet"
 	"github.com/nadun96/quizplatform/internal/oidc"
 	"github.com/nadun96/quizplatform/internal/oversight"
@@ -80,6 +82,8 @@ type App struct {
 	Oversight *oversight.Service    // the admin's live activity (D-90)
 	Progress  *progress.Service     // students' own XP, levels and badges (D-97)
 	Dashboard *dashboard.Service    // each person's own overview (D-99)
+	Mailing   *mailing.Service      // email to groups of accounts (D-102)
+	Inbox     *inbox.Service        // announcements and messages (D-103)
 }
 
 // Options let tests swap infrastructure.
@@ -291,6 +295,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	}, tutorMail)
 	a.Progress = progress.NewService(pool)
 	a.Dashboard = dashboard.NewService(pool)
+	a.Mailing = mailing.NewService(pool, rc, cfg.BaseURL) // email to groups (D-102)
+	a.Inbox = inbox.NewService(pool, rc, cfg.BaseURL)     // announcements and messages (D-103)
 	a.Live.SetGate(a.Oversight.Check)
 	a.Poll.SetGate(a.Oversight.Check)
 	a.Meet.SetGate(a.Oversight.Check)
@@ -339,6 +345,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Meet.AdminRoutes(ad, a.Auth)
 			a.Oversight.AdminRoutes(ad, a.Auth)
 			a.Content.OverseeRoutes(ad, a.Auth) // every classroom (D-101)
+			a.Mailing.AdminRoutes(ad, a.Auth)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
@@ -354,6 +361,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Drive.TeacherRoutes(t)
 			a.Tutorial.TeacherRoutes(t)
 			a.Slides.TeacherRoutes(t)
+			a.Inbox.TeacherRoutes(t)
 			// A classroom's results: each student's best mark on each quiz (D-87, TS-FR-82).
 			t.Method("GET", "/classrooms/{id}/results", httpx.Handler(a.classroomResults))
 		})
@@ -363,6 +371,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Admin.UserRoutes(s)
 			a.Progress.StudentRoutes(s)
 			a.Dashboard.Routes(s)
+			a.Inbox.Routes(s)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 			a.Meet.UserRoutes(s)
 			a.Drive.UserRoutes(s)
