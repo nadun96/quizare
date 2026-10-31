@@ -464,6 +464,39 @@ paths:
       summary: Send to every active account in the audience, each email filled in for its recipient and queued on its own; recorded and audited (D-102)
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmailDraft' } } } }
       responses: { '201': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailSend' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/queue:
+    get:
+      operationId: getAdminEmailQueue
+      tags: [admin, email]
+      summary: Every email the platform sends, kept a week, with its status (waiting, sent to the mail server, retrying, failed) and the mail server's last error; never the text (D-104)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: status, in: query, schema: { type: string, enum: [waiting, sent, retrying, failed] } }, { name: send, in: query, description: 'One send to a group', schema: { type: string, format: uuid } }, { name: sort, in: query, schema: { type: string, enum: [created, to] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { emails: { type: array, items: { $ref: '#/components/schemas/EmailDelivery' } }, counts: { $ref: '#/components/schemas/EmailProgress' }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+  /api/admin/email/queue/retry:
+    post:
+      operationId: postAdminEmailQueueRetry
+      tags: [admin, email]
+      summary: Send failed emails again - one by id, or all of a send's (or all) without one (D-104)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { id: { type: integer, format: int64 }, send_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { retried: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/admin/email/server:
+    get:
+      operationId: getAdminEmailServer
+      tags: [admin, email]
+      summary: The mail server set in the console, what sends email now (console, config or log), and the config file's settings; admins only, never the password (D-104)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/MailServerState' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putAdminEmailServer
+      tags: [admin, email]
+      summary: Save the mail server; turned on, it takes over from the config file. An empty password keeps the stored one (D-104)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MailServer' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/MailServerState' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/server/test:
+    post:
+      operationId: postAdminEmailServerTest
+      tags: [admin, email]
+      summary: Send one email now, outside the queue, with the settings given (not saved yet) or what sends email now; says which step failed and the server's words (D-104)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [to], properties: { to: { type: string }, server: { $ref: '#/components/schemas/MailServer' } } } } } }
+      responses: { '200': { description: 'How it went', content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, step: { type: string, enum: [connect, tls, login, send] }, error: { type: string }, via: { type: string } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/admin/live-activity:
     get:
       operationId: getAdminLiveActivity
@@ -3002,6 +3035,7 @@ components:
         recipients: { type: integer }
         sent_by: { type: string }
         sent_at: { type: string, format: date-time }
+        progress: { $ref: '#/components/schemas/EmailProgress' }
     Announcement:
       type: object
       properties:
@@ -3051,6 +3085,42 @@ components:
         sender: { type: string }
         body: { type: string }
         created_at: { type: string, format: date-time }
+    EmailProgress:
+      type: object
+      properties: { waiting: { type: integer }, sent: { type: integer }, retrying: { type: integer }, failed: { type: integer } }
+    EmailDelivery:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        to: { type: string }
+        subject: { type: string }
+        status: { type: string, enum: [waiting, sent, retrying, failed] }
+        attempts: { type: integer }
+        max_attempts: { type: integer }
+        error: { type: string }
+        send_id: { type: string }
+        created_at: { type: string, format: date-time }
+        at: { type: string, format: date-time, nullable: true }
+    MailServer:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        host: { type: string }
+        port: { type: integer }
+        security: { type: string, enum: [auto, starttls, tls, none] }
+        username: { type: string }
+        password: { type: string, writeOnly: true }
+        password_set: { type: boolean, readOnly: true }
+        from: { type: string }
+        from_name: { type: string }
+        updated_at: { type: string, format: date-time, readOnly: true }
+    MailServerState:
+      allOf:
+        - $ref: '#/components/schemas/MailServer'
+        - type: object
+          properties:
+            source: { type: string, enum: [console, config, log] }
+            config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
     DeleteContents:
       type: object
       properties:

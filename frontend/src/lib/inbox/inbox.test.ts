@@ -33,3 +33,13 @@ describe('templated email (D-102)', () => {
 		expect(parseEmails('a@x.lk, B@x.lk;\n<c@x.lk> a@x.lk')).toEqual(['a@x.lk', 'b@x.lk', 'c@x.lk']);
 	});
 });
+
+describe('email queue (D-104)', async () => {
+	const { progressText, inFlight } = await import('../admin/emailqueue');
+	it('says a send’s progress in words', () => {
+		expect(progressText({ sent: 118, retrying: 1, failed: 1, waiting: 0 })).toBe('118 sent · 1 retrying · 1 failed');
+		expect(progressText({})).toBe('');
+		expect(inFlight({ sent: 3, waiting: 1 })).toBe(true);
+		expect(inFlight({ sent: 3, failed: 1 })).toBe(false);
+	});
+});

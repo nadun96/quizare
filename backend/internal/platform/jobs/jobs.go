@@ -7,6 +7,7 @@ package jobs
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -51,7 +52,9 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 // insert-only (useful in tests and for processes that must not run jobs);
 // periodic jobs run only with workers.
 func NewClient(pool *pgxpool.Pool, workers *river.Workers, logger *slog.Logger, periodic ...*river.PeriodicJob) (*river.Client[pgx.Tx], error) {
-	cfg := &river.Config{Logger: logger}
+	// Finished jobs stay a week, so the admin's email queue shows the last
+	// week's emails (D-104); River's default keeps completed ones a day.
+	cfg := &river.Config{Logger: logger, CompletedJobRetentionPeriod: 7 * 24 * time.Hour}
 	if workers != nil {
 		cfg.Workers = workers
 		cfg.Queues = queueConfig

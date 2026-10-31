@@ -29,7 +29,7 @@ Tables: `users`, `sessions` (SHA-256 of the token), `tokens` (one-time verify/re
 
 ## mail (no schema)
 
-Transactional email as a River job on the `email` queue (2 workers, 5 attempts), so a slow mail server never blocks a request. `mail.Args{Message}` is inserted in the same transaction as the token that the email carries. `Sender` has two implementations: `SMTPSender` (when `QP_SMTP_ADDR` is set) and `LogSender` (development: messages go to the log).
+Transactional email as a River job on the `email` queue (2 workers, 5 attempts), so a slow mail server never blocks a request. `mail.Args{Message}` is inserted in the same transaction as the token that the email carries. `Sender` has two implementations: `SMTPSender` (when `QP_SMTP_ADDR` is set, or the mail server set in the console, D-104) and `LogSender` (development: messages go to the log). `SMTPSender` connects with `Security` `auto` (STARTTLS when offered), `starttls`, `tls` (port 465) or `none`, logs in with AUTH PLAIN, writes `Date`, `Message-ID` and MIME headers, and returns a `StepError` naming the step that failed (`connect`, `tls`, `login`, `send`). `mailtest` is a small SMTP server for tests. `Args.SendID` ties an email to a send to a group.
 
 ## settings (schema `settings`)
 
@@ -145,6 +145,8 @@ The admin's live activity (D-90), behind the `live_activity` feature. `Live` lis
 ## mailing (schema `mailing`)
 
 Email to groups of accounts (D-102), behind the `send_email` feature. `mailing.templates` are saved subjects and bodies; `check` refuses a placeholder that isn't in `Placeholders` (`name`, `first_name`, `email`, `role`, `classroom`, `site_url`) by name, and `Render` fills them in for each `Recipient`. `Recipients` turns an audience (everyone, students, teachers, staff, one classroom's active students, or up to 500 listed addresses) into active accounts, with the listed addresses that aren't any. `SendAll` queues one `mail.Args` job per recipient and the `mailing.sends` row in one transaction, and logs `email_sent`; `SendTest` sends only to the writer, marked [Test]. Routes under `/api/admin/email`.
+
+The mail server (D-104, `server.go`): `mailing.server` is one row, its password sealed with the master key (`mailing`/`smtp`). `Sender()` is what the email worker uses: the console's settings while they're on (read again at most every 30 s, at once after a save), the config file's `SMTPSender` or `LogSender` otherwise. `TestServer` sends one email at once, outside the queue, with settings not yet saved or with what sends now, and reports the failing step. The queue (`queue.go`) reads River's `river_job` rows of kind `email` (kept 7 days: `jobs.NewClient` sets `CompletedJobRetentionPeriod`) as waiting, sent, retrying or failed with the last error, never the body; `Retry` uses River's `JobRetry`. The server settings are admins only; the queue goes with `send_email`.
 
 ## inbox (schema `inbox`)
 
