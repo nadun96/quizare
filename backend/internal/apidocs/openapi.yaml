@@ -2936,7 +2936,7 @@ components:
       type: object
       description: A student's state; marks, feedback and the score appear when the tutorial's feedback setting allows
       properties:
-        tutorial: { type: object }
+        tutorial: { type: object, description: 'id, title, description, allow_back, feedback, due_at, and the byline (D-107): teacher, classroom, topic, published_at' }
         current: { type: integer }
         reached: { type: integer }
         finished: { type: boolean }

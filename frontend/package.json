@@ -37,6 +37,7 @@
     "@tiptap/pm": "^3.31.4",
     "@tiptap/starter-kit": "^3.31.4",
     "dompurify": "^3.4.16",
+    "gsap": "3.15.0",
     "katex": "^0.18.10",
     "livekit-client": "2.22.3",
     "marked": "^18.0.14",

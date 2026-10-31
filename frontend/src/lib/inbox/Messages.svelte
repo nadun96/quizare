@@ -13,6 +13,7 @@
 	import Pager from '../ui/Pager.svelte';
 	import { toast } from '../ui/toast.svelte';
 	import { inbox, when, type Conversation, type Message, type Person } from './inbox.svelte';
+	import { t } from '../i18n/i18n.svelte';
 
 	let { teacher, initial = '', onopen }: { teacher: boolean; initial?: string; onopen?: (id: string) => void } = $props();
 
@@ -148,9 +149,9 @@
 <div class="msgs" class:open={!!(current || to || picking)}>
 	<aside class="msgs-list card card-border bg-base-100 shadow-sm" aria-label="Conversations">
 		<div class="flex items-center gap-2 p-3 pb-0">
-			<button class="btn btn-primary btn-sm" onclick={newMessage}><Icon name="plus" size={16} />New message</button>
+			<button class="btn btn-primary btn-sm" onclick={newMessage}><Icon name="plus" size={16} />{t('inbox.newMessage')}</button>
 		</div>
-		<div class="p-3"><ListSearch {list} placeholder="Search by name" label="Search conversations" /></div>
+		<div class="p-3"><ListSearch {list} placeholder={t('inbox.searchByName')} label={t('inbox.searchByName')} /></div>
 		<ul class="conv">
 			{#each list.rows as c (c.id)}
 				<li>
@@ -158,7 +159,7 @@
 						<Avatar id={c.with.id} name={c.with.name} avatar={c.with.avatar} size={36} />
 						<span class="grow min-w-0 text-left">
 							<span class="flex items-baseline gap-2"><span class="grow truncate" class:font-bold={c.unread > 0}>{c.with.name}</span><span class="small muted shrink-0">{when(c.last_at)}</span></span>
-							<span class="flex items-center gap-2"><span class="small muted grow truncate">{c.last_mine ? 'You: ' : ''}{c.last}</span>{#if c.unread}<span class="badge badge-primary badge-sm" aria-label="{c.unread} unread">{c.unread}</span>{/if}</span>
+							<span class="flex items-center gap-2"><span class="small muted grow truncate">{c.last_mine ? t('inbox.you') : ''}{c.last}</span>{#if c.unread}<span class="badge badge-primary badge-sm" aria-label="{c.unread} unread">{c.unread}</span>{/if}</span>
 						</span>
 					</button>
 				</li>
@@ -214,14 +215,14 @@
 			{:else}
 				<form class="composer" onsubmit={send}>
 					<label for="msg-draft" class="sr-only">Message to {other.name}</label>
-					<textarea id="msg-draft" class="textarea grow" rows="2" maxlength="5000" placeholder="Write a message. Enter sends; Shift+Enter for a new line." bind:value={draft} onkeydown={keys}></textarea>
-					<button class="btn btn-primary btn-circle" aria-label="Send" disabled={!draft.trim() || sending}><Icon name="send" size={18} /></button>
+					<textarea id="msg-draft" class="textarea grow" rows="2" maxlength="5000" placeholder={t('inbox.writePlaceholder')} bind:value={draft} onkeydown={keys}></textarea>
+					<button class="btn btn-primary btn-circle" aria-label={t('inbox.send')} disabled={!draft.trim() || sending}><Icon name="send" size={18} /></button>
 				</form>
 			{/if}
 		{:else}
 			<div class="m-auto p-8 text-center muted vstack items-center">
 				<Icon name="send" size={32} />
-				<p class="m-0">Choose a conversation, or start one.</p>
+				<p class="m-0">{t('inbox.choose')}</p>
 			</div>
 		{/if}
 	</section>

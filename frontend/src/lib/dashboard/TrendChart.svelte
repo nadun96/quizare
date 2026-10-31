@@ -4,6 +4,8 @@
 	// series (the class average) in gray: the emphasis form. A crosshair
 	// snaps to the nearest quiz on hover or with the arrow keys, and the
 	// tooltip lists both; a table gives every value without hovering.
+	import { draw } from '../ui/motion';
+	import { t } from '../i18n/i18n.svelte';
 	type Point = { label: string; sub: string; value: number; context: number | null; note?: string };
 	let { points, name, contextName, title }: { points: Point[]; name: string; contextName: string; title: string } = $props();
 
@@ -59,6 +61,7 @@
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 		<svg bind:this={svg} viewBox="0 0 {W} {H}" width={W} height={H} class="chart" role="img" tabindex="0"
 			aria-label="{title}: {points.length} quizzes{last ? `, latest ${last.value}%` : ''}. Use the arrow keys to read each one."
+			use:draw={points}
 			onpointermove={onMove} onpointerleave={() => (active = null)} onkeydown={onKey} onblur={() => (active = null)}>
 			{#each [0, 50, 100] as t (t)}
 				<line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} class={t === 0 ? 'axis' : 'grid'} />
@@ -68,11 +71,11 @@
 				<text x={x(0)} y={H - 6} class="tick" text-anchor={points.length > 1 ? 'start' : 'middle'}>{points[0].sub}</text>
 				{#if points.length > 1}<text x={x(points.length - 1)} y={H - 6} class="tick" text-anchor="end">{points[points.length - 1].sub}</text>{/if}
 			{/if}
-			{#if area}<path d={area} class="wash" />{/if}
-			{#if ctx}<path d={ctx} class="line context" />{/if}
-			{#if main}<path d={main} class="line accent" />{/if}
+			{#if area}<path d={area} class="wash" data-fade />{/if}
+			{#if ctx}<path d={ctx} class="line context" data-draw />{/if}
+			{#if main}<path d={main} class="line accent" data-draw />{/if}
 			{#each points as p, i (i)}
-				<circle cx={x(i)} cy={y(p.value)} r={active === i ? 5.5 : 4} class="dot" />
+				<circle cx={x(i)} cy={y(p.value)} r={active === i ? 5.5 : 4} class="dot" data-pop />
 			{/each}
 			{#if active !== null && points[active]}
 				<line x1={x(active)} x2={x(active)} y1={pad.t} y2={pad.t + ih} class="cross" />
@@ -89,7 +92,7 @@
 		{/if}
 	</div>
 	<details class="small">
-		<summary>Show as a table</summary>
+		<summary>{t('common.showTable')}</summary>
 		<div class="table-wrap">
 			<table class="table table-sm">
 				<thead><tr><th>Quiz</th><th>When</th><th>{name}</th>{#if hasContext}<th>{contextName}</th>{/if}</tr></thead>

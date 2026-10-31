@@ -1,6 +1,7 @@
 // Each person's dashboard (D-99): the lists the server keeps, and how an
 // item reads.
 import type { IconName } from '../ui/Icon.svelte';
+import { i18n, t, type Key } from '../i18n/i18n.svelte';
 
 export type ListName = 'live' | 'upcoming' | 'overdue' | 'pending';
 export type Item = {
@@ -15,55 +16,55 @@ export type Item = {
 };
 export type Summary = { role: string; counts: Record<ListName, number> };
 
-/** The lists, in the order they show, with what each is called for each role. */
-export const LISTS: { id: ListName; title: string; teacherTitle: string; empty: string; teacherEmpty: string }[] = [
-	{ id: 'live', title: 'Live now', teacherTitle: 'Live now', empty: 'Nothing is live in your classes right now.', teacherEmpty: 'None of your sessions, polls, meetings or presentations is live.' },
-	{ id: 'overdue', title: 'Overdue and missed', teacherTitle: 'Past due, not everyone finished', empty: 'Nothing overdue. Well done.', teacherEmpty: 'No past-due work with students still to finish.' },
-	{ id: 'upcoming', title: 'Coming up', teacherTitle: 'Coming up', empty: 'Nothing with a date coming up.', teacherEmpty: 'None of your tutorials or presentations opens or is due soon.' },
-	{ id: 'pending', title: 'To do', teacherTitle: 'Waiting on you', empty: 'Nothing waiting. Tutorials and presentations without a due date show here.', teacherEmpty: 'Nothing to mark or approve.' }
+/** The lists, in the order they show, with the words for each role (D-109: keys, read with t()). */
+export const LISTS: { id: ListName; title: Key; teacherTitle: Key; empty: Key; teacherEmpty: Key }[] = [
+	{ id: 'live', title: 'list.live', teacherTitle: 'list.live', empty: 'list.liveEmpty', teacherEmpty: 'list.liveEmptyT' },
+	{ id: 'overdue', title: 'list.overdue', teacherTitle: 'list.overdueT', empty: 'list.overdueEmpty', teacherEmpty: 'list.overdueEmptyT' },
+	{ id: 'upcoming', title: 'list.upcoming', teacherTitle: 'list.upcoming', empty: 'list.upcomingEmpty', teacherEmpty: 'list.upcomingEmptyT' },
+	{ id: 'pending', title: 'list.pending', teacherTitle: 'list.pendingT', empty: 'list.pendingEmpty', teacherEmpty: 'list.pendingEmptyT' }
 ];
 
-export const KIND: Record<Item['kind'], { label: string; icon: IconName }> = {
-	quiz: { label: 'Quiz', icon: 'check-circle' },
-	tutorial: { label: 'Tutorial', icon: 'book' },
-	presentation: { label: 'Presentation', icon: 'monitor' },
-	meeting: { label: 'Meeting', icon: 'video' },
-	poll: { label: 'Poll', icon: 'chart' },
-	marking: { label: 'Marking', icon: 'pencil' },
-	enrolment: { label: 'Joining', icon: 'users' }
+export const KIND: Record<Item['kind'], { label: Key; icon: IconName }> = {
+	quiz: { label: 'kind.quiz', icon: 'check-circle' },
+	tutorial: { label: 'kind.tutorial', icon: 'book' },
+	presentation: { label: 'kind.presentation', icon: 'monitor' },
+	meeting: { label: 'kind.meeting', icon: 'video' },
+	poll: { label: 'kind.poll', icon: 'chart' },
+	marking: { label: 'kind.marking', icon: 'pencil' },
+	enrolment: { label: 'kind.enrolment', icon: 'users' }
 };
 
 /** The words for an item's status and date: "Due tomorrow, 3:00 PM", "Missed on 28 Oct". */
-export function when(it: Pick<Item, 'status' | 'at'>, now = Date.now(), locale?: string): string {
+export function when(it: Pick<Item, 'status' | 'at'>, now = Date.now(), locale: string = i18n.tag): string {
 	const at = it.at ? new Date(it.at) : null;
 	const day = (d: Date) => {
 		const days = Math.round((startOfDay(d) - startOfDay(new Date(now))) / 86_400_000);
 		const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-		if (days === 0) return `today, ${time}`;
-		if (days === 1) return `tomorrow, ${time}`;
-		if (days === -1) return `yesterday, ${time}`;
+		if (days === 0) return t('when.today', { time });
+		if (days === 1) return t('when.tomorrow', { time });
+		if (days === -1) return t('when.yesterday', { time });
 		return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 	};
 	switch (it.status) {
 		case 'live':
-			return 'Live now';
+			return t('when.live');
 		case 'opens':
-			return at ? `Opens ${day(at)}` : 'Opens soon';
+			return at ? t('when.opens', { day: day(at) }) : t('when.opensSoon');
 		case 'due':
 		case 'due_soon':
-			return at ? `Due ${day(at)}` : 'Due soon';
+			return at ? t('when.due', { day: day(at) }) : t('when.dueSoon');
 		case 'overdue':
-			return at ? `Was due ${day(at)}` : 'Overdue';
+			return at ? t('when.wasDue', { day: day(at) }) : t('when.overdue');
 		case 'missed':
-			return at ? `Missed, ended ${day(at)}` : 'Missed';
+			return at ? t('when.missedEnded', { day: day(at) }) : t('when.missed');
 		case 'in_progress':
-			return 'Started';
+			return t('when.started');
 		case 'not_started':
-			return 'Not started';
+			return t('when.notStarted');
 		case 'to_mark':
-			return 'To mark';
+			return t('when.toMark');
 		case 'to_approve':
-			return 'To approve';
+			return t('when.toApprove');
 		default:
 			return '';
 	}

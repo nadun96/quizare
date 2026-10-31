@@ -56,7 +56,7 @@ export type PageView = {
 	locked: boolean;
 };
 export type RunView = {
-	tutorial: { id: string; title: string; description: string; allow_back: boolean; feedback: FeedbackTiming; due_at?: string };
+	tutorial: { id: string; title: string; description: string; allow_back: boolean; feedback: FeedbackTiming; due_at?: string; teacher?: string; classroom?: string; topic?: string; published_at?: string };
 	current: number;
 	reached: number;
 	finished: boolean;
@@ -188,4 +188,10 @@ export function toLocalInput(iso: string | undefined | null): string {
 
 export function fromLocalInput(v: string): string | undefined {
 	return v ? new Date(v).toISOString() : undefined;
+}
+
+/** Minutes to read a page's text at 200 words a minute (D-107), at least 1. */
+export function readingMinutes(blocks: { type: string; text?: string }[]): number {
+	const words = blocks.filter((b) => b.type === 'text').reduce((n, b) => n + (b.text ?? '').split(/\s+/).filter(Boolean).length, 0);
+	return Math.max(1, Math.round(words / 200));
 }
