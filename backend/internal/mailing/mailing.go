@@ -75,6 +75,9 @@ type Send struct {
 	Recipients    int       `json:"recipients"`
 	SentBy        string    `json:"sent_by"` // their name
 	SentAt        time.Time `json:"sent_at"`
+	// Progress counts its emails still in the queue by status (D-104);
+	// empty once River has cleared them away (after 7 days).
+	Progress Progress `json:"progress"`
 }
 
 // Recipient is one account an email goes to.
@@ -96,6 +99,8 @@ type Service struct {
 	pool    *pgxpool.Pool
 	jobs    jobs.Inserter
 	baseURL string
+	srv     *server // the mail server (D-104)
+	retry   Retrier
 }
 
 func NewService(pool *pgxpool.Pool, inserter jobs.Inserter, baseURL string) *Service {
@@ -336,11 +341,6 @@ func (s *Service) SendAll(ctx context.Context, actorID, subject, body string, a 
 	aud, _ := json.Marshal(a)
 	var out Send
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		for _, r := range rs {
-			if _, err := s.jobs.InsertTx(ctx, tx, mail.Args{Message: s.message(subject, body, r)}, nil); err != nil {
-				return err
-			}
-		}
 		err := tx.QueryRow(ctx, `INSERT INTO mailing.sends (template_id, subject, body, audience, audience_label, recipients, sent_by)
 			VALUES ((SELECT id FROM mailing.templates WHERE id::text = $1), $2, $3, $4, $5, $6, $7)
 			RETURNING id, template_id, subject, body, audience_label, recipients, sent_at`,
@@ -348,6 +348,11 @@ func (s *Service) SendAll(ctx context.Context, actorID, subject, body string, a 
 			Scan(&out.ID, &out.TemplateID, &out.Subject, &out.Body, &out.AudienceLabel, &out.Recipients, &out.SentAt)
 		if err != nil {
 			return err
+		}
+		for _, r := range rs {
+			if _, err := s.jobs.InsertTx(ctx, tx, mail.Args{Message: s.message(subject, body, r), SendID: out.ID}, nil); err != nil {
+				return err
+			}
 		}
 		return audit.Log(ctx, tx, actorID, "email_sent", "email", out.ID, map[string]any{"audience": label, "recipients": len(rs), "subject": out.Subject})
 	})
@@ -376,6 +381,20 @@ func (s *Service) Sends(ctx context.Context, p page.Request) ([]Send, int, error
 		var x Send
 		return x, r.Scan(&x.ID, &x.TemplateID, &x.Subject, &x.Body, &x.AudienceLabel, &x.Recipients, &x.SentBy, &x.SentAt)
 	})
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := make([]string, len(out))
+	for i := range out {
+		ids[i] = out[i].ID
+	}
+	prog, err := s.progress(ctx, ids)
+	for i := range out {
+		out[i].Progress = prog[out[i].ID]
+		if out[i].Progress == nil {
+			out[i].Progress = Progress{}
+		}
+	}
 	if out == nil {
 		out = []Send{}
 	}

@@ -3,6 +3,7 @@
 	// "Email": write one (or start from a template) with placeholders filled
 	// in for each recipient, choose who gets it, preview, test, send; keep
 	// templates; see everything sent.
+	import { onDestroy } from 'svelte';
 	import { api, ApiError } from '../api';
 	import { auth } from '../session.svelte';
 	import { PLACEHOLDERS, insertAt, parseEmails, render, unknownPlaceholders } from '../mailing';
@@ -14,9 +15,13 @@
 	import SortHeader from '../ui/SortHeader.svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { toast } from '../ui/toast.svelte';
+	import { isAdmin } from '../staff';
+	import EmailQueue from './EmailQueue.svelte';
+	import MailServer from './MailServer.svelte';
+	import { inFlight, progressText, type Progress } from './emailqueue';
 
 	type Template = { id: string; name: string; subject: string; body: string; updated_at: string };
-	type Sent = { id: string; template_id: string | null; subject: string; body: string; audience_label: string; recipients: number; sent_by: string; sent_at: string };
+	type Sent = { id: string; template_id: string | null; subject: string; body: string; audience_label: string; recipients: number; sent_by: string; sent_at: string; progress: Progress };
 	type Room = { id: string; name: string; teacher: string; students: number };
 	type Preview = { recipients: number; label: string; unknown: string[]; sample: { to: string; subject: string; body: string } | null };
 	type Kind = 'everyone' | 'students' | 'teachers' | 'staff' | 'classroom' | 'emails';
@@ -30,7 +35,7 @@
 		{ id: 'emails', label: 'A list of addresses' }
 	];
 
-	let view = $state<'write' | 'templates' | 'sent'>('write');
+	let view = $state<'write' | 'templates' | 'sent' | 'queue' | 'server'>('write');
 
 	// Writing.
 	let subject = $state('');
@@ -185,6 +190,11 @@
 	const sent = new Paged<Sent>(() => '/api/admin/email/sends', 'sends', { url: urlState, prefix: 'es', sort: 'sent', desc: true });
 	templates.load();
 	sent.load();
+	// Sent follows its emails while they're on their way (D-104).
+	const following = setInterval(() => {
+		if (view === 'sent' && document.visibilityState === 'visible' && sent.rows.some((s) => inFlight(s.progress))) sent.load();
+	}, 10_000);
+	onDestroy(() => clearInterval(following));
 	let shown = $state<string | null>(null);
 
 	async function removeTemplate(t: Template) {
@@ -214,6 +224,8 @@
 		<button class="tab" role="tab" aria-selected={view === 'write'} class:tab-active={view === 'write'} onclick={() => (view = 'write')}>Write</button>
 		<button class="tab" role="tab" aria-selected={view === 'templates'} class:tab-active={view === 'templates'} onclick={() => (view = 'templates')}>Templates</button>
 		<button class="tab" role="tab" aria-selected={view === 'sent'} class:tab-active={view === 'sent'} onclick={() => (view = 'sent')}>Sent</button>
+		<button class="tab" role="tab" aria-selected={view === 'queue'} class:tab-active={view === 'queue'} onclick={() => (view = 'queue')}>Queue</button>
+		{#if isAdmin(auth.user)}<button class="tab" role="tab" aria-selected={view === 'server'} class:tab-active={view === 'server'} onclick={() => (view = 'server')}>Mail server</button>{/if}
 	</div>
 
 	{#if view === 'write'}
@@ -304,6 +316,10 @@
 				</div>
 			</section>
 		</div>
+	{:else if view === 'queue'}
+		<EmailQueue />
+	{:else if view === 'server'}
+		<MailServer />
 	{:else if view === 'templates'}
 		<ListSearch list={templates} placeholder="Search templates" label="Search templates" />
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
@@ -337,12 +353,13 @@
 						<tr>
 							<td><button class="link link-hover text-left font-semibold" aria-expanded={shown === s.id} onclick={() => (shown = shown === s.id ? null : s.id)}>{s.subject}</button></td>
 							<td>{s.audience_label}</td>
-							<td class="tabular">{s.recipients}</td>
+							<td class="tabular">{s.recipients}{#if progressText(s.progress)}<br /><span class="small {s.progress.failed ? 'text-error' : 'muted'}">{progressText(s.progress)}</span>{/if}</td>
 							<td>{s.sent_by}</td>
 							<td class="small tabular">{date(s.sent_at)}</td>
 						</tr>
 						{#if shown === s.id}
-							<tr><td colspan="5"><pre class="m-0 whitespace-pre-wrap font-sans text-sm">{s.body}</pre><button class="btn btn-xs mt-2" onclick={() => again(s)}>Send again</button></td></tr>
+							<tr><td colspan="5"><pre class="m-0 whitespace-pre-wrap font-sans text-sm">{s.body}</pre><button class="btn btn-xs mt-2" onclick={() => again(s)}>Write it again</button>
+								<div class="mt-3"><EmailQueue send={s.id} label="Its emails" /></div></td></tr>
 						{/if}
 					{:else}
 						<tr><td colspan="5" class="muted">{sent.loaded ? (sent.q ? `Nothing sent matches “${sent.q}”.` : 'Nothing sent yet.') : 'Loading…'}</td></tr>

@@ -120,6 +120,71 @@ func (s *Service) AdminRoutes(r chi.Router, a *auth.Service) {
 			httpx.JSON(w, http.StatusCreated, out)
 			return nil
 		}))
+		// The queue: every email the platform sends, and retrying failed ones (D-104).
+		r.Method("GET", "/queue", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+			p := page.Parse(r, QueueSorts, "created", true)
+			list, total, counts, err := s.Queue(r.Context(), r.URL.Query().Get("status"), r.URL.Query().Get("send"), p)
+			if err != nil {
+				return err
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"emails": list, "total": total, "page": p.Page, "size": p.Size, "counts": counts})
+			return nil
+		}))
+		r.Method("POST", "/queue/retry", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+			var in struct {
+				ID     int64  `json:"id"`
+				SendID string `json:"send_id"`
+			}
+			if err := httpx.Decode(w, r, &in); err != nil {
+				return err
+			}
+			n, err := s.Retry(r.Context(), in.ID, in.SendID)
+			if err != nil {
+				return err
+			}
+			_ = audit.Log(r.Context(), s.pool, actor(r), "email_retried", "email", in.SendID, map[string]any{"emails": n})
+			httpx.JSON(w, http.StatusOK, map[string]int{"retried": n})
+			return nil
+		}))
+		// The mail server: admins only (D-104).
+		r.Group(func(r chi.Router) {
+			r.Use(a.AdminOnly())
+			r.Method("GET", "/server", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+				st, err := s.ServerState(r.Context())
+				if err != nil {
+					return err
+				}
+				httpx.JSON(w, http.StatusOK, st)
+				return nil
+			}))
+			r.Method("PUT", "/server", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+				var in Server
+				if err := httpx.Decode(w, r, &in); err != nil {
+					return err
+				}
+				st, err := s.SaveServer(r.Context(), actor(r), in)
+				if err != nil {
+					return err
+				}
+				httpx.JSON(w, http.StatusOK, st)
+				return nil
+			}))
+			r.Method("POST", "/server/test", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+				var in struct {
+					To     string  `json:"to"`
+					Server *Server `json:"server"`
+				}
+				if err := httpx.Decode(w, r, &in); err != nil {
+					return err
+				}
+				res, err := s.TestServer(r.Context(), actor(r), in.To, in.Server)
+				if err != nil {
+					return err
+				}
+				httpx.JSON(w, http.StatusOK, res)
+				return nil
+			}))
+		})
 		r.Method("GET", "/sends", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 			p := page.Parse(r, SendSorts, "sent", true)
 			list, total, err := s.Sends(r.Context(), p)

@@ -177,7 +177,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		checker = imageurl.NewChecker(false)
 	}
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &mail.Worker{Sender: mailer})
+	mailWorker := &mail.Worker{Sender: mailer}
+	river.AddWorker(workers, mailWorker)
 	quizWorker := &quiz.CheckResourcesWorker{}
 	river.AddWorker(workers, quizWorker)
 	evalWorker := &eval.EvaluateWorker{}
@@ -296,7 +297,11 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Progress = progress.NewService(pool)
 	a.Dashboard = dashboard.NewService(pool)
 	a.Mailing = mailing.NewService(pool, rc, cfg.BaseURL) // email to groups (D-102)
-	a.Inbox = inbox.NewService(pool, rc, cfg.BaseURL)     // announcements and messages (D-103)
+	// The mail server set in the console takes over from the config file (D-104).
+	a.Mailing.SetServer(vault, mailer, mailing.ConfigInfo{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom, User: cfg.SMTPUser})
+	a.Mailing.SetRetrier(rc)
+	mailWorker.Sender = a.Mailing.Sender()
+	a.Inbox = inbox.NewService(pool, rc, cfg.BaseURL) // announcements and messages (D-103)
 	a.Live.SetGate(a.Oversight.Check)
 	a.Poll.SetGate(a.Oversight.Check)
 	a.Meet.SetGate(a.Oversight.Check)
