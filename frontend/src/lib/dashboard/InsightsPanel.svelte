@@ -129,7 +129,7 @@
 	.tiles { display: grid; gap: 0.5rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 	.charts { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 	.charts > :global(.wide) { grid-column: 1 / -1; }
-	.empty { padding: 2rem 0; text-align: center; }
+	.empty { padding: 0.5rem 0; margin: 0; }
 	@media (max-width: 860px) { .charts { grid-template-columns: minmax(0, 1fr); } }
 	@media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

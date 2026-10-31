@@ -6,6 +6,8 @@ export const ta: Record<Key, string> = {
 	'nav.main': 'முதன்மை',
 	'nav.dashboard': 'முகப்புப் பலகை',
 	'nav.inbox': 'உள்பெட்டி',
+	'nav.groupTeaching': 'கற்பித்தல்',
+	'nav.groupActivities': 'செயல்பாடுகள்',
 	'nav.classrooms': 'வகுப்பறைகள்',
 	'nav.bank': 'வினா வங்கி',
 	'nav.polls': 'கருத்துக் கணிப்புகள்',

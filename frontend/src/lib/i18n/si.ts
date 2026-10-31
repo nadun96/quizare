@@ -6,6 +6,8 @@ export const si: Record<Key, string> = {
 	'nav.main': 'ප්‍රධාන',
 	'nav.dashboard': 'උපකරණ පුවරුව',
 	'nav.inbox': 'එන ලිපි',
+	'nav.groupTeaching': 'ඉගැන්වීම',
+	'nav.groupActivities': 'ක්‍රියාකාරකම්',
 	'nav.classrooms': 'පන්ති කාමර',
 	'nav.bank': 'ප්‍රශ්න බැංකුව',
 	'nav.polls': 'මත විමසුම්',

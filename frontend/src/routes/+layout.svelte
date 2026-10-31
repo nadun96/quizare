@@ -47,18 +47,23 @@
 	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/') || page.url.pathname.startsWith('/live/') || page.url.pathname.startsWith('/m/'));
 	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
 
-	type Link = { href: string; label: string; icon: IconName; count?: number };
+	// A link, or a group of them opening a menu (D-110): teachers' seven pages fit as four.
+	type Link = { href: string; label: string; icon: IconName; count?: number; children?: Link[] };
 	const inboxLink = $derived<Link>({ href: '/inbox', label: t('nav.inbox'), icon: 'mail', count: inbox.unread });
 	const links = $derived<Link[]>(
 		auth.user?.role === 'teacher'
 			? [
 					{ href: '/dashboard', label: t('nav.dashboard'), icon: 'list' },
 					inboxLink,
-					{ href: '/t', label: t('nav.classrooms'), icon: 'users' },
-					{ href: '/t/bank', label: t('nav.bank'), icon: 'book' },
-					{ href: '/t/polls', label: t('nav.polls'), icon: 'chart' },
-					{ href: '/t/meetings', label: t('nav.meetings'), icon: 'video' },
-					...(tutoring ? [{ href: '/t/tutoring', label: t('nav.tutoring'), icon: 'monitor' as const }] : []),
+					{ href: '#teaching', label: t('nav.groupTeaching'), icon: 'users', children: [
+						{ href: '/t', label: t('nav.classrooms'), icon: 'users' },
+						{ href: '/t/bank', label: t('nav.bank'), icon: 'book' }
+					] },
+					{ href: '#activities', label: t('nav.groupActivities'), icon: 'chart', children: [
+						{ href: '/t/polls', label: t('nav.polls'), icon: 'chart' },
+						{ href: '/t/meetings', label: t('nav.meetings'), icon: 'video' },
+						...(tutoring ? [{ href: '/t/tutoring', label: t('nav.tutoring'), icon: 'monitor' as const }] : [])
+					] },
 				]
 			: auth.user?.role === 'student'
 				? [{ href: '/dashboard', label: t('nav.dashboard'), icon: 'list' }, inboxLink, { href: '/my', label: t('nav.myQuizzes'), icon: 'star' }, { href: '/join', label: t('nav.join'), icon: 'qr' }]
@@ -78,12 +83,14 @@
 	$effect(() => {
 		void page.url.pathname;
 		void links.length;
-		const el = pill?.querySelector<HTMLElement>('[aria-current="page"]');
+		const el = pill?.querySelector<HTMLElement>('[data-on]');
 		mark = el ? { left: el.offsetLeft, width: el.offsetWidth } : null;
 	});
 	// Classrooms (/t) owns every teacher page that no other item does.
 	const under = (href: string) => page.url.pathname === href || page.url.pathname.startsWith(href + '/');
-	const current = (href: string) => (href === '/t' ? under('/t') && !links.some((l) => l.href !== '/t' && under(l.href)) : under(href));
+	const flat = $derived(links.flatMap((l) => l.children ?? [l]));
+	const current = (href: string) => (href === '/t' ? under('/t') && !flat.some((l) => l.href !== '/t' && under(l.href)) : under(href));
+	const on = (l: Link) => (l.children ? l.children.some((c) => current(c.href)) : current(l.href));
 
 	// <details> menus are CSS-only; close them after a choice or navigation.
 	let menus: HTMLDetailsElement[] = $state([]);
@@ -119,17 +126,28 @@
 {#if !bare}
 	<header class="topbar sticky top-0 z-30">
 		<div class="page-container flex items-center gap-2 py-2">
-			<a class="brand flex min-w-0 items-center gap-2 whitespace-nowrap text-base font-bold no-underline sm:text-lg" href={auth.user ? auth.home() : '/'}>
+			<a class="brand flex shrink-0 items-center gap-2 whitespace-nowrap text-base font-bold no-underline sm:text-lg" href={auth.user ? auth.home() : '/'}>
 				<img class="brand-mark size-8" src="/favicon-64.png" width="32" height="32" alt="" aria-hidden="true" />
 				<span class="brand-name">Classroom Quiz</span>
 			</a>
 			{#if links.length}
-				<nav class="pill ml-3 hidden sm:flex" aria-label={t('nav.main')} bind:this={pill}>
+				<nav class="pill ml-4 hidden min-w-0 sm:flex" aria-label={t('nav.main')} bind:this={pill}>
 					{#if mark}<span class="pill-mark" use:glide={mark} aria-hidden="true"></span>{/if}
-					{#each links as l (l.href)}
-						<a class="pill-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-							<Icon name={l.icon} size={16} /><span class="pill-label">{l.label}</span>{#if l.count}<span class="count" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}
-						</a>
+					{#each links as l, gi (l.href)}
+						{#if l.children}
+							<details class="dropdown pill-group" bind:this={menus[3 + gi]} ontoggle={closeOthers}>
+								<summary class="pill-link" class:on={on(l)} data-on={on(l) || undefined}>
+									<Icon name={l.icon} size={16} /><span class="pill-label">{l.children.find((c) => current(c.href))?.label ?? l.label}</span><Icon name="chevron-down" size={14} class="chev" />
+								</summary>
+								<ul class="menu dropdown-content z-40 mt-2 w-56 border border-base-300 bg-base-100 p-1 shadow-lg">
+									{#each l.children as c (c.href)}<li><a href={c.href} aria-current={current(c.href) ? 'page' : undefined} class:menu-active={current(c.href)}><Icon name={c.icon} size={16} />{c.label}</a></li>{/each}
+								</ul>
+							</details>
+						{:else}
+							<a class="pill-link" class:on={current(l.href)} data-on={current(l.href) || undefined} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
+								<Icon name={l.icon} size={16} /><span class="pill-label">{l.label}</span>{#if l.count}<span class="count" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}
+							</a>
+						{/if}
 					{/each}
 				</nav>
 			{/if}
@@ -173,10 +191,19 @@
 	</header>
 	{#if links.length}
 		<nav class="tabbar" aria-label={t('nav.main')}>
-			{#each tabs as l (l.href)}
-				<a class="tab-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-					<span class="tab-icon"><Icon name={l.icon} size={20} />{#if l.count}<span class="count dot" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}</span><span class="tab-label">{l.label}</span>
-				</a>
+			{#each tabs as l, gi (l.href)}
+				{#if l.children}
+					<details class="dropdown dropdown-top dropdown-end tab-more" bind:this={menus[10 + gi]} ontoggle={closeOthers}>
+						<summary class="tab-link" class:on={on(l)}><span class="tab-icon"><Icon name={l.icon} size={20} /></span><span class="tab-label">{l.label}</span></summary>
+						<ul class="menu dropdown-content z-40 mb-2 w-56 border border-base-300 bg-base-100 p-2 shadow-lg">
+							{#each l.children as c (c.href)}<li><a href={c.href} aria-current={current(c.href) ? 'page' : undefined} class:menu-active={current(c.href)}><Icon name={c.icon} size={16} />{c.label}</a></li>{/each}
+						</ul>
+					</details>
+				{:else}
+					<a class="tab-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
+						<span class="tab-icon"><Icon name={l.icon} size={20} />{#if l.count}<span class="count dot" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}</span><span class="tab-label">{l.label}</span>
+					</a>
+				{/if}
 			{/each}
 			{#if more.length}
 				<details class="dropdown dropdown-top dropdown-end tab-more" bind:this={menus[0]} ontoggle={closeOthers}>
@@ -218,13 +245,17 @@
 	/* The bar: frosted, with a soft hairline. */
 	.topbar { background: color-mix(in oklab, var(--color-base-100) 82%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid color-mix(in oklab, var(--color-base-300) 70%, transparent); }
 	/* The pill: one rounded track, the current page lifted out of it. */
-	.pill { position: relative; align-items: center; gap: 0.125rem; padding: 0.25rem; border-radius: 9999px; background: var(--color-base-200); border: 1px solid color-mix(in oklab, var(--color-base-300) 60%, transparent); }
+	.pill { position: relative; align-items: center; gap: 0.375rem; padding: 0.25rem; border-radius: 9999px; background: var(--color-base-200); border: 1px solid color-mix(in oklab, var(--color-base-300) 60%, transparent); }
 	.pill-mark { position: absolute; top: 0.25rem; bottom: 0.25rem; left: 0; border-radius: 9999px; background: var(--color-base-100);
 		box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px color-mix(in oklab, var(--color-primary) 22%, transparent); }
-	.pill-link { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.8rem; border-radius: 9999px;
+	.pill-link { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.95rem; cursor: pointer; list-style: none; border-radius: 9999px;
 		font-size: 0.875rem; font-weight: 600; text-decoration: none; color: color-mix(in oklab, var(--color-base-content) 75%, transparent); white-space: nowrap; }
 	.pill-link:hover { color: var(--color-base-content); }
 	.pill-link.on { color: var(--color-primary); }
+	.pill-link::-webkit-details-marker { display: none; }
+	.pill-group { position: relative; z-index: 1; }
+	.pill-group[open] > .pill-link { color: var(--color-base-content); }
+	.pill-link :global(.chev) { opacity: 0.6; margin-left: -0.15rem; }
 	@media (max-width: 1100px) { .pill-link :global(svg) { display: none; } }
 	@media (max-width: 860px) { .pill-link { padding: 0.4rem 0.6rem; } }
 	/* Phones: a tab bar along the bottom, within the thumb's reach. */

@@ -5,6 +5,8 @@ export const en = {
 	'nav.main': 'Main',
 	'nav.dashboard': 'Dashboard',
 	'nav.inbox': 'Inbox',
+	'nav.groupTeaching': 'Teaching',
+	'nav.groupActivities': 'Activities',
 	'nav.classrooms': 'Classrooms',
 	'nav.bank': 'Question bank',
 	'nav.polls': 'Polls',

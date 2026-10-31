@@ -201,8 +201,10 @@
 	.table td { vertical-align: top; }
 
 	/* Layout helpers kept from the first version of the UI. */
-	.page-container { width: 100%; max-width: 72rem; margin-inline: auto; padding: 1rem; }
-	@media (min-width: 640px) { .page-container { padding: 1.5rem; } }
+	/* Pages use the screen's width (D-110), up to a wide 110rem so lines on very large screens stay findable. */
+	.page-container { width: 100%; max-width: 110rem; margin-inline: auto; padding: 1rem; }
+	@media (min-width: 640px) { .page-container { padding: 1.25rem 1.5rem; } }
+	@media (min-width: 1280px) { .page-container { padding: 1.5rem 2.5rem; } }
 	.narrow { max-width: 30rem; margin: 2rem auto; padding: 0 1rem; }
 	.vstack > * + * { margin-top: 0.75rem; }
 	.row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
@@ -319,6 +321,7 @@ html[data-motion='reduce'] *::after {
    our own. Only what must stay round to mean what it means keeps its shape:
    radio buttons (round says "pick one"), loading spinners and status dots. */
 :root, [data-theme] { --radius-selector: 0; --radius-field: 0; --radius-box: 0; }
+/* Profile pictures (.round) stay round too (D-110). */
 :where(*:not(.radio, .loading, .status, .round)),
 :where(*:not(.radio, .loading, .status, .round))::before,
 :where(*:not(.radio, .loading, .status, .round))::after { border-radius: 0 !important; }
