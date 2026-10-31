@@ -27,6 +27,10 @@ servers:
 security:
   - session: []
 tags:
+  - name: email
+    description: Email to groups of accounts (D-102)
+  - name: inbox
+    description: Announcements and messages (D-103)
   - name: auth
     description: Accounts and sessions (FR-ACC)
   - name: admin
@@ -395,6 +399,104 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [teacher_email], properties: { teacher_email: { type: string } } } } } }
       responses: { '200': { description: 'Moved', content: { application/json: { schema: { type: object, properties: { classroom: { $ref: '#/components/schemas/OverseenClassroom' }, quizzes: { type: integer }, bank_quizzes: { type: integer, description: 'Quizzes drawing from a question bank: now the new teacher''s' } } } } } }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/templates:
+    get:
+      operationId: getAdminEmailTemplates
+      tags: [admin, email]
+      summary: Saved email templates (admins, or managers with Email; D-102)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [name, updated] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { templates: { type: array, items: { $ref: '#/components/schemas/EmailTemplate' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+    post:
+      operationId: postAdminEmailTemplate
+      tags: [admin, email]
+      summary: Save a template; subject and body may hold the placeholders {{name}}, {{first_name}}, {{email}}, {{role}}, {{classroom}} and {{site_url}}, and any other is refused by name
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, subject, body], properties: { name: { type: string }, subject: { type: string }, body: { type: string } } } } } }
+      responses: { '201': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailTemplate' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/templates/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getAdminEmailTemplate
+      tags: [admin, email]
+      summary: One template (D-102)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailTemplate' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putAdminEmailTemplate
+      tags: [admin, email]
+      summary: Change a template (D-102)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, subject, body], properties: { name: { type: string }, subject: { type: string }, body: { type: string } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailTemplate' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteAdminEmailTemplate
+      tags: [admin, email]
+      summary: Delete a template; what was sent with it stays in the history (D-102)
+      responses: { '204': { description: 'Done' } }
+  /api/admin/email/classrooms:
+    get:
+      operationId: getAdminEmailClassrooms
+      tags: [admin, email]
+      summary: Up to 20 classrooms to send to, found by their name or their teacher's (D-102)
+      parameters: [{ $ref: '#/components/parameters/q' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classrooms: { type: array, items: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string }, teacher: { type: string }, students: { type: integer } } } } } } } } } }
+  /api/admin/email/preview:
+    post:
+      operationId: postAdminEmailPreview
+      tags: [admin, email]
+      summary: Who an email would reach, the listed addresses that aren't active accounts, and the email as the first recipient gets it (D-102)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmailDraft' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailPreview' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/test:
+    post:
+      operationId: postAdminEmailTest
+      tags: [admin, email]
+      summary: Send the email only to oneself, marked [Test] (D-102)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmailDraft' } } } }
+      responses: { '204': { description: 'Queued' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/sends:
+    get:
+      operationId: getAdminEmailSends
+      tags: [admin, email]
+      summary: Everything sent, newest first (D-102)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [sent, subject, recipients] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { sends: { type: array, items: { $ref: '#/components/schemas/EmailSend' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+    post:
+      operationId: postAdminEmailSend
+      tags: [admin, email]
+      summary: Send to every active account in the audience, each email filled in for its recipient and queued on its own; recorded and audited (D-102)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmailDraft' } } } }
+      responses: { '201': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/EmailSend' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/queue:
+    get:
+      operationId: getAdminEmailQueue
+      tags: [admin, email]
+      summary: Every email the platform sends, kept a week, with its status (waiting, sent to the mail server, retrying, failed) and the mail server's last error; never the text (D-104)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: status, in: query, schema: { type: string, enum: [waiting, sent, retrying, failed] } }, { name: send, in: query, description: 'One send to a group', schema: { type: string, format: uuid } }, { name: sort, in: query, schema: { type: string, enum: [created, to] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { emails: { type: array, items: { $ref: '#/components/schemas/EmailDelivery' } }, counts: { $ref: '#/components/schemas/EmailProgress' }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+  /api/admin/email/queue/retry:
+    post:
+      operationId: postAdminEmailQueueRetry
+      tags: [admin, email]
+      summary: Send failed emails again - one by id, or all of a send's (or all) without one (D-104)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { id: { type: integer, format: int64 }, send_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { retried: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/admin/email/server:
+    get:
+      operationId: getAdminEmailServer
+      tags: [admin, email]
+      summary: The mail server set in the console, what sends email now (console, config or log), and the config file's settings; admins only, never the password (D-104)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/MailServerState' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putAdminEmailServer
+      tags: [admin, email]
+      summary: Save the mail server; turned on, it takes over from the config file. An empty password keeps the stored one (D-104)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MailServer' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/MailServerState' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/email/server/test:
+    post:
+      operationId: postAdminEmailServerTest
+      tags: [admin, email]
+      summary: Send one email now, outside the queue, with the settings given (not saved yet) or what sends email now; says which step failed and the server's words (D-104)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [to], properties: { to: { type: string }, server: { $ref: '#/components/schemas/MailServer' } } } } } }
+      responses: { '200': { description: 'How it went', content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, step: { type: string, enum: [connect, tls, login, send] }, error: { type: string }, via: { type: string } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/admin/live-activity:
     get:
       operationId: getAdminLiveActivity
@@ -2122,6 +2224,109 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ViolationInput' } } } }
       responses: { '204': { description: 'Recorded' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/inbox:
+    get:
+      operationId: getMyInbox
+      tags: [inbox]
+      summary: Unread announcements and messages, and whether new ones come by email (D-103)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { announcements: { type: integer }, messages: { type: integer }, email: { type: boolean } } } } } } }
+  /api/my/inbox/prefs:
+    put:
+      operationId: putMyInboxPrefs
+      tags: [inbox]
+      summary: Turn emails of new announcements and messages on or off (D-103)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: boolean } } } } } }
+      responses: { '204': { description: 'Done' } }
+  /api/my/announcements:
+    get:
+      operationId: getMyAnnouncements
+      tags: [inbox]
+      summary: A student's announcements from their classrooms (with read), or a teacher's in theirs (with reads and students), newest first (D-103)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { name: classroom, in: query, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { announcements: { type: array, items: { $ref: '#/components/schemas/Announcement' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+  /api/my/announcements/read:
+    post:
+      operationId: postMyAnnouncementsRead
+      tags: [inbox]
+      summary: A student marks announcements read; with no ids, all of them (D-103)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: string, format: uuid } } } } } } }
+      responses: { '204': { description: 'Done' } }
+  /api/my/contacts:
+    get:
+      operationId: getMyContacts
+      tags: [inbox]
+      summary: Who one can message, with the classrooms shared - a student's teachers, a teacher's students (D-103)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { name: classroom, in: query, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { contacts: { type: array, items: { $ref: '#/components/schemas/InboxPerson' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+  /api/my/conversations:
+    get:
+      operationId: getMyConversations
+      tags: [inbox]
+      summary: One's conversations, the latest first (D-103)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { conversations: { type: array, items: { $ref: '#/components/schemas/Conversation' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+    post:
+      operationId: postMyConversation
+      tags: [inbox]
+      summary: Message a teacher of one's classrooms, or a student of them, in the one conversation the two have; the other gets one email until they read it (D-103)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [user_id, body], properties: { user_id: { type: string, format: uuid }, body: { type: string, maxLength: 5000 } } } } } }
+      responses: { '201': { description: 'Sent', content: { application/json: { schema: { type: object, properties: { conversation: { $ref: '#/components/schemas/Conversation' }, message: { $ref: '#/components/schemas/InboxMessage' } } } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/conversations/{id}:
+    get:
+      operationId: getMyConversation
+      tags: [inbox]
+      summary: One conversation (D-103)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Conversation' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/conversations/{id}/messages:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getMyConversationMessages
+      tags: [inbox]
+      summary: A conversation's messages, the newest first (D-103)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { messages: { type: array, items: { $ref: '#/components/schemas/InboxMessage' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
+    post:
+      operationId: postMyConversationMessage
+      tags: [inbox]
+      summary: Reply, while the two still share a classroom (403 `not_your_class` after) (D-103)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [body], properties: { body: { type: string, maxLength: 5000 } } } } } }
+      responses: { '201': { description: 'Sent', content: { application/json: { schema: { $ref: '#/components/schemas/InboxMessage' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/my/conversations/{id}/read:
+    post:
+      operationId: postMyConversationRead
+      tags: [inbox]
+      summary: Mark a conversation read (D-103)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Done' } }
+  /api/teacher/classrooms/{id}/announcements:
+    post:
+      operationId: postTeacherAnnouncement
+      tags: [inbox, classrooms]
+      summary: Announce to one's classroom; with email, its students get it by email too, unless they turned that off (D-103)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [title, body], properties: { title: { type: string, maxLength: 200 }, body: { type: string, maxLength: 10000 }, email: { type: boolean } } } } } }
+      responses: { '201': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Announcement' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/announcements/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    patch:
+      operationId: patchTeacherAnnouncement
+      tags: [inbox]
+      summary: Change an announcement's title or text; nothing is emailed again (D-103)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { title: { type: string }, body: { type: string } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Announcement' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete:
+      operationId: deleteTeacherAnnouncement
+      tags: [inbox]
+      summary: Delete an announcement (D-103)
+      responses: { '204': { description: 'Done' } }
+  /api/teacher/announcements/{id}/readers:
+    get:
+      operationId: getTeacherAnnouncementReaders
+      tags: [inbox]
+      summary: The classroom's students and when each read the announcement, those who haven't first (D-103)
+      parameters: [{ $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { readers: { type: array, items: { $ref: '#/components/schemas/AnnouncementReader' } }, total: { type: integer }, page: { type: integer }, size: { type: integer } } } } } } }
   /api/my/dashboard:
     get:
       operationId: getMyDashboard
@@ -2788,6 +2993,134 @@ components:
         student_number: { type: string, nullable: true }
         status: { type: string, enum: [active, pending, rejected] }
         created_at: { type: string, format: date-time }
+    EmailDraft:
+      type: object
+      required: [subject, body, audience]
+      properties:
+        subject: { type: string, maxLength: 200 }
+        body: { type: string, maxLength: 20000 }
+        template_id: { type: string, format: uuid }
+        audience:
+          type: object
+          required: [kind]
+          properties:
+            kind: { type: string, enum: [everyone, students, teachers, staff, classroom, emails] }
+            classroom_id: { type: string, format: uuid }
+            emails: { type: array, items: { type: string }, description: 'Addresses, also comma- or line-separated; at most 500' }
+    EmailTemplate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        subject: { type: string }
+        body: { type: string }
+        created_by: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    EmailPreview:
+      type: object
+      properties:
+        recipients: { type: integer }
+        label: { type: string }
+        unknown: { type: array, items: { type: string } }
+        sample: { type: object, nullable: true, properties: { to: { type: string }, subject: { type: string }, body: { type: string } } }
+    EmailSend:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        template_id: { type: string, format: uuid, nullable: true }
+        subject: { type: string }
+        body: { type: string }
+        audience_label: { type: string }
+        recipients: { type: integer }
+        sent_by: { type: string }
+        sent_at: { type: string, format: date-time }
+        progress: { $ref: '#/components/schemas/EmailProgress' }
+    Announcement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        classroom_id: { type: string, format: uuid }
+        classroom: { type: string }
+        author: { type: string }
+        author_id: { type: string, format: uuid, nullable: true }
+        avatar: { type: string }
+        title: { type: string }
+        body: { type: string }
+        emailed: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        read: { type: boolean, description: 'For students' }
+        reads: { type: integer, description: 'For teachers: students who read it' }
+        students: { type: integer, description: 'For teachers: the classroom''s students' }
+    AnnouncementReader:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        student_number: { type: string, nullable: true }
+        read_at: { type: string, format: date-time, nullable: true }
+    InboxPerson:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        avatar: { type: string }
+        classrooms: { type: string }
+    Conversation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        with: { $ref: '#/components/schemas/InboxPerson' }
+        last: { type: string }
+        last_mine: { type: boolean }
+        last_at: { type: string, format: date-time }
+        unread: { type: integer }
+        can_reply: { type: boolean }
+    InboxMessage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        mine: { type: boolean }
+        sender: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+    EmailProgress:
+      type: object
+      properties: { waiting: { type: integer }, sent: { type: integer }, retrying: { type: integer }, failed: { type: integer } }
+    EmailDelivery:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        to: { type: string }
+        subject: { type: string }
+        status: { type: string, enum: [waiting, sent, retrying, failed] }
+        attempts: { type: integer }
+        max_attempts: { type: integer }
+        error: { type: string }
+        send_id: { type: string }
+        created_at: { type: string, format: date-time }
+        at: { type: string, format: date-time, nullable: true }
+    MailServer:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        host: { type: string }
+        port: { type: integer }
+        security: { type: string, enum: [auto, starttls, tls, none] }
+        username: { type: string }
+        password: { type: string, writeOnly: true }
+        password_set: { type: boolean, readOnly: true }
+        from: { type: string }
+        from_name: { type: string }
+        updated_at: { type: string, format: date-time, readOnly: true }
+    MailServerState:
+      allOf:
+        - $ref: '#/components/schemas/MailServer'
+        - type: object
+          properties:
+            source: { type: string, enum: [console, config, log] }
+            config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
     DeleteContents:
       type: object
       properties:
@@ -2984,7 +3317,7 @@ components:
     Feature:
       type: string
       description: An admin feature a manager can be given (PL-FR-10)
-      enum: [view_users, manage_users, approval_policy, settings, usage, audit, storage, cleanup, backups, live_activity, manage_classes]
+      enum: [view_users, manage_users, approval_policy, settings, usage, audit, storage, cleanup, backups, live_activity, manage_classes, send_email]
     StorageLimits:
       type: object
       properties:

@@ -44,6 +44,9 @@ const (
 	// FeatClasses oversees every classroom: its students, its teacher, and
 	// renaming, archiving or deleting it (D-101). Never quiz content or answers.
 	FeatClasses Feature = "manage_classes"
+	// FeatEmail writes email templates and sends email to groups of
+	// accounts (D-102).
+	FeatEmail Feature = "send_email"
 
 	// featAdmin is never given: routes behind it are for admins only
 	// (making and changing managers, PL-FR-13).
@@ -52,12 +55,12 @@ const (
 
 // Features lists what can be given, in the order the admin sees them.
 // Recordings and tutoring resources join the list with tutoring.
-var Features = []Feature{FeatViewUsers, FeatManageUsers, FeatApprovalPolicy, FeatSettings, FeatUsage, FeatAudit, FeatStorage, FeatCleanup, FeatBackups, FeatLive, FeatClasses}
+var Features = []Feature{FeatViewUsers, FeatManageUsers, FeatApprovalPolicy, FeatSettings, FeatUsage, FeatAudit, FeatStorage, FeatCleanup, FeatBackups, FeatLive, FeatClasses, FeatEmail}
 
 var featureLabels = map[Feature]string{
 	FeatViewUsers: "View users", FeatManageUsers: "Manage users", FeatApprovalPolicy: "Teacher approval policy",
 	FeatSettings: "Platform settings", FeatUsage: "Usage", FeatAudit: "Audit log",
-	FeatStorage: "Storage", FeatCleanup: "Clean-up", FeatBackups: "Backups", FeatLive: "Live activity", FeatClasses: "Classes",
+	FeatStorage: "Storage", FeatCleanup: "Clean-up", FeatBackups: "Backups", FeatLive: "Live activity", FeatClasses: "Classes", FeatEmail: "Email",
 }
 
 // Manager is what a manager may do in the admin console.
