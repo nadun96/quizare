@@ -15,6 +15,7 @@
 	import DashboardList from '$lib/dashboard/DashboardList.svelte';
 	import { LISTS, type Summary } from '$lib/dashboard/dashboard';
 	import UpcomingTutoring from '$lib/tutoring/UpcomingTutoring.svelte';
+	import InsightsPanel from '$lib/dashboard/InsightsPanel.svelte';
 	import LevelRing from '$lib/progress/LevelRing.svelte';
 	import { levelFraction, progress } from '$lib/progress/progress.svelte';
 
@@ -94,6 +95,8 @@
 				{/each}
 			</nav>
 		{/if}
+
+		<InsightsPanel {teacher} />
 
 		<UpcomingTutoring />
 

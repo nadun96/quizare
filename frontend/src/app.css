@@ -292,3 +292,25 @@ html[data-motion='reduce'] *::after {
 	--cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
 	--cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
 }
+
+/* Dashboard charts (D-105), from the dataviz reference palette and validated
+   against this app's surfaces (#ffffff light, #17202b dark): one accent hue
+   for the series that is the point, a gray for context (the emphasis form),
+   and a five-step ordinal blue ramp for counts. light-dark() follows each
+   theme's color-scheme, so every light and dark theme gets its own steps. */
+:root {
+	--viz-accent: light-dark(#2a78d6, #3987e5);
+	--viz-accent-wash: light-dark(rgb(42 120 214 / 0.1), rgb(57 135 229 / 0.14));
+	--viz-context: #898781;
+	--viz-grid: light-dark(#e1e0d9, #2c3644);
+	--viz-axis: light-dark(#c3c2b7, #3d4857);
+	--viz-seq-1: light-dark(#86b6ef, #184f95);
+	--viz-seq-2: light-dark(#5598e7, #256abf);
+	--viz-seq-3: light-dark(#2a78d6, #3987e5);
+	--viz-seq-4: light-dark(#1c5cab, #6da7ec);
+	--viz-seq-5: light-dark(#104281, #9ec5f4);
+	--viz-good-text: light-dark(#006300, #0ca30c);
+	--viz-bad-text: light-dark(#b42f2f, #e66767);
+	--viz-good: #0ca30c;
+	--viz-critical: #d03b3b;
+}
