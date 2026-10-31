@@ -120,6 +120,7 @@ func (s *Service) AdminRoutes(r chi.Router) {
 	r.With(s.RequireFeature(FeatViewUsers)).Method("GET", "/users", httpx.Handler(s.handleListUsers))
 	r.With(s.RequireFeature(FeatManageUsers)).Method("POST", "/users/{id}/status", httpx.Handler(s.handleSetStatus))
 	r.With(s.RequireFeature(FeatManageUsers)).Method("DELETE", "/users/{id}", httpx.Handler(s.handleDeleteUser))
+	r.With(s.RequireFeature(FeatManageUsers)).Method("POST", "/users/{id}/role", httpx.Handler(s.handleSetRole))
 	r.With(s.RequireFeature(FeatApprovalPolicy)).Method("GET", "/auth-policy", httpx.Handler(s.handleGetPolicy))
 	r.With(s.RequireFeature(FeatApprovalPolicy)).Method("PUT", "/auth-policy", httpx.Handler(s.handleSetPolicy))
 	s.managerRoutes(r)
