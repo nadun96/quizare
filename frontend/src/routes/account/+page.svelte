@@ -5,6 +5,7 @@
 	import DisplayMenu from '$lib/ui/DisplayMenu.svelte';
 	import AccountSecurity from '$lib/account/AccountSecurity.svelte';
 	import ConnectedSignIns from '$lib/account/ConnectedSignIns.svelte';
+	import ProfileCard from '$lib/account/ProfileCard.svelte';
 	let password = $state('');
 	let error = $state('');
 	let confirming = $state(false);
@@ -23,11 +24,7 @@
 <div class="page-container vstack" style="max-width:640px">
 	<h1>Your account</h1>
 	{#if auth.user}
-		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-			<p><strong>{auth.user.name}</strong><br /><span class="muted">{auth.user.email}</span></p>
-			<p>Email {auth.user.email_verified ? 'verified' : 'not verified yet — check your inbox'}.</p>
-			<a class="btn" href="/api/my/data" download>Download my data</a>
-		</div>
+		<ProfileCard />
 		<AccountSecurity />
 		<ConnectedSignIns />
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">

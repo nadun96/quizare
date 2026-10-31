@@ -18,8 +18,10 @@ A SvelteKit 2 / Svelte 5 single-page app built with `adapter-static` (ADR-11): n
 | `/t/settings` | teacher | Teacher defaults, LLM keys |
 | `/t/tutoring` | teacher | Tutoring sessions: create one for a classroom, and the paginated list (D-59); shown only when tutoring is on |
 | `/tutor/[code]` | logged in | A tutoring session's room: waiting room, broadcast, people, hands, chat, attendance. Talks to the tutoring service with a bearer token; `livekit-client` loads only here |
+| `/dashboard` | student, teacher | Their home (D-99): profile at a glance, four lists (live, coming up, overdue and missed, to do or waiting), each paged, tutoring sessions and their classes |
+| `/docs` | admin | These docs (D-100); the API reference at `/api/docs` too |
 | (bar) | everyone | A frosted bar; sections in a pill whose highlight slides to the current page; on phones a tab bar along the bottom (D-97). Students' avatar sits in their level ring (`lib/progress`) |
-| `/admin` | admin, manager | Users, usage, live activity (D-90), platform settings, audit, storage and clean-up, backups, managers (admins only); a manager sees only the tabs and actions for their features (`lib/staff.ts`) |
+| `/admin` | admin, manager | Users (with role changes, D-101), classes (every classroom, D-101), usage, live activity (D-90), platform settings, audit, storage and clean-up, backups, managers (admins only); a manager sees only the tabs and actions for their features (`lib/staff.ts`) |
 | `/r/[token]` | public | Shared results |
 | `/live/[token]` | public | Live leaderboards (polls and sessions), full screen (D-45) |
 | `/docs/[slug]` | developers | This documentation |

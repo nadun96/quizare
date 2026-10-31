@@ -21,7 +21,7 @@ Accounts, passwords, sessions, verification, password reset, and admin account m
 - `password.go`: Argon2id (m=19456 KiB, t=2, p=1). `Hasher` runs at most N hashes at once with a queue of 200 and a 10 s acquire timeout; when full it returns `ErrBusy`, which becomes `503 Retry-After: 2`.
 - `service.go`: `Register`, `Login`, `CreateSession`, `Authenticate` (idle and absolute timeouts per role), `Logout`, `VerifyEmail`, `RequestPasswordReset`, `ResetPassword`, `UsersByID`, `CreateAdmin`.
 - `admin.go`: `ListUsers`, `SetStatus`, `DeleteUser` and `DeleteOwnAccount` (both anonymise), and `GetPolicy`/`SetPolicy` (teacher approval). A manager may act only on teachers and students, and the last active admin can't be suspended or deleted.
-- `manager.go` (D-56): the admin features a manager can be given (`Features`), the `RequireStaff` and `RequireFeature` route checks, and `ListManagers`, `MakeManager` (an existing teacher, or a new manager-only account), `SetManagerFeatures` and `RemoveManager`.
+- `roles.go` (D-101) changes roles: admins any but their own, managers students and teachers only, never the last admin, never a teacher who still owns classrooms. `manager.go` (D-56): the admin features a manager can be given (`Features`), the `RequireStaff` and `RequireFeature` route checks, and `ListManagers`, `MakeManager` (an existing teacher, or a new manager-only account), `SetManagerFeatures` and `RemoveManager`.
 - `http.go`: `Middleware`, `RequireRole`, `CurrentUser`/`MustUser`, cookie helpers, and the routes.
 - `ratelimit.go`: token bucket. Per IP: burst 300, refill every 200 ms (a class shares one NAT address). Per email: burst 10, refill every 30 s.
 
@@ -37,7 +37,7 @@ The configuration hierarchy (BA §7). `Overrides` is a struct of pointer fields;
 
 ## content (schema `content`)
 
-Classrooms, modules, topics and enrolments (FR-CLS). `purge.go` (D-92) deletes a classroom, module or topic with everything inside (quiz sessions and results, tutorials, quizzes, presentations) in one transaction, after `DeletePreview` has counted it; results go only when the name is typed, and nothing while a quiz session in it is open.
+Classrooms, modules, topics and enrolments (FR-CLS). `oversee.go` (D-101) is the staff's view of every classroom: list, students in and out, rename, archive, delete, and moving one to another teacher with its work. `purge.go` (D-92) deletes a classroom, module or topic with everything inside (quiz sessions and results, tutorials, quizzes, presentations) in one transaction, after `DeletePreview` has counted it; results go only when the name is typed, and nothing while a quiz session in it is open.
 
 - Every query includes `teacher_id`, so another teacher's ids return 404 (BR-14).
 - Classroom join codes are 8 characters and session codes 6, both drawn from an alphabet without `0/O/1/I`.
@@ -141,6 +141,10 @@ Usage counts and the audit log for admins and managers given those features (fil
 ## oversight (schema `oversight`)
 
 The admin's live activity (D-90), behind the `live_activity` feature. `Live` lists what's live across `live`, `poll`, `meet` and `presentation` in one read-only query; `End` calls that module's `ForceEnd`/`ForceClose`/`ForceEndLive` (which skip the ownership check), logs the reason and emails the teacher. `oversight.pauses` holds a pause for everyone (no teacher) and one per teacher; `Check` is installed in each module with `SetGate` and runs before anything starts, and `Paused` goes to tutoring in the `/internal/tutoring/access` answer (`paused`).
+
+## dashboard (no schema)
+
+Each person's own dashboard (D-99), read-only across the modules. For a student: quiz sessions open in their classrooms that they haven't finished, presentations being presented and meetings open there (live); tutorials and presentations by their dates and the student's progress (opening later or due: coming up; past due and unfinished: overdue; no date: to do); and quizzes they missed, ended in the last 60 days after they joined without an attempt that got going. For a teacher: their live sessions, polls, meetings and presentations; their tutorials and presentations opening or due, or past due within 30 days with students still to finish; and what waits on them (answers to mark in quizzes and tutorials, students asking to join). `GET /api/my/dashboard` counts each list, `GET /api/my/dashboard/{list}` pages one. Tutoring sessions come from the tutoring service, asked by the page.
 
 ## progress (no schema)
 
