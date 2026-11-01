@@ -108,3 +108,35 @@ describe('editor', () => {
 		expect(toPlain(e.out(), 'markdown')).toBe('2 * 3 * 4 and [x](y) <b>');
 	});
 });
+
+describe('formulas everywhere (D-112)', async () => {
+	const { mathTextHTML, textHasMath, mathPlain, optionLabel, plainHTML } = await import('./plain');
+	const { renderRich } = await import('./render');
+	test('typesets $…$ and $$…$$ in short text and escapes the rest', () => {
+		const h = mathTextHTML('Area <b> = $\\pi r^2$ and $$\\frac{a}{b}$$');
+		expect(h).toContain('&lt;b&gt;');
+		expect(h).toContain('data-latex="\\pi r^2"');
+		expect(h).toContain('data-latex="\\frac{a}{b}" data-display="1"');
+	});
+	test('reads a formula typed as text, escaped by Markdown', () => {
+		expect(mathTextHTML('$\\\\epsilon$')).toContain('data-latex="\\epsilon"');
+		expect(mathTextHTML('$a \\\\ b$')).toContain('data-latex="a \\\\ b"');
+	});
+	test('leaves prices alone', () => {
+		expect(textHasMath('It costs $5 or $10')).toBe(false);
+		expect(textHasMath('$x$')).toBe(true);
+	});
+	test('letters options a select must show as text', () => {
+		expect(mathPlain('Root: $\\sqrt{2}$')).toBe('Root: \\sqrt{2}');
+		expect(optionLabel('$x^2$', 1, true)).toBe('B · x^2');
+		expect(optionLabel('Paris', 0, false)).toBe('Paris');
+	});
+	test('reads formulas in plain questions (CSV) too', () => {
+		expect(plainHTML('Solve $x+1=2$ for [[1]]', 'line')).toContain('data-latex="x+1=2"');
+	});
+	test('takes $$…$$ inside a paragraph as display math', () => {
+		const h = renderRich('The model is\n$$Y = f(X) + \\epsilon$$\nwhere…', 'markdown');
+		expect(h).toContain('data-display="1"');
+		expect(h).not.toContain('$$');
+	});
+});

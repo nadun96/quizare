@@ -1,4 +1,5 @@
 <script lang="ts">
+	import FormulaInput from './richtext/FormulaInput.svelte';
 	// One-by-one question authoring for all seven types (FR-QZ-02/03/04/07/09).
 	import { api, ApiError } from './api';
 	import { QTYPES, QTYPE_LABEL, type QType, type Question } from './types';
@@ -168,6 +169,7 @@
 	{#if usesOptions}
 		<fieldset class="vstack">
 			<legend><strong>{type === 'DRAG' ? (dragMode === 'order' ? 'Items, in the correct order' : 'Items') : 'Options'}</strong></legend>
+			<p class="small muted m-0">Formulas go between dollar signs, like <code>{'$x^2 + 1$'}</code>, or <code>{'$$\\frac{a}{b}$$'}</code> on a line of their own; Σ starts one.</p>
 			{#if type === 'DRAG'}
 				<div class="row small">
 					<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={dragMode} value="order" /> Put in order</label>
@@ -178,7 +180,7 @@
 				<div class="row">
 					{#if type === 'SINGLE'}<input class="radio" type="radio" name="correct" aria-label="Correct" checked={r.correct} onchange={() => rows.forEach((x, j) => (x.correct = j === i))} />{/if}
 					{#if type === 'MULTI'}<input class="checkbox" type="checkbox" aria-label="Correct" bind:checked={r.correct} />{/if}
-					<input class="input w-full" style="flex:1" aria-label={'Option ' + (i + 1)} bind:value={r.text} required />
+					<FormulaInput label={(type === 'DRAG' ? 'Item ' : 'Option ') + (i + 1)} bind:value={r.text} required />
 					{#if type === 'DRAG' && dragMode === 'zones'}
 						<select class="select w-full" style="width:10rem" aria-label="Box" bind:value={r.zone}>
 							<option value="">Box…</option>
@@ -192,7 +194,7 @@
 			{#if type === 'DRAG' && dragMode === 'zones'}
 				<strong>Boxes</strong>
 				{#each zones as _z, i (i)}
-					<div class="row"><input class="input w-full" style="flex:1" aria-label={'Box ' + (i + 1)} bind:value={zones[i]} required /><button type="button" class="btn btn-sm" onclick={() => zones.splice(i, 1)} disabled={zones.length <= 1}>✕</button></div>
+					<div class="row"><FormulaInput label={'Box ' + (i + 1)} bind:value={zones[i]} required /><button type="button" class="btn btn-sm" onclick={() => zones.splice(i, 1)} disabled={zones.length <= 1}>✕</button></div>
 				{/each}
 				<button type="button" class="btn btn-sm" onclick={() => zones.push('')}>Add box</button>
 			{/if}
@@ -203,7 +205,7 @@
 		<fieldset class="vstack">
 			<legend><strong>Correct pairs</strong> <span class="small muted">(the right side is shuffled for students)</span></legend>
 			{#each pairs as p, i (i)}
-				<div class="row"><input class="input w-full" style="flex:1" aria-label="Left" bind:value={p.left} required /> → <input class="input w-full" style="flex:1" aria-label="Right" bind:value={p.right} required />
+				<div class="row items-start"><FormulaInput label={'Left ' + (i + 1)} bind:value={p.left} required /> <span class="mt-2">→</span> <FormulaInput label={'Right ' + (i + 1)} bind:value={p.right} required />
 					<button type="button" class="btn btn-sm" onclick={() => pairs.splice(i, 1)} disabled={pairs.length <= 2}>✕</button></div>
 			{/each}
 			<button type="button" class="btn btn-sm" onclick={() => pairs.push({ left: '', right: '' })}>Add pair</button>

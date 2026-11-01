@@ -332,3 +332,7 @@ html[data-motion='reduce'] *::after {
 html:lang(si) { --font-sans: system-ui, 'Noto Sans Sinhala', 'Nirmala UI', 'Iskoola Pota', 'Sinhala Sangam MN', 'Segoe UI', sans-serif; }
 html:lang(ta) { --font-sans: system-ui, 'Noto Sans Tamil', 'Nirmala UI', 'Latha', 'Tamil Sangam MN', 'Segoe UI', sans-serif; }
 html:lang(si) body, html:lang(ta) body { line-height: 1.65; }
+
+/* Formulas (D-112): display math sits on its own line wherever it appears, and scrolls rather than overflowing. */
+.math-display { display: block; text-align: center; margin: 0.6em 0; overflow-x: auto; overflow-y: hidden; }
+.mtext .math-display { margin: 0.3em 0; }

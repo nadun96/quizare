@@ -5,6 +5,8 @@
 	import IconBtn from '../ui/IconBtn.svelte';
 	import { flipMs } from '../ui/motion';
 	import type { Choice } from './types';
+	import MathText from '../richtext/MathText.svelte';
+	import { textHasMath } from '../richtext/plain';
 
 	let { items = $bindable([]), label, noun = 'option', min = 2, max = 50, letters = false }: { items?: Choice[]; label: string; noun?: string; min?: number; max?: number; letters?: boolean } = $props();
 	let keySeq = 0;
@@ -30,7 +32,7 @@
 	<legend class="small font-semibold">{label}</legend>
 	<ol class="vstack">
 		{#each items as c, i (keyOf(c))}
-			<li class="flex items-center gap-2" animate:flip={{ duration: flipMs() }}>
+			<li class="flex flex-wrap items-center gap-2" animate:flip={{ duration: flipMs() }}>
 				<span class="mark" aria-hidden="true">{letters ? String.fromCharCode(65 + i) : i + 1}</span>
 				<input
 					class="input input-sm w-full"
@@ -46,6 +48,7 @@
 						}
 					}}
 				/>
+				{#if textHasMath(c.text)}<span class="pv small" style="order: 9"><MathText text={c.text} /></span>{/if}
 				<IconBtn icon="arrow-up" label="Up" hint="Move {noun} {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)} />
 				<IconBtn icon="arrow-down" label="Down" hint="Move {noun} {i + 1} down" disabled={i === items.length - 1} onclick={() => move(i, 1)} />
 				<IconBtn icon="x" label="Remove" hint="Remove {noun} {i + 1}" size={15} disabled={items.length <= min} onclick={() => items.splice(i, 1)} />
@@ -61,4 +64,5 @@
 	ol { list-style: none; padding: 0; margin: 0; }
 	ol > li + li { margin-top: 0.4rem; }
 	.mark { width: 1.6rem; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--color-muted); flex: none; }
+	.pv { flex-basis: 100%; padding: 0.2rem 0.6rem; margin-left: 2rem; background: var(--color-base-200); border-left: 3px solid var(--color-primary); }
 </style>

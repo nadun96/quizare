@@ -83,8 +83,10 @@
 	$effect(() => {
 		void page.url.pathname;
 		void links.length;
+		void i18n.locale; // labels change width with the language
 		const el = pill?.querySelector<HTMLElement>('[data-on]');
-		mark = el ? { left: el.offsetLeft, width: el.offsetWidth } : null;
+		// Measured against the pill itself: a group's summary sits inside its own <details>, so offsetLeft would be 0.
+		mark = el && pill ? { left: el.getBoundingClientRect().left - pill.getBoundingClientRect().left - pill.clientLeft, width: el.offsetWidth } : null;
 	});
 	// Classrooms (/t) owns every teacher page that no other item does.
 	const under = (href: string) => page.url.pathname === href || page.url.pathname.startsWith(href + '/');

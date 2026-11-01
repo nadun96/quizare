@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MathText from '$lib/richtext/MathText.svelte';
 	// A tutorial's editor (D-74): its pages (content, questions, checkpoints,
 	// leaving the app) in order, its settings, how its students are doing,
 	// and its figures (D-75).
@@ -506,8 +507,8 @@
 							<div class="answer">
 								<p class="small muted m-0">Page {a.page + 1} · {a.question.code} · {count(a.max, 'mark')}</p>
 								<RichText text={a.question.text} format={a.question.body.format} />
-								<p class="m-0"><strong>Answer:</strong> {a.response ? describeResponse(a.question.type, a.question.body, a.response) || '—' : 'Not answered'}</p>
-								{#if a.question.type !== 'ESSAY'}<p class="small muted m-0">Right answer: {describeKey(a.question.type, a.question.body, a.question.key)}</p>{/if}
+								<p class="m-0"><strong>Answer:</strong> <MathText text={a.response ? describeResponse(a.question.type, a.question.body, a.response) || '—' : 'Not answered'} /></p>
+								{#if a.question.type !== 'ESSAY'}<p class="small muted m-0">Right answer: <MathText text={describeKey(a.question.type, a.question.body, a.question.key)} /></p>{/if}
 								{#if a.marking}<p class="small m-0"><Icon name="sparkles" size={14} /> The AI is marking this.</p>{/if}
 								{#if a.ai_marked}<p class="small m-0"><Icon name="sparkles" size={14} /> Marked by the AI{a.ai_feedback ? `: “${a.ai_feedback}”` : ''}</p>{/if}
 								{#if a.flagged && a.flag_reason}<p class="small m-0 text-warning"><Icon name="alert" size={14} /> {a.flag_reason}</p>{/if}

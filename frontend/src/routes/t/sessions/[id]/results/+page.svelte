@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MathText from '$lib/richtext/MathText.svelte';
 	import { promptDialog } from '$lib/ui/dialog.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import SaveToDrive from '$lib/drive/SaveToDrive.svelte';
@@ -168,8 +169,8 @@
 								<button class="btn btn-sm" onclick={() => override(r, m)}>Set mark</button>
 								{#if m.type === 'ESSAY' || m.type === 'BLANK_TEXT'}<button class="btn btn-sm" onclick={() => remark(r, m)}>Re-run AI</button>{/if}
 							</div>
-							<p class="small" style="margin:0.25rem 0"><span class="muted">Answer:</span> <span style="white-space:pre-wrap">{describeResponse(m.type, bodies[m.question_id] ?? {}, m.response)}</span></p>
-							<p class="small muted" style="margin:0">Key: {describeKey(m.type, bodies[m.question_id] ?? {}, m.key)}</p>
+							<p class="small" style="margin:0.25rem 0"><span class="muted">Answer:</span> <span style="white-space:pre-wrap"><MathText text={describeResponse(m.type, bodies[m.question_id] ?? {}, m.response)} /></span></p>
+							<p class="small muted" style="margin:0">Key: <MathText text={describeKey(m.type, bodies[m.question_id] ?? {}, m.key)} /></p>
 							{#if m.flag_reason}<p class="small" style="color:var(--danger);margin:0">{m.flag_reason}</p>{/if}
 							{#if m.ai_rationale}<p class="small muted" style="margin:0">AI rationale: {m.ai_rationale}</p>{/if}
 							{#if m.feedback || m.ai_feedback}<p class="small" style="margin:0">Feedback: {m.feedback} {m.ai_feedback}</p>{/if}
