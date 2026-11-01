@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MathText from '$lib/richtext/MathText.svelte';
 	// A student working through a tutorial (D-74): one page at a time, with
 	// reading, questions, checks and feedback as the teacher set them. Time
 	// on each page and leaving the app are recorded as the page says (D-75).
@@ -188,7 +189,7 @@
 								<strong>{q.mark.marking ? 'Being marked…' : q.mark.pending ? 'Your teacher will mark this' : q.mark.correct ? 'Right' : q.locked ? 'Not quite' : 'Not quite: try again'}</strong>
 								{#if !q.mark.pending}<span class="small tabular"> · {q.mark.score} / {q.mark.max}</span>{/if}
 								{#if q.mark.feedback}<p class="m-0 mt-1">{q.mark.feedback}</p>{/if}
-								{#if q.mark.key && !q.mark.correct}<p class="small m-0 mt-1">The right answer: {describeKey(q.type, q.body, q.mark.key)}</p>{/if}
+								{#if q.mark.key && !q.mark.correct}<p class="small m-0 mt-1">The right answer: <MathText text={describeKey(q.type, q.body, q.mark.key)} /></p>{/if}
 								{#if q.mark.comment}<p class="small m-0 mt-1"><strong>Your teacher:</strong> {q.mark.comment}</p>{/if}
 							</div>
 						</div>

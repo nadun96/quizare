@@ -8,14 +8,9 @@
 import DOMPurify from 'dompurify';
 import { Marked, type Tokens, type TokenizerAndRendererExtension } from 'marked';
 import { BLANK, BLOCK_MATH, INLINE_MATH, UNDERLINE, startOf, type TextFormat } from './syntax';
-import { blankHTML, esc, plainHTML, type BlankMode } from './plain';
+import { blankHTML, esc, mathHTML, plainHTML, type BlankMode } from './plain';
 
 export { hasMath, typeset, type BlankMode } from './plain';
-
-function mathHTML(latex: string, display: boolean): string {
-	const tag = display ? 'div' : 'span';
-	return `<${tag} class="math" data-latex="${esc(latex.trim())}"${display ? ' data-display="1"' : ''}>${esc(latex.trim())}</${tag}>`;
-}
 
 const SAFE_HREF = /^(https?:|mailto:)/i;
 
@@ -35,6 +30,8 @@ function markdownParser(mode: BlankMode): Marked {
 		extensions: [
 			ext('blank', 'inline', '[[', BLANK, (m) => blankHTML(m[1], mode)),
 			ext('blockMath', 'block', '$$', BLOCK_MATH, (m) => mathHTML(m[1], true) + '\n'),
+			// $$…$$ in the middle of a paragraph is display math too (D-112), not text.
+			ext('displayMath', 'inline', '$$', BLOCK_MATH, (m) => mathHTML(m[1], true)),
 			ext('inlineMath', 'inline', '$', INLINE_MATH, (m) => mathHTML(m[1].replace(/\\\$/g, '$'), false)),
 			{
 				name: 'underline',
