@@ -2046,6 +2046,31 @@ paths:
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { answers: { type: integer }, estimated_tokens: { type: integer } } } } } } }
 
   # ---------------- llm keys ----------------
+  /api/teacher/llm-local:
+    get:
+      operationId: getTeacherLLMLocal
+      tags: [llm-keys]
+      summary: The school's local models a teacher can pick (D-115) - on, the models, the default, and whether teachers without a key use it
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { enabled: { type: boolean }, models: { type: array, items: { type: string } }, default_model: { type: string }, for_everyone: { type: boolean } } } } } } }
+  /api/admin/ai/local:
+    get:
+      operationId: getAdminAILocal
+      tags: [admin, llm-keys]
+      summary: The school's Ollama server - its address, the models teachers may use, the default for teachers without a key - and what the server has now (admins only, D-115)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/LocalAI' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putAdminAILocal
+      tags: [admin, llm-keys]
+      summary: Save the school's Ollama settings (D-115)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { enabled: { type: boolean }, base_url: { type: string, example: 'http://127.0.0.1:11434' }, models: { type: array, items: { type: string } }, default_model: { type: string }, for_everyone: { type: boolean } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/LocalAI' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/ai/local/test:
+    post:
+      operationId: postAdminAILocalTest
+      tags: [admin, llm-keys]
+      summary: Mark a tiny answer with a model on the school's server, to see it works and how long it takes (D-115)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { model: { type: string } } } } } }
+      responses: { '200': { description: 'How it went', content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, error: { type: string }, seconds: { type: number }, score: { type: number } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/llm-keys:
     get:
       operationId: getTeacherLlmKeys
@@ -3167,6 +3192,18 @@ components:
         sessions: { type: array, items: { type: object, properties: { at: { type: string, format: date-time }, title: { type: string }, classroom: { type: string }, avg: { type: number }, pass_rate: { type: number }, results: { type: integer } } } }
         weeks: { type: array, items: { type: object, properties: { week: { type: string, format: date }, quizzes: { type: integer }, tutorials: { type: integer }, students: { type: integer } } } }
         classrooms: { type: array, items: { type: object, properties: { name: { type: string }, avg: { type: number, nullable: true }, quizzes: { type: integer }, students: { type: integer }, participation: { type: number, nullable: true } } } }
+    LocalAI:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        base_url: { type: string }
+        models: { type: array, items: { type: string } }
+        default_model: { type: string }
+        for_everyone: { type: boolean }
+        updated_at: { type: string, format: date-time }
+        reachable: { type: boolean }
+        error: { type: string }
+        installed: { type: array, items: { type: object, properties: { name: { type: string }, size: { type: integer }, family: { type: string }, parameters: { type: string }, modified_at: { type: string, format: date-time } } } }
     DeleteContents:
       type: object
       properties:
@@ -4013,7 +4050,7 @@ components:
       description: Masked view; the key itself is never returned (BR-10, AC-11).
       properties:
         id: { type: string, format: uuid }
-        provider: { type: string, enum: [anthropic, openai, google] }
+        provider: { type: string, enum: [anthropic, openai, google, ollama], description: 'ollama: the school''s own server (D-115); no api_key, and the model must be one the admin allows' }
         label: { type: string }
         model: { type: string }
         last4: { type: string }
@@ -4026,7 +4063,7 @@ components:
       type: object
       required: [provider, api_key]
       properties:
-        provider: { type: string, enum: [anthropic, openai, google] }
+        provider: { type: string, enum: [anthropic, openai, google, ollama], description: 'ollama: the school''s own server (D-115); no api_key, and the model must be one the admin allows' }
         model: { type: string, description: 'Required for openai and google; anthropic defaults to claude-opus-5-5' }
         label: { type: string }
         api_key: { type: string, writeOnly: true }

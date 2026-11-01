@@ -21,13 +21,17 @@ func TestSearchEngines(t *testing.T) {
 		b, _ := io.ReadAll(w.Result().Body)
 		return string(b)
 	}
-	on := read(func(w *httptest.ResponseRecorder) { httpx.Robots("https://quiz.school.lk/", true)(w, httptest.NewRequest("GET", "/robots.txt", nil)) })
+	on := read(func(w *httptest.ResponseRecorder) {
+		httpx.Robots("https://quiz.school.lk/", true)(w, httptest.NewRequest("GET", "/robots.txt", nil))
+	})
 	for _, want := range []string{"Disallow: /api/", "Disallow: /t/", "Disallow: /j/", "Allow: /", "Sitemap: https://quiz.school.lk/sitemap.xml"} {
 		if !strings.Contains(on, want) {
 			t.Errorf("robots.txt lacks %q:\n%s", want, on)
 		}
 	}
-	off := read(func(w *httptest.ResponseRecorder) { httpx.Robots("https://quiz.school.lk", false)(w, httptest.NewRequest("GET", "/robots.txt", nil)) })
+	off := read(func(w *httptest.ResponseRecorder) {
+		httpx.Robots("https://quiz.school.lk", false)(w, httptest.NewRequest("GET", "/robots.txt", nil))
+	})
 	if !strings.Contains(off, "Disallow: /\n") || strings.Contains(off, "Sitemap") {
 		t.Errorf("private robots.txt = %s", off)
 	}
