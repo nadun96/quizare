@@ -2,7 +2,7 @@
 	// A tutoring session's room (D-59): the waiting room, the broadcast, the
 	// teacher's controls, raised hands, chat, breakout groups (D-79) and
 	// recording the presenter (D-80).
-	// Joining needs a login and a computer (TS-FR-02, TS-FR-09).
+	// Joining needs a login (TS-FR-02); phones and tablets join too (D-117).
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -11,7 +11,7 @@
 	import QrCode from '$lib/QrCode.svelte';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { looksLikeComputer, TutorClient, TutorSocket, tutoringConfig, type SocketEvent } from '$lib/tutoring/client';
+	import { canShareScreen, TutorClient, TutorSocket, tutoringConfig, type SocketEvent } from '$lib/tutoring/client';
 	import { rejoinDelay, SessionMedia, type Tile, type Tokens } from '$lib/tutoring/media.svelte';
 	import TrackView from '$lib/tutoring/TrackView.svelte';
 	import ChatPanel from '$lib/tutoring/ChatPanel.svelte';
@@ -51,7 +51,7 @@
 	let side = $state<Side>('chat');
 	// The side panel (D-116): opened from the toolbar under the video, docked
 	// beside it or floating over it, as the person chose last on this device.
-	let panelOpen = $state(true);
+	let panelOpen = $state(typeof window === 'undefined' || window.innerWidth > 640); // a phone starts with the video
 	let dock = $state<Dock>(loadDock());
 	let vw = $state(1280);
 	let vh = $state(800);
@@ -73,7 +73,7 @@
 	}
 	// Dragging: the docked panel's edge sets its width; a floating panel moves by its title bar.
 	function drag(e: PointerEvent, what: 'width' | 'move' | 'height') {
-		if (e.button !== 0) return;
+		if (e.button !== 0 || vw <= 640) return;
 		e.preventDefault();
 		const start = { x: e.clientX, y: e.clientY, d: placed };
 		const el = e.currentTarget as HTMLElement;
@@ -195,11 +195,8 @@
 		const t = setInterval(() => (now = Date.now()), 1000);
 		return () => clearInterval(t);
 	});
-	onMount(async () => {
-		if (!looksLikeComputer(window, navigator.userAgent)) {
-			problem = 'Tutoring sessions need a computer. Open this link on a laptop or desktop.';
-		}
-	});
+	// Phone browsers can't share a screen; the button only shows where it works.
+	const screenOK = typeof navigator !== 'undefined' && canShareScreen(navigator);
 
 	$effect(() => {
 		if (!auth.loaded || problem || view) return;
@@ -547,6 +544,8 @@
 		{:else}
 			<div class="body" class:docked={panelOpen && placed.mode === 'docked'} style:--panel-w="{placed.width}px">
 				<main class="stage">
+					{#if !teacher && (!media.canMic && !media.canCamera && !media.canScreen)}<p class="small muted m-0">Your teacher hasn’t allowed you to share anything yet.</p>{/if}
+					{#if !teacher && media.tiles.some((t) => t.local && t.backstage)}<p class="small m-0"><span class="badge badge-soft">Your teachers can see what you share</span></p>{/if}
 					{#if sidelined}<p class="small muted m-0">{broadcasterName(view)} is broadcasting; your microphone still reaches everyone.</p>{/if}
 					{#if !teacher && view.session.groups_open}
 						<div class="alert alert-soft py-2" class:alert-info={!!group} role="status">
@@ -627,7 +626,7 @@
 								<span class="grip" role="button" tabindex="0" title="Drag to move; arrow keys move it too" aria-label="Move the panel" onpointerdown={(e) => drag(e, 'move')} onkeydown={(e) => nudge(e, 'move')}><Icon name="grip" size={16} /></span>
 							{/if}
 							<h2 class="m-0 grow text-sm">{panelTitle[side]}</h2>
-							<IconBtn icon={floating ? 'dock' : 'float'} label={floating ? 'Dock' : 'Float'} hint={floating ? 'Dock beside the video' : 'Float over the video'} class="btn-ghost btn-xs" tip="bottom" onclick={() => setDock({ mode: floating ? 'docked' : 'floating' })} />
+							<IconBtn icon={floating ? 'dock' : 'float'} label={floating ? 'Dock' : 'Float'} hint={floating ? 'Dock beside the video' : 'Float over the video'} class="btn-ghost btn-xs dockbtn" tip="bottom" onclick={() => setDock({ mode: floating ? 'docked' : 'floating' })} />
 							<IconBtn icon="x" label="Close" hint="Close the panel" class="btn-ghost btn-xs" tip="bottom" onclick={() => (panelOpen = false)} />
 						</div>
 						<div class="panel-body vstack">
@@ -691,7 +690,9 @@
 						{@render tool('mic-off', 'Mic', () => {}, { disabled: true, tip: 'Your teacher hasn’t allowed this' })}
 					{/if}
 					{#if !sidelined}
-						{#if media.canScreen}
+						{#if !screenOK}
+							<!-- A phone or tablet: its browser can't share the screen (D-117). -->
+						{:else if media.canScreen}
 							{@render tool('monitor', teacher ? 'Share screen' : 'Share my screen', () => addTrack('screen', () => media.addScreen()), { disabled: media.state !== 'connected' })}
 						{:else}
 							{@render tool('monitor', 'Screen', () => {}, { disabled: true, tip: 'Your teacher hasn’t allowed this' })}
@@ -715,8 +716,6 @@
 						<ReactionsBar {client} sessionId={view.session.id} teacher counts={reactions} />
 					{/if}
 				</div>
-				{#if !teacher && (!media.canMic && !media.canCamera && !media.canScreen)}<span class="small muted note">Your teacher hasn’t allowed you to share anything.</span>{/if}
-				{#if !teacher && media.tiles.some((t) => t.local && t.backstage)}<span class="badge badge-soft">Your teachers can see what you share</span>{/if}
 				<div class="group panels" aria-label="Panels">
 					{@render tool('chat', 'Chat', () => show('chat'), { on: panelOpen && side === 'chat', pressed: panelOpen && side === 'chat' })}
 					{#if teacher || view.session.poll_code}
@@ -772,7 +771,7 @@
 	/* While in a breakout group, the group comes first and the main room shrinks (D-79). */
 	.main-room { display: grid; gap: 0.5rem; width: 100%; }
 	/* The main video is as big as the window's height allows, with nothing to scroll. */
-	.main-room:not(.mini) { max-width: max(28rem, calc((100dvh - 13rem) * 16 / 9)); margin-inline: auto; }
+	.main-room:not(.mini) { max-width: max(16rem, calc((100dvh - 13rem) * 16 / 9)); margin-inline: auto; }
 	.main-room.mini { max-width: 22rem; }
 	.board-box { min-width: 0; }
 	.main-room.mini .empty { aspect-ratio: auto; padding: 0.75rem; }
@@ -801,7 +800,6 @@
 	.tool.warn { background: color-mix(in oklab, var(--color-warning) 25%, transparent); }
 	.ico { position: relative; display: grid; place-items: center; }
 	.tbadge { position: absolute; top: -0.45rem; left: 0.9rem; padding: 0 0.25rem; font-size: 0.6rem; line-height: 1rem; white-space: nowrap; background: var(--color-primary); color: var(--color-primary-content); }
-	.note { max-width: 14rem; }
 
 	/* Narrow windows: a docked panel slides over the video instead of squeezing it. */
 	@media (max-width: 900px) {
@@ -811,5 +809,21 @@
 		.tool { min-width: 3.25rem; }
 		.tool .lbl { display: none; }
 		.panels { padding-left: 0; border-left: 0; }
+	}
+	/* Phones (D-117): the controls stay on one row that scrolls sideways, and
+	   any panel, docked or floating, is a sheet over the lower part of the video. */
+	@media (max-width: 640px) {
+		.top { padding: 0.3rem 0.5rem; gap: 0.35rem; }
+		.top h1 { font-size: 0.95rem; }
+		.top > .grow { flex: 1 1 0; }
+		.stage { padding: 0.5rem; gap: 0.5rem; }
+		.toolbar { flex-wrap: nowrap; justify-content: safe center; overflow-x: auto; gap: 0.5rem; padding: 0.25rem 0.5rem calc(0.25rem + env(safe-area-inset-bottom)); scrollbar-width: none; }
+		.group { flex-wrap: nowrap; }
+		.tool { min-width: 2.9rem; padding: 0.35rem; }
+		.panel, .body.docked .panel:not(.floating) { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: calc(3.25rem + env(safe-area-inset-bottom)); width: auto !important; height: min(62dvh, 30rem) !important; z-index: 30; border: 0; border-top: 1px solid var(--color-base-300); box-shadow: 0 -10px 30px rgb(0 0 0 / 0.25); }
+		.panel.floating .panel-head { cursor: default; }
+		.grip, .vresize, .panel :global(.dockbtn) { display: none; }
+		.thumbs { grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); }
+		.grid-view { grid-template-columns: 1fr; }
 	}
 </style>
