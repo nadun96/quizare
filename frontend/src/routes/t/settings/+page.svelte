@@ -16,12 +16,18 @@
 	let form = $state({ provider: 'anthropic', model: '', label: '', api_key: '' });
 	let consent = $state(false);
 	let keyError = $state('');
+	// The school's own server (D-115): no key, its models only.
+	type Local = { enabled: boolean; models: string[]; default_model: string; for_everyone: boolean };
+	let local = $state<Local>({ enabled: false, models: [], default_model: '', for_everyone: false });
+	const isLocal = $derived(form.provider === 'ollama');
+	const PROVIDER_NAMES: Record<string, string> = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google', ollama: "this school's server" };
 
 	async function load() {
 		const s = await api.get<{ overrides: Overrides; effective: Effective }>('/api/teacher/settings');
 		overrides = s.overrides;
 		effective = s.effective;
 		keys = (await api.get<{ keys: Key[] }>('/api/teacher/llm-keys')).keys ?? [];
+		local = await api.get<Local>('/api/teacher/llm-local').catch(() => local);
 	}
 	$effect(() => {
 		if (ready()) load();
@@ -40,7 +46,7 @@
 		e.preventDefault();
 		keyError = '';
 		try {
-			await api.post('/api/teacher/llm-keys', form);
+			await api.post('/api/teacher/llm-keys', isLocal ? { provider: 'ollama', model: form.model || local.default_model, label: form.label } : form);
 			form = { provider: form.provider, model: '', label: '', api_key: '' }; // never keep the key in memory
 			load();
 		} catch (err) {
@@ -73,32 +79,46 @@ if (await confirmDialog({ title: 'Delete this API key?', body: 'Quizzes that use
 	<DriveCard />
 	<h2>LLM API keys</h2>
 	<p class="small">Keys are encrypted and can never be shown again after saving: only the last 4 characters appear here. They are used only for marking and feedback on your own quizzes.</p>
+	{#if local.enabled}
+		<p class="alert alert-info alert-soft small m-0"><span>Your school runs its own AI models, so answers marked with them never leave the school.{#if local.for_everyone && !keys.length} Until you add a key, your AI marking uses <strong>{local.default_model}</strong> on the school's server.{/if}</span></p>
+	{/if}
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 		<table class="table"><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Status</th><th></th></tr></thead><tbody>
 			{#each keys as k (k.id)}
 				<tr>
-					<td>{k.provider}{k.label ? ` · ${k.label}` : ''} {#if k.is_default}<span class="badge badge-soft badge-success">default</span>{/if}</td>
+					<td>{k.provider === 'ollama' ? 'School server' : k.provider}{k.label ? ` · ${k.label}` : ''} {#if k.is_default}<span class="badge badge-soft badge-success">default</span>{/if}</td>
 					<td class="small">{k.model}</td>
-					<td><code>••••{k.last4}</code></td>
+					<td>{#if k.provider === 'ollama'}<span class="small muted">no key needed</span>{:else}<code>••••{k.last4}</code>{/if}</td>
 					<td class="small">{#if k.last_test_ok === true}<span class="badge badge-soft badge-success">works</span>{:else if k.last_test_ok === false}<span class="badge badge-soft badge-error" title={k.last_test_error}>failed</span> {k.last_test_error}{:else}untested{/if}</td>
 					<td class="row"><button class="btn btn-sm" onclick={() => test(k)}>Test</button>{#if !k.is_default}<button class="btn btn-sm" onclick={() => makeDefault(k)}>Make default</button>{/if}<button class="btn btn-sm btn-error btn-outline" onclick={() => del(k)}>Delete</button></td>
 				</tr>
-			{:else}<tr><td colspan="5" class="muted">No keys. Without a key, essay answers are marked by you (manual marking).</td></tr>{/each}
+			{:else}<tr><td colspan="5" class="muted">{local.enabled && local.for_everyone ? `No keys of your own: AI marking uses ${local.default_model} on the school's server.` : 'No keys. Without a key, essay answers are marked by you (manual marking).'}</td></tr>{/each}
 		</tbody></table>
 	</div>
 	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={addKey}>
 		<strong>Add a key</strong>
 		<div class="auto-grid">
-			<div><label for="prov">Provider</label><select class="select w-full" id="prov" bind:value={form.provider}><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="google">Google Gemini</option></select></div>
-			<div><label for="model">Model</label><input class="input w-full" id="model" bind:value={form.model} placeholder={placeholder[form.provider]} required={form.provider !== 'anthropic'} /></div>
+			<div><label for="prov">Provider</label><select class="select w-full" id="prov" bind:value={form.provider}><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="google">Google Gemini</option>{#if local.enabled}<option value="ollama">This school's server (Ollama)</option>{/if}</select></div>
+			{#if isLocal}
+				<div><label for="model">Model</label><select class="select w-full" id="model" bind:value={form.model}>
+					<option value="">{local.default_model ? `${local.default_model} (the school's default)` : 'Choose…'}</option>
+					{#each local.models as m (m)}<option value={m}>{m}</option>{/each}
+				</select></div>
+			{:else}
+				<div><label for="model">Model</label><input class="input w-full" id="model" bind:value={form.model} placeholder={placeholder[form.provider]} required={form.provider !== 'anthropic'} /></div>
+			{/if}
 			<div><label for="label">Label (optional)</label><input class="input w-full" id="label" bind:value={form.label} /></div>
 		</div>
-		<div><label for="key">API key</label><input class="input w-full" id="key" type="password" autocomplete="off" bind:value={form.api_key} required /></div>
+		{#if !isLocal}<div><label for="key">API key</label><input class="input w-full" id="key" type="password" autocomplete="off" bind:value={form.api_key} required /></div>{/if}
 		<label class="row" style="font-weight:400;align-items:flex-start">
 			<input class="checkbox" type="checkbox" bind:checked={consent} style="margin-top:0.3rem" />
-			<span class="small">I understand that when AI marking or feedback is on, students' answers (without names, emails or student IDs) are sent to {form.provider === 'openai' ? 'OpenAI' : form.provider === 'google' ? 'Google' : 'Anthropic'} under my account, and that the provider's own retention terms apply. Students are told when a quiz uses AI marking.</span>
+			{#if isLocal}
+				<span class="small">I understand that when AI marking or feedback is on, students' answers (without names, emails or student IDs) are marked by a model on the school's own server, and that AI marks can be wrong and I check them. Students are told when a quiz uses AI marking.</span>
+			{:else}
+				<span class="small">I understand that when AI marking or feedback is on, students' answers (without names, emails or student IDs) are sent to {PROVIDER_NAMES[form.provider]} under my account, and that the provider's own retention terms apply. Students are told when a quiz uses AI marking.</span>
+			{/if}
 		</label>
 		{#if keyError}<p class="alert alert-soft alert-error">{keyError}</p>{/if}
-		<button class="btn btn-primary" disabled={!consent}>Save key</button>
+		<button class="btn btn-primary" disabled={!consent || (isLocal && !form.model && !local.default_model)}>{isLocal ? 'Use this model' : 'Save key'}</button>
 	</form>
 </div>

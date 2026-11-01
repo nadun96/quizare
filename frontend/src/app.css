@@ -321,10 +321,10 @@ html[data-motion='reduce'] *::after {
    our own. Only what must stay round to mean what it means keeps its shape:
    radio buttons (round says "pick one"), loading spinners and status dots. */
 :root, [data-theme] { --radius-selector: 0; --radius-field: 0; --radius-box: 0; }
-/* Profile pictures (.round) stay round too (D-110). */
-:where(*:not(.radio, .loading, .status, .round)),
-:where(*:not(.radio, .loading, .status, .round))::before,
-:where(*:not(.radio, .loading, .status, .round))::after { border-radius: 0 !important; }
+/* Profile pictures (.round) stay round too (D-110), and so do switches (.toggle): their knob shows on or off. */
+:where(*:not(.radio, .toggle, .loading, .status, .round)),
+:where(*:not(.radio, .toggle, .loading, .status, .round))::before,
+:where(*:not(.radio, .toggle, .loading, .status, .round))::after { border-radius: 0 !important; }
 
 /* Sinhala and Tamil (D-109): the system's own faces, from Windows (Nirmala
    UI, Iskoola Pota, Latha), Android and Linux (Noto), and Apple's. Their

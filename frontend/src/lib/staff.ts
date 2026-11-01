@@ -63,7 +63,7 @@ export function roleLabel(u: Person): string {
 	return u.manager && u.role !== 'manager' ? r + ' · manager' : r;
 }
 
-export type ConsoleTab = 'users' | 'classes' | 'email' | 'usage' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
+export type ConsoleTab = 'users' | 'classes' | 'email' | 'ai' | 'usage' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
 
 /** The admin console's tabs this person can open, in order. */
 export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
@@ -71,6 +71,8 @@ export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
 	if (can(u, 'view_users')) tabs.push('users');
 	if (can(u, 'manage_classes')) tabs.push('classes');
 	if (can(u, 'send_email')) tabs.push('email');
+	// The school's AI server (D-115): admins only, like other server addresses.
+	if (isAdmin(u)) tabs.push('ai');
 	if (can(u, 'usage')) tabs.push('usage');
 	if (can(u, 'live_activity')) tabs.push('live');
 	if (can(u, 'approval_policy') || can(u, 'settings')) tabs.push('settings');
