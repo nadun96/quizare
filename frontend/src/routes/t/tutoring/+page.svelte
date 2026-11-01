@@ -116,7 +116,7 @@
 			</div>
 			{#if later}<ScheduleFields bind:value={schedule} {errors} />{/if}
 			<label class="row font-normal"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={manual} /> Students wait until I admit them</label>
-			<p class="small muted m-0">Students in the classroom join with the session's code or link, on a computer, or from their calendar. They can't share anything until you allow it.</p>
+			<p class="small muted m-0">Students in the classroom join with the session's code or link, on a computer, tablet or phone, or from their calendar. They can't share anything until you allow it.</p>
 			{#if errors._}<p class="alert alert-soft alert-error small m-0">{errors._}</p>{/if}
 			<div class="row gap-2">
 				<button class="btn btn-primary" disabled={busy || !pick}>{later ? 'Schedule' : 'Create and open'}</button>

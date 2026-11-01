@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../api';
-import { looksLikeComputer, TutorClient, tutoringConfig } from './client';
+import { canShareScreen, TutorClient, tutoringConfig } from './client';
 import { rejoinDelay } from './media.svelte';
 import { fit, pickMime } from './recorder.svelte';
 import { audienceLabel, broadcasterName, deletedIn, groupNow, handQueue, isBroadcaster, linkParts, publishTarget, recordingLength, secondsLeft, type ChatMessage, type TutoringParticipant, type TutoringView } from './types';
@@ -70,17 +70,12 @@ describe('raised hands', () => {
 	});
 });
 
-describe('computers only (TS-FR-09)', () => {
-	const w = (width: number, coarse: boolean, fine: boolean) => ({
-		innerWidth: width,
-		matchMedia: (q: string) => ({ matches: q.includes('any-pointer: fine') ? fine : q.includes('pointer: coarse') ? coarse : false })
-	});
-	it('lets laptops in and keeps phones and tablets out', () => {
-		expect(looksLikeComputer(w(1440, false, true), 'Mozilla/5.0 (Windows NT 10.0)')).toBe(true);
-		expect(looksLikeComputer(w(390, true, false), 'iPhone')).toBe(false);
-		expect(looksLikeComputer(w(1024, true, false), 'Mozilla/5.0 (iPad)')).toBe(false);
-		// A touch laptop has a fine pointer too.
-		expect(looksLikeComputer(w(1366, true, true), 'Mozilla/5.0 (Windows NT 10.0)')).toBe(true);
+describe('phones and tablets join too (D-117)', () => {
+	it('offers screen sharing only where the browser can', () => {
+		expect(canShareScreen({ mediaDevices: { getDisplayMedia: () => {} } })).toBe(true); // a computer
+		expect(canShareScreen({ mediaDevices: {} })).toBe(false); // a phone's browser
+		expect(canShareScreen({})).toBe(false); // not a secure page
+		expect(canShareScreen(undefined)).toBe(false);
 	});
 });
 

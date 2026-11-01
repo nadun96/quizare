@@ -171,12 +171,8 @@ export class TutorSocket {
 	}
 }
 
-/** Phones and tablets can't join (PO-4, TS-FR-09): by capabilities and screen, not only the user agent. */
-export function looksLikeComputer(w: { innerWidth: number; matchMedia?: (q: string) => { matches: boolean } }, ua = ''): boolean {
-	const coarse = w.matchMedia?.('(pointer: coarse)').matches ?? false;
-	const fine = w.matchMedia?.('(any-pointer: fine)').matches ?? true;
-	const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
-	if (w.innerWidth < 800) return false;
-	if (coarse && !fine) return false;
-	return !(mobileUA && coarse);
+/** Phones and tablets join too (D-117), but their browsers can't share a
+ * screen: the room offers it only where the browser can. */
+export function canShareScreen(nav: { mediaDevices?: { getDisplayMedia?: unknown } } | undefined): boolean {
+	return typeof nav?.mediaDevices?.getDisplayMedia === 'function';
 }
