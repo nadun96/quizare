@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -49,11 +50,28 @@ type Service struct {
 	// NFR-16 / R6: per-teacher call rate limit, a simple circuit breaker
 	// that protects teachers' quotas during bulk marking.
 	limiter *auth.Limiter
+	// The school's Ollama server (D-115).
+	local       localCache
+	localClient *http.Client // tests
 }
 
 func NewService(pool *pgxpool.Pool, vault *Vault, providers map[string]Provider, inserter jobs.Inserter, attempts Attempts, marks Marks, log *slog.Logger) *Service {
-	return &Service{pool: pool, vault: vault, providers: providers, jobs: inserter, attempts: attempts, marks: marks, log: log,
+	s := &Service{pool: pool, vault: vault, providers: map[string]Provider{}, jobs: inserter, attempts: attempts, marks: marks, log: log,
 		limiter: auth.NewLimiter(10, 2*time.Second)}
+	for name, p := range providers {
+		s.providers[name] = p
+	}
+	// The school's own server, whose address the admin sets (D-115).
+	if _, ok := s.providers[LocalProvider]; !ok {
+		s.providers[LocalProvider] = Ollama{Base: s.localBase}
+	}
+	return s
+}
+
+// SetLocalClient is for tests: the client that reaches Ollama.
+func (s *Service) SetLocalClient(c *http.Client) {
+	s.localClient = c
+	s.providers[LocalProvider] = Ollama{Base: s.localBase, Client: c}
 }
 
 // DefaultProviders are the launch providers (Q-08).
@@ -111,9 +129,29 @@ func (s *Service) AddKey(ctx context.Context, teacherID string, in KeyInput) (Ke
 	in.Model = strings.TrimSpace(in.Model)
 	f := map[string]string{}
 	if _, ok := s.providers[in.Provider]; !ok {
-		f["provider"] = "provider must be anthropic, openai or google"
+		f["provider"] = "provider must be anthropic, openai, google or ollama"
 	}
-	if len(in.APIKey) < 8 || len(in.APIKey) > 500 {
+	local := in.Provider == LocalProvider
+	if local {
+		// The school's server needs no key, only a model the admin allows (D-115).
+		l, err := s.loadLocal(ctx)
+		if err != nil {
+			return Key{}, err
+		}
+		if !l.Enabled {
+			f["provider"] = "the school's local models are switched off"
+		} else if in.Model == "" {
+			in.Model = l.DefaultModel
+		}
+		if l.Enabled && in.Model != "" {
+			if ok, err := s.localModelAllowed(ctx, l, in.Model); err != nil {
+				return Key{}, err
+			} else if !ok {
+				f["model"] = "choose one of the school's models"
+			}
+		}
+		in.APIKey = "local"
+	} else if len(in.APIKey) < 8 || len(in.APIKey) > 500 {
 		f["api_key"] = "paste the full API key"
 	}
 	if in.Model == "" {
@@ -135,6 +173,9 @@ func (s *Service) AddKey(ctx context.Context, teacherID string, in KeyInput) (Ke
 		return Key{}, err
 	}
 	last4 := in.APIKey[len(in.APIKey)-4:]
+	if local {
+		last4 = ""
+	}
 	var k Key
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var n int
@@ -211,6 +252,10 @@ func (s *Service) resolveKey(ctx context.Context, q interface {
 		Scan(&k.ID, &k.Provider, &k.Label, &k.Model, &k.Last4, &k.IsDefault, &k.LastTestAt, &k.LastTestOK, &k.LastTestError, &k.CreatedAt,
 			&k.teacherID, &k.version, &k.sealed.Ciphertext, &k.sealed.Nonce, &k.sealed.WrappedDEK, &k.sealed.DEKNonce, &k.sealed.KEKID)
 	if errors.Is(err, pgx.ErrNoRows) {
+		if keyID == "" || keyID == LocalKeyID {
+			// No key of their own: the school's model, if the admin offers it to everyone (D-115).
+			return s.schoolKey(ctx, teacherID)
+		}
 		return nil, nil
 	}
 	return &k, err
@@ -222,6 +267,15 @@ func (s *Service) call(ctx context.Context, k *storedKey, model string, r GradeR
 	p, ok := s.providers[k.Provider]
 	if !ok {
 		return GradeResult{}, &PermanentError{"unsupported provider " + k.Provider}
+	}
+	if k.Provider == LocalProvider {
+		// No secret: the school's server. A model setting meant for a cloud provider doesn't apply.
+		if model == "" {
+			model = k.Model
+		} else if l, err := s.loadLocal(ctx); err == nil && !l.allowed(model) {
+			model = k.Model
+		}
+		return p.Grade(ctx, "", model, r)
 	}
 	secret, err := s.vault.Open(k.sealed, k.teacherID, k.Provider, k.version)
 	if err != nil {

@@ -92,6 +92,9 @@ The LLM gateway (FR-EV-02/03/05, ADR-09, ADR-16).
 - `service.go`: key CRUD (never readable), `EnqueueTx`, `Remark`, `Estimate`, and the `Worker`.
 - `tutorial.go`: the same for tutorial answers (D-75): `EnqueueTutorialTx`, the `llm_tutorial_mark` job and `TutorialWorker`, with the pseudonym made from the run.
 
+
+Local models (D-115, `local.go`): `llm.local` holds the admin's Ollama address and allowed models. `Ollama` is a provider that calls `POST /api/chat` with the marking JSON schema as `format`, `stream: false` and temperature 0, at an address only the admin sets; its keys carry no secret (`call` skips the vault). `resolveKey` falls back to `schoolKey` (id `local`, the default model) for a teacher with no key when the admin offers the default to everyone. `LocalState` asks the server for `/api/tags`; `TestLocal` marks a tiny answer and times it. Routes: `/api/admin/ai/local` (admins), `GET /api/teacher/llm-local`.
+
 ## analytics (schema `analytics`)
 
 `compute.go` turns results into class, question and student statistics. `service.go` stores them per session (`session_stats`), rolls them up per quiz, handles share links and the public view, and exports CSV. See [Results & analytics](analytics.md).
