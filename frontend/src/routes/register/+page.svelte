@@ -35,6 +35,9 @@
 	}
 </script>
 
+<svelte:head><title>Create an account · Classroom Quiz</title><meta name="description" content="Create a free Classroom Quiz account as a student or a teacher." /></svelte:head>
+
+
 <div class="narrow">
 	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={submit}>
 		<h1>{t('auth.createAccount')}</h1>

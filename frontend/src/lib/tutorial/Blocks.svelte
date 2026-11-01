@@ -4,6 +4,7 @@
 	// so only YouTube's privacy-enhanced player and Google's viewers are framed.
 	import RichText from '../richtext/RichText.svelte';
 	import Icon from '../ui/Icon.svelte';
+	import MathText from '../richtext/MathText.svelte';
 	import type { Block } from './tutorial';
 
 	// onlink: a link on the page was opened (leaving through it is allowed, D-75).
@@ -17,7 +18,7 @@
 		{:else if b.type === 'image'}
 			<figure>
 				<img src={b.embed} alt={b.alt ?? ''} loading="lazy" referrerpolicy="no-referrer" />
-				{#if b.text}<figcaption>{b.text}</figcaption>{/if}
+				{#if b.text}<figcaption><MathText text={b.text} /></figcaption>{/if}
 			</figure>
 		{:else if b.type === 'video' || b.type === 'document'}
 			<figure>
@@ -25,7 +26,7 @@
 					<iframe src={b.embed} title={b.text || (b.type === 'video' ? 'Video' : 'Document')} loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
 						allow="fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>
 				</div>
-				{#if b.text}<figcaption>{b.text}</figcaption>{/if}
+				{#if b.text}<figcaption><MathText text={b.text} /></figcaption>{/if}
 			</figure>
 		{:else if b.type === 'link'}
 			<a class="link-card" href={b.url} target="_blank" rel="noopener noreferrer" onclick={() => onlink?.()} onauxclick={() => onlink?.()}>

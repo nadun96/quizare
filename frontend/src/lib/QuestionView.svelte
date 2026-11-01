@@ -5,6 +5,8 @@
 	import Sortable from 'sortablejs';
 	import type { Response, StudentQuestion } from './types';
 	import RichText from './richtext/RichText.svelte';
+	import MathText from './richtext/MathText.svelte';
+	import { optionLabel, textHasMath } from './richtext/plain';
 
 	let {
 		question,
@@ -32,6 +34,9 @@
 
 	const opts = $derived(question.body.options ?? []);
 	const optText = $derived(Object.fromEntries(opts.map((o) => [o.id, o.text])));
+	// Formulas in a select's choices (D-112): letters in the select, the typeset list beside it.
+	const rightMath = $derived((question.body.right ?? []).some((c) => textHasMath(c.text)));
+	const optsMath = $derived(opts.some((c) => textHasMath(c.text)));
 	const stemImages = $derived(question.resources.filter((x) => x.role === 'Q'));
 	const optionImage = (i: number) => question.resources.find((x) => x.role === 'O' && x.n === i + 1);
 
@@ -136,29 +141,35 @@
 						onchange={() => toggle(o.id)}
 					/>
 					<span class="letter" class:square={question.type === 'MULTI'} aria-hidden="true">{#if r.selected?.includes(o.id)}<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>{:else}{String.fromCharCode(65 + i)}{/if}</span>
-					<span class="choice-text">{o.text}</span>
+					<span class="choice-text"><MathText text={o.text} /></span>
 					{#if optionImage(i)}<img class="res small-res" src={optionImage(i)!.url} alt={optionImage(i)!.alt_text} referrerpolicy="no-referrer" />{/if}
 				</label>
 			{/each}
 		</div>
 	{:else if question.type === 'MATCH'}
 		<p class="muted small">Match each item on the left with one on the right.</p>
+		{#if rightMath}
+			<ol class="lettered" aria-label="Choices">{#each question.body.right ?? [] as rt, i (rt.id)}<li><b>{String.fromCharCode(65 + i)}</b><MathText text={rt.text} /></li>{/each}</ol>
+		{/if}
 		{#each question.body.left ?? [] as l (l.id)}
 			<div class="match">
-				<span>{l.text}</span>
-				<select class="select w-full" aria-label={'Match for ' + l.text} value={r.pairs?.[l.id] ?? ''} {disabled} onchange={(e) => setPair(l.id, e.currentTarget.value)}>
+				<span><MathText text={l.text} /></span>
+				<select class="select w-full" aria-label={'Match for ' + optionLabel(l.text, 0, false)} value={r.pairs?.[l.id] ?? ''} {disabled} onchange={(e) => setPair(l.id, e.currentTarget.value)}>
 					<option value="">Choose…</option>
-					{#each question.body.right ?? [] as rt (rt.id)}<option value={rt.id}>{rt.text}</option>{/each}
+					{#each question.body.right ?? [] as rt, i (rt.id)}<option value={rt.id}>{optionLabel(rt.text, i, rightMath)}</option>{/each}
 				</select>
 			</div>
 		{/each}
 	{:else if isBlank}
+		{#if question.type === 'BLANK_OPT' && optsMath}
+			<ol class="lettered" aria-label="Choices">{#each opts as o, i (o.id)}<li><b>{String.fromCharCode(65 + i)}</b><MathText text={o.text} /></li>{/each}</ol>
+		{/if}
 		<RichText class="qtext blanks" text={question.text} format={question.body.format}>
 			{#snippet blank(b)}
 				{#if question.type === 'BLANK_OPT'}
 					<select class="select" aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled} onchange={(e) => setBlank(b, e.currentTarget.value)}>
 						<option value="">…</option>
-						{#each opts as o (o.id)}<option value={o.id}>{o.text}</option>{/each}
+						{#each opts as o, i (o.id)}<option value={o.id}>{optionLabel(o.text, i, optsMath)}</option>{/each}
 					</select>
 				{:else}
 					<input class="blank" aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled}
@@ -171,19 +182,19 @@
 		{#if !question.body.zones?.length}
 			<p class="muted small">Drag the items into the right order.</p>
 			<ol class="drag-list" bind:this={orderList}>
-				{#each r.order ?? [] as id (id)}<li class="drag-item" data-id={id}>☰ {optText[id]}</li>{/each}
+				{#each r.order ?? [] as id (id)}<li class="drag-item" data-id={id}>☰ <MathText text={optText[id]} /></li>{/each}
 			</ol>
 		{:else}
 			<p class="muted small">Drag each item into the right box.</p>
 			<div class="drag-pool" bind:this={poolEl} data-zone="">
-				{#each unplaced as o (o.id)}<div class="drag-item" data-id={o.id}>☰ {o.text}</div>{/each}
+				{#each unplaced as o (o.id)}<div class="drag-item" data-id={o.id}>☰ <MathText text={o.text} /></div>{/each}
 			</div>
 			<div class="zones">
 				{#each question.body.zones as z (z.id)}
 					<div class="zone">
-						<strong>{z.text}</strong>
+						<strong><MathText text={z.text} /></strong>
 						<div class="zone-drop" bind:this={zoneEls[z.id]} data-zone={z.id}>
-							{#each placed(z.id) as o (o.id)}<div class="drag-item" data-id={o.id}>☰ {o.text}</div>{/each}
+							{#each placed(z.id) as o (o.id)}<div class="drag-item" data-id={o.id}>☰ <MathText text={o.text} /></div>{/each}
 						</div>
 					</div>
 				{/each}
@@ -191,6 +202,11 @@
 		{/if}
 	{:else if question.type === 'ESSAY'}
 		<textarea class="textarea w-full essay" aria-label="Your answer" value={r.text ?? ''} {disabled} oninput={(e) => setText(e.currentTarget.value)} onblur={emit} rows="8"></textarea>
+		{#if r.text && textHasMath(r.text)}
+			<div class="math-preview small" aria-live="polite"><span class="muted">How your formulas read:</span> <MathText text={r.text} /></div>
+		{:else}
+			<p class="small muted m-0">Formulas: write them between dollar signs, like $x^2 + 1$.</p>
+		{/if}
 		<div class="flex items-center gap-3 small muted" class:over={!!question.body.word_limit && words > question.body.word_limit}>
 			<span class="tabular" aria-live="polite">{words} word{words === 1 ? '' : 's'}{question.body.word_limit ? ` of ${question.body.word_limit}` : ''}</span>
 			{#if question.body.word_limit}<progress class="progress flex-1" class:progress-error={words > question.body.word_limit} class:progress-primary={words <= question.body.word_limit} value={Math.min(words, question.body.word_limit)} max={question.body.word_limit} aria-hidden="true"></progress>{/if}
@@ -200,6 +216,10 @@
 
 <style>
 	.question :global(.qtext) { font-size: 1.1rem; }
+	.lettered { list-style: none; margin: 0; padding: 0.5rem 0.75rem; display: grid; gap: 0.35rem; background: var(--color-base-200); }
+	.lettered li { display: flex; gap: 0.6rem; align-items: baseline; }
+	.lettered b { flex: none; min-width: 1.2rem; }
+	.math-preview { padding: 0.5rem 0.75rem; border-left: 3px solid var(--color-primary); background: var(--color-base-200); white-space: pre-wrap; }
 	.question :global(.blanks) { line-height: 2.6; }
 	.question :global(.blanks select), .question :global(.blank) { width: auto; min-width: 7rem; max-width: 100%; display: inline-block; margin: 0 0.25rem; line-height: 1.3; padding: 0.35rem 0.6rem; min-height: 2.4rem; vertical-align: middle; }
 	.res { max-width: 100%; max-height: 50vh; border-radius: 8px; }

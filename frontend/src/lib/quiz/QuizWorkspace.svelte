@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MathText from '$lib/richtext/MathText.svelte';
 	// A quiz's workspace: questions, CSV import, pools, settings, sessions and
 	// preview. The question bank (D-66) is a quiz of kind "bank" and uses the
 	// same page with only questions, import and preview.
@@ -288,7 +289,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 							]} />
 						</div>
 						<RichText text={q.text} format={q.body.format} blanks="chip" />
-						<p class="small muted" style="margin:0">Answer: {describeKey(q.type, q.body, q.key) || '(marked by LLM or manually)'}</p>
+						<p class="small muted" style="margin:0">Answer: <MathText text={describeKey(q.type, q.body, q.key) || '(marked by LLM or manually)'} /></p>
 						<details>
 							<summary class="small">Resources ({q.resources.length})</summary>
 							{#each q.resources as r (r.id)}

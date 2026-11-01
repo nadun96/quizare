@@ -114,7 +114,7 @@ export const ta: Record<Key, string> = {
 	'join.title': 'சேர்',
 	'join.what': 'எதில் சேர்கிறீர்கள்?',
 	'join.quiz': 'வினாடி வினா',
-	'join.poll': 'கருத்துக் கணிப்பு',
+	'join.poll': 'கணிப்பு',
 	'join.classroom': 'வகுப்பறை',
 	'join.meeting': 'கூட்டம்',
 	'join.code': 'ஆசிரியர் தந்த குறியீடு',
