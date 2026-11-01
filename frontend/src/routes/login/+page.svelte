@@ -40,6 +40,9 @@
 	}
 </script>
 
+<svelte:head><title>Log in · Classroom Quiz</title><meta name="description" content="Log in to Classroom Quiz to take quizzes, read tutorials and see your progress, or to run your classroom." /></svelte:head>
+
+
 <div class="narrow">
 	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={submit}>
 		<h1>{t('auth.login')}</h1>

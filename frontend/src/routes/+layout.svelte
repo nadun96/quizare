@@ -46,6 +46,9 @@
 	// The live quiz and the projector are full-screen experiences without the nav.
 	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/') || page.url.pathname.startsWith('/live/') || page.url.pathname.startsWith('/m/'));
 	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
+	// Search engines (D-114): the public pages are listed under one address each; everything else is kept out.
+	const PUBLIC = ['/', '/join', '/login', '/register'];
+	const listed = $derived(PUBLIC.includes(page.url.pathname));
 
 	// A link, or a group of them opening a menu (D-110): teachers' seven pages fit as four.
 	type Link = { href: string; label: string; icon: IconName; count?: number; children?: Link[] };
@@ -122,6 +125,10 @@
 </script>
 
 <svelte:window onkeydown={menuKeys} onclick={menuClicks} />
+
+<svelte:head>
+	{#if listed}<link rel="canonical" href={page.url.origin + page.url.pathname} />{:else}<meta name="robots" content="noindex, nofollow" />{/if}
+</svelte:head>
 
 <a class="skip-link btn btn-primary btn-sm" href="#main">{t('nav.skip')}</a>
 

@@ -37,6 +37,9 @@
 	]);
 </script>
 
+<svelte:head><title>Classroom Quiz: live quizzes, tutorials and polls for every classroom</title><meta name="description" content="Put a code on the board and every phone in the room takes the quiz. Live quizzes, newspaper-style tutorials, polls, meetings and progress dashboards, in English, Sinhala and Tamil." /></svelte:head>
+
+
 <section class="page-container landing">
 	<div class="intro">
 		<div class="pitch" in:flyIn>

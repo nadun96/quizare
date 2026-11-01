@@ -6,6 +6,7 @@ import { Markdown } from '@tiptap/markdown';
 import { TableKit } from '@tiptap/extension-table';
 import { BlockMath, InlineMath } from '@tiptap/extension-mathematics';
 import { Placeholder } from '@tiptap/extensions';
+import Image from '@tiptap/extension-image';
 import 'katex/dist/katex.min.css';
 import { BLANK, BLOCK_MATH, INLINE_MATH, type TextFormat } from './syntax';
 
@@ -103,6 +104,8 @@ export type EditorOptions = {
 	onchange: (markdown: string) => void;
 	onstate: () => void;
 	onmath: (m: MathEdit) => void;
+	/** Pictures dropped or pasted into the text (D-113); the editor inserts what this returns. */
+	onimages?: (files: File[], at: number | null) => void;
 };
 
 export function createEditor(o: EditorOptions): Editor {
@@ -113,7 +116,6 @@ export function createEditor(o: EditorOptions): Editor {
 			StarterKit.configure({
 				heading: { levels: [2, 3, 4] },
 				link: { openOnClick: false, autolink: true, protocols: ['mailto'], isAllowedUri: (url) => /^(https?:|mailto:)/i.test(url) },
-				// Pictures are question resources (BR-15), not inline images.
 				dropcursor: { width: 2 }
 			}),
 			Markdown,
@@ -121,10 +123,27 @@ export function createEditor(o: EditorOptions): Editor {
 			PandocInlineMath.configure({ katexOptions, onClick: (node, pos) => o.onmath({ latex: node.attrs.latex, pos, display: false }) }),
 			StrictBlockMath.configure({ katexOptions, onClick: (node, pos) => o.onmath({ latex: node.attrs.latex, pos, display: true }) }),
 			Blank,
+			// Pictures sit in the text (D-113), from this site's own store only.
+			Image.configure({ inline: true, allowBase64: false, HTMLAttributes: { class: 'rt-img', loading: 'lazy' } }),
 			Placeholder.configure({ placeholder: o.placeholder ?? '' })
 		],
 		content: o.format === 'markdown' ? o.value : plainToDoc(o.value),
 		contentType: o.format === 'markdown' ? 'markdown' : 'json',
+		editorProps: {
+			handlePaste: (_view, event) => {
+				const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+				if (!files.length || !o.onimages) return false;
+				o.onimages(files, null);
+				return true;
+			},
+			handleDrop: (view, event) => {
+				const files = [...(event.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+				if (!files.length || !o.onimages) return false;
+				const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? null;
+				o.onimages(files, at);
+				return true;
+			}
+		},
 		onUpdate: () => o.onchange(markdownOf(editor)),
 		onSelectionUpdate: o.onstate,
 		onTransaction: o.onstate

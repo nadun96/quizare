@@ -44,21 +44,31 @@ quiz.example.edu {
 	}
 
 	# API, WebSockets and beacons go to the Go binary on loopback.
-	@backend path /api/* /ws/* /beacon/* /healthz
+	# robots.txt and sitemap.xml know the site's address and whether it's listed (D-114).
+	@backend path /api/* /ws/* /beacon/* /healthz /robots.txt /sitemap.xml
 	handle @backend {
 		reverse_proxy 127.0.0.1:8080
 	}
 
-	# The SvelteKit static build (ADR-11).
+	# The SvelteKit static build (ADR-11): its files straight from disk. Pages
+	# (index.html for every app address) come from the Go binary, which fills
+	# in the site's address and the robots rule for search engines and link
+	# previews (D-114); it needs QP_STATIC_DIR=/srv/quiz/frontend.
 	handle {
 		root * /srv/quiz/frontend
-		@immutable path /_app/immutable/*
-		header @immutable Cache-Control "public, max-age=31536000, immutable"
-		@html path / /index.html
-		header @html Cache-Control "no-cache"
-		try_files {path} /index.html
-		file_server {
-			precompressed br gzip
+		@file {
+			file
+			not path / /index.html
+		}
+		handle @file {
+			@immutable path /_app/immutable/*
+			header @immutable Cache-Control "public, max-age=31536000, immutable"
+			file_server {
+				precompressed br gzip
+			}
+		}
+		handle {
+			reverse_proxy 127.0.0.1:8080
 		}
 	}
 

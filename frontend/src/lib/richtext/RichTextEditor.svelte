@@ -9,6 +9,9 @@
 	import type { TextFormat } from './syntax';
 	import Icon from '../ui/Icon.svelte';
 	import IconBtn from '../ui/IconBtn.svelte';
+	import { promptDialog } from '../ui/dialog.svelte';
+	import { toast } from '../ui/toast.svelte';
+	import { IMAGE_TYPES, imageFiles, uploadImage } from './images';
 
 	let {
 		value = $bindable(''),
@@ -65,8 +68,10 @@
 				format,
 				placeholder,
 				onchange: (md) => (value = md),
-				onstate: () => tick++,
-				onmath: (m: MathEdit) => openMath(m.latex, m.display, m.pos)
+				// Later, not now: a blur can arrive while Svelte is drawing (a dialog taking focus), when state mustn't change.
+				onstate: () => queueMicrotask(() => tick++),
+				onmath: (m: MathEdit) => openMath(m.latex, m.display, m.pos),
+				onimages: (files, at) => addImages(files, at)
 			});
 			editor.view.dom.setAttribute('id', id);
 			editor.view.dom.setAttribute('aria-label', label);
@@ -111,6 +116,29 @@
 	function openLink() {
 		openPanel({ kind: 'link', href: (editor?.getAttributes('link').href as string) ?? 'https://' });
 	}
+	// Pictures (D-113): picked, dropped or pasted; each is uploaded, then put
+	// where it was dropped (or at the cursor) with a description for students
+	// who can't see it.
+	let picker = $state<HTMLInputElement>();
+	let uploading = $state(0);
+	async function addImages(files: File[], at: number | null = null) {
+		for (const file of imageFiles(files)) {
+			uploading++;
+			try {
+				const img = await uploadImage(file);
+				const alt = await promptDialog({ title: 'Describe the picture', body: 'Students who use a screen reader, or whose picture doesn’t load, read this instead.', label: 'Description', value: file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '), allowEmpty: true, maxlength: 200, confirm: 'Insert' });
+				if (alt === null) continue;
+				const node = { type: 'image', attrs: { src: img.url, alt: alt.trim() } };
+				if (at !== null) run((c) => c.insertContentAt(at, node));
+				else run((c) => c.insertContent(node));
+			} catch (e) {
+				toast(e instanceof Error ? e.message : 'Could not add the picture', 'error');
+			} finally {
+				uploading--;
+			}
+		}
+	}
+
 	function openMath(latex = '', display = false, pos: number | null = null) {
 		openPanel({ kind: 'math', latex, display, pos });
 	}
@@ -174,6 +202,9 @@
 			<IconBtn icon="strike" label="Strikethrough" hint="Strikethrough (Ctrl+Shift+S)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())} />
 			<IconBtn icon="code" label="Inline code" hint="Inline code (Ctrl+E)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())} />
 			<IconBtn icon="link" label="Link" hint="Link (Ctrl+K)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('link')} onclick={openLink} />
+			<IconBtn icon="image" label="Picture" hint="Picture: pick one, or drop or paste it into the text" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={uploading > 0} onclick={() => picker?.click()} />
+			<input type="file" class="hidden" accept={IMAGE_TYPES.join(',')} multiple bind:this={picker} onchange={(e) => { addImages([...(e.currentTarget.files ?? [])]); e.currentTarget.value = ''; }} />
+			{#if uploading}<span class="loading loading-spinner loading-xs" aria-label="Uploading a picture"></span>{/if}
 			{#if onlink}<IconBtn icon="cloud" label="Drive file" hint="Link a Google Drive file (shared by link)" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={linking} onclick={linkFile} />{/if}
 			<span class="sep"></span>
 			<IconBtn icon="list" label="Bulleted list" hint="Bulleted list" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())} />
@@ -273,6 +304,8 @@
 	.surface :global(.tiptap a) { color: var(--accent); }
 	.surface :global(.blank-chip) { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; padding: 0.05em 0.35em; border-radius: 4px; background: var(--warn-bg); color: var(--warn); border: 1px solid currentColor; cursor: default; }
 	.surface :global(.ProseMirror-selectednode) { outline: 2px solid var(--accent); }
+	.surface :global(img.rt-img) { max-width: 100%; max-height: 22rem; display: inline-block; vertical-align: middle; }
+	.surface :global(img.rt-img.ProseMirror-selectednode) { outline: 3px solid var(--color-primary); }
 	.surface :global(.tiptap-mathematics-render--editable) { cursor: pointer; border-radius: 4px; }
 	.surface :global(.tiptap-mathematics-render--editable:hover) { background: var(--bg); }
 	.surface :global(.block-math-error), .surface :global(.inline-math-error) { color: var(--danger); }

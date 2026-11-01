@@ -51,6 +51,9 @@ type Config struct {
 	TrustedProxies []string
 
 	APIDocs bool // serve the OpenAPI spec and Swagger UI at /api/docs (QP_API_DOCS=0 disables)
+	// SearchIndex lets search engines list the public pages (D-114); a
+	// private install sets QP_SEARCH_INDEX=0 to keep every crawler out.
+	SearchIndex bool
 
 	KEKGenerate bool          // create the KEK file on first start if missing (containers; QP_KEK_GENERATE=1)
 	DBWait      time.Duration // keep retrying the database for this long at startup (QP_DB_WAIT_SECONDS, default 60)
@@ -87,6 +90,7 @@ func FromEnv() (Config, error) {
 		TrustedProxies: list(os.Getenv("QP_TRUSTED_PROXIES")),
 
 		APIDocs:          os.Getenv("QP_API_DOCS") != "0",
+		SearchIndex:      os.Getenv("QP_SEARCH_INDEX") != "0",
 		KEKGenerate:      os.Getenv("QP_KEK_GENERATE") == "1",
 		DBWait:           time.Duration(envInt("QP_DB_WAIT_SECONDS", 60)) * time.Second,
 		SMTPAddr:         os.Getenv("QP_SMTP_ADDR"),

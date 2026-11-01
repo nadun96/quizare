@@ -34,6 +34,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/mailing"
+	"github.com/nadun96/quizplatform/internal/media"
 	"github.com/nadun96/quizplatform/internal/meet"
 	"github.com/nadun96/quizplatform/internal/oidc"
 	"github.com/nadun96/quizplatform/internal/oversight"
@@ -83,6 +84,7 @@ type App struct {
 	Progress  *progress.Service     // students' own XP, levels and badges (D-97)
 	Dashboard *dashboard.Service    // each person's own overview (D-99)
 	Mailing   *mailing.Service      // email to groups of accounts (D-102)
+	Media     *media.Service        // pictures in rich text (D-113)
 	Inbox     *inbox.Service        // announcements and messages (D-103)
 }
 
@@ -301,6 +303,16 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Mailing.SetServer(vault, mailer, mailing.ConfigInfo{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom, User: cfg.SMTPUser})
 	a.Mailing.SetRetrier(rc)
 	mailWorker.Sender = a.Mailing.Sender()
+	a.Media = media.NewService(pool)
+	a.Storage.AddArea(storage.Area{ID: "images", Label: "Pictures uploaded before the date that no question, poll or tutorial uses",
+		Preview: func(ctx context.Context, before time.Time) (storage.Freed, error) {
+			n, b, err := a.Media.PreviewUnused(ctx, before)
+			return storage.Freed{Items: n, Bytes: b}, err
+		},
+		Run: func(ctx context.Context, _ string, before time.Time) (storage.Freed, error) {
+			n, b, err := a.Media.DeleteUnused(ctx, before)
+			return storage.Freed{Items: n, Bytes: b}, err
+		}})
 	a.Inbox = inbox.NewService(pool, rc, cfg.BaseURL) // announcements and messages (D-103)
 	a.Live.SetGate(a.Oversight.Check)
 	a.Poll.SetGate(a.Oversight.Check)
@@ -324,6 +336,9 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	r := chi.NewRouter()
 	r.Use(httpx.Recover, httpx.SecurityHeaders)
 	r.Get("/healthz", a.health)
+	// Search engines (D-114).
+	r.Get("/robots.txt", httpx.Robots(cfg.BaseURL, cfg.SearchIndex))
+	r.Get("/sitemap.xml", httpx.Sitemap(cfg.BaseURL, cfg.SearchIndex, time.Now()))
 	r.Route("/api", func(api chi.Router) {
 		api.Use(httpx.SameOrigin(cfg.BaseURL), a.Auth.Middleware)
 		api.Route("/auth", func(r chi.Router) {
@@ -331,6 +346,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.OIDC.Routes(r) // sign-in with providers (D-70)
 		})
 		api.Route("/public", a.Analytics.PublicRoutes)
+		a.Media.PublicRoutes(api) // pictures in rich text, by id (D-113)
 		// Polls: anyone with the code; the poll decides whether login is needed (D-40).
 		api.Route("/polls", a.Poll.PublicRoutes)
 		if cfg.APIDocs {
@@ -367,6 +383,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Tutorial.TeacherRoutes(t)
 			a.Slides.TeacherRoutes(t)
 			a.Inbox.TeacherRoutes(t)
+			a.Media.TeacherRoutes(t)
 			// A classroom's results: each student's best mark on each quiz (D-87, TS-FR-82).
 			t.Method("GET", "/classrooms/{id}/results", httpx.Handler(a.classroomResults))
 		})
@@ -404,7 +421,11 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		a.Live.BeaconRoutes(b)
 	})
 	if cfg.StaticDir != "" {
-		r.NotFound(httpx.SPA(cfg.StaticDir).ServeHTTP)
+		robots := "index, follow"
+		if !cfg.SearchIndex {
+			robots = "noindex, nofollow"
+		}
+		r.NotFound(httpx.SPA(cfg.StaticDir, "__SITE_URL__", strings.TrimRight(cfg.BaseURL, "/"), "__ROBOTS__", robots).ServeHTTP)
 	}
 	a.router = r
 	return a, nil

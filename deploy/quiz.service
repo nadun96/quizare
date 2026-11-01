@@ -16,6 +16,8 @@ RestartSec=2
 
 Environment=QP_LISTEN=127.0.0.1:8080
 Environment=QP_BASE_URL=https://quiz.example.edu
+# Pages come from here so they carry the site address (D-114); Caddy serves the other files.
+Environment=QP_STATIC_DIR=/srv/quiz/frontend
 Environment=QP_DATABASE_URL=postgres://quiz@/quiz?host=/var/run/postgresql
 Environment=QP_DB_MAX_CONNS=15
 Environment=QP_ARGON2_WORKERS=2
