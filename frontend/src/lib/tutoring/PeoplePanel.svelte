@@ -5,6 +5,7 @@
 	import { ApiError } from '../api';
 	import { confirmDialog } from '../ui/dialog.svelte';
 	import { toast } from '../ui/toast.svelte';
+	import Icon from '../ui/Icon.svelte';
 	import type { TutorClient } from './client';
 	import { broadcasterName, handQueue, type TutoringParticipant, type TutoringView } from './types';
 
@@ -54,6 +55,11 @@
 		if (!(await confirmDialog({ title: `Remove ${p.name}?`, body: 'They leave the session and can’t rejoin it.', confirm: 'Remove', danger: true }))) return;
 		act(() => client.del(path + '/participants/' + p.user_id));
 	}
+	const perms = [
+		{ key: 'mic', field: 'allow_mic', label: 'Microphone', icon: 'mic', off: 'mic-off' },
+		{ key: 'camera', field: 'allow_camera', label: 'Camera', icon: 'video', off: 'video-off' },
+		{ key: 'screen', field: 'allow_screen', label: 'Screen', icon: 'monitor', off: 'monitor' }
+	] as const;
 	const wait = (s?: string) => (s ? Math.max(0, Math.round((Date.now() - Date.parse(s)) / 1000)) : 0);
 	const fmtWait = (s: number) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} min`);
 	let tick = $state(0);
@@ -139,10 +145,11 @@
 				<li>
 					<span class="dot" class:on={p.online} title={p.online ? 'Here' : 'Not connected'} aria-label={p.online ? 'Here' : 'Not connected'}></span>
 					<span class="truncate name">{p.name}{#if live(p)}{' '}<span class="badge badge-soft badge-xs">broadcasting</span>{/if}{#if p.chat_muted}{' '}<span class="badge badge-soft badge-xs">chat muted</span>{/if}</span>
-					<span class="spacer"></span>
-					<label class="tog" title="Microphone"><input type="checkbox" class="toggle toggle-xs" checked={p.allow_mic} onchange={(e) => allow([p.user_id], { mic: e.currentTarget.checked })} /> Mic</label>
-					<label class="tog" title="Camera"><input type="checkbox" class="toggle toggle-xs" checked={p.allow_camera} onchange={(e) => allow([p.user_id], { camera: e.currentTarget.checked })} /> Cam</label>
-					<label class="tog" title="Screen"><input type="checkbox" class="toggle toggle-xs" checked={p.allow_screen} onchange={(e) => allow([p.user_id], { screen: e.currentTarget.checked })} /> Screen</label>
+					<!-- What they may share, as three switches that fit beside the name (D-116). -->
+					{#each perms as k (k.key)}
+						{@const on = p[k.field]}
+						<button type="button" class="perm" class:on aria-pressed={on} title="{k.label}: {on ? 'allowed' : 'not allowed'}" aria-label="Allow {p.name}’s {k.label.toLowerCase()}" onclick={() => allow([p.user_id], { [k.key]: !on })}><Icon name={on ? k.icon : k.off} size={15} /></button>
+					{/each}
 					<details class="dropdown dropdown-end">
 						<summary class="btn btn-xs btn-ghost" aria-label="More for {p.name}">⋯</summary>
 						<ul class="menu dropdown-content z-40 w-48 rounded-box border border-base-300 bg-base-100 p-1 shadow">
@@ -167,8 +174,10 @@
 <style>
 	.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
 	.list li { display: flex; align-items: center; gap: 0.4rem; min-height: 2rem; }
-	.name { max-width: 12rem; }
-	.tog { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.75rem; font-weight: 400; }
+	.name { min-width: 0; flex: 1 1 auto; }
+	.perm { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; flex: none; border: 1px solid var(--color-base-300); color: var(--color-muted); opacity: 0.7; }
+	.perm.on { border-color: var(--color-success); background: color-mix(in oklab, var(--color-success) 18%, transparent); color: var(--color-base-content); opacity: 1; }
+	.perm:focus-visible { outline: 2px solid var(--color-primary); }
 	.dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--color-base-300); flex: none; }
 	.dot.on { background: var(--color-success); }
 </style>

@@ -25,6 +25,9 @@
 	import ResourcesPanel from '$lib/tutoring/ResourcesPanel.svelte';
 	import SessionTiming from '$lib/tutoring/SessionTiming.svelte';
 	import BoardControls from '$lib/tutoring/BoardControls.svelte';
+	import { fit, loadDock, saveDock, type Dock } from '$lib/tutoring/dock';
+	import Icon, { type IconName } from '$lib/ui/Icon.svelte';
+	import IconBtn from '$lib/ui/IconBtn.svelte';
 	import SessionPolls from '$lib/tutoring/SessionPolls.svelte';
 	import PollTake from '$lib/poll/PollTake.svelte';
 	import Whiteboard from '$lib/board/Whiteboard.svelte';
@@ -44,11 +47,65 @@
 	const media = new SessionMedia(() => audioHost, (m) => toast(m, 'error'));
 	media.forceRelay = page.url.searchParams.get('relay') === '1'; // checking the relay (D-83)
 	let socket: TutorSocket | null = null;
-	let side = $state<'chat' | 'people' | 'groups' | 'recordings' | 'attendance' | 'resources' | 'board' | 'poll'>('chat');
+	type Side = 'chat' | 'people' | 'groups' | 'recordings' | 'attendance' | 'resources' | 'board' | 'poll' | 'settings';
+	let side = $state<Side>('chat');
+	// The side panel (D-116): opened from the toolbar under the video, docked
+	// beside it or floating over it, as the person chose last on this device.
+	let panelOpen = $state(true);
+	let dock = $state<Dock>(loadDock());
+	let vw = $state(1280);
+	let vh = $state(800);
+	const placed = $derived(fit(dock, vw, vh));
+	function show(s: Side) {
+		if (panelOpen && side === s) {
+			panelOpen = false;
+			return;
+		}
+		panelOpen = true;
+		side = s;
+		if (s === 'recordings') loadRecordings();
+		else if (s === 'attendance') showAttendance();
+		else if (s === 'resources') showResources();
+	}
+	function setDock(d: Partial<Dock>) {
+		dock = fit({ ...dock, ...d }, vw, vh);
+		saveDock(dock);
+	}
+	// Dragging: the docked panel's edge sets its width; a floating panel moves by its title bar.
+	function drag(e: PointerEvent, what: 'width' | 'move' | 'height') {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		const start = { x: e.clientX, y: e.clientY, d: placed };
+		const el = e.currentTarget as HTMLElement;
+		el.setPointerCapture(e.pointerId);
+		const move = (m: PointerEvent) => {
+			const dx = m.clientX - start.x;
+			const dy = m.clientY - start.y;
+			dock = fit(what === 'width' ? { ...start.d, width: start.d.width - dx } : what === 'height' ? { ...start.d, h: start.d.h + dy } : { ...start.d, x: Math.max(0, start.d.x + dx), y: Math.max(0, start.d.y + dy) }, vw, vh);
+		};
+		const up = () => {
+			el.removeEventListener('pointermove', move);
+			el.removeEventListener('pointerup', up);
+			el.removeEventListener('pointercancel', up);
+			saveDock(dock);
+		};
+		el.addEventListener('pointermove', move);
+		el.addEventListener('pointerup', up);
+		el.addEventListener('pointercancel', up);
+	}
+	// Arrow keys do what dragging does, for the keyboard.
+	function nudge(e: KeyboardEvent, what: 'width' | 'move' | 'height') {
+		const step = e.shiftKey ? 64 : 16;
+		const k: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+		const v = k[e.key];
+		if (!v) return;
+		e.preventDefault();
+		const d = placed;
+		setDock(what === 'width' ? { width: d.width - v[0] } : what === 'height' ? { h: d.h + v[1] } : { x: Math.max(0, d.x + v[0]), y: Math.max(0, d.y + v[1]) });
+	}
 	// What the session sends now, pushed to the teachers every 2 s (D-81).
 	let resources = $state<Resources | null>(null);
 	async function showResources() {
-		side = 'resources';
 		if (view && !resources) resources = await client.get<Resources>(`/api/sessions/${view.session.id}/resources`).catch(() => null);
 	}
 	let ask = $state<{ mic: boolean; camera: boolean; screen: boolean } | null>(null);
@@ -86,7 +143,6 @@
 		recorder.start();
 	}
 	async function loadRecordings() {
-		side = 'recordings';
 		if (view) recordings = (await client.get<{ recordings: Recording[] }>(`/api/sessions/${view.session.id}/recordings`)).recordings;
 	}
 	$effect(() => {
@@ -226,6 +282,7 @@
 			case 'poll_shown':
 				if (!teacher) {
 					side = 'poll'; // students answer beside the broadcast (D-86)
+					panelOpen = true;
 					toast(`A poll has started: ${e.data.title}`);
 				}
 				break;
@@ -404,10 +461,14 @@
 		await act(() => client.post(`/api/sessions/${sid()}/broadcast-answer`, { accept }), accept ? 'You are broadcasting: share your screen or camera' : undefined);
 	}
 	async function showAttendance() {
-		side = 'attendance';
 		attendance = (await client.get<{ attendance: Attendee[] }>(`/api/sessions/${sid()}/attendance`)).attendance;
 	}
 	const minutes = (s: number) => Math.round(s / 60);
+	const panelTitle = $derived<Record<Side, string>>({ chat: 'Chat', people: 'People', groups: 'Groups', recordings: 'Recordings', attendance: 'Attendance', resources: 'Resources', board: 'Whiteboard', poll: teacher ? 'Polls' : 'Poll', settings: 'Session settings' });
+	async function leave() {
+		if (recordingHere && !(await confirmDialog({ title: 'Leave and stop recording?', body: 'The recording runs in this browser, so leaving stops and saves it.', confirm: 'Leave' }))) return;
+		goto(auth.home());
+	}
 	const closedText: Record<string, string> = {
 		ended: 'The session has ended.',
 		removed: 'The teacher removed you from this session.',
@@ -419,24 +480,37 @@
 
 <svelte:head><title>{view?.session.title ?? 'Tutoring'} · Classroom Quiz</title></svelte:head>
 
-<div class="page-container vstack tutor">
-	{#if problem}
-		<div class="card card-border bg-base-100 p-6 vstack"><h1 class="m-0 text-xl">Tutoring</h1><p class="m-0">{problem}</p></div>
-	{:else if closed}
-		<div class="card card-border bg-base-100 p-6 vstack">
-			<h1 class="m-0 text-xl">{view?.session.title ?? 'Tutoring'}</h1>
-			<p class="m-0">{closedText[closed] ?? 'You were disconnected.'}</p>
-			{#if closed === 'replaced' || closed === 'expired'}<div><button class="btn" onclick={() => location.reload()}>Reload</button></div>{/if}
-		</div>
-	{:else if !view}
-		<p class="muted">Joining…</p>
-	{:else}
-		<header class="row">
-			<div class="min-w-0">
-				<h1 class="m-0 text-xl truncate">{view.session.title}</h1>
-				<p class="small muted m-0">{view.session.classroom_name} · {view.teachers.map((t) => t.name + (t.role === 'coteacher' ? ' (co-teacher)' : '')).join(', ')} · {view.online} here{#if teacher && view.waiting}{' · '}{view.waiting} waiting{/if}{#if view.session.broadcaster_id}{' · '}{broadcasterName(view)} is broadcasting{/if}</p>
+<svelte:window bind:innerWidth={vw} bind:innerHeight={vh} />
+
+{#snippet tool(icon: IconName, label: string, onclick: () => void, o: { on?: boolean; pressed?: boolean; disabled?: boolean; tip?: string; badge?: string; warn?: boolean } = {})}
+	<button type="button" class="btn btn-ghost tool" class:on={o.on} class:warn={o.warn} aria-pressed={o.pressed} disabled={o.disabled} title={o.tip ?? label} {onclick}>
+		<span class="ico"><Icon name={icon} size={20} />{#if o.badge}<span class="tbadge">{o.badge}</span>{/if}</span>
+		<span class="lbl">{label}</span>
+	</button>
+{/snippet}
+
+{#if problem || closed || !view}
+	<div class="center-screen">
+		{#if problem}
+			<div class="card card-border bg-base-100 p-6 vstack"><h1 class="m-0 text-xl">Tutoring</h1><p class="m-0">{problem}</p><div><a class="btn btn-sm" href={auth.home()}>Home</a></div></div>
+		{:else if closed}
+			<div class="card card-border bg-base-100 p-6 vstack">
+				<h1 class="m-0 text-xl">{view?.session.title ?? 'Tutoring'}</h1>
+				<p class="m-0">{closedText[closed] ?? 'You were disconnected.'}</p>
+				<div class="row">{#if closed === 'replaced' || closed === 'expired'}<button class="btn btn-primary btn-sm" onclick={() => location.reload()}>Reload</button>{/if}<a class="btn btn-sm" href={auth.home()}>Home</a></div>
 			</div>
-			<span class="spacer"></span>
+		{:else}
+			<p class="muted">Joining…</p>
+		{/if}
+	</div>
+{:else}
+	<div class="room">
+		<header class="top">
+			<button class="btn btn-ghost btn-sm btn-square" onclick={leave} title="Leave the session" aria-label="Leave the session"><Icon name="arrow-left" size={18} /></button>
+			<div class="min-w-0 grow">
+				<h1 class="m-0 text-base truncate">{view.session.title}</h1>
+				<p class="small muted m-0 truncate">{view.session.classroom_name} · {view.teachers.map((t) => t.name + (t.role === 'coteacher' ? ' (co-teacher)' : '')).join(', ')} · {view.online} here{#if teacher && view.waiting}{' · '}{view.waiting} waiting{/if}{#if view.session.broadcaster_id}{' · '}{broadcasterName(view)} is broadcasting{/if}</p>
+			</div>
 			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
 			{#if !closed && (media.state === 'reconnecting' || media.state === 'error' || media.state === 'disconnected')}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
 			{#if media.forceRelay}<span class="badge badge-soft" title="Opened with ?relay=1: video goes only through the relay on port 443">Relay only</span>{/if}
@@ -458,18 +532,22 @@
 			</select>
 			{#if lead}
 				{#if view.session.status === 'open'}<button class="btn btn-primary btn-sm" onclick={start}>Start session</button>{/if}
-				<button class="btn btn-error btn-outline btn-sm" onclick={end}>End</button>
+				<button class="btn btn-error btn-sm" onclick={end}>End</button>
 			{/if}
 		</header>
 		<DeviceCheck bind:open={checking} canPublish={teacher || media.canMic || media.canCamera || media.canScreen} onsave={(c) => media.useDevices(c)} />
 
-		{#if !admitted}
-			<div class="card card-border bg-base-100 p-6 vstack"><p class="m-0">Waiting for the teacher to let you in…</p><div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div></div>
-		{:else if !teacher && !live}
-			<div class="card card-border bg-base-100 p-6 vstack"><p class="m-0">You're in. The session starts when the teacher starts it.</p><div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div></div>
+		{#if !admitted || (!teacher && !live)}
+			<div class="center-screen">
+				<div class="card card-border bg-base-100 p-6 vstack">
+					<p class="m-0">{admitted ? 'You’re in. The session starts when the teacher starts it.' : 'Waiting for the teacher to let you in…'}</p>
+					<div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div>
+				</div>
+			</div>
 		{:else}
-			<div class="layout">
-				<div class="stage vstack">
+			<div class="body" class:docked={panelOpen && placed.mode === 'docked'} style:--panel-w="{placed.width}px">
+				<main class="stage">
+					{#if sidelined}<p class="small muted m-0">{broadcasterName(view)} is broadcasting; your microphone still reaches everyone.</p>{/if}
 					{#if !teacher && view.session.groups_open}
 						<div class="alert alert-soft py-2" class:alert-info={!!group} role="status">
 							{#if group}
@@ -531,116 +609,135 @@
 						<h2 class="m-0 text-sm">What you share: only your teachers see it</h2>
 						<div class="thumbs">{#each stageTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
+					<div bind:this={audioHost} hidden></div>
+				</main>
 
-					<div class="controls row">
-						<button class="btn btn-sm btn-ghost" onclick={() => (checking = true)} title="Speakers, microphone and camera">Devices</button>
-						{#if media.canMic}
-							<button class="btn btn-sm" class:btn-primary={media.micOn} onclick={() => deviceAct(() => media.setMic(!media.micOn))} disabled={media.state !== 'connected'}>{media.micOn ? 'Mute mic' : 'Turn mic on'}</button>
-						{:else}
-							<button class="btn btn-sm" disabled title="Your teacher hasn't allowed this">Mic</button>
+				{#if panelOpen}
+					{@const floating = placed.mode === 'floating'}
+					{#if !floating}
+						<!-- A focusable separator is a widget (WAI-ARIA window splitter). -->
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+						<div class="resizer" role="separator" aria-orientation="vertical" aria-label="Panel width" aria-valuenow={placed.width} aria-valuemin={280} aria-valuemax={640} tabindex="0" onpointerdown={(e) => drag(e, 'width')} onkeydown={(e) => nudge(e, 'width')}></div>
+					{/if}
+					<aside class="panel bg-base-100" class:floating aria-label={panelTitle[side]}
+						style:left={floating ? `${placed.x}px` : undefined} style:top={floating ? `${placed.y}px` : undefined}
+						style:width={floating ? `${placed.width}px` : undefined} style:height={floating ? `${placed.h}px` : undefined}>
+						<div class="panel-head" role="presentation" onpointerdown={(e) => floating && !(e.target as HTMLElement).closest('button, [role=button]') && drag(e, 'move')}>
+							{#if floating}
+								<span class="grip" role="button" tabindex="0" title="Drag to move; arrow keys move it too" aria-label="Move the panel" onpointerdown={(e) => drag(e, 'move')} onkeydown={(e) => nudge(e, 'move')}><Icon name="grip" size={16} /></span>
+							{/if}
+							<h2 class="m-0 grow text-sm">{panelTitle[side]}</h2>
+							<IconBtn icon={floating ? 'dock' : 'float'} label={floating ? 'Dock' : 'Float'} hint={floating ? 'Dock beside the video' : 'Float over the video'} class="btn-ghost btn-xs" tip="bottom" onclick={() => setDock({ mode: floating ? 'docked' : 'floating' })} />
+							<IconBtn icon="x" label="Close" hint="Close the panel" class="btn-ghost btn-xs" tip="bottom" onclick={() => (panelOpen = false)} />
+						</div>
+						<div class="panel-body vstack">
+							{#if side === 'chat'}
+								<ChatPanel {client} {view} {messages} />
+							{:else if side === 'people' && teacher}
+								<PeoplePanel {client} {view} />
+							{:else if side === 'groups' && teacher}
+								<GroupsPanel {client} {view} />
+							{:else if side === 'recordings'}
+								<RecordingsList {client} {recordings} meId={view.me.user_id} leadOf={(r) => r.lead} onchange={loadRecordings} />
+								{#if !recordings.length && !teacher}<p class="small muted m-0">Your teacher chooses whether students can watch recordings.</p>{/if}
+							{:else if side === 'poll' && teacher}
+								<SessionPolls {client} {view} />
+							{:else if side === 'poll' && view.session.poll_code}
+								{#key view.session.poll_code}<PollTake code={view.session.poll_code} compact />{/key}
+							{:else if side === 'poll'}
+								<p class="small muted m-0">The poll has ended.</p>
+							{:else if side === 'board' && teacher}
+								<BoardControls {client} {view} />
+							{:else if side === 'resources' && teacher}
+								<ResourcesPanel {client} {view} {resources} />
+							{:else if side === 'attendance' && teacher}
+								<button class="btn btn-sm" onclick={() => act(() => client.download(`/api/sessions/${sid()}/attendance?format=csv`, `attendance-${code}.csv`))}>Download CSV</button>
+								<table class="table table-sm"><thead><tr><th>Name</th><th>Visits</th><th>Minutes</th></tr></thead><tbody>
+									{#each attendance as a (a.user_id)}<tr><td>{a.name}{#if a.online}{' '}<span class="badge badge-soft ok badge-xs">here</span>{/if}</td><td class="tabular">{a.visits}</td><td class="tabular">{minutes(a.seconds)}</td></tr>{:else}<tr><td colspan="3" class="muted">Attendance starts when the session does.</td></tr>{/each}
+								</tbody></table>
+							{:else if side === 'settings' && teacher}
+								{#if lead && view.session.status === 'open'}
+									<h3 class="m-0 text-sm">Schedule{#if view.session.scheduled_at}{' '}<span class="font-normal small muted">· {new Date(view.session.scheduled_at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>{/if}</h3>
+									<SessionTiming {client} session={view.session} />
+								{/if}
+								<h3 class="m-0 text-sm">Joining</h3>
+								<p class="small m-0">Code <strong class="tabular">{view.session.join_code}</strong> · <a href={link}>{link}</a></p>
+								<QrCode text={link} size={140} />
+								<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.locked} onchange={(e) => settings({ locked: e.currentTarget.checked })} /> Lock: nobody new can join</label>
+								<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.admit_mode === 'manual'} onchange={(e) => settings({ admit_mode: e.currentTarget.checked ? 'manual' : 'auto' })} /> Students wait until I admit them</label>
+								<h3 class="m-0 text-sm">Chat</h3>
+								<label class="small" for="chat-mode">Who can write</label>
+								<select id="chat-mode" class="select select-sm w-full" value={view.session.chat_mode} onchange={(e) => settings({ chat_mode: e.currentTarget.value })}>{#each CHAT_MODES as m (m.id)}<option value={m.id}>{m.label}</option>{/each}</select>
+								<label class="small" for="slow">Slow mode</label>
+								<select id="slow" class="select select-sm w-full" value={String(view.session.slow_seconds)} onchange={(e) => settings({ slow_seconds: Number(e.currentTarget.value) })}>{#each [0, 10, 30, 60, 120] as n (n)}<option value={String(n)}>{n ? `One message every ${n} s` : 'Off'}</option>{/each}</select>
+							{/if}
+						</div>
+						{#if floating}
+							<!-- A focusable separator is a widget (WAI-ARIA window splitter). -->
+							<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+							<div class="vresize" role="separator" aria-orientation="horizontal" aria-label="Panel height" aria-valuenow={placed.h} tabindex="0" onpointerdown={(e) => drag(e, 'height')} onkeydown={(e) => nudge(e, 'height')}></div>
 						{/if}
-						{#if sidelined}
-							<span class="small muted">{broadcasterName(view)} is broadcasting; your microphone still reaches everyone.</span>
-						{:else if media.canScreen}
-							<button class="btn btn-sm" onclick={() => addTrack('screen', () => media.addScreen())} disabled={media.state !== 'connected'}>{teacher ? 'Share a screen' : 'Share my screen'}</button>
+					</aside>
+				{/if}
+			</div>
+
+			<!-- Everything one does in the room, under the video (D-116). -->
+			<div class="toolbar" role="toolbar" aria-label="Session controls">
+				<div class="group">
+					{@render tool('sliders', 'Devices', () => (checking = true), { tip: 'Speakers, microphone and camera' })}
+					{#if media.canMic}
+						{@render tool(media.micOn ? 'mic' : 'mic-off', media.micOn ? 'Mute' : 'Unmute', () => deviceAct(() => media.setMic(!media.micOn)), { on: media.micOn, pressed: media.micOn, disabled: media.state !== 'connected', tip: media.micOn ? 'Mute your microphone' : 'Turn your microphone on' })}
+					{:else}
+						{@render tool('mic-off', 'Mic', () => {}, { disabled: true, tip: 'Your teacher hasn’t allowed this' })}
+					{/if}
+					{#if !sidelined}
+						{#if media.canScreen}
+							{@render tool('monitor', teacher ? 'Share screen' : 'Share my screen', () => addTrack('screen', () => media.addScreen()), { disabled: media.state !== 'connected' })}
 						{:else}
-							<button class="btn btn-sm" disabled title="Your teacher hasn't allowed this">Screen</button>
+							{@render tool('monitor', 'Screen', () => {}, { disabled: true, tip: 'Your teacher hasn’t allowed this' })}
 						{/if}
-						{#if sidelined}
-							<span></span>
-						{:else if media.canCamera}
-							<details class="dropdown" ontoggle={(e) => e.currentTarget.open && loadCameras()}>
-								<summary class="btn btn-sm" class:btn-disabled={media.state !== 'connected'}>Add a camera</summary>
-								<ul class="menu dropdown-content z-40 w-64 rounded-box border border-base-300 bg-base-100 p-1 shadow">
+						{#if media.canCamera}
+							<details class="dropdown dropdown-top" ontoggle={(e) => e.currentTarget.open && loadCameras()}>
+								<summary class="btn btn-ghost tool" class:btn-disabled={media.state !== 'connected'} title="Add a camera"><span class="ico"><Icon name="video" size={20} /></span><span class="lbl">Camera</span></summary>
+								<ul class="menu dropdown-content z-40 mb-1 w-64 rounded-box border border-base-300 bg-base-100 p-1 shadow">
 									<li><button onclick={(e) => { closeMenu(e); addTrack('camera', () => media.addCamera()); }}>Default camera</button></li>
 									{#each cameras.filter((c) => c.deviceId) as c (c.deviceId)}<li><button onclick={(e) => { closeMenu(e); addTrack('camera', () => media.addCamera(c.deviceId, c.label || undefined)); }}>{c.label || 'Camera'}</button></li>{/each}
 								</ul>
 							</details>
 						{:else}
-							<button class="btn btn-sm" disabled title="Your teacher hasn't allowed this">Camera</button>
+							{@render tool('video-off', 'Camera', () => {}, { disabled: true, tip: 'Your teacher hasn’t allowed this' })}
 						{/if}
-						{#if teacher}<ReactionsBar {client} sessionId={view.session.id} teacher counts={reactions} />{/if}
-						{#if !teacher}
-							<button class="btn btn-sm" class:btn-warning={!!view.me.hand_at} onclick={() => hand(!view?.me.hand_at)}>{view.me.hand_at ? 'Lower hand' : 'Raise hand'}</button>
-							{#if view.me.state === 'admitted'}<ReactionsBar {client} sessionId={view.session.id} teacher={false} />{/if}
-							{#if !media.canMic && !media.canCamera && !media.canScreen}<span class="small muted">Your teacher hasn't allowed you to share anything.</span>{/if}
-							{#if media.tiles.some((t) => t.local && t.backstage)}<span class="badge badge-soft">Your teachers can see what you share</span>{/if}
-						{/if}
-					</div>
-					<div bind:this={audioHost} hidden></div>
-				</div>
-
-				<aside class="side card card-border bg-base-100 p-3 vstack">
-					<div class="tabs tabs-border" role="tablist">
-						<button class="tab" role="tab" aria-selected={side === 'chat'} class:tab-active={side === 'chat'} onclick={() => (side = 'chat')}>Chat</button>
-						{#if view.session.poll_code}<button class="tab" role="tab" aria-selected={side === 'poll'} class:tab-active={side === 'poll'} onclick={() => (side = 'poll')}>{teacher ? 'Polls' : 'Poll'}{' '}<span class="badge badge-primary badge-xs">live</span></button>{:else if teacher}<button class="tab" role="tab" aria-selected={side === 'poll'} class:tab-active={side === 'poll'} onclick={() => (side = 'poll')}>Polls</button>{/if}
-						<button class="tab" role="tab" aria-selected={side === 'recordings'} class:tab-active={side === 'recordings'} onclick={loadRecordings}>Recordings</button>
-						{#if teacher}
-							<button class="tab" role="tab" aria-selected={side === 'people'} class:tab-active={side === 'people'} onclick={() => (side = 'people')}>People{#if view.waiting}{' '}({view.waiting}){/if}</button>
-							<button class="tab" role="tab" aria-selected={side === 'groups'} class:tab-active={side === 'groups'} onclick={() => (side = 'groups')}>Groups{#if view.groups.some((g) => g.help_at)}{' '}<span class="badge badge-warning badge-xs">help</span>{/if}</button>
-							<button class="tab" role="tab" aria-selected={side === 'attendance'} class:tab-active={side === 'attendance'} onclick={showAttendance}>Attendance</button>
-							<button class="tab" role="tab" aria-selected={side === 'board'} class:tab-active={side === 'board'} onclick={() => (side = 'board')}>Board{#if view.session.board_open}{' '}<span class="badge badge-soft badge-xs">on</span>{/if}</button>
-						<button class="tab" role="tab" aria-selected={side === 'resources'} class:tab-active={side === 'resources'} onclick={showResources}>Resources{#if view.session.auto_off.length}{' '}<span class="badge badge-warning badge-xs">{view.session.auto_off.length} off</span>{/if}</button>
-						{/if}
-					</div>
-					{#if side === 'chat'}
-						<ChatPanel {client} {view} {messages} />
-					{:else if side === 'people' && teacher}
-						<PeoplePanel {client} {view} />
-					{:else if side === 'groups' && teacher}
-						<GroupsPanel {client} {view} />
-					{:else if side === 'recordings'}
-						<RecordingsList {client} {recordings} meId={view.me.user_id} leadOf={(r) => r.lead} onchange={loadRecordings} />
-						{#if !recordings.length && !teacher}<p class="small muted m-0">Your teacher chooses whether students can watch recordings.</p>{/if}
-					{:else if side === 'poll' && teacher}
-						<SessionPolls {client} {view} />
-					{:else if side === 'poll' && view.session.poll_code}
-						{#key view.session.poll_code}<PollTake code={view.session.poll_code} compact />{/key}
-					{:else if side === 'poll'}
-						<p class="small muted m-0">The poll has ended.</p>
-					{:else if side === 'board' && teacher}
-						<BoardControls {client} {view} />
-					{:else if side === 'resources' && teacher}
-						<ResourcesPanel {client} {view} {resources} />
-					{:else if side === 'attendance' && teacher}
-						<div class="vstack">
-							<button class="btn btn-sm" onclick={() => act(() => client.download(`/api/sessions/${sid()}/attendance?format=csv`, `attendance-${code}.csv`))}>Download CSV</button>
-							<table class="table table-sm"><thead><tr><th>Name</th><th>Visits</th><th>Minutes</th></tr></thead><tbody>
-								{#each attendance as a (a.user_id)}<tr><td>{a.name}{#if a.online}{' '}<span class="badge badge-soft ok badge-xs">here</span>{/if}</td><td class="tabular">{a.visits}</td><td class="tabular">{minutes(a.seconds)}</td></tr>{:else}<tr><td colspan="3" class="muted">Attendance starts when the session does.</td></tr>{/each}
-							</tbody></table>
-						</div>
 					{/if}
-				</aside>
+					{#if !teacher}
+						{@render tool('hand', view.me.hand_at ? 'Lower hand' : 'Raise hand', () => hand(!view?.me.hand_at), { warn: !!view.me.hand_at, pressed: !!view.me.hand_at })}
+						<ReactionsBar {client} sessionId={view.session.id} teacher={false} />
+					{:else}
+						<ReactionsBar {client} sessionId={view.session.id} teacher counts={reactions} />
+					{/if}
+				</div>
+				{#if !teacher && (!media.canMic && !media.canCamera && !media.canScreen)}<span class="small muted note">Your teacher hasn’t allowed you to share anything.</span>{/if}
+				{#if !teacher && media.tiles.some((t) => t.local && t.backstage)}<span class="badge badge-soft">Your teachers can see what you share</span>{/if}
+				<div class="group panels" aria-label="Panels">
+					{@render tool('chat', 'Chat', () => show('chat'), { on: panelOpen && side === 'chat', pressed: panelOpen && side === 'chat' })}
+					{#if teacher || view.session.poll_code}
+						{@render tool('chart', teacher ? 'Polls' : 'Poll', () => show('poll'), { on: panelOpen && side === 'poll', pressed: panelOpen && side === 'poll', badge: view.session.poll_code ? 'live' : '' })}
+					{/if}
+					{#if teacher}
+						{@render tool('users', 'People', () => show('people'), { on: panelOpen && side === 'people', pressed: panelOpen && side === 'people', badge: view.waiting ? String(view.waiting) : '' })}
+						{@render tool('grid', 'Groups', () => show('groups'), { on: panelOpen && side === 'groups', pressed: panelOpen && side === 'groups', badge: view.groups.some((g) => g.help_at) ? 'help' : '' })}
+						{@render tool('brush', 'Board', () => show('board'), { on: panelOpen && side === 'board', pressed: panelOpen && side === 'board', badge: view.session.board_open ? 'on' : '' })}
+						{@render tool('check-circle', 'Attendance', () => show('attendance'), { on: panelOpen && side === 'attendance', pressed: panelOpen && side === 'attendance' })}
+					{/if}
+					{@render tool('play', 'Recordings', () => show('recordings'), { on: panelOpen && side === 'recordings', pressed: panelOpen && side === 'recordings' })}
+					{#if teacher}
+						{@render tool('cloud', 'Resources', () => show('resources'), { on: panelOpen && side === 'resources', pressed: panelOpen && side === 'resources', badge: view.session.auto_off.length ? `${view.session.auto_off.length} off` : '' })}
+						{@render tool('settings', 'Settings', () => show('settings'), { on: panelOpen && side === 'settings', pressed: panelOpen && side === 'settings', tip: 'Joining, chat and schedule' })}
+					{/if}
+				</div>
 			</div>
-
-			{#if lead && view.session.status === 'open'}
-				<details class="card card-border bg-base-100 p-4" open={!!view.session.scheduled_at && Date.parse(view.session.scheduled_at) > now + 60 * 60_000}>
-					<summary class="font-semibold">Schedule{#if view.session.scheduled_at}{' '}<span class="font-normal small muted">· {new Date(view.session.scheduled_at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>{/if}</summary>
-					<div class="mt-3"><SessionTiming {client} session={view.session} /></div>
-				</details>
-			{/if}
-			{#if teacher}
-				<details class="card card-border bg-base-100 p-4">
-					<summary class="font-semibold">Joining and chat settings</summary>
-					<div class="settings mt-3">
-						<div class="vstack gap-1">
-							<p class="small m-0">Code <strong class="tabular">{view.session.join_code}</strong> · <a href={link}>{link}</a></p>
-							<QrCode text={link} size={160} />
-						</div>
-						<div class="vstack gap-2">
-							<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.locked} onchange={(e) => settings({ locked: e.currentTarget.checked })} /> Lock: nobody new can join</label>
-							<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.admit_mode === 'manual'} onchange={(e) => settings({ admit_mode: e.currentTarget.checked ? 'manual' : 'auto' })} /> Students wait until I admit them</label>
-							<label class="small" for="chat-mode">Chat</label>
-							<select id="chat-mode" class="select select-sm" value={view.session.chat_mode} onchange={(e) => settings({ chat_mode: e.currentTarget.value })}>{#each CHAT_MODES as m (m.id)}<option value={m.id}>{m.label}</option>{/each}</select>
-							<label class="small" for="slow">Slow mode</label>
-							<select id="slow" class="select select-sm" value={String(view.session.slow_seconds)} onchange={(e) => settings({ slow_seconds: Number(e.currentTarget.value) })}>{#each [0, 10, 30, 60, 120] as n (n)}<option value={String(n)}>{n ? `One message every ${n} s` : 'Off'}</option>{/each}</select>
-						</div>
-					</div>
-				</details>
-			{/if}
 		{/if}
-	{/if}
-</div>
+	</div>
+{/if}
 
 <dialog class="modal" open={!!ask} aria-labelledby="ask-h">
 	{#if ask}
@@ -663,20 +760,56 @@
 </dialog>
 
 <style>
-	.tutor { max-width: 1400px; }
-	.layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) 22rem; align-items: start; }
-	@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
-	.stage { min-width: 0; }
+	.center-screen { min-height: 100dvh; display: grid; place-items: center; padding: 1rem; }
+	.center-screen > :global(*) { width: min(100%, 32rem); }
+	/* The room: exactly the screen. The video takes all the width the panel leaves (D-116). */
+	.room { position: fixed; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--color-base-200); }
+	.room > .center-screen { min-height: 0; }
+	.top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.4rem 0.75rem; background: var(--color-base-100); border-bottom: 1px solid var(--color-base-300); }
+	.body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+	.body.docked { grid-template-columns: minmax(0, 1fr) auto var(--panel-w); }
+	.stage { min-width: 0; min-height: 0; overflow-y: auto; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
 	/* While in a breakout group, the group comes first and the main room shrinks (D-79). */
-	.main-room { display: grid; gap: 0.5rem; }
+	.main-room { display: grid; gap: 0.5rem; width: 100%; }
+	/* The main video is as big as the window's height allows, with nothing to scroll. */
+	.main-room:not(.mini) { max-width: max(28rem, calc((100dvh - 13rem) * 16 / 9)); margin-inline: auto; }
 	.main-room.mini { max-width: 22rem; }
 	.board-box { min-width: 0; }
 	.main-room.mini .empty { aspect-ratio: auto; padding: 0.75rem; }
-	.empty { aspect-ratio: 16 / 9; display: grid; place-items: center; text-align: center; padding: 1rem; border-radius: 0.75rem; background: var(--color-base-200); color: var(--color-muted); }
+	.empty { aspect-ratio: 16 / 9; display: grid; place-items: center; text-align: center; padding: 1rem; background: var(--color-base-300); color: var(--color-muted); }
 	.thumbs { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
 	.side-by-side { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.grid-view { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); }
-	.controls { flex-wrap: wrap; gap: 0.5rem; }
-	.side { position: sticky; top: 4.5rem; max-height: calc(100vh - 6rem); overflow-y: auto; }
-	.settings { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+
+	.resizer { width: 6px; cursor: col-resize; background: var(--color-base-300); touch-action: none; }
+	.resizer:hover, .resizer:focus-visible { background: var(--color-primary); outline: none; }
+	.panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-left: 1px solid var(--color-base-300); }
+	.panel.floating { position: fixed; z-index: 30; border: 1px solid var(--color-base-300); box-shadow: 0 12px 40px rgb(0 0 0 / 0.3); }
+	.panel-head { display: flex; align-items: center; gap: 0.25rem; padding: 0.35rem 0.5rem 0.35rem 0.75rem; border-bottom: 1px solid var(--color-base-300); }
+	.panel.floating .panel-head { cursor: move; touch-action: none; user-select: none; padding-left: 0.25rem; }
+	.grip { display: grid; place-items: center; padding: 0.25rem; color: var(--color-muted); }
+	.grip:focus-visible { outline: 2px solid var(--color-primary); }
+	.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0.75rem; }
+	.vresize { height: 8px; cursor: row-resize; touch-action: none; border-top: 1px solid var(--color-base-300); }
+	.vresize:hover, .vresize:focus-visible { background: var(--color-primary); outline: none; }
+
+	.toolbar { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.25rem 1rem; padding: 0.35rem 0.75rem; background: var(--color-base-100); border-top: 1px solid var(--color-base-300); }
+	.group { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 0.15rem; }
+	.panels { padding-left: 1rem; border-left: 1px solid var(--color-base-300); }
+	.tool { height: auto; min-height: 0; flex-direction: column; gap: 0.1rem; padding: 0.3rem 0.5rem; min-width: 4.25rem; font-weight: 400; font-size: 0.72rem; line-height: 1.1; }
+	.tool.on { background: color-mix(in oklab, var(--color-primary) 16%, transparent); color: var(--color-primary); }
+	.tool.warn { background: color-mix(in oklab, var(--color-warning) 25%, transparent); }
+	.ico { position: relative; display: grid; place-items: center; }
+	.tbadge { position: absolute; top: -0.45rem; left: 0.9rem; padding: 0 0.25rem; font-size: 0.6rem; line-height: 1rem; white-space: nowrap; background: var(--color-primary); color: var(--color-primary-content); }
+	.note { max-width: 14rem; }
+
+	/* Narrow windows: a docked panel slides over the video instead of squeezing it. */
+	@media (max-width: 900px) {
+		.body.docked { grid-template-columns: minmax(0, 1fr); }
+		.body.docked .resizer { display: none; }
+		.body.docked .panel:not(.floating) { position: absolute; inset: 0 0 0 auto; width: min(100%, var(--panel-w)); z-index: 20; box-shadow: -8px 0 30px rgb(0 0 0 / 0.25); }
+		.tool { min-width: 3.25rem; }
+		.tool .lbl { display: none; }
+		.panels { padding-left: 0; border-left: 0; }
+	}
 </style>
