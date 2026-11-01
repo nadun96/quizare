@@ -248,9 +248,9 @@ func (s *Service) teacherInsights(ctx context.Context, tid string, now, from, si
 	}
 	type res struct {
 		session, title, room, user string
-		started, at              time.Time
-		pct                      float64
-		passed                   bool
+		started, at                time.Time
+		pct                        float64
+		passed                     bool
 	}
 	var all []res
 	if err := each(rows, func(r pgx.Rows) error {

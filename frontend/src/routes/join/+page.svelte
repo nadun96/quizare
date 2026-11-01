@@ -20,6 +20,9 @@
 	}
 </script>
 
+<svelte:head><title>Join a quiz, poll, classroom or meeting · Classroom Quiz</title><meta name="description" content="Enter the code from your teacher, or scan the QR code on the board, to join a live quiz, poll, classroom or meeting." /></svelte:head>
+
+
 <div class="narrow">
 	<form class="card card-border vstack bg-base-100 p-5 shadow-sm sm:p-7" onsubmit={submit} in:flyIn>
 		<div class="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary" aria-hidden="true"><Icon name="qr" size={28} /></div>

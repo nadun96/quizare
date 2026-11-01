@@ -9,6 +9,7 @@ import DOMPurify from 'dompurify';
 import { Marked, type Tokens, type TokenizerAndRendererExtension } from 'marked';
 import { BLANK, BLOCK_MATH, INLINE_MATH, UNDERLINE, startOf, type TextFormat } from './syntax';
 import { blankHTML, esc, mathHTML, plainHTML, type BlankMode } from './plain';
+import { IMAGE_SRC } from './images';
 
 export { hasMath, typeset, type BlankMode } from './plain';
 
@@ -48,7 +49,8 @@ function markdownParser(mode: BlankMode): Marked {
 		],
 		renderer: {
 			html: ({ text }: Tokens.HTML | Tokens.Tag) => esc(text),
-			image: ({ text }: Tokens.Image) => esc(text),
+			// Pictures from this site's own store only (D-113); anything else shows its description.
+			image: ({ href, text }: Tokens.Image) => (IMAGE_SRC.test(href) ? `<img class="rt-img" src="${esc(href)}" alt="${esc(text)}" loading="lazy" decoding="async">` : esc(text)),
 			link({ href, tokens }: Tokens.Link) {
 				const inner = this.parser.parseInline(tokens);
 				if (!SAFE_HREF.test(href)) return inner;
@@ -67,8 +69,8 @@ function markdownParser(mode: BlankMode): Marked {
 
 const parsers = new Map<BlankMode, Marked>();
 
-const ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'u', 's', 'del', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'a', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'input'];
-const ALLOWED_ATTR = ['href', 'target', 'rel', 'class', 'start', 'data-blank', 'data-latex', 'data-display', 'aria-label', 'type', 'checked', 'disabled'];
+const ALLOWED_TAGS = ['img', 'p', 'br', 'strong', 'em', 'u', 's', 'del', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'a', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'input'];
+const ALLOWED_ATTR = ['src', 'alt', 'loading', 'decoding', 'href', 'target', 'rel', 'class', 'start', 'data-blank', 'data-latex', 'data-display', 'aria-label', 'type', 'checked', 'disabled'];
 
 /** Renders question text or feedback to sanitised HTML. */
 export function renderRich(text: string, format: TextFormat | undefined, mode: BlankMode = 'line'): string {
@@ -81,6 +83,8 @@ export function renderRich(text: string, format: TextFormat | undefined, mode: B
 		html = plainHTML(text, mode);
 	}
 	const clean = DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false });
+	// Belt and braces: an <img> that isn't one of ours never survives.
+	if (clean.includes('<img')) return clean.replace(/<img [^>]*>/g, (tag) => (/ src="\/api\/images\/[0-9a-f-]{36}"/.test(tag) ? tag : '')).replace(/<input /g, '<input disabled ');
 	// Task-list checkboxes (GFM) are display only.
 	return clean.replace(/<input /g, '<input disabled ');
 }
