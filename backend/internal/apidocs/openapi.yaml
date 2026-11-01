@@ -71,6 +71,35 @@ tags:
     description: Peer-to-peer video meetings (D-69); the server only passes the set-up messages
 
 paths:
+  /robots.txt:
+    get:
+      operationId: getRobots
+      tags: [public]
+      summary: What search engines may list - the public pages only, or nothing with QP_SEARCH_INDEX=0 (D-114)
+      security: []
+      responses: { '200': { description: 'OK', content: { text/plain: { schema: { type: string } } } } }
+  /sitemap.xml:
+    get:
+      operationId: getSitemap
+      tags: [public]
+      summary: The public pages at the site's address, for search engines (D-114)
+      security: []
+      responses: { '200': { description: 'OK', content: { application/xml: { schema: { type: string } } } } }
+  /api/images/{id}:
+    get:
+      operationId: getImage
+      tags: [public]
+      summary: A picture from rich text, by its id - for anyone with the text, cached for good (D-113)
+      security: []
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'The picture', content: { image/png: { schema: { type: string, format: binary } }, image/jpeg: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/images:
+    post:
+      operationId: postTeacherImage
+      tags: [quizzes, tutorials]
+      summary: Upload a picture for a question, feedback, poll or tutorial text; it's redrawn (PNG with transparency, JPEG otherwise, at most 1600 px wide) and its url goes in the text as Markdown (D-113)
+      requestBody: { required: true, content: { image/png: { schema: { type: string, format: binary } }, image/jpeg: { schema: { type: string, format: binary } }, image/gif: { schema: { type: string, format: binary } }, image/webp: { schema: { type: string, format: binary } } } }
+      responses: { '201': { description: 'Stored', content: { application/json: { schema: { type: object, properties: { id: { type: string, format: uuid }, url: { type: string }, width: { type: integer }, height: { type: integer }, bytes: { type: integer } } } } } }, '413': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Invalid' } }
   /healthz:
     get:
       operationId: getHealthz

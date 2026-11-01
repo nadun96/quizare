@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MathText from '$lib/richtext/MathText.svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { describeKey, describeResponse } from '$lib/answerText';
@@ -60,8 +61,8 @@
 					{:else}<span class="badge badge-soft badge-warning">Being marked</span>{/if}
 				</div>
 				<RichText text={q.question.text} format={q.question.body.format} />
-				{#if q.response !== undefined}<p><span class="muted small">Your answer</span><br />{describeResponse(q.question.type, q.question.body, q.response)}</p>{/if}
-				{#if q.correct_answer}<p><span class="muted small">{q.question.type === 'ESSAY' ? 'Model answer' : 'Correct answer'}</span><br />{describeKey(q.question.type, q.question.body, q.correct_answer)}</p>{/if}
+				{#if q.response !== undefined}<p><span class="muted small">Your answer</span><br /><MathText text={describeResponse(q.question.type, q.question.body, q.response)} /></p>{/if}
+				{#if q.correct_answer}<p><span class="muted small">{q.question.type === 'ESSAY' ? 'Model answer' : 'Correct answer'}</span><br /><MathText text={describeKey(q.question.type, q.question.body, q.correct_answer)} /></p>{/if}
 				{#if q.feedback}<div class="alert alert-soft alert-success"><RichText text={q.feedback} format={q.question.body.format} /></div>{/if}
 				{#if q.ai_feedback}<p class="alert alert-soft alert-success" style="white-space:pre-wrap"><strong>Feedback:</strong> {q.ai_feedback}</p>{/if}
 				{#each q.feedback_resources ?? [] as r (r.id)}<img src={r.url} alt={r.alt_text} style="max-width:100%" referrerpolicy="no-referrer" />{/each}

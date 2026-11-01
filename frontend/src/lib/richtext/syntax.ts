@@ -14,6 +14,8 @@ export const BLANK = /^\[\[(\d{1,2})\]\]/;
 export const UNDERLINE = /^\+\+(?=\S)([\s\S]*?\S)\+\+/;
 export const INLINE_MATH = /^\$(?=[^\s$])((?:\\\$|[^$\n])*?[^\s$\\])\$(?!\d)/;
 export const BLOCK_MATH = /^\$\$([\s\S]+?)\$\$/;
+/** Math anywhere in plain text (D-112): $$display$$ first, then $inline$ by the Pandoc rule. */
+export const ANY_MATH = /\$\$([\s\S]+?)\$\$|\$(?=[^\s$])((?:\\\$|[^$\n])*?[^\s$\\])\$(?!\d)/g;
 
 /** Marked-style `start` helpers: where a token could begin in `src`. */
 export const startOf = (marker: string) => (src: string) => {
