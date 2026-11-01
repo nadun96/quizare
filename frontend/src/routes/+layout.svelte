@@ -44,7 +44,7 @@
 	});
 
 	// The live quiz and the projector are full-screen experiences without the nav.
-	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/') || page.url.pathname.startsWith('/live/') || page.url.pathname.startsWith('/m/'));
+	const bare = $derived(page.url.pathname.startsWith('/attempt/') || page.url.pathname.endsWith('/projector') || page.url.pathname.endsWith('/present') || page.url.pathname.startsWith('/r/') || page.url.pathname.startsWith('/live/') || page.url.pathname.startsWith('/m/') || page.url.pathname.startsWith('/tutor/'));
 	const isDocs = $derived(page.url.pathname.startsWith('/docs'));
 	// Search engines (D-114): the public pages are listed under one address each; everything else is kept out.
 	const PUBLIC = ['/', '/join', '/login', '/register'];
