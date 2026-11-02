@@ -107,3 +107,24 @@ Teachers see it on a classroom's **Trends** tab (12, 24 or 60 months) and per st
 - Every foreign key has an index starting with it; `TestForeignKeysAreIndexed` fails when a new one doesn't, so deleting a user or a classroom, or listing by owner, never reads a whole table.
 - Results pages read one precomputed row per session (above), and long-term charts read roll-ups.
 - Lists are paged on the server everywhere (TS-FR-94).
+
+## Explore: multi-dimensional analysis (D-120)
+
+Code: `backend/internal/insight`. A warehouse inside the database (schema `olap`) and a query engine over it; the **Explore** page asks it.
+
+```mermaid
+flowchart LR
+  S[results, marks, tutorial runs,<br/>classrooms, topics, people] -->|loader every 5 min,<br/>only what changed| F[(olap facts:<br/>activity, answers)]
+  S -->|names and trees| D[(olap dimensions)]
+  F --> Q[query engine]
+  D --> Q
+  Q -->|scope: teacher's classrooms,<br/>or staff without students| E[Explore page]
+```
+
+A query is measures × up to three dimensions × filters × a date range:
+
+| Measures (activity) | Measures (questions) | Dimensions |
+|---|---|---|
+| quiz results, average score, pass rate, tutorials finished, students, minutes per quiz, minutes per tutorial | answers marked, marks gained, fully right, students | date (day, week, month, quarter, year), classroom, teacher (admins), module, topic, quiz or tutorial, activity, question type (questions), student (teachers) |
+
+Every name in a request is looked up in the catalog; the SQL comes from the catalog, never from the request. Question measures come from another fact table, so they can't be mixed with activity measures in one query. With totals, the first dimension gets subtotals and there is a grand total (`GROUPING SETS`). At most 5,000 rows come back. Admins see every classroom but never a student, and a group of fewer than 5 students is shown without its values. The warehouse lags the live data by up to 5 minutes; a deleted source leaves it at the next daily reconcile. Reports never read the live tables, so analysis can't slow a quiz down, and the package could later read from a replica or another store without the page changing.
