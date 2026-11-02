@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ClassroomTrends from '$lib/trends/ClassroomTrends.svelte';
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -28,7 +29,7 @@
 	const modules = new Paged<Module>(() => '/api/teacher/classrooms/' + id + '/modules', 'modules', { url: urlState, prefix: 'mod', sort: 'position' });
 	let studentCount = $state(0);
 	// ?tab=files: back from connecting Google Drive (D-71).
-	let tab = $state<'content' | 'students' | 'results' | 'attendance' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
+	let tab = $state<'content' | 'students' | 'results' | 'trends' | 'attendance' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
 	// Attendance at tutoring sessions, when tutoring is on (D-87).
 	let tutoring = $state(false);
 	tutoringConfig().then((c) => (tutoring = c.enabled), () => {});
@@ -113,7 +114,7 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 			{#if !c.archived}<a class="btn btn-sm" href="/inbox?tab=announcements&classroom={c.id}&new=1"><Icon name="mail" size={16} />Announce</a>{/if}</div>
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ...(tutoring ? [['attendance', 'Attendance']] : []), ['files', 'Files'], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
+			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ['trends', 'Trends'], ...(tutoring ? [['attendance', 'Attendance']] : []), ['files', 'Files'], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -138,6 +139,8 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 			<StudentsPanel classroomId={id} bind:count={studentCount} oneditnumber={editNumber} onstatus={setEnrolment} />
 		{:else if tab === 'results'}
 			<ClassroomResults classroomId={id} classroomName={c.name} />
+		{:else if tab === 'trends'}
+			<ClassroomTrends classroomId={id} />
 		{:else if tab === 'attendance' && tutoring}
 			<ClassroomAttendance classroomId={id} classroomName={c.name} />
 		{:else if tab === 'files'}
