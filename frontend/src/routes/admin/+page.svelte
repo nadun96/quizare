@@ -28,6 +28,7 @@
 	import EmailPanel from '$lib/admin/EmailPanel.svelte';
 	import LocalAIPanel from '$lib/admin/LocalAIPanel.svelte';
 	import CapacityPanel from '$lib/admin/CapacityPanel.svelte';
+	import SignInLimits from '$lib/admin/SignInLimits.svelte';
 	import Explore from '$lib/insight/Explore.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
 	import { grouped, toolFrom, TOOLS } from '$lib/admin/tools';
@@ -283,6 +284,7 @@
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="platform" value={platform.overrides} effective={platform.effective} onsave={savePlatform} {errors} /></div>
 					<MeetingLimits />
 				{/if}
+				{#if isAdmin(auth.user)}<SignInLimits />{/if}
 			{:else if tab === 'audit'}
 				<div class="row">
 					<ListSearch list={events} placeholder="Search action, target or person" label="Search the audit log" />
