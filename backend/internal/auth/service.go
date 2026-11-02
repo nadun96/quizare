@@ -59,6 +59,8 @@ type User struct {
 	Manager *Manager `json:"manager,omitempty"`
 	// Directory: signs in with the school's directory, not a password of its own (D-64).
 	Directory bool `json:"directory,omitempty"`
+	// Synthetic: a capacity test's virtual student or teacher (D-125).
+	Synthetic bool `json:"-"`
 }
 
 // Timeouts per role (ADR-13): students get long-lived sessions so most are
@@ -102,6 +104,7 @@ type Service struct {
 	relations    Relations                         // who may see whose profile picture (D-49)
 	dir          Directory                         // school sign-in (D-64); nil = off
 	sso          func(context.Context) []SSOOption // outside sign-in buttons (D-70); nil = none
+	loadGate     func(token string) bool           // whether a capacity test may sign in its accounts (D-125)
 
 	cacheMu sync.Mutex
 	cache   map[string]cachedSession // key: token hash
@@ -243,6 +246,21 @@ func (s *Service) issueTokenTx(ctx context.Context, tx pgx.Tx, u User, purpose s
 type LoginInput struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// LoadToken is the running capacity test's secret, from LoadTestHeader:
+	// its virtual accounts sign in with it and nothing else (D-125).
+	LoadToken string `json:"-"`
+}
+
+// LoadTestHeader carries a capacity test's secret on its sign-ins.
+const LoadTestHeader = "X-QP-Load-Test"
+
+// SetLoadGate lets the capacity test (D-125) decide which sign-ins of its
+// virtual accounts are its own; without it they can't sign in at all.
+func (s *Service) SetLoadGate(f func(token string) bool) { s.loadGate = f }
+
+// HashPassword hashes a password as accounts keep it.
+func (s *Service) HashPassword(ctx context.Context, password string) (string, error) {
+	return s.hasher.Hash(ctx, password)
 }
 
 // Login verifies credentials and creates a new session (rotating any token
@@ -255,6 +273,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput, ip, userAgent string
 	u, err := s.checkCredentials(ctx, strings.TrimSpace(in.Email), in.Password)
 	if err != nil {
 		return User{}, "", time.Time{}, err
+	}
+	if u.Synthetic && (s.loadGate == nil || in.LoadToken == "" || !s.loadGate(in.LoadToken)) {
+		return User{}, "", time.Time{}, errInvalidCredentials
 	}
 	switch u.Status {
 	case StatusSuspended:
@@ -276,9 +297,9 @@ func (s *Service) checkCredentials(ctx context.Context, login, password string) 
 	var hash, source string
 	var verified *time.Time
 	var mgr managerCols
-	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.password_hash, u.email_verified_at, coalesce(u.avatar_version, ''), u.auth_source, `+managerSelect+`
+	err := s.pool.QueryRow(ctx, `SELECT u.id, u.email, u.name, u.role, u.status, u.password_hash, u.email_verified_at, coalesce(u.avatar_version, ''), u.auth_source, u.synthetic, `+managerSelect+`
 		FROM auth.users u `+managerJoin+` WHERE u.email=$1 AND u.status <> 'deleted'`, strings.ToLower(login)).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified, &u.Avatar, &source, &mgr.is, &mgr.features)
+		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Status, &hash, &verified, &u.Avatar, &source, &u.Synthetic, &mgr.is, &mgr.features)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return User{}, err
 	}

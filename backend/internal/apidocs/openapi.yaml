@@ -2203,6 +2203,36 @@ paths:
       summary: Mark a tiny answer with a model on the school's server, to see it works and how long it takes (D-115)
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { model: { type: string } } } } } }
       responses: { '200': { description: 'How it went', content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, error: { type: string }, seconds: { type: number }, score: { type: number } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/loadtest:
+    get:
+      operationId: getAdminLoadtest
+      tags: [admin]
+      summary: The capacity test - the one running, with its progress, and the recent tests, newest first, without their reports; also the default plan and the thresholds (admins only, D-125)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { running: { type: object, nullable: true }, runs: { type: array, items: { $ref: '#/components/schemas/LoadTestRun' } }, defaults: { $ref: '#/components/schemas/LoadTestPlan' }, thresholds: { type: object }, max_students: { type: integer }, max_steps: { type: integer } } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    post:
+      operationId: postAdminLoadtest
+      tags: [admin]
+      summary: Start a capacity test - virtual students sign in, join a quiz on this server, answer and submit, in growing steps; stops at the first step that fails, then deletes every virtual account and all they made (D-125). Refused while real students are in a live quiz
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoadTestPlan' } } } }
+      responses: { '202': { description: 'Started', content: { application/json: { schema: { type: object, properties: { id: { type: string, format: uuid } } } } } }, '409': { description: 'A test is running (test_running), or students are in a live quiz (server_in_use)' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/loadtest/stop:
+    post:
+      operationId: postAdminLoadtestStop
+      tags: [admin]
+      summary: Stop the running test now; it still cleans up and keeps its report so far (D-125)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { stopping: { type: boolean } } } } } } }
+  /api/admin/loadtest/runs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      operationId: getAdminLoadtestRun
+      tags: [admin]
+      summary: One test with its report - each step's timings (p50, p95, p99), failures, traffic, CPU, memory and database use, and the largest class that passed (D-125)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/LoadTestRun' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteAdminLoadtestRun
+      tags: [admin]
+      summary: Delete a finished test's report (D-125)
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/llm-keys:
     get:
       operationId: getTeacherLlmKeys
@@ -3002,6 +3032,26 @@ components:
       content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
 
   schemas:
+    LoadTestPlan:
+      type: object
+      properties:
+        steps: { type: array, items: { type: integer, minimum: 1, maximum: 2000 }, example: [100, 250, 500, 1000, 2000], description: 'students in each step, growing (1 to 6 steps)' }
+        questions: { type: integer, minimum: 3, maximum: 30 }
+        think_seconds: { type: integer, minimum: 1, maximum: 30 }
+        ramp_seconds: { type: integer, minimum: 0, maximum: 300 }
+        one_network: { type: boolean, description: 'every student from one internet address, as behind a school router' }
+        link_mbps: { type: number, description: "the server's upload, for the bandwidth estimate" }
+    LoadTestRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        admin_name: { type: string }
+        status: { type: string, enum: [running, passed, failed, stopped, interrupted, error] }
+        plan: { $ref: '#/components/schemas/LoadTestPlan' }
+        max: { type: integer, description: 'the largest step that passed' }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time, nullable: true }
+        report: { type: object, description: 'steps (students, passed, reasons, ops with n/p50/p95/p99/max in ms, errors, drops, traffic, cpu, memory, db, samples), max, page_kb, machine' }
     Tutorial:
       type: object
       properties:
