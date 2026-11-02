@@ -9,6 +9,7 @@ export const en = {
 	'nav.groupActivities': 'Activities',
 	'nav.classrooms': 'Classrooms',
 	'nav.bank': 'Question bank',
+	'nav.explore': 'Explore',
 	'nav.polls': 'Polls',
 	'nav.meetings': 'Meetings',
 	'nav.tutoring': 'Tutoring',
