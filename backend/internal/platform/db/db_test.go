@@ -51,3 +51,31 @@ func TestOpenWaitSucceedsImmediately(t *testing.T) {
 	}
 	p.Close()
 }
+
+// Every foreign key has an index that starts with it (D-119): without one,
+// deleting a user or a classroom, or listing by owner, reads the whole
+// table. The exceptions are single-row settings tables.
+func TestForeignKeysAreIndexed(t *testing.T) {
+	pool := dbtest.New(t)
+	rows, err := pool.Query(context.Background(), `
+		SELECT c.conrelid::regclass::text || '.' || a.attname
+		FROM pg_constraint c
+		JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+		WHERE c.contype = 'f' AND NOT EXISTS (
+			SELECT 1 FROM pg_index i WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1])
+		ORDER BY 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	small := map[string]bool{"auth.managers.granted_by": true, "mailing.server.updated_by": true, "llm.local.updated_by": true}
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatal(err)
+		}
+		if !small[k] {
+			t.Errorf("foreign key %s has no index", k)
+		}
+	}
+}
