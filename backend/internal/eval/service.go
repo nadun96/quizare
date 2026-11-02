@@ -41,6 +41,7 @@ type Attempts interface {
 	TeamInfos(ctx context.Context, sessionID string) ([]live.TeamInfo, error)
 	SessionMaxScore(ctx context.Context, sessionID string) (float64, error)
 	TeamMaxScores(ctx context.Context, sessionID, acceptance, calc string) (map[string]float64, bool, error)
+	Teaches(ctx context.Context, classroomID, userID string) (bool, error)
 }
 
 // LLMQueue schedules LLM marking or feedback in the caller's transaction.
@@ -491,8 +492,8 @@ func (s *Service) Override(ctx context.Context, teacherID, attemptID, questionID
 	if err != nil {
 		return MarkView{}, err
 	}
-	if d.TeacherID != teacherID {
-		return MarkView{}, httpx.ErrNotFound
+	if ok, err := s.attempts.Teaches(ctx, d.ClassroomID, teacherID); err != nil || !ok {
+		return MarkView{}, httpx.ErrNotFound // the classroom's teachers only (D-121)
 	}
 	var q *quiz.Question
 	for i := range d.Items {

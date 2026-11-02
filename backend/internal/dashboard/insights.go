@@ -242,7 +242,7 @@ func (s *Service) teacherInsights(ctx context.Context, tid string, now, from, si
 		coalesce(a.submitted_at, s.ended_at, a.created_at)
 		FROM eval.results r JOIN live.attempts a ON a.id = r.attempt_id JOIN live.sessions s ON s.id = r.session_id
 		JOIN content.classrooms c ON c.id = s.classroom_id
-		WHERE s.teacher_id = $1 AND r.complete AND NOT r.invalidated AND coalesce(a.submitted_at, s.ended_at, a.created_at) >= $2`, tid, since)
+		WHERE content.teaches(s.classroom_id, $1) AND r.complete AND NOT r.invalidated AND coalesce(a.submitted_at, s.ended_at, a.created_at) >= $2`, tid, since)
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func (s *Service) teacherInsights(ctx context.Context, tid string, now, from, si
 		return err
 	}
 	rows, err = s.pool.Query(ctx, `SELECT r.user_id, r.finished_at FROM tutorial.runs r JOIN tutorial.tutorials t ON t.id = r.tutorial_id
-		WHERE t.teacher_id = $1 AND r.finished_at >= $2`, tid, since)
+		WHERE content.teaches_topic(t.topic_id, $1) AND r.finished_at >= $2`, tid, since)
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func (s *Service) teacherInsights(ctx context.Context, tid string, now, from, si
 	}
 	// Their classrooms and how many students each has now.
 	rows, err = s.pool.Query(ctx, `SELECT c.name, (SELECT count(*) FROM content.enrolments e WHERE e.classroom_id = c.id AND e.status = 'active')::int
-		FROM content.classrooms c WHERE c.teacher_id = $1 AND c.archived_at IS NULL`, tid)
+		FROM content.classrooms c WHERE content.teaches(c.id, $1) AND c.archived_at IS NULL`, tid)
 	if err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func (s *Service) teacherInsights(ctx context.Context, tid string, now, from, si
 	}
 	var enrolled int
 	if err := s.pool.QueryRow(ctx, `SELECT count(DISTINCT e.user_id) FROM content.enrolments e JOIN content.classrooms c ON c.id = e.classroom_id
-		WHERE c.teacher_id = $1 AND c.archived_at IS NULL AND e.status = 'active'`, tid).Scan(&enrolled); err != nil {
+		WHERE content.teaches(c.id, $1) AND c.archived_at IS NULL AND e.status = 'active'`, tid).Scan(&enrolled); err != nil {
 		return err
 	}
 

@@ -168,6 +168,10 @@ var dimensionLoads = []string{
 		UNION ALL SELECT id, 'tutorial', title, topic_id FROM tutorial.tutorials
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, topic_id = EXCLUDED.topic_id
 		WHERE (olap.items.title, olap.items.topic_id) IS DISTINCT FROM (EXCLUDED.title, EXCLUDED.topic_id)`,
+	`DELETE FROM olap.coteachers c WHERE NOT EXISTS (SELECT 1 FROM content.classroom_teachers t
+		WHERE t.classroom_id = c.classroom_id AND t.user_id = c.user_id AND t.status = 'active')`,
+	`INSERT INTO olap.coteachers (classroom_id, user_id) SELECT classroom_id, user_id FROM content.classroom_teachers WHERE status = 'active'
+		ON CONFLICT DO NOTHING`,
 	`INSERT INTO olap.people (id, name) SELECT id, name FROM auth.users
 		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name WHERE olap.people.name IS DISTINCT FROM EXCLUDED.name`,
 }

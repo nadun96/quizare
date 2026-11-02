@@ -104,7 +104,7 @@ var (
 func runes(s string) int { return utf8.RuneCountInString(s) }
 
 func (s *Service) owned(ctx context.Context, teacherID, id string) (Presentation, error) {
-	return scan(s.pool.QueryRow(ctx, `SELECT `+cols+from+` WHERE p.id=$1 AND p.teacher_id=$2`, id, teacherID))
+	return scan(s.pool.QueryRow(ctx, `SELECT `+cols+from+` WHERE p.id=$1 AND content.teaches_topic(p.topic_id, $2)`, id, teacherID))
 }
 
 // Get returns one of the teacher's presentations.
@@ -162,7 +162,7 @@ func (s *Service) List(ctx context.Context, teacherID, topicID string) ([]Presen
 	if _, err := s.topics.TopicContext(ctx, teacherID, topicID); err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT `+cols+from+` WHERE p.topic_id=$1 AND p.teacher_id=$2 ORDER BY p.created_at`, topicID, teacherID)
+	rows, err := s.pool.Query(ctx, `SELECT `+cols+from+` WHERE p.topic_id=$1 AND content.teaches_topic(p.topic_id, $2) ORDER BY p.created_at`, topicID, teacherID)
 	if err != nil {
 		return nil, err
 	}

@@ -29,6 +29,7 @@ import (
 type Attempts interface {
 	MarkingData(ctx context.Context, attemptID string) (*live.MarkingData, error)
 	SessionMarkingData(ctx context.Context, teacherID, sessionID string) ([]*live.MarkingData, error)
+	Teaches(ctx context.Context, classroomID, userID string) (bool, error)
 }
 
 // Marks is the slice of the eval module the gateway writes through.
@@ -348,8 +349,8 @@ func (s *Service) Remark(ctx context.Context, teacherID, attemptID, questionID s
 	if err != nil {
 		return err
 	}
-	if d.TeacherID != teacherID {
-		return httpx.ErrNotFound
+	if ok, err := s.attempts.Teaches(ctx, d.ClassroomID, teacherID); err != nil || !ok {
+		return httpx.ErrNotFound // the classroom's teachers only (D-121)
 	}
 	var item *live.MarkingItem
 	for i := range d.Items {

@@ -54,7 +54,8 @@ func (s *Service) Catalog(ctx context.Context, sc Scope) (Catalog, error) {
 	q := `SELECT id::text, name FROM olap.classrooms WHERE NOT archived ORDER BY name`
 	args := []any{}
 	if !sc.Staff {
-		q = `SELECT id::text, name FROM olap.classrooms WHERE teacher_id = $1 ORDER BY archived, name`
+		q = `SELECT id::text, name FROM olap.classrooms c WHERE c.teacher_id = $1
+			OR EXISTS (SELECT 1 FROM olap.coteachers ct WHERE ct.classroom_id = c.id AND ct.user_id = $1) ORDER BY archived, name`
 		args = append(args, sc.UserID)
 	}
 	rows, err := s.pool.Query(ctx, q, args...)

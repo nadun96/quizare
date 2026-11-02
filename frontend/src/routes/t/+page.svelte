@@ -30,8 +30,28 @@
 	}
 
 	$effect(() => {
-		if (ready()) list.load();
+		if (ready()) {
+			list.load();
+			loadInvitations();
+		}
 	});
+
+	// Invitations to co-teach (D-121), answered here.
+	type Invitation = { classroom_id: string; classroom: string; owner_name: string; invited_at: string };
+	let invitations = $state<Invitation[]>([]);
+	async function loadInvitations() {
+		invitations = (await api.get<{ invitations: Invitation[] }>('/api/teacher/invitations').catch(() => ({ invitations: [] }))).invitations;
+	}
+	async function answer(inv: Invitation, accept: boolean) {
+		try {
+			await api.post(`/api/teacher/invitations/${inv.classroom_id}/${accept ? 'accept' : 'decline'}`);
+			toast(accept ? `You now co-teach “${inv.classroom}”` : 'Invitation declined');
+			invitations = invitations.filter((x) => x.classroom_id !== inv.classroom_id);
+			if (accept) list.load();
+		} catch (err) {
+			toast(err instanceof ApiError ? err.message : 'That didn’t work', 'error');
+		}
+	}
 	function toggleArchived() {
 		showArchived = !showArchived;
 		list.refilter();
@@ -58,6 +78,14 @@
 		<span class="spacer"></span>
 		{#if !formOpen}<button class="btn btn-primary" onclick={openForm}><Icon name="plus" size={16} />New classroom</button>{/if}
 	</div>
+	{#each invitations as inv (inv.classroom_id)}
+		<div class="alert alert-info alert-soft" role="status">
+			<Icon name="users" size={18} />
+			<span class="grow"><strong>{inv.owner_name}</strong> invites you to co-teach <strong>{inv.classroom}</strong>.</span>
+			<button class="btn btn-sm btn-ghost" onclick={() => answer(inv, false)}>Decline</button>
+			<button class="btn btn-sm btn-primary" onclick={() => answer(inv, true)}>Accept</button>
+		</div>
+	{/each}
 	{#if formOpen}
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-5 row" onsubmit={create} in:flyIn>
 			<div style="flex:1;min-width:14rem"><label for="n">Classroom name</label><input class="input w-full" id="n" bind:this={nameEl} bind:value={name} placeholder="e.g. Grade 10 Science" required /></div>
@@ -89,6 +117,7 @@
 							<h3 class="m-0 truncate">{c.name}</h3>
 							{#if c.description}<p class="small muted m-0 mt-1 truncate">{c.description}</p>{/if}
 							<p class="small muted m-0 mt-1 whitespace-nowrap">Join code <strong class="tabular">{c.join_code}</strong>{#if c.archived}{' '}<span class="badge badge-soft badge-sm">Archived</span>{/if}</p>
+							{#if c.role === 'coteacher'}<p class="small m-0 mt-1 truncate"><span class="badge badge-soft badge-sm">Co-teacher</span> <span class="muted">with {c.owner_name}</span></p>{/if}
 						</div>
 						<span class="muted" aria-hidden="true"><Icon name="arrow-right" size={18} /></span>
 					</div>

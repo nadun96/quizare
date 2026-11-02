@@ -177,4 +177,16 @@ func TestInsight(t *testing.T) {
 	if val(r.Rows[0], "results") != 5 || r.Loaded == nil {
 		t.Fatalf("after invalidating = %+v", r)
 	}
+
+	// A co-teacher sees the classroom too, once the loader knows (D-121).
+	co := e.NewUser(auth.RoleTeacher)
+	big.teacher.Call("POST", "/api/teacher/classrooms/"+big.id+"/teachers", map[string]string{"email": co.User.Email}, 201, nil)
+	co.Call("POST", "/api/teacher/invitations/"+big.id+"/accept", nil, 204, nil)
+	if _, err := e.App.Insight.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r = query(co, insight.Query{Measures: []string{"results"}, Dimensions: []string{"classroom"}}, 200)
+	if len(r.Rows) != 1 || r.Rows[0].Dims["classroom"].Label != "Physics" || val(r.Rows[0], "results") != 5 {
+		t.Fatalf("co-teacher = %+v", r.Rows)
+	}
 }
