@@ -218,7 +218,7 @@ func (s *Service) ListQuizzes(ctx context.Context, teacherID, topicID, status st
 	if _, err := s.topics.TopicContext(ctx, teacherID, topicID); err != nil {
 		return nil, 0, err
 	}
-	where := ` FROM quiz.quizzes q WHERE q.topic_id=$1 AND `+mayTeach+` AND q.kind='quiz' AND ($3 = '' OR q.title ILIKE $3) AND ($4 = '' OR q.status = $4)`
+	where := ` FROM quiz.quizzes q WHERE q.topic_id=$1 AND ` + mayTeach + ` AND q.kind='quiz' AND ($3 = '' OR q.title ILIKE $3) AND ($4 = '' OR q.status = $4)`
 	args := []any{topicID, teacherID, p.Like(), status}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {

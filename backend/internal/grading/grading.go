@@ -1,0 +1,402 @@
+// Package grading is a classroom's gradebook and attendance (D-122):
+// each quiz and tutorial with the weight it carries in the final result,
+// every student's mark on each and their weighted total, and who came to
+// the classroom's quiz sessions and meetings. Like the dashboard, it reads
+// the other modules' tables and writes only its own weights.
+package grading
+
+import (
+	"context"
+	"math"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/nadun96/quizplatform/internal/platform/audit"
+	"github.com/nadun96/quizplatform/internal/platform/httpx"
+)
+
+type Service struct {
+	pool *pgxpool.Pool
+}
+
+func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool} }
+
+// Item is a quiz or tutorial that can count towards the final result.
+type Item struct {
+	Kind   string   `json:"kind"` // quiz or tutorial
+	ID     string   `json:"id"`
+	Title  string   `json:"title"`
+	Topic  string   `json:"topic"`
+	Weight *float64 `json:"weight"` // percent of the final result; nil: doesn't count
+	Taken  int      `json:"taken"`  // students with a mark
+	Avg    *float64 `json:"avg"`    // their average percentage
+}
+
+// Mark is one student's mark on one item.
+type Mark struct {
+	Pct    float64  `json:"pct"`
+	Points *float64 `json:"points,omitempty"` // pct × weight / 100, when the item counts
+}
+
+type Student struct {
+	UserID        string          `json:"user_id"`
+	Name          string          `json:"name"`
+	StudentNumber string          `json:"student_number,omitempty"`
+	Marks         map[string]Mark `json:"marks"`   // by item key, kind:id
+	Average       *float64        `json:"average"` // plain average of their percentages
+	Total         float64         `json:"total"`   // weighted points
+	Missing       int             `json:"missing"` // weighted items with no mark (count as 0)
+	Final         *float64        `json:"final"`   // total as a percentage of the weights, when any are set
+}
+
+type Gradebook struct {
+	Classroom   string    `json:"classroom"`
+	Items       []Item    `json:"items"`
+	Students    []Student `json:"students"`
+	WeightTotal float64   `json:"weight_total"` // the sum of the weights: what the total is out of
+}
+
+// Key names an item in a student's marks.
+func Key(kind, id string) string { return kind + ":" + id }
+
+func round(v float64, places int) float64 {
+	p := math.Pow(10, float64(places))
+	return math.Round(v*p) / p
+}
+
+func (s *Service) teaches(ctx context.Context, teacherID, classroomID string) (string, error) {
+	var name string
+	err := s.pool.QueryRow(ctx, `SELECT name FROM content.classrooms WHERE id = $1 AND content.teaches(id, $2)`, classroomID, teacherID).Scan(&name)
+	if err == pgx.ErrNoRows {
+		return "", httpx.ErrNotFound
+	}
+	return name, err
+}
+
+// Gradebook is the classroom's items, their weights, and every active
+// student's marks: a quiz's best valid attempt, a finished tutorial's
+// score. A weighted item a student has no mark on counts 0 for them.
+func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) (Gradebook, error) {
+	name, err := s.teaches(ctx, teacherID, classroomID)
+	if err != nil {
+		return Gradebook{}, err
+	}
+	g := Gradebook{Classroom: name, Items: []Item{}, Students: []Student{}}
+
+	// Quizzes run here (in the order first run), and tutorials with questions.
+	rows, err := s.pool.Query(ctx, `
+		SELECT 'quiz', q.id::text, q.title, coalesce(tp.name, ''), w.weight::float8, se.first
+		FROM quiz.quizzes q
+		JOIN (SELECT quiz_id, min(created_at) AS first FROM live.sessions WHERE classroom_id = $1 GROUP BY quiz_id) se ON se.quiz_id = q.id
+		LEFT JOIN content.topics tp ON tp.id = q.topic_id
+		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = 'quiz' AND w.item_id = q.id
+		UNION ALL
+		SELECT 'tutorial', t.id::text, t.title, tp.name, w.weight::float8, coalesce(t.published_at, t.created_at)
+		FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
+		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = 'tutorial' AND w.item_id = t.id
+		WHERE m.classroom_id = $1 AND t.status = 'published' AND EXISTS (SELECT 1 FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)
+		ORDER BY 6, 2`, classroomID)
+	if err != nil {
+		return g, err
+	}
+	for rows.Next() {
+		var it Item
+		var at time.Time
+		if err := rows.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Weight, &at); err != nil {
+			rows.Close()
+			return g, err
+		}
+		if it.Weight != nil {
+			g.WeightTotal += *it.Weight
+		}
+		g.Items = append(g.Items, it)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return g, err
+	}
+	g.WeightTotal = round(g.WeightTotal, 2)
+
+	// Each student's mark on each: the best valid quiz attempt, a finished tutorial's score out of its marks.
+	marks := map[string]map[string]float64{}
+	rows, err = s.pool.Query(ctx, `
+		SELECT r.user_id::text, 'quiz:' || se.quiz_id::text, max(r.pct)::float8
+		FROM eval.results r JOIN live.sessions se ON se.id = r.session_id
+		WHERE se.classroom_id = $1 AND NOT r.invalidated GROUP BY r.user_id, se.quiz_id
+		UNION ALL
+		SELECT ru.user_id::text, 'tutorial:' || t.id::text,
+			100 * coalesce((SELECT sum(a.score) FROM tutorial.answers a WHERE a.run_id = ru.id), 0)::float8
+				/ (SELECT sum(x.marks) FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)::float8
+		FROM tutorial.runs ru JOIN tutorial.tutorials t ON t.id = ru.tutorial_id
+		JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
+		WHERE m.classroom_id = $1 AND ru.finished_at IS NOT NULL
+			AND (SELECT sum(x.marks) FROM quiz.questions x WHERE x.quiz_id = t.quiz_id) > 0`, classroomID)
+	if err != nil {
+		return g, err
+	}
+	for rows.Next() {
+		var user, key string
+		var pct float64
+		if err := rows.Scan(&user, &key, &pct); err != nil {
+			rows.Close()
+			return g, err
+		}
+		if marks[user] == nil {
+			marks[user] = map[string]float64{}
+		}
+		marks[user][key] = round(math.Max(0, math.Min(100, pct)), 1)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return g, err
+	}
+
+	// The roster: active students.
+	rows, err = s.pool.Query(ctx, `SELECT e.user_id::text, u.name, coalesce(e.student_number, '')
+		FROM content.enrolments e JOIN auth.users u ON u.id = e.user_id
+		WHERE e.classroom_id = $1 AND e.status = 'active'`, classroomID)
+	if err != nil {
+		return g, err
+	}
+	for rows.Next() {
+		var st Student
+		if err := rows.Scan(&st.UserID, &st.Name, &st.StudentNumber); err != nil {
+			rows.Close()
+			return g, err
+		}
+		g.Students = append(g.Students, st)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return g, err
+	}
+
+	sums := map[string]float64{}
+	counts := map[string]int{}
+	for i := range g.Students {
+		st := &g.Students[i]
+		st.Marks = map[string]Mark{}
+		var sum float64
+		n := 0
+		for _, it := range g.Items {
+			k := Key(it.Kind, it.ID)
+			pct, ok := marks[st.UserID][k]
+			if !ok {
+				if it.Weight != nil {
+					st.Missing++
+				}
+				continue
+			}
+			m := Mark{Pct: pct}
+			if it.Weight != nil {
+				p := round(pct**it.Weight/100, 2)
+				m.Points = &p
+				st.Total += p
+			}
+			st.Marks[k] = m
+			sum += pct
+			n++
+			sums[k] += pct
+			counts[k]++
+		}
+		st.Total = round(st.Total, 2)
+		if n > 0 {
+			a := round(sum/float64(n), 1)
+			st.Average = &a
+		}
+		if g.WeightTotal > 0 {
+			f := round(st.Total/g.WeightTotal*100, 1)
+			st.Final = &f
+		}
+	}
+	for i := range g.Items {
+		k := Key(g.Items[i].Kind, g.Items[i].ID)
+		g.Items[i].Taken = counts[k]
+		if counts[k] > 0 {
+			a := round(sums[k]/float64(counts[k]), 1)
+			g.Items[i].Avg = &a
+		}
+	}
+	sort.SliceStable(g.Students, func(i, j int) bool { return strings.ToLower(g.Students[i].Name) < strings.ToLower(g.Students[j].Name) })
+	return g, nil
+}
+
+// WeightInput sets one item's weight; 0 (or none) means it doesn't count.
+type WeightInput struct {
+	Kind   string  `json:"kind"`
+	ID     string  `json:"id"`
+	Weight float64 `json:"weight"`
+}
+
+// SetWeights replaces the classroom's weights. Any teacher of the classroom may.
+func (s *Service) SetWeights(ctx context.Context, teacherID, classroomID string, in []WeightInput) (Gradebook, error) {
+	if _, err := s.teaches(ctx, teacherID, classroomID); err != nil {
+		return Gradebook{}, err
+	}
+	g, err := s.Gradebook(ctx, teacherID, classroomID)
+	if err != nil {
+		return g, err
+	}
+	known := map[string]bool{}
+	for _, it := range g.Items {
+		known[Key(it.Kind, it.ID)] = true
+	}
+	bad := map[string]string{}
+	var total float64
+	for _, w := range in {
+		switch {
+		case !known[Key(w.Kind, w.ID)]:
+			bad["weights"] = "a quiz or tutorial that isn't in this classroom"
+		case math.IsNaN(w.Weight) || w.Weight < 0 || w.Weight > 100:
+			bad["weights"] = "each weight is between 0 and 100"
+		}
+		total += w.Weight
+	}
+	if total > 100.0001 {
+		bad["weights"] = "the weights add up to more than 100%"
+	}
+	if len(bad) > 0 {
+		return g, httpx.Invalid(bad)
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM grading.weights WHERE classroom_id = $1`, classroomID); err != nil {
+			return err
+		}
+		for _, w := range in {
+			if w.Weight == 0 {
+				continue
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO grading.weights (classroom_id, kind, item_id, weight, updated_by) VALUES ($1, $2, $3, $4, $5)`,
+				classroomID, w.Kind, w.ID, round(w.Weight, 2), teacherID); err != nil {
+				return err
+			}
+		}
+		return audit.Log(ctx, tx, teacherID, "weights_set", "classroom", classroomID, map[string]any{"weights": in})
+	})
+	if err != nil {
+		return g, err
+	}
+	return s.Gradebook(ctx, teacherID, classroomID)
+}
+
+// ---------- attendance ----------
+
+// Event is a quiz session or a meeting of the classroom.
+type Event struct {
+	Kind  string    `json:"kind"` // quiz or meeting
+	ID    string    `json:"id"`
+	Title string    `json:"title"`
+	At    time.Time `json:"at"`
+}
+
+type Attendee struct {
+	UserID        string             `json:"user_id"`
+	Name          string             `json:"name"`
+	StudentNumber string             `json:"student_number,omitempty"`
+	Attended      []string           `json:"attended"` // event ids
+	Minutes       map[string]float64 `json:"minutes"`  // meetings: minutes in
+}
+
+type Attendance struct {
+	Classroom string     `json:"classroom"`
+	From      string     `json:"from"`
+	To        string     `json:"to"`
+	Events    []Event    `json:"events"`
+	Students  []Attendee `json:"students"`
+}
+
+// Attendance lists the classroom's quiz sessions and meetings between two
+// dates (inclusive), and which each active student came to: an attempt in
+// a quiz session, having joined a meeting. Tutoring sessions come from the
+// tutoring service; the page adds them.
+func (s *Service) Attendance(ctx context.Context, teacherID, classroomID string, from, to time.Time) (Attendance, error) {
+	name, err := s.teaches(ctx, teacherID, classroomID)
+	if err != nil {
+		return Attendance{}, err
+	}
+	out := Attendance{Classroom: name, From: from.Format("2006-01-02"), To: to.Format("2006-01-02"), Events: []Event{}, Students: []Attendee{}}
+	end := to.AddDate(0, 0, 1)
+	rows, err := s.pool.Query(ctx, `
+		SELECT 'quiz', s.id::text, s.title, coalesce(s.started_at, s.created_at) FROM live.sessions s
+		WHERE s.classroom_id = $1 AND coalesce(s.started_at, s.created_at) >= $2 AND coalesce(s.started_at, s.created_at) < $3
+		UNION ALL
+		SELECT 'meeting', m.id::text, m.title, m.created_at FROM meet.meetings m
+		WHERE m.classroom_id = $1 AND m.created_at >= $2 AND m.created_at < $3
+		ORDER BY 4, 2`, classroomID, from, end)
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.Kind, &e.ID, &e.Title, &e.At); err != nil {
+			rows.Close()
+			return out, err
+		}
+		out.Events = append(out.Events, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+
+	came := map[string][]string{}
+	mins := map[string]map[string]float64{}
+	rows, err = s.pool.Query(ctx, `
+		SELECT a.user_id::text, s.id::text, NULL::float8 FROM live.attempts a JOIN live.sessions s ON s.id = a.session_id
+		WHERE s.classroom_id = $1 AND coalesce(s.started_at, s.created_at) >= $2 AND coalesce(s.started_at, s.created_at) < $3
+			AND a.state <> 'waiting'
+		UNION ALL
+		SELECT a.user_id::text, m.id::text, extract(epoch FROM a.last_seen - a.first_joined)::float8 / 60
+		FROM meet.attendance a JOIN meet.meetings m ON m.id = a.meeting_id
+		WHERE m.classroom_id = $1 AND m.created_at >= $2 AND m.created_at < $3`, classroomID, from, end)
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var user, event string
+		var m *float64
+		if err := rows.Scan(&user, &event, &m); err != nil {
+			rows.Close()
+			return out, err
+		}
+		came[user] = append(came[user], event)
+		if m != nil {
+			if mins[user] == nil {
+				mins[user] = map[string]float64{}
+			}
+			mins[user][event] = round(*m, 1)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+
+	rows, err = s.pool.Query(ctx, `SELECT e.user_id::text, u.name, coalesce(e.student_number, '')
+		FROM content.enrolments e JOIN auth.users u ON u.id = e.user_id
+		WHERE e.classroom_id = $1 AND e.status = 'active' ORDER BY lower(u.name), u.id`, classroomID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var a Attendee
+		if err := rows.Scan(&a.UserID, &a.Name, &a.StudentNumber); err != nil {
+			return out, err
+		}
+		a.Attended = came[a.UserID]
+		if a.Attended == nil {
+			a.Attended = []string{}
+		}
+		a.Minutes = mins[a.UserID]
+		if a.Minutes == nil {
+			a.Minutes = map[string]float64{}
+		}
+		out.Students = append(out.Students, a)
+	}
+	return out, rows.Err()
+}

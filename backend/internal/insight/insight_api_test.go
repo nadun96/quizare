@@ -157,7 +157,7 @@ func TestInsight(t *testing.T) {
 	}
 
 	// What can't be asked.
-	query(big.teacher, insight.Query{Measures: []string{"results", "pct_correct"}}, 422)               // two facts
+	query(big.teacher, insight.Query{Measures: []string{"results", "pct_correct"}}, 422)                 // two facts
 	query(big.teacher, insight.Query{Measures: []string{"results"}, Dimensions: []string{"qtype"}}, 422) // not with activity
 	query(big.teacher, insight.Query{Measures: []string{"drop table"}}, 422)
 	query(big.teacher, insight.Query{Measures: []string{"results"}, Dimensions: []string{"date", "topic", "item", "kind"}}, 422)
