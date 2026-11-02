@@ -46,6 +46,9 @@ export function byCategory(qs: Question[]): { category: string; questions: Quest
 	return [...m.entries()].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))).map(([category, questions]) => ({ category, questions }));
 }
 
+/** A question's text on one line, for a list row: no markup, blanks as ___. */
+export const plain = (s: string) => s.replace(/[*_`$#>]+/g, '').replace(/\[\[\d+\]\]/g, '___').replace(/\s+/g, ' ').trim();
+
 /** "Algebra 100 · Geometry 100": an import's categories. */
 export function categoryLine(c: Record<string, number>): string {
 	return Object.entries(c).sort(([a], [b]) => a.localeCompare(b)).map(([k, n]) => `${k || 'No category'} ${n}`).join(' · ');

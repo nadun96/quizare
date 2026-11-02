@@ -35,6 +35,18 @@
 	const total = $derived(fixedCount + rules.reduce((n, r) => n + drawn(r), 0));
 	const unused = (source: PoolRule['source']) => listOf(source).filter((c) => !rules.some((r) => key(r) === key({ source, category: c.category })));
 	const SOURCE = { quiz: 'This quiz', bank: 'Bank', class: 'Class pool' } as const;
+	// Where questions come from, one line each; a click shows its categories.
+	const SOURCES = [
+		{ key: 'quiz', name: 'This quiz', icon: 'list', empty: 'No questions in this quiz yet.' },
+		{ key: 'class', name: 'Classroom’s question pool', icon: 'book', empty: 'Empty. Fill it from the classroom’s Question pool tab.' },
+		{ key: 'bank', name: 'My question bank', icon: 'user', empty: 'Empty. Add questions to it to draw them into any quiz.' }
+	] as const;
+	let openSrc = $state<Set<string>>(new Set());
+	function toggleSrc(k: string) {
+		const s = new Set(openSrc);
+		if (!s.delete(k)) s.add(k);
+		openSrc = s;
+	}
 
 	function add(source: PoolRule['source'], c: PoolCount) {
 		rules = [...rules, { source, category: c.category, count: Math.min(c.count, source === 'quiz' ? Math.max(1, Math.floor(c.count / 2)) : source === 'class' ? 10 : 5) }];
@@ -116,30 +128,48 @@
 			</div>
 		{/if}
 
-		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-			<h3 class="b-title"><Icon name="plus" size={16} />Add a pool</h3>
-			<p class="small muted m-0 mb-1">From this quiz's categories</p>
-			<div class="flex flex-wrap gap-2">
-				{#each unused('quiz') as c (c.category)}<button type="button" class="btn btn-sm" onclick={() => add('quiz', c)}><Icon name="plus" size={14} />{label(c.category)} <span class="muted">({c.count})</span></button>
-				{:else}<span class="small muted">{info.quiz.length ? 'Every category has a pool.' : 'No questions yet.'}</span>{/each}
+		<div class="card card-border bg-base-100 shadow-sm">
+			<div class="px-4 pt-4 sm:px-5">
+				<h3 class="b-title"><Icon name="plus" size={16} />Add a pool</h3>
+				<p class="small muted m-0">Open where the questions come from, then add a category.</p>
 			</div>
-			<p class="small muted m-0 mt-3 mb-1">From the classroom's question pool</p>
-			<div class="flex flex-wrap items-center gap-2">
-				{#each unused('class') as c (c.category)}<button type="button" class="btn btn-sm" onclick={() => add('class', c)}><Icon name="plus" size={14} />{label(c.category)} <span class="muted">({c.count})</span></button>
-				{:else}<span class="small muted">{info.class.length ? 'Every class pool category has a pool.' : 'The classroom’s question pool is empty. Fill it from the classroom’s Question pool tab.'}</span>{/each}
-			</div>
-			{#if info.class.length > 1}
-				<div class="flex flex-wrap items-center gap-2 mt-2">
-					<span class="small">Or take</span>
-					<label class="input input-sm w-24"><input type="number" min="1" bind:value={each} aria-label="Questions from each category" /></label>
-					<button type="button" class="btn btn-sm" onclick={addAllClass}>from every category</button>
-					<span class="small muted">({words(info.class.reduce((n, c) => n + Math.min(each, c.count), 0), 'question')} in all)</span>
-				</div>
-			{/if}
-			<p class="small muted m-0 mt-3 mb-1">From your <a href="/t/bank">question bank</a></p>
-			<div class="flex flex-wrap gap-2">
-				{#each unused('bank') as c (c.category)}<button type="button" class="btn btn-sm" onclick={() => add('bank', c)}><Icon name="plus" size={14} />{label(c.category)} <span class="muted">({c.count})</span></button>
-				{:else}<span class="small muted">{info.bank.length ? 'Every bank category has a pool.' : 'Your bank is empty. Add questions to it to draw them into any quiz.'}</span>{/each}
+			<div class="srcs">
+				{#each SOURCES as s (s.key)}
+					{@const cats = listOf(s.key)}
+					{@const free = unused(s.key)}
+					{@const isOpen = openSrc.has(s.key)}
+					<section class="src" class:on={isOpen}>
+						<button type="button" class="src-head" aria-expanded={isOpen} onclick={() => toggleSrc(s.key)}>
+							<Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />
+							<Icon name={s.icon} size={16} />
+							<span class="font-semibold">{s.name}</span>
+							<span class="small muted grow">{cats.length ? `${words(cats.reduce((n, c) => n + c.count, 0), 'question')} in ${words(cats.length, 'category', 'categories')}` : 'empty'}</span>
+							{#if free.length}<span class="badge badge-soft badge-primary badge-sm">{free.length} to add</span>{/if}
+						</button>
+						{#if isOpen}
+							<ul class="cats">
+								{#each free as c (c.category)}
+									<li>
+										<span class="truncate">{label(c.category)}</span>
+										<span class="small muted tabular grow">{words(c.count, 'question')}</span>
+										<button type="button" class="btn btn-xs" onclick={() => add(s.key, c)}><Icon name="plus" size={13} />Add</button>
+									</li>
+								{:else}
+									<li class="small muted">{cats.length ? 'Every category here already has a pool above.' : s.empty}</li>
+								{/each}
+							</ul>
+							{#if s.key === 'class' && info.class.length > 1}
+								<div class="flex flex-wrap items-center gap-2 px-4 pb-3 sm:pl-12">
+									<span class="small">Or take</span>
+									<label class="input input-sm w-24"><input type="number" min="1" bind:value={each} aria-label="Questions from each category" /></label>
+									<button type="button" class="btn btn-sm" onclick={addAllClass}>from every category</button>
+									<span class="small muted">({words(info.class.reduce((n, c) => n + Math.min(each, c.count), 0), 'question')} in all)</span>
+								</div>
+							{/if}
+							{#if s.key === 'bank'}<p class="small m-0 px-4 pb-3 sm:pl-12"><a href="/t/bank">Manage your question pools</a></p>{/if}
+						{/if}
+					</section>
+				{/each}
 			</div>
 		</div>
 
@@ -155,5 +185,13 @@
 	.b-title { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.5rem; font-size: 1rem; }
 	.b-title :global(svg) { color: var(--color-primary); }
 	.prow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; padding: 0.6rem 0; border-top: 1px solid var(--color-base-300); }
+	.srcs { margin-top: 0.75rem; }
+	.src { border-top: 1px solid var(--color-base-300); }
+	.src.on { background: color-mix(in oklab, var(--color-base-200) 45%, transparent); }
+	.src-head { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.7rem 1rem; text-align: left; flex-wrap: wrap; }
+	.src-head:hover { background: var(--color-base-200); }
+	.cats { list-style: none; margin: 0; padding: 0 1rem 0.5rem; }
+	.cats li { display: flex; align-items: center; gap: 0.75rem; padding: 0.35rem 0 0.35rem 2rem; border-top: 1px dashed var(--color-base-300); min-width: 0; }
+	@media (max-width: 640px) { .cats li { padding-left: 0; } }
 	.pname { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-width: 0; }
 </style>

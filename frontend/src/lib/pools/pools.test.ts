@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byCategory, categoryLine, fromFileName, tidy } from './pools';
+import { byCategory, categoryLine, fromFileName, plain, tidy } from './pools';
 import type { Question } from '../types';
 
 const rooms = [
@@ -25,6 +25,11 @@ describe('question pools (D-123)', () => {
 	it('tidies categories as the server does', () => {
 		expect(tidy('  Number__theory  ')).toBe('Number theory');
 		expect(tidy('x'.repeat(80))).toHaveLength(60);
+	});
+
+	it('puts a question on one plain line for a list row', () => {
+		expect(plain('**Water** boils at [[1]] °C\n\nat sea level')).toBe('Water boils at ___ °C at sea level');
+		expect(plain('Area: $\\pi r^2$')).toBe('Area: \\pi r^2');
 	});
 
 	it('groups questions by category, "no category" last', () => {
