@@ -24,16 +24,17 @@ var TemplateColumns = []string{
 	"negative_marks", "partial_credit", "word_limit", "case_sensitive", "tolerance", "category",
 }
 
-// Template is the downloadable CSV template, with one example per type.
-const Template = `question_code,type,question_text,options,correct_answer,marks,time_limit_sec,evaluation,rubric,feedback_correct,feedback_incorrect
-Q001,SINGLE,What is the capital of France?,Paris|Rome|Madrid,Paris,1,30,KEY,,Correct!,Paris is the capital of France.
-Q002,MULTI,Select the prime numbers,2|3|4|9,2|3,2,45,KEY,,,
-Q003,MATCH,Match the country to its capital,France|Japan||Paris|Tokyo,France=Paris|Japan=Tokyo,2,60,KEY,,,
-Q004,BLANK_TEXT,Water boils at [[1]] degrees Celsius,,1=100,1,30,KEY,,,
-Q005,BLANK_OPT,The [[1]] is the largest planet,Jupiter|Mars|Venus,1=Jupiter,1,30,KEY,,,
-Q006,DRAG,Put these in order from smallest to largest,Atom|Cell|Organ,Atom|Cell|Organ,1,60,KEY,,,
-Q007,DRAG,Sort each animal into its class,Frog|Eagle||Amphibian|Bird,Frog=Amphibian|Eagle=Bird,2,60,KEY,,,
-Q008,ESSAY,Explain photosynthesis in 100 words,,,5,300,LLM,Award marks for light energy; chlorophyll; glucose and oxygen,,
+// Template is the downloadable CSV template, with one example per type and a
+// category for each, which sorts questions into pools (D-66, D-123).
+const Template = `question_code,type,question_text,options,correct_answer,marks,time_limit_sec,evaluation,rubric,feedback_correct,feedback_incorrect,category
+Q001,SINGLE,What is the capital of France?,Paris|Rome|Madrid,Paris,1,30,KEY,,Correct!,Paris is the capital of France.,Geography
+Q002,MULTI,Select the prime numbers,2|3|4|9,2|3,2,45,KEY,,,,Maths
+Q003,MATCH,Match the country to its capital,France|Japan||Paris|Tokyo,France=Paris|Japan=Tokyo,2,60,KEY,,,,Geography
+Q004,BLANK_TEXT,Water boils at [[1]] degrees Celsius,,1=100,1,30,KEY,,,,Science
+Q005,BLANK_OPT,The [[1]] is the largest planet,Jupiter|Mars|Venus,1=Jupiter,1,30,KEY,,,,Science
+Q006,DRAG,Put these in order from smallest to largest,Atom|Cell|Organ,Atom|Cell|Organ,1,60,KEY,,,,Science
+Q007,DRAG,Sort each animal into its class,Frog|Eagle||Amphibian|Bird,Frog=Amphibian|Eagle=Bird,2,60,KEY,,,,Science
+Q008,ESSAY,Explain photosynthesis in 100 words,,,5,300,LLM,Award marks for light energy; chlorophyll; glucose and oxygen,,,Science
 `
 
 // RowError describes one rejected CSV row.

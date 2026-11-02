@@ -37,6 +37,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("PUT", "/questions/{id}/resources", httpx.Handler(s.hSetResource))
 	r.Method("DELETE", "/resources/{id}", httpx.Handler(s.hDeleteResource))
 
+	s.poolRoutes(r) // classroom pools, bulk changes and categories (D-123)
 	// Question pools and the question bank (D-66).
 	r.Method("GET", "/bank", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		b, err := s.Bank(r.Context(), uid(r))
@@ -309,7 +310,8 @@ func (s *Service) hImport(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rep, err := s.ImportQuestions(r.Context(), uid(r), id(r), data)
+	// ?preview=1 checks without saving; ?category= fills rows without one; ?rename=1 renames codes in use (D-123).
+	rep, err := s.ImportWith(r.Context(), uid(r), id(r), data, importOptions(r))
 	if err != nil {
 		return err
 	}

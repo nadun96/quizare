@@ -9,7 +9,7 @@ export const si: Record<Key, string> = {
 	'nav.groupTeaching': 'ඉගැන්වීම',
 	'nav.groupActivities': 'ක්‍රියාකාරකම්',
 	'nav.classrooms': 'පන්ති කාමර',
-	'nav.bank': 'ප්‍රශ්න බැංකුව',
+	'nav.bank': 'ප්‍රශ්න සංචිත',
 	'nav.explore': 'විශ්ලේෂණය',
 	'nav.polls': 'මත විමසුම්',
 	'nav.meetings': 'රැස්වීම්',

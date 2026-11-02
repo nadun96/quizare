@@ -1,6 +1,7 @@
 <script lang="ts">
 	// A quiz's question pools (D-66): how many questions each student draws
-	// from each category of the quiz, or of the teacher's question bank.
+	// from each category of the quiz, of the teacher's question bank, or of
+	// the classroom's question pool (D-123).
 	// Quiz questions in a category without a rule are always asked.
 	import { api, ApiError } from './api';
 	import type { PoolCount, PoolInfo, PoolRule } from './types';
@@ -25,16 +26,23 @@
 
 	const label = (c: string) => c || 'No category';
 	const key = (r: { source: string; category: string }) => r.source + '|' + r.category.toLowerCase();
-	const sizeOf = (r: PoolRule) => (r.source === 'bank' ? info?.bank : info?.quiz)?.find((c) => c.category.toLowerCase() === r.category.toLowerCase())?.count ?? 0;
+	const listOf = (source: PoolRule['source']) => (source === 'bank' ? info?.bank : source === 'class' ? info?.class : info?.quiz) ?? [];
+	const sizeOf = (r: PoolRule) => listOf(r.source).find((c) => c.category.toLowerCase() === r.category.toLowerCase())?.count ?? 0;
 	const drawn = (r: PoolRule) => (r.count > 0 ? Math.min(r.count, sizeOf(r)) : sizeOf(r));
 	// Quiz categories without a rule: always asked.
 	const fixed = $derived((info?.quiz ?? []).filter((c) => !rules.some((r) => key(r) === key({ source: 'quiz', category: c.category }))));
 	const fixedCount = $derived(fixed.reduce((n, c) => n + c.count, 0));
 	const total = $derived(fixedCount + rules.reduce((n, r) => n + drawn(r), 0));
-	const unused = (source: 'quiz' | 'bank') => ((source === 'bank' ? info?.bank : info?.quiz) ?? []).filter((c) => !rules.some((r) => key(r) === key({ source, category: c.category })));
+	const unused = (source: PoolRule['source']) => listOf(source).filter((c) => !rules.some((r) => key(r) === key({ source, category: c.category })));
+	const SOURCE = { quiz: 'This quiz', bank: 'Bank', class: 'Class pool' } as const;
 
-	function add(source: 'quiz' | 'bank', c: PoolCount) {
-		rules = [...rules, { source, category: c.category, count: Math.min(c.count, source === 'bank' ? 5 : Math.max(1, Math.floor(c.count / 2))) }];
+	function add(source: PoolRule['source'], c: PoolCount) {
+		rules = [...rules, { source, category: c.category, count: Math.min(c.count, source === 'quiz' ? Math.max(1, Math.floor(c.count / 2)) : source === 'class' ? 10 : 5) }];
+	}
+	// Every category of the class pool at once, so many from each.
+	let each = $state(10);
+	function addAllClass() {
+		rules = [...rules.filter((r) => r.source !== 'class'), ...(info?.class ?? []).map((c) => ({ source: 'class' as const, category: c.category, count: Math.min(each, c.count) }))];
 	}
 	function remove(i: number) {
 		rules = rules.filter((_, j) => j !== i);
@@ -77,7 +85,7 @@
 				{#each rules as r, i (key(r))}
 					<div class="prow">
 						<span class="pname">
-							<span class="badge badge-soft badge-sm">{r.source === 'bank' ? 'Bank' : 'This quiz'}</span>
+							<span class="badge badge-soft badge-sm">{SOURCE[r.source]}</span>
 							<span class="font-semibold">{label(r.category)}</span>
 							<span class="small muted">{words(sizeOf(r), 'question')}</span>
 						</span>
@@ -115,6 +123,19 @@
 				{#each unused('quiz') as c (c.category)}<button type="button" class="btn btn-sm" onclick={() => add('quiz', c)}><Icon name="plus" size={14} />{label(c.category)} <span class="muted">({c.count})</span></button>
 				{:else}<span class="small muted">{info.quiz.length ? 'Every category has a pool.' : 'No questions yet.'}</span>{/each}
 			</div>
+			<p class="small muted m-0 mt-3 mb-1">From the classroom's question pool</p>
+			<div class="flex flex-wrap items-center gap-2">
+				{#each unused('class') as c (c.category)}<button type="button" class="btn btn-sm" onclick={() => add('class', c)}><Icon name="plus" size={14} />{label(c.category)} <span class="muted">({c.count})</span></button>
+				{:else}<span class="small muted">{info.class.length ? 'Every class pool category has a pool.' : 'The classroom’s question pool is empty. Fill it from the classroom’s Question pool tab.'}</span>{/each}
+			</div>
+			{#if info.class.length > 1}
+				<div class="flex flex-wrap items-center gap-2 mt-2">
+					<span class="small">Or take</span>
+					<label class="input input-sm w-24"><input type="number" min="1" bind:value={each} aria-label="Questions from each category" /></label>
+					<button type="button" class="btn btn-sm" onclick={addAllClass}>from every category</button>
+					<span class="small muted">({words(info.class.reduce((n, c) => n + Math.min(each, c.count), 0), 'question')} in all)</span>
+				</div>
+			{/if}
 			<p class="small muted m-0 mt-3 mb-1">From your <a href="/t/bank">question bank</a></p>
 			<div class="flex flex-wrap gap-2">
 				{#each unused('bank') as c (c.category)}<button type="button" class="btn btn-sm" onclick={() => add('bank', c)}><Icon name="plus" size={14} />{label(c.category)} <span class="muted">({c.count})</span></button>
