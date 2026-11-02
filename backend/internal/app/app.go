@@ -30,6 +30,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/eval"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/inbox"
+	"github.com/nadun96/quizplatform/internal/insight"
 	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/llm"
 	"github.com/nadun96/quizplatform/internal/mail"
@@ -70,6 +71,7 @@ type App struct {
 	Eval      *eval.Service
 	LLM       *llm.Service
 	Analytics *analytics.Service
+	Insight   *insight.Service
 	Admin     *admin.Service
 	Poll      *poll.Service
 	Storage   *storage.Service
@@ -193,6 +195,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, analyticsWorker)
 	rollupWorker := &analytics.RollupWorker{}
 	river.AddWorker(workers, rollupWorker)
+	insightWorker := &insight.LoadWorker{}
+	river.AddWorker(workers, insightWorker)
 
 	var w *river.Workers
 	if opt.RunJobs {
@@ -211,6 +215,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 		periodic = append(periodic, directory.Periodic())       // sign out accounts the directory disabled (D-64)
 		periodic = append(periodic, drive.SyncPeriodic())       // classroom Drive files follow enrolments (D-71)
 		periodic = append(periodic, analytics.RollupPeriodic()) // month-by-month trends (D-119)
+		periodic = append(periodic, insight.Periodic())         // the analysis warehouse (D-120)
 	}
 	rc, err := jobs.NewClient(pool, w, log, periodic...)
 	if err != nil {
@@ -248,6 +253,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Analytics = analytics.NewService(pool, a.Live, a.Eval, a.Auth, rc)
 	analyticsWorker.Service = a.Analytics
 	rollupWorker.Service = a.Analytics
+	a.Insight = insight.NewService(pool)
+	insightWorker.Service = a.Insight
 	a.Admin = admin.NewService(pool, a.Auth)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Storage = storage.NewService(pool, a.Auth, log, cfg.BackupDir, cfg.NightlyBackupDir, opt.KEK)
@@ -401,6 +408,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Progress.StudentRoutes(s)
 			a.Dashboard.Routes(s)
 			a.Analytics.MyTrendRoutes(s)
+			a.Insight.Routes(s) // multi-dimensional analysis, teachers and admins (D-120)
 			a.Inbox.Routes(s)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 			a.Meet.UserRoutes(s)

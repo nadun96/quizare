@@ -27,6 +27,7 @@
 	import ClassesPanel from '$lib/admin/ClassesPanel.svelte';
 	import EmailPanel from '$lib/admin/EmailPanel.svelte';
 	import LocalAIPanel from '$lib/admin/LocalAIPanel.svelte';
+	import Explore from '$lib/insight/Explore.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
 	import { grouped, toolFrom, TOOLS } from '$lib/admin/tools';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -308,6 +309,8 @@
 				<ClassesPanel />
 			{:else if tab === 'email'}
 				<EmailPanel />
+			{:else if tab === 'explore'}
+				<Explore />
 			{:else if tab === 'ai'}
 				<LocalAIPanel />
 			{:else if tab === 'signin'}

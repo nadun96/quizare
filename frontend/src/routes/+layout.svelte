@@ -60,7 +60,8 @@
 					inboxLink,
 					{ href: '#teaching', label: t('nav.groupTeaching'), icon: 'users', children: [
 						{ href: '/t', label: t('nav.classrooms'), icon: 'users' },
-						{ href: '/t/bank', label: t('nav.bank'), icon: 'book' }
+						{ href: '/t/bank', label: t('nav.bank'), icon: 'book' },
+						{ href: '/t/explore', label: t('nav.explore'), icon: 'table' }
 					] },
 					{ href: '#activities', label: t('nav.groupActivities'), icon: 'chart', children: [
 						{ href: '/t/polls', label: t('nav.polls'), icon: 'chart' },

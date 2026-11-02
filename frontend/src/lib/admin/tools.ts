@@ -22,6 +22,7 @@ export const TOOLS: Record<ConsoleTab, Tool> = {
 	managers: { key: 'managers', label: 'Managers', icon: 'shield', blurb: 'Teachers given parts of the console', group: 'people' },
 	live: { key: 'live', label: 'Live activity', icon: 'activity', blurb: 'Quizzes, polls and sessions running now', group: 'activity' },
 	recordings: { key: 'recordings', label: 'Tutoring', icon: 'monitor', blurb: 'Bandwidth, monitoring and recordings', group: 'activity' },
+	explore: { key: 'explore', label: 'Explore', icon: 'table', blurb: 'Any measure by date, classroom, teacher, topic or question type', group: 'activity' },
 	usage: { key: 'usage', label: 'Usage', icon: 'chart', blurb: 'Counts of people, quizzes and attempts', group: 'activity' },
 	email: { key: 'email', label: 'Email', icon: 'mail', blurb: 'Templates, sending, the mail server and queue', group: 'messages' },
 	settings: { key: 'settings', label: 'Platform settings', icon: 'settings', blurb: 'Defaults for quizzes, approvals and meetings', group: 'settings' },

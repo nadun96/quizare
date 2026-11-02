@@ -27,6 +27,8 @@ servers:
 security:
   - session: []
 tags:
+  - name: insight
+    description: Multi-dimensional analysis over the warehouse (D-120)
   - name: email
     description: Email to groups of accounts (D-102)
   - name: inbox
@@ -2412,6 +2414,21 @@ paths:
       summary: The dashboard's charts over the last 30, 90 or 365 days with the period before to compare - a student's scores against each quiz's class average, weeks of activity and classrooms; a teacher's sessions, active students and classroom participation (D-105)
       parameters: [{ name: days, in: query, schema: { type: integer, enum: [30, 90, 365], default: 90 } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Insights' } } } } }
+  /api/insight/catalog:
+    get:
+      operationId: getInsightCatalog
+      tags: [insight]
+      summary: What the asker may analyse - measures, dimensions, date grains and the classrooms to filter by (D-120)
+      description: Teachers get their own classrooms with students; admins get every classroom, no student dimension, and groups under min_group students hidden. Students are refused.
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/InsightCatalog' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/insight/query:
+    post:
+      operationId: postInsightQuery
+      tags: [insight]
+      summary: Measures by up to three dimensions, filtered, over a date range, with optional subtotals and a grand total (D-120)
+      description: Read from the analysis warehouse (schema olap), loaded every 5 minutes; loaded_at says when. Question measures (answers, pct_correct, fully_right, answer_students) can't be mixed with activity measures in one query.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/InsightQuery' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/InsightResult' } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/my/trends:
     get:
       operationId: getMyTrends
@@ -3208,6 +3225,45 @@ components:
           properties:
             source: { type: string, enum: [console, config, log] }
             config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
+    InsightQuery:
+      type: object
+      required: [measures]
+      properties:
+        measures: { type: array, items: { type: string, enum: [results, avg_score, pass_rate, tutorials, students, quiz_minutes, tutorial_minutes, answers, pct_correct, fully_right, answer_students] } }
+        dimensions: { type: array, maxItems: 3, items: { type: string, enum: [date, classroom, teacher, module, topic, item, kind, qtype, student] } }
+        grain: { type: string, enum: [day, week, month, quarter, year], default: month }
+        from: { type: string, format: date, description: inclusive; a year ago by default }
+        to: { type: string, format: date, description: inclusive; today by default }
+        filters: { type: object, additionalProperties: { type: array, items: { type: string } }, description: 'dimension key to the ids to keep, e.g. {"classroom": ["…"]}' }
+        totals: { type: boolean, description: add subtotals for the first dimension and a grand total }
+    InsightResult:
+      type: object
+      properties:
+        columns: { type: array, items: { type: object, properties: { key: { type: string }, label: { type: string }, kind: { type: string, enum: [dimension, measure] }, unit: { type: string } } } }
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              dims: { type: object, nullable: true, additionalProperties: { type: object, properties: { id: { type: string }, label: { type: string } } } }
+              values: { type: object, additionalProperties: { type: number, nullable: true } }
+              level: { type: integer, description: 0 a row, 1 a subtotal of the first dimension, 2 the grand total }
+              hidden: { type: boolean, description: admins only - fewer than min_group students, so the values are left out }
+        truncated: { type: boolean }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        grain: { type: string }
+        loaded_at: { type: string, format: date-time, nullable: true }
+        min_group: { type: integer }
+    InsightCatalog:
+      type: object
+      properties:
+        measures: { type: array, items: { type: object, properties: { key: { type: string }, label: { type: string }, unit: { type: string }, fact: { type: string, enum: [activity, answers] }, help: { type: string } } } }
+        dimensions: { type: array, items: { type: object, properties: { key: { type: string }, label: { type: string }, facts: { type: array, items: { type: string } } } } }
+        grains: { type: array, items: { type: string } }
+        classrooms: { type: array, items: { type: object, properties: { id: { type: string }, label: { type: string } } } }
+        staff: { type: boolean }
+        min_group: { type: integer }
     TrendMonth:
       type: object
       properties:

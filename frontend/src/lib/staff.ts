@@ -63,7 +63,7 @@ export function roleLabel(u: Person): string {
 	return u.manager && u.role !== 'manager' ? r + ' · manager' : r;
 }
 
-export type ConsoleTab = 'users' | 'classes' | 'email' | 'ai' | 'usage' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
+export type ConsoleTab = 'users' | 'classes' | 'email' | 'ai' | 'usage' | 'explore' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
 
 /** The admin console's tabs this person can open, in order. */
 export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
@@ -74,6 +74,8 @@ export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
 	// The school's AI server (D-115): admins only, like other server addresses.
 	if (isAdmin(u)) tabs.push('ai');
 	if (can(u, 'usage')) tabs.push('usage');
+	// Multi-dimensional analysis (D-120): admins, as groups only.
+	if (isAdmin(u)) tabs.push('explore');
 	if (can(u, 'live_activity')) tabs.push('live');
 	if (can(u, 'approval_policy') || can(u, 'settings')) tabs.push('settings');
 	// School sign-in decides who becomes a teacher: admins only (D-64).

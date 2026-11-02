@@ -10,6 +10,7 @@ export const ta: Record<Key, string> = {
 	'nav.groupActivities': 'செயல்பாடுகள்',
 	'nav.classrooms': 'வகுப்பறைகள்',
 	'nav.bank': 'வினா வங்கி',
+	'nav.explore': 'பகுப்பாய்வு',
 	'nav.polls': 'கருத்துக் கணிப்புகள்',
 	'nav.meetings': 'கூட்டங்கள்',
 	'nav.tutoring': 'பயிற்சி வகுப்புகள்',
