@@ -23,6 +23,20 @@ func NewLimiter(burst int, every time.Duration) *Limiter {
 	return &Limiter{burst: float64(burst), perSec: 1 / every.Seconds(), buckets: map[string]*bucket{}, now: time.Now}
 }
 
+// SetRate changes the bucket size and refill; buckets keep their tokens, capped at the new size.
+func (l *Limiter) SetRate(burst int, every time.Duration) {
+	l.mu.Lock()
+	l.burst, l.perSec = float64(burst), 1/every.Seconds()
+	l.mu.Unlock()
+}
+
+// Rate is the bucket size and tokens added a second.
+func (l *Limiter) Rate() (burst int, perSec float64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(l.burst), l.perSec
+}
+
 // Allow consumes one token for key if available.
 func (l *Limiter) Allow(key string) bool {
 	l.mu.Lock()

@@ -98,13 +98,14 @@ type Service struct {
 	baseURL string
 	now     func() time.Time
 
-	ipLimiter    *Limiter
-	emailLimiter *Limiter
-	mailLimiter  *Limiter                          // verification and change-of-email emails a person may ask for (D-98)
-	relations    Relations                         // who may see whose profile picture (D-49)
-	dir          Directory                         // school sign-in (D-64); nil = off
-	sso          func(context.Context) []SSOOption // outside sign-in buttons (D-70); nil = none
-	loadGate     func(token string) bool           // whether a capacity test may sign in its accounts (D-125)
+	ipLimiter      *Limiter
+	emailLimiter   *Limiter
+	mailLimiter    *Limiter                          // verification and change-of-email emails a person may ask for (D-98)
+	relations      Relations                         // who may see whose profile picture (D-49)
+	dir            Directory                         // school sign-in (D-64); nil = off
+	sso            func(context.Context) []SSOOption // outside sign-in buttons (D-70); nil = none
+	loadGate       func(token string) bool           // whether a capacity test may sign in its accounts (D-125)
+	defaultWorkers int                               // passwords checked at once unless the admin says otherwise (D-126)
 
 	cacheMu sync.Mutex
 	cache   map[string]cachedSession // key: token hash
@@ -126,12 +127,14 @@ const sessionCacheTTL = 30 * time.Second
 func NewService(pool *pgxpool.Pool, hasher *Hasher, inserter jobs.Inserter, baseURL string) *Service {
 	return &Service{
 		pool: pool, hasher: hasher, jobs: inserter, baseURL: strings.TrimRight(baseURL, "/"), now: time.Now,
-		// A whole class shares one NAT address, so the per-IP bucket is generous;
-		// the per-account bucket is what stops password guessing.
-		ipLimiter:    NewLimiter(300, 200*time.Millisecond),
-		emailLimiter: NewLimiter(10, 30*time.Second),
-		mailLimiter:  NewLimiter(3, 10*time.Minute),
-		cache:        map[string]cachedSession{},
+		// A whole class shares one NAT address, so the per-IP bucket is generous
+		// and the admin may change it (D-126); the per-account bucket is what
+		// stops password guessing.
+		ipLimiter:      NewLimiter(DefaultSignInLimits.NetworkBurst, time.Duration(float64(time.Second)/DefaultSignInLimits.NetworkPerSec)),
+		emailLimiter:   NewLimiter(10, 30*time.Second),
+		mailLimiter:    NewLimiter(3, 10*time.Minute),
+		cache:          map[string]cachedSession{},
+		defaultWorkers: hasher.Workers(),
 	}
 }
 

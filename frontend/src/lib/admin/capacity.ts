@@ -11,7 +11,7 @@ export type Step = {
 	cpu_peak: number; cpu_avg: number; mem_free_min_mb: number; load1_peak: number; heap_peak_mb: number;
 	db_busy_peak: number; db_waits: number; saves_per_sec_peak: number; samples?: Sample[];
 };
-export type Report = { steps: Step[]; max: number; page_kb: number; page_files: number; machine: { cpus: number; mem_total_mb: number; os: string }; error?: string; db_max: number };
+export type Report = { steps: Step[]; max: number; page_kb: number; page_files: number; machine: { cpus: number; mem_total_mb: number; os: string }; error?: string; db_max: number; sign_in?: { network_burst: number; network_per_sec: number; workers: number } };
 export type Status = 'running' | 'passed' | 'failed' | 'stopped' | 'interrupted' | 'error';
 export type Run = { id: string; admin_name: string; status: Status; plan: Plan; report?: Report; max: number; started_at: string; finished_at: string | null };
 export type Progress = { run_id: string; plan: Plan; step: number; students: number; phase: string; joined: number; finished: number; errors: number; elapsed: number; sample: Sample | null; done: Step[]; stopping: boolean };
@@ -87,12 +87,13 @@ export function advice(r: Run): string[] {
 	if (!rep?.steps?.length) return [];
 	const out: string[] = [];
 	const limited = rep.steps.reduce((n, s) => n + (s.errors?.login_limited ?? 0), 0);
+	const si = rep.sign_in ?? { network_burst: 300, network_per_sec: 5, workers: 2 };
 	if (limited)
 		out.push(r.plan.one_network
-			? `${limited.toLocaleString()} sign-ins were held back by the per-network limit (300 at once, then 5 a second from one internet address) and tried again. A school where everyone shares one address should have students sign in a few minutes early, or ask for the limit to be raised.`
+			? `${limited.toLocaleString()} sign-ins were held back by the per-network limit (${si.network_burst.toLocaleString()} at once, then ${si.network_per_sec} a second from one internet address) and tried again. Raise it under Platform settings → Sign-in limits, or have students sign in a few minutes early.`
 			: `${limited.toLocaleString()} sign-ins were refused for trying too often: students who kept retrying while the server was busy reached the per-account limit (10 tries, then one every 30 s).`);
 	const busy = rep.steps.reduce((n, s) => n + (s.errors?.login_busy ?? 0), 0);
-	if (busy) out.push(`The server asked ${busy.toLocaleString()} sign-ins to wait while it checked passwords (two at a time, by design). Signing in early spreads this out.`);
+	if (busy) out.push(`The server asked ${busy.toLocaleString()} sign-ins to wait while it checked passwords (${si.workers} at a time). Signing in early spreads this out; on a server with spare cores, more checks at a time (Platform settings → Sign-in limits) help too.`);
 	const top = rep.steps[rep.steps.length - 1];
 	if (top.cpu_peak >= 85) out.push(`The processor reached ${Math.round(top.cpu_peak)} % with ${top.students.toLocaleString()} students: that’s the limit here. More cores would raise it.`);
 	if (top.db_waits > 100) out.push(`Requests waited for a database connection ${top.db_waits.toLocaleString()} times at ${top.students.toLocaleString()} students (the server uses ${rep.db_max}).`);

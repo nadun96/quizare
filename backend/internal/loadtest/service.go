@@ -122,6 +122,15 @@ type Report struct {
 	Machine   Machine `json:"machine"`
 	Error     string  `json:"error,omitempty"`
 	DBMax     int32   `json:"db_max"`
+	// The sign-in limits in force during the test (D-126).
+	SignIn *SignIn `json:"sign_in,omitempty"`
+}
+
+// SignIn is the server's sign-in limits when the test ran.
+type SignIn struct {
+	NetworkBurst  int     `json:"network_burst"`
+	NetworkPerSec float64 `json:"network_per_sec"`
+	Workers       int     `json:"workers"`
 }
 
 // Machine is what the test ran on.
