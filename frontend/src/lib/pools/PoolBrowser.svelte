@@ -10,7 +10,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import Skeleton from '../ui/Skeleton.svelte';
 	import { toast } from '../ui/toast.svelte';
-	import { byCategory } from './pools';
+	import { byCategory, plain } from './pools';
 
 	let { quizId, onchange }: { quizId: string; onchange?: () => void } = $props();
 	let questions = $state<Question[] | null>(null);
@@ -42,7 +42,6 @@
 	});
 	const categories = $derived([...new Set((questions ?? []).map((q) => q.category).filter(Boolean))].sort());
 	const label = (c: string) => c || 'No category';
-	const plain = (s: string) => s.replace(/[*_`$]+/g, '').replace(/\[\[\d+\]\]/g, '___').replace(/\s+/g, ' ').trim();
 
 	function toggle(set: Set<string>, id: string) {
 		const s = new Set(set);
