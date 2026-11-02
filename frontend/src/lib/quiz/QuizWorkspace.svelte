@@ -37,7 +37,8 @@
 	const sessions = new Paged<Session>(() => '/api/teacher/quizzes/' + id + '/sessions', 'sessions', { url: urlState, prefix: 'ses', sort: 'created', desc: true });
 	let readiness = $state<{ blocking: string[]; warnings: string[] }>({ blocking: [], warnings: [] });
 	let tab = $state<'questions' | 'import' | 'pools' | 'settings' | 'sessions' | 'preview'>('questions');
-	const bank = $derived(quiz?.kind === 'bank');
+	// A question bank (D-66) or a classroom's pool (D-123): questions, import and preview only.
+	const bank = $derived(quiz?.kind === 'bank' || quiz?.kind === 'pool');
 	// Categories (D-66): a filter over the list, and suggestions in the editor.
 	let filter = $state<string | null>(null);
 	let bankCategories = $state<string[]>([]);
@@ -56,7 +57,7 @@
 	async function load() {
 		quiz = await api.get<Quiz>('/api/teacher/quizzes/' + id);
 		questions = (await api.get<{ questions: Question[] }>('/api/teacher/quizzes/' + id + '/questions')).questions ?? [];
-		if (quiz.kind === 'bank') return;
+		if (quiz.kind === 'bank' || quiz.kind === 'pool') return;
 		await sessions.load();
 		readiness = await api.get('/api/teacher/quizzes/' + id + '/readiness');
 		api.get<PoolInfo>('/api/teacher/quizzes/' + id + '/pools').then((p) => (bankCategories = p.bank.map((c) => c.category).filter(Boolean)), () => {});
@@ -219,9 +220,10 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 	{#if quiz}
 		{#if bank}
 			<div class="row">
-				<h1 style="margin:0">Question bank</h1>
+				<h1 style="margin:0">{quiz.kind === 'pool' ? quiz.title : 'Question bank'}</h1>
 			</div>
-			<p class="muted small m-0">Your questions for any of your quizzes: give them categories, then draw from those categories in a quiz's <strong>Pools</strong>. {count(questions.length, 'question')} in {count(categories.length, 'category', 'categories')}.</p>
+			<p class="small m-0">{#if quiz.kind === 'pool'}<a href="/t/classrooms/{quiz.classroom_id}">← Classroom</a>{:else}<a href="/t/bank">← Question pools</a>{/if}</p>
+			<p class="muted small m-0">{quiz.kind === 'pool' ? 'Questions for this classroom’s quizzes' : 'Your questions for any of your quizzes'}: give them categories, then draw from those categories in a quiz's <strong>Pools</strong>. {count(questions.length, 'question')} in {count(categories.length, 'category', 'categories')}.</p>
 		{:else}
 		<p class="small"><a href={'/t/topics/' + quiz.topic_id}>← Topic</a></p>
 		<div class="row">

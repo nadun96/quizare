@@ -109,6 +109,8 @@ type Question struct {
 	// FromBank marks, in a session's snapshot, a question drawn in from the
 	// teacher's question bank by a pool (D-66).
 	FromBank bool `json:"from_bank,omitempty"`
+	// FromClass: drawn in from the classroom's question pool (D-123).
+	FromClass bool `json:"from_class,omitempty"`
 }
 
 // StudentQuestion is what the student's browser receives.
