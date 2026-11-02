@@ -97,7 +97,7 @@ Local models (D-115, `local.go`): `llm.local` holds the admin's Ollama address a
 
 ## analytics (schema `analytics`)
 
-`compute.go` turns results into class, question and student statistics. `service.go` stores them per session (`session_stats`), rolls them up per quiz, handles share links and the public view, and exports CSV. See [Results & analytics](analytics.md).
+`compute.go` turns results into class, question and student statistics. `trends.go` (D-119) keeps month-by-month roll-ups per student in a classroom and per classroom (`student_months`, `classroom_months`): a periodic job every 15 minutes recomputes only the classroom-months whose results or finished tutorials changed since its last run, plus each open classroom's current month, and serves a classroom's trends with every student's figures, one student's months beside the class average, and a student's own months (`/api/my/trends`). Like the dashboard, it reads the other modules' tables without changing them. `service.go` stores them per session (`session_stats`), rolls them up per quiz, handles share links and the public view, and exports CSV. See [Results & analytics](analytics.md).
 
 ## poll (schema `poll`)
 

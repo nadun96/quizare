@@ -4,6 +4,7 @@
 	import MyFiles from '$lib/drive/MyFiles.svelte';
 	import MyPresentations from '$lib/presentation/MyPresentations.svelte';
 	import MyTutorials from '$lib/tutorial/MyTutorials.svelte';
+	import MyTrends from '$lib/trends/MyTrends.svelte';
 	import MyRecordings from '$lib/tutoring/MyRecordings.svelte';
 	import UpcomingTutoring from '$lib/tutoring/UpcomingTutoring.svelte';
 	import MyAttendance from '$lib/tutoring/MyAttendance.svelte';
@@ -96,6 +97,7 @@
 			<div class="mt-3"><Pager list={attempts} label="My quizzes" /></div>
 		{/if}
 	</div>
+	{#if auth.user?.role === 'student'}<MyTrends />{/if}
 	<MyTutorials />
 	<MyPresentations />
 	<MyRecordings meId={auth.user?.id ?? ''} />

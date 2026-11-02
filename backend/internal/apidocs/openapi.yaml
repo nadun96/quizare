@@ -1557,6 +1557,24 @@ paths:
       summary: Students enrolled in a classroom
       parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, name, number, status] } }, { name: category, in: query, description: 'Only students in this category', schema: { type: string, format: uuid } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
+  /api/teacher/classrooms/{id}/trends:
+    get:
+      operationId: getTeacherClassroomTrends
+      tags: [classrooms]
+      summary: A classroom month by month - members taking part, quiz sessions, results, average, pass rate and tutorials finished - and each student's figures over the span (D-119)
+      description: Read from monthly roll-ups that a background job refreshes every 15 minutes; updated_at says when. Months are UTC calendar months, the current one last.
+      parameters: [{ $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/months' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ClassroomTrends' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/classrooms/{id}/students/{user}/trends:
+    get:
+      operationId: getTeacherStudentTrends
+      tags: [classrooms]
+      summary: One student's months in the classroom beside the class average (D-119)
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+        - { name: user, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/months' }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/StudentTrends' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/classrooms/{id}/results:
     get:
       operationId: getTeacherClassroomsResults
@@ -2394,6 +2412,13 @@ paths:
       summary: The dashboard's charts over the last 30, 90 or 365 days with the period before to compare - a student's scores against each quiz's class average, weeks of activity and classrooms; a teacher's sessions, active students and classroom participation (D-105)
       parameters: [{ name: days, in: query, schema: { type: integer, enum: [30, 90, 365], default: 90 } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Insights' } } } } }
+  /api/my/trends:
+    get:
+      operationId: getMyTrends
+      tags: [students]
+      summary: The student's own month-by-month results and finished tutorials across their classrooms, with each classroom's average beside them (D-119)
+      parameters: [{ $ref: '#/components/parameters/months' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/StudentTrends' } } } } }
   /api/my/dashboard/{list}:
     get:
       operationId: getMyDashboardList
@@ -2808,6 +2833,7 @@ components:
 
   parameters:
     id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    months: { name: months, in: query, description: 'How many months, the current one last', schema: { type: integer, enum: [12, 24, 60], default: 12 } }
     attempt: { name: attempt, in: path, required: true, schema: { type: string, format: uuid } }
     question: { name: question, in: path, required: true, schema: { type: string, format: uuid } }
     code: { name: code, in: path, required: true, description: 'Join code', schema: { type: string, example: K7Q2XM } }
@@ -3182,6 +3208,47 @@ components:
           properties:
             source: { type: string, enum: [console, config, log] }
             config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
+    TrendMonth:
+      type: object
+      properties:
+        month: { type: string, example: '2026-03' }
+        enrolled: { type: integer, description: classroom only - members; frozen once the month is over }
+        active: { type: integer, description: classroom - members taking part; student - days with activity }
+        taking_part: { type: number, nullable: true, description: classroom only - percent of members taking part }
+        sessions: { type: integer }
+        quizzes: { type: integer, description: complete, valid quiz results }
+        avg: { type: number, nullable: true }
+        pass_rate: { type: number, nullable: true }
+        tutorials: { type: integer, description: tutorials finished }
+        class_avg: { type: number, nullable: true, description: student only - the classroom's average that month }
+    ClassroomTrends:
+      type: object
+      properties:
+        classroom: { type: string }
+        months: { type: array, items: { $ref: '#/components/schemas/TrendMonth' } }
+        students:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id: { type: string, format: uuid }
+              name: { type: string }
+              student_number: { type: string }
+              quizzes: { type: integer }
+              avg: { type: number, nullable: true }
+              tutorials: { type: integer }
+              active_months: { type: integer }
+              recent_avg: { type: number, nullable: true, description: the last three months }
+              earlier_avg: { type: number, nullable: true, description: the three months before }
+              last_active: { type: string, example: '2026-03' }
+        updated_at: { type: string, format: date-time, nullable: true }
+    StudentTrends:
+      type: object
+      properties:
+        name: { type: string }
+        classroom: { type: string }
+        months: { type: array, items: { $ref: '#/components/schemas/TrendMonth' } }
+        updated_at: { type: string, format: date-time, nullable: true }
     Insights:
       type: object
       properties:
