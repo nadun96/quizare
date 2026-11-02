@@ -31,7 +31,8 @@ export const TOOLS: Record<ConsoleTab, Tool> = {
 	drive: { key: 'drive', label: 'Google Drive', icon: 'cloud', blurb: 'The Google app teachers connect through', group: 'settings' },
 	storage: { key: 'storage', label: 'Storage', icon: 'hard-drive', blurb: 'Disk space and clean-ups', group: 'system' },
 	backups: { key: 'backups', label: 'Backups', icon: 'database', blurb: 'Database backups, made and restored', group: 'system' },
-	audit: { key: 'audit', label: 'Audit log', icon: 'list', blurb: 'Who changed what, and when', group: 'system' }
+	audit: { key: 'audit', label: 'Audit log', icon: 'list', blurb: 'Who changed what, and when', group: 'system' },
+	capacity: { key: 'capacity', label: 'Capacity test', icon: 'trophy', blurb: 'How many students this server handles at once, with a report', group: 'system' }
 };
 
 /** The groups with the tools this person may open, in order; empty groups are left out. */

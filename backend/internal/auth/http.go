@@ -168,6 +168,7 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
+	in.LoadToken = r.Header.Get(LoadTestHeader)
 	u, token, exp, err := s.Login(r.Context(), in, httpx.ClientIP(r), r.UserAgent())
 	if writeBusy(w, err) {
 		return nil

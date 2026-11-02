@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -34,6 +35,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/insight"
 	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/llm"
+	"github.com/nadun96/quizplatform/internal/loadtest"
 	"github.com/nadun96/quizplatform/internal/mail"
 	"github.com/nadun96/quizplatform/internal/mailing"
 	"github.com/nadun96/quizplatform/internal/media"
@@ -74,6 +76,7 @@ type App struct {
 	Analytics *analytics.Service
 	Insight   *insight.Service
 	Grading   *grading.Service
+	LoadTest  *loadtest.Service // the admin's capacity test (D-125)
 	Admin     *admin.Service
 	Poll      *poll.Service
 	Storage   *storage.Service
@@ -161,6 +164,10 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		return nil, err
 	}
 	a.ownPool = true
+	// A capacity test cut short by a stop or a crash leaves accounts behind (D-125).
+	if err := a.LoadTest.Recover(ctx); err != nil {
+		log.Error("capacity test: removing a cut-short test's accounts", "err", err)
+	}
 	return a, nil
 }
 
@@ -262,6 +269,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	rollupWorker.Service = a.Analytics
 	a.Insight = insight.NewService(pool)
 	a.Grading = grading.NewService(pool)
+	a.LoadTest = loadtest.NewService(pool, a.Auth, selfURL(cfg), cfg.BaseURL, log)
 	insightWorker.Service = a.Insight
 	a.Admin = admin.NewService(pool, a.Auth)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
@@ -387,6 +395,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Content.OverseeRoutes(ad, a.Auth) // every classroom (D-101)
 			a.Mailing.AdminRoutes(ad, a.Auth)
 			a.LLM.LocalAdminRoutes(ad, a.Auth) // the school's Ollama server (D-115)
+			a.LoadTest.AdminRoutes(ad)         // the capacity test (D-125)
 		})
 		api.Route("/teacher", func(t chi.Router) {
 			t.Use(auth.RequireRole(auth.RoleTeacher))
@@ -454,6 +463,19 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	}
 	a.router = r
 	return a, nil
+}
+
+// selfURL is where the capacity test reaches this server directly, past
+// the proxy: its listening address on loopback (D-125).
+func selfURL(cfg config.Config) string {
+	host, port, err := net.SplitHostPort(cfg.ListenAddr)
+	if err != nil || port == "" {
+		return strings.TrimRight(cfg.BaseURL, "/")
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 func newMailer(cfg config.Config, log *slog.Logger) (mail.Sender, error) {

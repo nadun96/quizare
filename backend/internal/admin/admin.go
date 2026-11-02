@@ -46,8 +46,8 @@ func (s *Service) Usage(ctx context.Context) (Usage, error) {
 		sql string
 		dst map[string]int
 	}{
-		{`SELECT role, count(*) FROM auth.users WHERE status <> 'deleted' GROUP BY role`, u.UsersByRole},
-		{`SELECT status, count(*) FROM auth.users GROUP BY status`, u.UsersByStatus},
+		{`SELECT role, count(*) FROM auth.users WHERE status <> 'deleted' AND NOT synthetic GROUP BY role`, u.UsersByRole},
+		{`SELECT status, count(*) FROM auth.users WHERE NOT synthetic GROUP BY status`, u.UsersByStatus},
 		{`SELECT queue || ':' || state, count(*) FROM river_job GROUP BY queue, state`, u.JobsByQueueState},
 	}
 	for _, g := range groups {
