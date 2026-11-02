@@ -30,6 +30,9 @@ type Classroom struct {
 	Effective   *settings.Effective `json:"effective,omitempty"`
 	Archived    bool                `json:"archived"`
 	CreatedAt   time.Time           `json:"created_at"`
+	// For the asking teacher (D-121): owner, or coteacher; and the owner's name.
+	Role      string `json:"role,omitempty"`
+	OwnerName string `json:"owner_name,omitempty"`
 }
 
 type Module struct {
@@ -70,6 +73,8 @@ type Service struct {
 	pool     *pgxpool.Pool
 	settings *settings.Store
 	users    Users
+	mailer   Mailer // co-teacher invitations (D-121)
+	baseURL  string
 }
 
 func NewService(pool *pgxpool.Pool, st *settings.Store, users Users) *Service {
@@ -158,12 +163,13 @@ func (s *Service) CreateClassroom(ctx context.Context, teacherID string, in Clas
 	return c, errors.New("could not allocate a unique join code")
 }
 
-const classroomCols = `id, teacher_id, name, description, join_code, settings, archived_at IS NOT NULL, created_at`
+const classroomCols = `id, teacher_id, name, description, join_code, settings, archived_at IS NOT NULL, created_at,
+	coalesce((SELECT u.name FROM auth.users u WHERE u.id = teacher_id), '')`
 
 func scanClassroom(row pgx.Row) (Classroom, error) {
 	var c Classroom
 	var raw []byte
-	err := row.Scan(&c.ID, &c.TeacherID, &c.Name, &c.Description, &c.JoinCode, &raw, &c.Archived, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.TeacherID, &c.Name, &c.Description, &c.JoinCode, &raw, &c.Archived, &c.CreatedAt, &c.OwnerName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, httpx.ErrNotFound
 	}
@@ -177,10 +183,10 @@ func scanClassroom(row pgx.Row) (Classroom, error) {
 // ClassroomSorts are the orders of a teacher's classroom list (PL-FR-01).
 var ClassroomSorts = page.Sorts{"created": "created_at", "name": "lower(name)"}
 
-// ListClassrooms returns one page of a teacher's classrooms, searched by name,
-// and how many there are in all.
+// ListClassrooms returns one page of the classrooms a teacher owns or
+// co-teaches (D-121), searched by name, and how many there are in all.
 func (s *Service) ListClassrooms(ctx context.Context, teacherID string, includeArchived bool, p page.Request) ([]Classroom, int, error) {
-	where := ` FROM content.classrooms WHERE teacher_id=$1 AND ($2 OR archived_at IS NULL) AND ($3 = '' OR name ILIKE $3)`
+	where := ` FROM content.classrooms WHERE content.teaches(id, $1) AND ($2 OR archived_at IS NULL) AND ($3 = '' OR name ILIKE $3)`
 	args := []any{teacherID, includeArchived, p.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
@@ -190,17 +196,33 @@ func (s *Service) ListClassrooms(ctx context.Context, teacherID string, includeA
 	if err != nil {
 		return nil, 0, err
 	}
-	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Classroom, error) { return scanClassroom(r) })
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Classroom, error) {
+		c, err := scanClassroom(r)
+		c.Role = roleOf(c, teacherID)
+		return c, err
+	})
 	return list, total, err
 }
 
-// GetClassroom returns a classroom owned by teacherID, with effective settings.
+func roleOf(c Classroom, teacherID string) string {
+	if c.TeacherID == teacherID {
+		return "owner"
+	}
+	return "coteacher"
+}
+
+// errOwnerOnly: co-teachers teach the classroom; the classroom itself is its owner's (D-121).
+var errOwnerOnly = httpx.NewError(http.StatusForbidden, "owner_only", "only the classroom's owner can do this")
+
+// GetClassroom returns a classroom teacherID teaches (owns or co-teaches),
+// with effective settings from its owner's defaults.
 func (s *Service) GetClassroom(ctx context.Context, teacherID, id string) (Classroom, error) {
-	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+` FROM content.classrooms WHERE id=$1 AND teacher_id=$2`, id, teacherID))
+	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+` FROM content.classrooms WHERE id=$1 AND content.teaches(id, $2)`, id, teacherID))
 	if err != nil {
 		return c, err
 	}
-	base, err := s.settings.Base(ctx, teacherID)
+	c.Role = roleOf(c, teacherID)
+	base, err := s.settings.Base(ctx, c.TeacherID)
 	if err != nil {
 		return c, err
 	}
@@ -213,6 +235,9 @@ func (s *Service) UpdateClassroom(ctx context.Context, teacherID, id string, in 
 	c, err := s.GetClassroom(ctx, teacherID, id)
 	if err != nil {
 		return c, err
+	}
+	if c.Role != "owner" {
+		return c, errOwnerOnly
 	}
 	f := map[string]string{}
 	if in.Name != nil {
@@ -239,7 +264,7 @@ func (s *Service) SetArchived(ctx context.Context, teacherID, id string, archive
 	tag, err := s.pool.Exec(ctx, `UPDATE content.classrooms SET archived_at = CASE WHEN $3 THEN coalesce(archived_at, now()) END
 		WHERE id=$1 AND teacher_id=$2`, id, teacherID, archived)
 	if err == nil && tag.RowsAffected() == 0 {
-		return httpx.ErrNotFound
+		return s.ownerOr404(ctx, teacherID, id)
 	}
 	return err
 }
@@ -258,7 +283,7 @@ func (s *Service) RegenerateJoinCode(ctx context.Context, teacherID, id string) 
 			continue
 		}
 		if err == nil && tag.RowsAffected() == 0 {
-			return "", httpx.ErrNotFound
+			return "", s.ownerOr404(ctx, teacherID, id)
 		}
 		return code, err
 	}
@@ -300,7 +325,7 @@ func (s *Service) CreateModule(ctx context.Context, teacherID, classroomID strin
 	}
 	err = s.pool.QueryRow(ctx, `INSERT INTO content.modules(classroom_id, name, position, settings)
 		SELECT c.id, $3, coalesce($4, (SELECT count(*) FROM content.modules WHERE classroom_id=c.id)), $5
-		FROM content.classrooms c WHERE c.id=$1 AND c.teacher_id=$2
+		FROM content.classrooms c WHERE c.id=$1 AND content.teaches(c.id, $2)
 		RETURNING id, position`, classroomID, teacherID, name, in.Position, m.Settings.JSON()).Scan(&m.ID, &m.Position)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return m, httpx.ErrNotFound
@@ -315,7 +340,7 @@ var NodeSorts = page.Sorts{"position": "position", "name": "lower(name)"}
 // ListModules returns one page of a classroom's modules and how many there are.
 func (s *Service) ListModules(ctx context.Context, teacherID, classroomID string, p page.Request) ([]Module, int, error) {
 	where := ` FROM content.modules m JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE m.classroom_id=$1 AND c.teacher_id=$2 AND ($3 = '' OR m.name ILIKE $3)`
+		WHERE m.classroom_id=$1 AND content.teaches(c.id, $2) AND ($3 = '' OR m.name ILIKE $3)`
 	args := []any{classroomID, teacherID, p.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
@@ -351,7 +376,7 @@ func (s *Service) UpdateModule(ctx context.Context, teacherID, id string, in Nod
 		name = CASE WHEN $3 <> '' THEN $3 ELSE m.name END,
 		position = coalesce($4, m.position),
 		settings = coalesce($5, m.settings)
-		FROM content.classrooms c WHERE c.id=m.classroom_id AND m.id=$1 AND c.teacher_id=$2`, id, teacherID, name, in.Position, raw)
+		FROM content.classrooms c WHERE c.id=m.classroom_id AND m.id=$1 AND content.teaches(c.id, $2)`, id, teacherID, name, in.Position, raw)
 	if err == nil && tag.RowsAffected() == 0 {
 		return httpx.ErrNotFound
 	}
@@ -374,7 +399,7 @@ func (s *Service) CreateTopic(ctx context.Context, teacherID, moduleID string, i
 	err = s.pool.QueryRow(ctx, `INSERT INTO content.topics(module_id, name, position, settings)
 		SELECT m.id, $3, coalesce($4, (SELECT count(*) FROM content.topics WHERE module_id=m.id)), $5
 		FROM content.modules m JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE m.id=$1 AND c.teacher_id=$2
+		WHERE m.id=$1 AND content.teaches(c.id, $2)
 		RETURNING id, position`, moduleID, teacherID, name, in.Position, t.Settings.JSON()).Scan(&t.ID, &t.Position)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, httpx.ErrNotFound
@@ -385,7 +410,7 @@ func (s *Service) CreateTopic(ctx context.Context, teacherID, moduleID string, i
 // ListTopics returns one page of a module's topics and how many there are.
 func (s *Service) ListTopics(ctx context.Context, teacherID, moduleID string, p page.Request) ([]Topic, int, error) {
 	where := ` FROM content.topics t JOIN content.modules m ON m.id=t.module_id JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE t.module_id=$1 AND c.teacher_id=$2 AND ($3 = '' OR t.name ILIKE $3)`
+		WHERE t.module_id=$1 AND content.teaches(c.id, $2) AND ($3 = '' OR t.name ILIKE $3)`
 	args := []any{moduleID, teacherID, p.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
@@ -421,7 +446,7 @@ func (s *Service) GetTopic(ctx context.Context, teacherID, id string) (TopicDeta
 	var raw []byte
 	err := s.pool.QueryRow(ctx, `SELECT t.id, t.module_id, t.name, t.position, t.settings, c.id, c.name, m.name
 		FROM content.topics t JOIN content.modules m ON m.id=t.module_id JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE t.id=$1 AND c.teacher_id=$2`, id, teacherID).Scan(&t.ID, &t.ModuleID, &t.Name, &t.Position, &raw, &t.ClassroomID, &t.ClassroomName, &t.ModuleName)
+		WHERE t.id=$1 AND content.teaches(c.id, $2)`, id, teacherID).Scan(&t.ID, &t.ModuleID, &t.Name, &t.Position, &raw, &t.ClassroomID, &t.ClassroomName, &t.ModuleName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, httpx.ErrNotFound
 	}
@@ -446,7 +471,7 @@ func (s *Service) UpdateTopic(ctx context.Context, teacherID, id string, in Node
 		position = coalesce($4, t.position),
 		settings = coalesce($5, t.settings)
 		FROM content.modules m JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE m.id=t.module_id AND t.id=$1 AND c.teacher_id=$2`, id, teacherID, name, in.Position, raw)
+		WHERE m.id=t.module_id AND t.id=$1 AND content.teaches(c.id, $2)`, id, teacherID, name, in.Position, raw)
 	if err == nil && tag.RowsAffected() == 0 {
 		return httpx.ErrNotFound
 	}
@@ -470,13 +495,14 @@ func (tc TopicContext) Layers() []settings.Overrides {
 	return []settings.Overrides{tc.Classroom, tc.Module, tc.Topic}
 }
 
-// TopicContext loads a topic and checks it belongs to teacherID ("" skips the check).
+// TopicContext loads a topic and checks teacherID teaches its classroom ("" skips the check).
+// TeacherID is the classroom's owner, whose defaults the settings start from.
 func (s *Service) TopicContext(ctx context.Context, teacherID, topicID string) (TopicContext, error) {
 	var tc TopicContext
 	var cRaw, mRaw, tRaw []byte
 	err := s.pool.QueryRow(ctx, `SELECT t.id, m.id, c.id, c.teacher_id, c.archived_at IS NOT NULL, c.settings, m.settings, t.settings
 		FROM content.topics t JOIN content.modules m ON m.id=t.module_id JOIN content.classrooms c ON c.id=m.classroom_id
-		WHERE t.id=$1 AND ($2 = '' OR c.teacher_id::text = $2)`, topicID, teacherID).
+		WHERE t.id=$1 AND ($2 = '' OR content.teaches(c.id, nullif($2, '')::uuid))`, topicID, teacherID).
 		Scan(&tc.TopicID, &tc.ModuleID, &tc.ClassroomID, &tc.TeacherID, &tc.ClassroomArchived, &cRaw, &mRaw, &tRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tc, httpx.ErrNotFound
@@ -492,4 +518,12 @@ func (s *Service) TopicContext(ctx context.Context, teacherID, topicID string) (
 	}
 	tc.Topic, err = settings.Parse(tRaw)
 	return tc, err
+}
+
+// ownerOr404: a co-teacher is told it's the owner's to do; anyone else, that there's no such classroom.
+func (s *Service) ownerOr404(ctx context.Context, teacherID, id string) error {
+	if c, err := s.GetClassroom(ctx, teacherID, id); err == nil && c.Role != "owner" {
+		return errOwnerOnly
+	}
+	return httpx.ErrNotFound
 }

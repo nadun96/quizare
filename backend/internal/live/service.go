@@ -37,6 +37,7 @@ type Quizzes interface {
 type Classrooms interface {
 	TopicContext(ctx context.Context, teacherID, topicID string) (content.TopicContext, error)
 	EnsureEnrolled(ctx context.Context, classroomID, userID, studentNumber string) (content.Enrolment, error)
+	Teaches(ctx context.Context, classroomID, userID string) (bool, error)
 	ListCategories(ctx context.Context, teacherID, classroomID string) ([]content.Category, error)
 	CategoryMembers(ctx context.Context, teacherID, classroomID string) ([]content.CategoryMember, error)
 }
@@ -264,10 +265,19 @@ func (s *Service) ownedSession(ctx context.Context, teacherID, id string) (*Sess
 	if err != nil {
 		return nil, err
 	}
-	if sess.TeacherID != teacherID {
+	// The classroom's teachers, owner and co-teachers, run its sessions; one
+	// who leaves the classroom leaves its sessions too (D-121).
+	if ok, err := s.Teaches(ctx, sess.ClassroomID, teacherID); err != nil {
+		return nil, err
+	} else if !ok {
 		return nil, httpx.ErrNotFound
 	}
 	return sess, nil
+}
+
+// Teaches reports whether userID owns or co-teaches the classroom (D-121).
+func (s *Service) Teaches(ctx context.Context, classroomID, userID string) (bool, error) {
+	return s.classrooms.Teaches(ctx, classroomID, userID)
 }
 
 // SessionSorts are the orders of a quiz's session list (PL-FR-01).
@@ -276,7 +286,7 @@ var SessionSorts = page.Sorts{"created": "created_at", "title": "lower(title)", 
 // ListSessions returns one page of a quiz's sessions, searched by title or
 // join code, and how many there are.
 func (s *Service) ListSessions(ctx context.Context, teacherID, quizID string, p page.Request) ([]Session, int, error) {
-	where := ` FROM live.sessions WHERE quiz_id=$1 AND teacher_id=$2 AND ($3 = '' OR title ILIKE $3 OR join_code ILIKE $3)`
+	where := ` FROM live.sessions WHERE quiz_id=$1 AND content.teaches(classroom_id, $2) AND ($3 = '' OR title ILIKE $3 OR join_code ILIKE $3)`
 	args := []any{quizID, teacherID, p.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
@@ -889,8 +899,9 @@ func (s *Service) Reinstate(ctx context.Context, teacherID, attemptID, reason st
 	}
 	return s.change(ctx, attemptID, func(tx pgx.Tx, sess *Session, a *Attempt) error {
 		v := s.sessionView(sess)
-		if v.TeacherID != teacherID {
-			return httpx.ErrNotFound // BR-08: only the owning teacher
+		// BR-08: only the classroom's teachers (D-121).
+		if ok, err := s.Teaches(ctx, v.ClassroomID, teacherID); err != nil || !ok {
+			return httpx.ErrNotFound
 		}
 		if v.Status == SessionEnded {
 			return errSessionEnded

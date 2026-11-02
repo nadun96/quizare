@@ -227,6 +227,11 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Settings = settings.NewStore(pool)
 	a.Content = content.NewService(pool, a.Settings, a.Auth)
 	a.Auth.SetRelations(a.Content)
+	// Co-teacher invitations go out as email jobs (D-121).
+	a.Content.SetMailer(func(ctx context.Context, tx pgx.Tx, m mail.Message) error {
+		_, err := rc.InsertTx(ctx, tx, mail.Args{Message: m}, nil)
+		return err
+	}, cfg.BaseURL)
 	a.Quiz = quiz.NewService(pool, a.Content, a.Settings, rc, checker)
 	quizWorker.Service = a.Quiz
 	a.Live = live.NewService(pool, a.Quiz, a.Content, a.Auth, cfg.BaseURL, log)
