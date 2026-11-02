@@ -28,6 +28,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/directory"
 	"github.com/nadun96/quizplatform/internal/drive"
 	"github.com/nadun96/quizplatform/internal/eval"
+	"github.com/nadun96/quizplatform/internal/grading"
 	"github.com/nadun96/quizplatform/internal/imageurl"
 	"github.com/nadun96/quizplatform/internal/inbox"
 	"github.com/nadun96/quizplatform/internal/insight"
@@ -72,6 +73,7 @@ type App struct {
 	LLM       *llm.Service
 	Analytics *analytics.Service
 	Insight   *insight.Service
+	Grading   *grading.Service
 	Admin     *admin.Service
 	Poll      *poll.Service
 	Storage   *storage.Service
@@ -259,6 +261,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	analyticsWorker.Service = a.Analytics
 	rollupWorker.Service = a.Analytics
 	a.Insight = insight.NewService(pool)
+	a.Grading = grading.NewService(pool)
 	insightWorker.Service = a.Insight
 	a.Admin = admin.NewService(pool, a.Auth)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
@@ -396,6 +399,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.LLM.LocalTeacherRoutes(t)
 			a.Analytics.TeacherRoutes(t)
 			a.Analytics.TrendRoutes(t) // long-term trends (D-119)
+			a.Grading.TeacherRoutes(t) // gradebook, weights and attendance (D-122)
 			a.Poll.TeacherRoutes(t)
 			a.Meet.TeacherRoutes(t)
 			a.Drive.TeacherRoutes(t)

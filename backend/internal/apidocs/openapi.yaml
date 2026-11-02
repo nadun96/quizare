@@ -1559,6 +1559,34 @@ paths:
       summary: Students enrolled in a classroom
       parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, name, number, status] } }, { name: category, in: query, description: 'Only students in this category', schema: { type: string, format: uuid } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
+  /api/teacher/classrooms/{id}/gradebook:
+    get:
+      operationId: getTeacherClassroomGradebook
+      tags: [classrooms]
+      summary: The classroom's quizzes and tutorials with their weights, and every active student's marks, weighted points and final result (D-122)
+      description: A quiz mark is the best valid attempt; a tutorial's, a finished run's score out of its questions' marks. Points are percent × weight / 100; a weighted item with no mark counts 0. The final result is the points as a percentage of weight_total, the sum of the weights, which needn't be 100.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Gradebook' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/classrooms/{id}/weights:
+    put:
+      operationId: putTeacherClassroomWeights
+      tags: [classrooms]
+      summary: Set how much each quiz or tutorial counts towards the final result, as a percent of it (D-122)
+      description: Replaces every weight; an item left out or at 0 doesn't count. Each 0-100, at most 100 together. Any teacher of the classroom.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { weights: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, tutorial] }, id: { type: string, format: uuid }, weight: { type: number, minimum: 0, maximum: 100 } } } } } } } } }
+      responses: { '200': { description: 'The gradebook', content: { application/json: { schema: { $ref: '#/components/schemas/Gradebook' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/attendance:
+    get:
+      operationId: getTeacherClassroomAttendance
+      tags: [classrooms]
+      summary: The classroom's quiz sessions and meetings between two dates, and which each active student came to (D-122)
+      description: Came to a quiz session = was admitted to it; to a meeting = joined it (with minutes in). Tutoring sessions come from the tutoring service.
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+        - { name: from, in: query, schema: { type: string, format: date }, description: 'inclusive; 90 days ago by default' }
+        - { name: to, in: query, schema: { type: string, format: date }, description: 'inclusive; today by default' }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ClassroomAttendance' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/classrooms/{id}/teachers:
     get:
       operationId: getTeacherClassroomTeachers
@@ -3267,6 +3295,33 @@ components:
           properties:
             source: { type: string, enum: [console, config, log] }
             config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
+    Gradebook:
+      type: object
+      properties:
+        classroom: { type: string }
+        weight_total: { type: number }
+        items: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, tutorial] }, id: { type: string }, title: { type: string }, topic: { type: string }, weight: { type: number, nullable: true }, taken: { type: integer }, avg: { type: number, nullable: true } } } }
+        students:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id: { type: string, format: uuid }
+              name: { type: string }
+              student_number: { type: string }
+              marks: { type: object, description: 'by "kind:id"', additionalProperties: { type: object, properties: { pct: { type: number }, points: { type: number } } } }
+              average: { type: number, nullable: true }
+              total: { type: number }
+              missing: { type: integer }
+              final: { type: number, nullable: true }
+    ClassroomAttendance:
+      type: object
+      properties:
+        classroom: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        events: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, meeting] }, id: { type: string }, title: { type: string }, at: { type: string, format: date-time } } } }
+        students: { type: array, items: { type: object, properties: { user_id: { type: string }, name: { type: string }, student_number: { type: string }, attended: { type: array, items: { type: string } }, minutes: { type: object, additionalProperties: { type: number } } } } }
     ClassroomTeacher:
       type: object
       properties:
