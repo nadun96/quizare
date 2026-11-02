@@ -40,6 +40,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("PATCH", "/topics/{id}", httpx.Handler(s.hUpdateTopic))
 	r.Method("DELETE", "/topics/{id}", httpx.Handler(s.hDeleteTopic))
 	r.Method("GET", "/topics/{id}/delete-preview", httpx.Handler(s.hDeletePreview("topic")))
+	s.teacherRoutesCo(r) // co-teachers (D-121)
 }
 
 // StudentRoutes mounts endpoints for any logged-in user (enrolment is by code).

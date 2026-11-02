@@ -75,7 +75,7 @@ func scanTutorial(r pgx.Row) (Tutorial, error) {
 
 // owned returns a teacher's tutorial.
 func (s *Service) owned(ctx context.Context, teacherID, id string) (Tutorial, error) {
-	return scanTutorial(s.pool.QueryRow(ctx, `SELECT `+tutorialCols+` FROM tutorial.tutorials t WHERE t.id=$1 AND t.teacher_id=$2`, id, teacherID))
+	return scanTutorial(s.pool.QueryRow(ctx, `SELECT `+tutorialCols+` FROM tutorial.tutorials t WHERE t.id=$1 AND content.teaches_topic(t.topic_id, $2)`, id, teacherID))
 }
 
 // Create makes a tutorial, and the quiz that holds its questions.
@@ -115,7 +115,7 @@ func (s *Service) List(ctx context.Context, teacherID, topicID string) ([]Tutori
 	if _, err := s.topics.TopicContext(ctx, teacherID, topicID); err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT `+tutorialCols+` FROM tutorial.tutorials t WHERE t.topic_id=$1 AND t.teacher_id=$2 ORDER BY t.created_at`, topicID, teacherID)
+	rows, err := s.pool.Query(ctx, `SELECT `+tutorialCols+` FROM tutorial.tutorials t WHERE t.topic_id=$1 AND content.teaches_topic(t.topic_id, $2) ORDER BY t.created_at`, topicID, teacherID)
 	if err != nil {
 		return nil, err
 	}

@@ -161,10 +161,16 @@ func scanQuiz(r pgx.Row) (Quiz, error) {
 	return q, err
 }
 
-// GetQuiz returns a quiz owned by teacherID with its effective settings
+// mayTeach is the SQL test that teacher $2 may work on quiz q: they teach
+// the classroom its topic is in, as its owner or a co-teacher (D-121), so
+// someone who leaves a classroom leaves its quizzes too. A question bank
+// has no topic, so it stays its own teacher's.
+const mayTeach = `(CASE WHEN q.topic_id IS NULL THEN q.teacher_id=$2 ELSE content.teaches_topic(q.topic_id, $2) END)`
+
+// GetQuiz returns a quiz teacherID may work on, with its effective settings
 // (platform → teacher → classroom → module → topic → quiz).
 func (s *Service) GetQuiz(ctx context.Context, teacherID, id string) (Quiz, error) {
-	q, err := scanQuiz(s.pool.QueryRow(ctx, `SELECT `+quizCols+` FROM quiz.quizzes q WHERE q.id=$1 AND q.teacher_id=$2`, id, teacherID))
+	q, err := scanQuiz(s.pool.QueryRow(ctx, `SELECT `+quizCols+` FROM quiz.quizzes q WHERE q.id=$1 AND `+mayTeach, id, teacherID))
 	if err != nil {
 		return q, err
 	}
@@ -183,11 +189,12 @@ func (s *Service) QuizLayers(ctx context.Context, q Quiz) (settings.Effective, [
 		base, err := s.settings.Base(ctx, q.TeacherID)
 		return base, []settings.Overrides{q.Settings}, err
 	}
-	tc, err := s.topics.TopicContext(ctx, q.TeacherID, q.TopicID)
+	// Already allowed: the layers come from the classroom, and the defaults from its owner.
+	tc, err := s.topics.TopicContext(ctx, "", q.TopicID)
 	if err != nil {
 		return settings.Effective{}, nil, err
 	}
-	base, err := s.settings.Base(ctx, q.TeacherID)
+	base, err := s.settings.Base(ctx, tc.TeacherID)
 	if err != nil {
 		return settings.Effective{}, nil, err
 	}
@@ -211,7 +218,7 @@ func (s *Service) ListQuizzes(ctx context.Context, teacherID, topicID, status st
 	if _, err := s.topics.TopicContext(ctx, teacherID, topicID); err != nil {
 		return nil, 0, err
 	}
-	where := ` FROM quiz.quizzes q WHERE q.topic_id=$1 AND q.teacher_id=$2 AND q.kind='quiz' AND ($3 = '' OR q.title ILIKE $3) AND ($4 = '' OR q.status = $4)`
+	where := ` FROM quiz.quizzes q WHERE q.topic_id=$1 AND `+mayTeach+` AND q.kind='quiz' AND ($3 = '' OR q.title ILIKE $3) AND ($4 = '' OR q.status = $4)`
 	args := []any{topicID, teacherID, p.Like(), status}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
@@ -240,8 +247,8 @@ func (s *Service) UpdateQuiz(ctx context.Context, teacherID, id string, in QuizI
 	if in.Settings != nil {
 		raw = in.Settings.JSON()
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE quiz.quizzes SET title=coalesce($3,title), description=coalesce($4,description),
-		settings=coalesce($5,settings), updated_at=now() WHERE id=$1 AND teacher_id=$2`, id, teacherID, title, desc, raw)
+	tag, err := s.pool.Exec(ctx, `UPDATE quiz.quizzes SET title=coalesce($3,quizzes.title), description=coalesce($4,quizzes.description),
+		settings=coalesce($5,quizzes.settings), updated_at=now() FROM quiz.quizzes q WHERE quizzes.id=q.id AND q.id=$1 AND `+mayTeach, id, teacherID, title, desc, raw)
 	if err != nil {
 		return Quiz{}, err
 	}
@@ -284,7 +291,7 @@ func (s *Service) DeleteQuizConfirmed(ctx context.Context, teacherID, id, confir
 			if err := tx.QueryRow(ctx, `WITH d AS (DELETE FROM live.sessions WHERE quiz_id=$1 RETURNING 1) SELECT count(*) FROM d`, id).Scan(&n); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, `DELETE FROM quiz.quizzes WHERE id=$1 AND teacher_id=$2`, id, teacherID); err != nil {
+			if _, err := tx.Exec(ctx, `DELETE FROM quiz.quizzes WHERE id=$1`, id); err != nil { // allowed: GetQuiz above
 				return err
 			}
 			return audit.Log(ctx, tx, teacherID, "quiz_deleted", "quiz", id, map[string]any{"title": qz.Title, "sessions": n})
@@ -300,7 +307,7 @@ func (s *Service) DeleteQuizConfirmed(ctx context.Context, teacherID, id, confir
 			return true, err
 		}
 	}
-	_, err = s.pool.Exec(ctx, `DELETE FROM quiz.quizzes WHERE id=$1 AND teacher_id=$2`, id, teacherID)
+	_, err = s.pool.Exec(ctx, `DELETE FROM quiz.quizzes WHERE id=$1`, id) // allowed: GetQuiz above
 	return false, err
 }
 
@@ -361,7 +368,7 @@ func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string, a
 	default:
 		return Quiz{}, httpx.BadRequest("status must be draft or ready")
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE quiz.quizzes SET status=$3, warnings_accepted=$4, updated_at=now() WHERE id=$1 AND teacher_id=$2`,
+	tag, err := s.pool.Exec(ctx, `UPDATE quiz.quizzes SET status=$3, warnings_accepted=$4, updated_at=now() FROM quiz.quizzes q WHERE quizzes.id=q.id AND q.id=$1 AND `+mayTeach,
 		id, teacherID, status, acceptWarnings && status == StatusReady)
 	if err != nil {
 		return Quiz{}, err
@@ -453,7 +460,7 @@ type querier interface {
 // ownedQuiz checks ownership and returns the quiz status.
 func (s *Service) ownedQuiz(ctx context.Context, db querier, teacherID, quizID string) (string, error) {
 	var status string
-	err := db.QueryRow(ctx, `SELECT status FROM quiz.quizzes WHERE id=$1 AND teacher_id=$2`, quizID, teacherID).Scan(&status)
+	err := db.QueryRow(ctx, `SELECT status FROM quiz.quizzes q WHERE q.id=$1 AND `+mayTeach, quizID, teacherID).Scan(&status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", httpx.ErrNotFound
 	}
@@ -462,8 +469,8 @@ func (s *Service) ownedQuiz(ctx context.Context, db querier, teacherID, quizID s
 
 func (s *Service) GetQuestion(ctx context.Context, teacherID, id string) (Question, error) {
 	var quizID string
-	err := s.pool.QueryRow(ctx, `SELECT q.quiz_id FROM quiz.questions q JOIN quiz.quizzes z ON z.id=q.quiz_id
-		WHERE q.id=$1 AND z.teacher_id=$2`, id, teacherID).Scan(&quizID)
+	err := s.pool.QueryRow(ctx, `SELECT x.quiz_id FROM quiz.questions x JOIN quiz.quizzes q ON q.id=x.quiz_id
+		WHERE x.id=$1 AND `+mayTeach, id, teacherID).Scan(&quizID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Question{}, httpx.ErrNotFound
 	}
@@ -552,7 +559,7 @@ func (s *Service) UpdateQuestion(ctx context.Context, teacherID, id string, q Qu
 }
 
 func (s *Service) DeleteQuestion(ctx context.Context, teacherID, id string) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM quiz.questions q USING quiz.quizzes z WHERE z.id=q.quiz_id AND q.id=$1 AND z.teacher_id=$2`, id, teacherID)
+	tag, err := s.pool.Exec(ctx, `DELETE FROM quiz.questions x USING quiz.quizzes q WHERE q.id=x.quiz_id AND x.id=$1 AND `+mayTeach, id, teacherID)
 	if err == nil && tag.RowsAffected() == 0 {
 		return httpx.ErrNotFound
 	}
@@ -769,8 +776,8 @@ func (s *Service) SetResource(ctx context.Context, teacherID, questionID string,
 }
 
 func (s *Service) DeleteResource(ctx context.Context, teacherID, resourceID string) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM quiz.resources r USING quiz.questions q, quiz.quizzes z
-		WHERE q.id=r.question_id AND z.id=q.quiz_id AND r.id=$1 AND z.teacher_id=$2`, resourceID, teacherID)
+	tag, err := s.pool.Exec(ctx, `DELETE FROM quiz.resources r USING quiz.questions x, quiz.quizzes q
+		WHERE x.id=r.question_id AND q.id=x.quiz_id AND r.id=$1 AND `+mayTeach, resourceID, teacherID)
 	if err == nil && tag.RowsAffected() == 0 {
 		return httpx.ErrNotFound
 	}

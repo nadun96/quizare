@@ -109,7 +109,7 @@ func (s *Service) CreateCategory(ctx context.Context, teacherID, classroomID str
 func (s *Service) ownedCategory(ctx context.Context, teacherID, id string) (Category, error) {
 	var c Category
 	err := s.pool.QueryRow(ctx, `SELECT c.id, c.classroom_id, c.name, c.color, c.position FROM content.categories c
-		JOIN content.classrooms k ON k.id=c.classroom_id WHERE c.id=$1 AND k.teacher_id=$2`, id, teacherID).
+		JOIN content.classrooms k ON k.id=c.classroom_id WHERE c.id=$1 AND content.teaches(k.id, $2)`, id, teacherID).
 		Scan(&c.ID, &c.ClassroomID, &c.Name, &c.Color, &c.Position)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, httpx.ErrNotFound
@@ -239,6 +239,6 @@ func (s *Service) CategoryMembers(ctx context.Context, teacherID, classroomID st
 func (s *Service) SharesClassroom(ctx context.Context, a, b string) (bool, error) {
 	var ok bool
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM content.classrooms c JOIN content.enrolments e ON e.classroom_id=c.id
-		WHERE e.status IN ('pending', 'active') AND ((c.teacher_id=$1 AND e.user_id=$2) OR (c.teacher_id=$2 AND e.user_id=$1)))`, a, b).Scan(&ok)
+		WHERE e.status IN ('pending', 'active') AND ((content.teaches(c.id, $1) AND e.user_id=$2) OR (content.teaches(c.id, $2) AND e.user_id=$1)))`, a, b).Scan(&ok)
 	return ok, err
 }

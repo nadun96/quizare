@@ -32,6 +32,7 @@ type MarkingData struct {
 	SessionTitle  string
 	QuizTitle     string
 	TeacherID     string
+	ClassroomID   string
 	UserID        string
 	StudentNumber *string
 	State         string
@@ -94,7 +95,7 @@ func (s *Service) markingData(ctx context.Context, sess Session, a *Attempt) (*M
 	eff := sess.Effective(nil, a.Overrides)
 	d := &MarkingData{
 		AttemptID: a.ID, SessionID: sess.ID, SessionTitle: sess.Title, QuizTitle: sess.Snapshot.QuizTitle,
-		TeacherID: sess.TeacherID, UserID: a.UserID, StudentNumber: a.StudentNumber, State: a.State,
+		TeacherID: sess.TeacherID, ClassroomID: sess.ClassroomID, UserID: a.UserID, StudentNumber: a.StudentNumber, State: a.State,
 		StartedAt: a.StartedAt, SubmittedAt: a.SubmittedAt, ExtensionSec: a.ExtensionSec, Warnings: a.Warnings, Violations: a.Violations,
 		Session: eff, Released: released(sess, a, eff),
 	}
@@ -177,7 +178,7 @@ func (s *Service) SessionInfo(ctx context.Context, teacherID, sessionID string) 
 
 // SessionIDsForQuiz lists a quiz's sessions, oldest first.
 func (s *Service) SessionIDsForQuiz(ctx context.Context, teacherID, quizID string) ([]string, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id FROM live.sessions WHERE quiz_id=$1 AND teacher_id=$2 ORDER BY created_at`, quizID, teacherID)
+	rows, err := s.pool.Query(ctx, `SELECT id FROM live.sessions WHERE quiz_id=$1 AND content.teaches(classroom_id, $2) ORDER BY created_at`, quizID, teacherID)
 	if err != nil {
 		return nil, err
 	}
