@@ -26,7 +26,7 @@ describe('managers', () => {
 	});
 
 	it('shows each person only their tabs; managers never get the managers page', () => {
-		expect(consoleTabs(admin)).toEqual(['users', 'classes', 'email', 'ai', 'usage', 'explore', 'live', 'settings', 'signin', 'drive', 'audit', 'storage', 'backups', 'recordings', 'managers']);
+		expect(consoleTabs(admin)).toEqual(['users', 'classes', 'email', 'ai', 'usage', 'explore', 'live', 'settings', 'signin', 'drive', 'audit', 'storage', 'backups', 'recordings', 'managers', 'capacity']);
 		expect(consoleTabs(mgr(['cleanup']))).toEqual(['storage']);
 		expect(consoleTabs(mgr(['backups']))).toEqual(['backups']);
 		expect(consoleTabs(mgr(['live_activity', 'usage']))).toEqual(['usage', 'live']); // Explore is admins' only (D-120)

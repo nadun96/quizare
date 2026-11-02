@@ -63,7 +63,7 @@ export function roleLabel(u: Person): string {
 	return u.manager && u.role !== 'manager' ? r + ' · manager' : r;
 }
 
-export type ConsoleTab = 'users' | 'classes' | 'email' | 'ai' | 'usage' | 'explore' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers';
+export type ConsoleTab = 'users' | 'classes' | 'email' | 'ai' | 'usage' | 'explore' | 'live' | 'settings' | 'signin' | 'drive' | 'audit' | 'storage' | 'backups' | 'recordings' | 'managers' | 'capacity';
 
 /** The admin console's tabs this person can open, in order. */
 export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
@@ -88,6 +88,8 @@ export function consoleTabs(u: Person | null | undefined): ConsoleTab[] {
 	// Every tutoring recording, and their space (D-80): admins only.
 	if (isAdmin(u)) tabs.push('recordings');
 	if (isAdmin(u)) tabs.push('managers');
+	// The capacity test runs virtual students on the server (D-125): admins only.
+	if (isAdmin(u)) tabs.push('capacity');
 	return tabs;
 }
 

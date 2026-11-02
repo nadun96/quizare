@@ -27,6 +27,7 @@
 	import ClassesPanel from '$lib/admin/ClassesPanel.svelte';
 	import EmailPanel from '$lib/admin/EmailPanel.svelte';
 	import LocalAIPanel from '$lib/admin/LocalAIPanel.svelte';
+	import CapacityPanel from '$lib/admin/CapacityPanel.svelte';
 	import Explore from '$lib/insight/Explore.svelte';
 	import ManagerDialog, { type ManagerRow, type Teacher } from '$lib/admin/ManagerDialog.svelte';
 	import { grouped, toolFrom, TOOLS } from '$lib/admin/tools';
@@ -313,6 +314,8 @@
 				<Explore />
 			{:else if tab === 'ai'}
 				<LocalAIPanel />
+			{:else if tab === 'capacity'}
+				<CapacityPanel />
 			{:else if tab === 'signin'}
 				<div class="vstack">
 					<section class="vstack" aria-labelledby="sso-h"><h2 id="sso-h" class="m-0 text-lg">Other accounts (OpenID Connect)</h2><SsoPanel /></section>
