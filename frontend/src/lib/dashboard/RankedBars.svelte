@@ -4,14 +4,15 @@
 	// and a second figure beside it. No value: an empty track and "—".
 	import { grow } from '../ui/motion';
 	type Row = { label: string; value: number | null; note: string };
-	let { rows, title, unit = '%' }: { rows: Row[]; title: string; unit?: string } = $props();
+	// max is the full bar: 100 for percentages; Explore passes the largest count (D-120).
+	let { rows, title, unit = '%', max = 100 }: { rows: Row[]; title: string; unit?: string; max?: number } = $props();
 </script>
 
 <ol class="bars" aria-label={title} use:grow={rows}>
 	{#each rows as r (r.label)}
 		<li aria-label="{r.label}: {r.value === null ? 'no results' : r.value + unit}, {r.note}">
 			<div class="head small"><span class="name truncate">{r.label}</span><span class="figs"><strong>{r.value === null ? '—' : r.value + unit}</strong><span class="muted">{r.note}</span></span></div>
-			<div class="track" aria-hidden="true"><div class="fill" data-grow="x" style="width: {Math.max(0, Math.min(100, r.value ?? 0))}%"></div></div>
+			<div class="track" aria-hidden="true"><div class="fill" data-grow="x" style="width: {Math.max(0, Math.min(100, ((r.value ?? 0) / (max || 1)) * 100))}%"></div></div>
 		</li>
 	{/each}
 </ol>
