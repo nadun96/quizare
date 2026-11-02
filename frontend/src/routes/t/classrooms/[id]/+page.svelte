@@ -18,10 +18,9 @@
 	import ClassroomFiles from '$lib/drive/ClassroomFiles.svelte';
 
 	import StudentsPanel, { type Enrolment } from '$lib/StudentsPanel.svelte';
-	import ClassroomResults from '$lib/ClassroomResults.svelte';
+	import Gradebook from '$lib/grading/Gradebook.svelte';
 	import { deleteWithContents } from '$lib/deleting';
-	import ClassroomAttendance from '$lib/tutoring/ClassroomAttendance.svelte';
-	import { tutoringConfig } from '$lib/tutoring/client';
+	import AttendanceReport from '$lib/grading/AttendanceReport.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
@@ -33,9 +32,6 @@
 	let studentCount = $state(0);
 	// ?tab=files: back from connecting Google Drive (D-71).
 	let tab = $state<'content' | 'students' | 'results' | 'trends' | 'teachers' | 'attendance' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
-	// Attendance at tutoring sessions, when tutoring is on (D-87).
-	let tutoring = $state(false);
-	tutoringConfig().then((c) => (tutoring = c.enabled), () => {});
 	let newModule = $state('');
 	let errors = $state<Record<string, string>>({});
 	let notice = $state('');
@@ -117,7 +113,7 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 			{#if !c.archived}<a class="btn btn-sm" href="/inbox?tab=announcements&classroom={c.id}&new=1"><Icon name="mail" size={16} />Announce</a>{/if}</div>
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ['trends', 'Trends'], ['teachers', 'Teachers'], ...(tutoring ? [['attendance', 'Attendance']] : []), ['files', 'Files'], ...(owner ? [['settings', 'Settings']] : []), ['join', 'Join code']] as [k, l] (k)}
+			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ['trends', 'Trends'], ['teachers', 'Teachers'], ['attendance', 'Attendance'], ['files', 'Files'], ...(owner ? [['settings', 'Settings']] : []), ['join', 'Join code']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -141,13 +137,13 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 		{:else if tab === 'students'}
 			<StudentsPanel classroomId={id} bind:count={studentCount} oneditnumber={editNumber} onstatus={setEnrolment} canRemove={owner} />
 		{:else if tab === 'results'}
-			<ClassroomResults classroomId={id} classroomName={c.name} />
+			<Gradebook classroomId={id} classroomName={c.name} />
 		{:else if tab === 'teachers'}
 			<TeachersPanel classroomId={id} classroomName={c.name} {owner} />
 		{:else if tab === 'trends'}
 			<ClassroomTrends classroomId={id} />
-		{:else if tab === 'attendance' && tutoring}
-			<ClassroomAttendance classroomId={id} classroomName={c.name} />
+		{:else if tab === 'attendance'}
+			<AttendanceReport classroomId={id} classroomName={c.name} />
 		{:else if tab === 'files'}
 			<ClassroomFiles classroomId={id} />
 		{:else if tab === 'settings' && owner}
