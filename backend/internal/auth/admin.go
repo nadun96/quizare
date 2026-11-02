@@ -26,7 +26,7 @@ var UserSorts = page.Sorts{"created": "u.created_at", "name": "lower(u.name)", "
 // how many match in all.
 // Role "manager" lists every manager, teacher-managers included.
 func (s *Service) ListUsers(ctx context.Context, f UserFilter, p page.Request) ([]User, int, error) {
-	where := ` FROM auth.users u ` + managerJoin + ` WHERE ($1 = '' OR u.role = $1 OR ($1 = 'manager' AND m.user_id IS NOT NULL))
+	where := ` FROM auth.users u ` + managerJoin + ` WHERE NOT u.synthetic AND ($1 = '' OR u.role = $1 OR ($1 = 'manager' AND m.user_id IS NOT NULL))
 		  AND ($2 = '' OR u.status = $2) AND ($3 = '' OR u.email ILIKE $3 OR u.name ILIKE $3)`
 	args := []any{f.Role, f.Status, p.Like()}
 	var total int

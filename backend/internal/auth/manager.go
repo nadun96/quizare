@@ -243,7 +243,7 @@ var ManagerSorts = page.Sorts{"granted": "m.granted_at", "name": "lower(u.name)"
 // ListManagers returns one page of managers, searched by name or email.
 func (s *Service) ListManagers(ctx context.Context, p page.Request) ([]ManagerRow, int, error) {
 	where := ` FROM auth.managers m JOIN auth.users u ON u.id = m.user_id LEFT JOIN auth.users g ON g.id = m.granted_by
-		WHERE u.status <> 'deleted' AND ($1 = '' OR u.email ILIKE $1 OR u.name ILIKE $1)`
+		WHERE u.status <> 'deleted' AND NOT u.synthetic AND ($1 = '' OR u.email ILIKE $1 OR u.name ILIKE $1)`
 	args := []any{p.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {

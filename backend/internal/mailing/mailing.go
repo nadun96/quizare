@@ -204,7 +204,7 @@ func (s *Service) message(subject, body string, r Recipient) mail.Message {
 // Recipients resolves an audience to active accounts, with the listed
 // addresses that aren't any, and a label for the record.
 func (s *Service) Recipients(ctx context.Context, a Audience) ([]Recipient, []string, string, error) {
-	const cols = `SELECT u.name, u.email, u.role, '' FROM auth.users u WHERE u.status = 'active'`
+	const cols = `SELECT u.name, u.email, u.role, '' FROM auth.users u WHERE u.status = 'active' AND NOT u.synthetic`
 	var (
 		rows  pgx.Rows
 		err   error
@@ -230,7 +230,7 @@ func (s *Service) Recipients(ctx context.Context, a Audience) ([]Recipient, []st
 		}
 		label = "Students of " + name
 		rows, err = s.pool.Query(ctx, `SELECT u.name, u.email, u.role, c.name FROM content.enrolments e
-			JOIN auth.users u ON u.id = e.user_id AND u.status = 'active'
+			JOIN auth.users u ON u.id = e.user_id AND u.status = 'active' AND NOT u.synthetic
 			JOIN content.classrooms c ON c.id = e.classroom_id
 			WHERE e.classroom_id = $1::uuid AND e.status = 'active' ORDER BY u.email`, a.ClassroomID)
 	case ToEmails:
