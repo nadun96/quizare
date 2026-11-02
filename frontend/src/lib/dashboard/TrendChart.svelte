@@ -7,7 +7,8 @@
 	import { draw } from '../ui/motion';
 	import { t } from '../i18n/i18n.svelte';
 	type Point = { label: string; sub: string; value: number; context: number | null; note?: string };
-	let { points, name, contextName, title }: { points: Point[]; name: string; contextName: string; title: string } = $props();
+	// rowName and noun name what each point is: a quiz (the dashboard) or a month (trends, D-119).
+	let { points, name, contextName, title, rowName = 'Quiz', noun = 'quizzes' }: { points: Point[]; name: string; contextName: string; title: string; rowName?: string; noun?: string } = $props();
 
 	let width = $state(560);
 	const W = $derived(Math.max(260, width));
@@ -60,7 +61,7 @@
 	<div class="relative" bind:clientWidth={width}>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 		<svg bind:this={svg} viewBox="0 0 {W} {H}" width={W} height={H} class="chart" role="img" tabindex="0"
-			aria-label="{title}: {points.length} quizzes{last ? `, latest ${last.value}%` : ''}. Use the arrow keys to read each one."
+			aria-label="{title}: {points.length} {noun}{last ? `, latest ${last.value}%` : ''}. Use the arrow keys to read each one."
 			use:draw={points}
 			onpointermove={onMove} onpointerleave={() => (active = null)} onkeydown={onKey} onblur={() => (active = null)}>
 			{#each [0, 50, 100] as t (t)}
@@ -95,7 +96,7 @@
 		<summary>{t('common.showTable')}</summary>
 		<div class="table-wrap">
 			<table class="table table-sm">
-				<thead><tr><th>Quiz</th><th>When</th><th>{name}</th>{#if hasContext}<th>{contextName}</th>{/if}</tr></thead>
+				<thead><tr><th>{rowName}</th><th>When</th><th>{name}</th>{#if hasContext}<th>{contextName}</th>{/if}</tr></thead>
 				<tbody>{#each points as p, i (i)}<tr><td>{p.label}</td><td>{p.sub}</td><td class="tabular">{p.value}%{p.note ? ' · ' + p.note : ''}</td>{#if hasContext}<td class="tabular">{p.context ?? '—'}{p.context !== null ? '%' : ''}</td>{/if}</tr>{/each}</tbody>
 			</table>
 		</div>

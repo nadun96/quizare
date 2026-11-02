@@ -191,6 +191,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, llmTutorialWorker)
 	analyticsWorker := &analytics.Worker{}
 	river.AddWorker(workers, analyticsWorker)
+	rollupWorker := &analytics.RollupWorker{}
+	river.AddWorker(workers, rollupWorker)
 
 	var w *river.Workers
 	if opt.RunJobs {
@@ -205,9 +207,10 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	river.AddWorker(workers, driveSync)
 	var periodic []*river.PeriodicJob
 	if opt.RunJobs {
-		periodic = append(periodic, storage.Periodic())   // hourly storage figures (PL-FR-04)
-		periodic = append(periodic, directory.Periodic()) // sign out accounts the directory disabled (D-64)
-		periodic = append(periodic, drive.SyncPeriodic()) // classroom Drive files follow enrolments (D-71)
+		periodic = append(periodic, storage.Periodic())         // hourly storage figures (PL-FR-04)
+		periodic = append(periodic, directory.Periodic())       // sign out accounts the directory disabled (D-64)
+		periodic = append(periodic, drive.SyncPeriodic())       // classroom Drive files follow enrolments (D-71)
+		periodic = append(periodic, analytics.RollupPeriodic()) // month-by-month trends (D-119)
 	}
 	rc, err := jobs.NewClient(pool, w, log, periodic...)
 	if err != nil {
@@ -244,6 +247,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Eval.SetLLM(a.LLM)
 	a.Analytics = analytics.NewService(pool, a.Live, a.Eval, a.Auth, rc)
 	analyticsWorker.Service = a.Analytics
+	rollupWorker.Service = a.Analytics
 	a.Admin = admin.NewService(pool, a.Auth)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
 	a.Storage = storage.NewService(pool, a.Auth, log, cfg.BackupDir, cfg.NightlyBackupDir, opt.KEK)
@@ -379,6 +383,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.LLM.TeacherRoutes(t)
 			a.LLM.LocalTeacherRoutes(t)
 			a.Analytics.TeacherRoutes(t)
+			a.Analytics.TrendRoutes(t) // long-term trends (D-119)
 			a.Poll.TeacherRoutes(t)
 			a.Meet.TeacherRoutes(t)
 			a.Drive.TeacherRoutes(t)
@@ -395,6 +400,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Admin.UserRoutes(s)
 			a.Progress.StudentRoutes(s)
 			a.Dashboard.Routes(s)
+			a.Analytics.MyTrendRoutes(s)
 			a.Inbox.Routes(s)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 			a.Meet.UserRoutes(s)

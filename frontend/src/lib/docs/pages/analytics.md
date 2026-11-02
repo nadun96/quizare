@@ -73,3 +73,37 @@ Teachers create live links on the poll's **Share** tab and on the session dashbo
 ## CSV export
 
 `GET /api/teacher/sessions/{id}/export.csv` writes one row per student with a column per question score. Cells starting with `=`, `+`, `-`, `@`, tab or CR are prefixed with `'` to prevent formula injection when opened in a spreadsheet (ADR-16).
+
+## Long-term trends (D-119)
+
+Charts over months and years read small roll-up tables instead of every result ever recorded, so they stay quick however much history there is.
+
+```mermaid
+flowchart LR
+  R[results, finished tutorials] -->|changed since last run| J[analytics_rollup<br/>every 15 min]
+  E[enrolments] -->|current month| J
+  J --> SM[analytics.student_months]
+  J --> CM[analytics.classroom_months]
+  SM --> T[classroom trends<br/>student trends<br/>my trends]
+  CM --> T
+```
+
+The job finds the classroom-months touched since its last run (by `eval.results.updated_at` and `tutorial.runs.updated_at`, with a minute of overlap), adds every open classroom's current month, and recomputes just those in a few set-based statements. Its first run computes all history. One run at a time: the state row is locked.
+
+| Figure | Definition |
+|--------|------------|
+| Results | complete, valid quiz results, in the month of the attempt's submission (UTC) |
+| Average, pass rate | over those results |
+| Tutorials | tutorials finished in the classroom |
+| Members | active members while the month runs, frozen once it's over (never fewer than took part) |
+| Taking part | members with a result or a finished tutorial ÷ members |
+| Student's active days | days with a result or a finished tutorial |
+| Recent / earlier average | a student's average over the last three months / the three before, for the trend arrow |
+
+Teachers see it on a classroom's **Trends** tab (12, 24 or 60 months) and per student; students see their own on **My results**.
+
+## Staying fast as it grows (D-119)
+
+- Every foreign key has an index starting with it; `TestForeignKeysAreIndexed` fails when a new one doesn't, so deleting a user or a classroom, or listing by owner, never reads a whole table.
+- Results pages read one precomputed row per session (above), and long-term charts read roll-ups.
+- Lists are paged on the server everywhere (TS-FR-94).
