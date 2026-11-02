@@ -8,7 +8,7 @@ export const en = {
 	'nav.groupTeaching': 'Teaching',
 	'nav.groupActivities': 'Activities',
 	'nav.classrooms': 'Classrooms',
-	'nav.bank': 'Question bank',
+	'nav.bank': 'Question pools',
 	'nav.explore': 'Explore',
 	'nav.polls': 'Polls',
 	'nav.meetings': 'Meetings',

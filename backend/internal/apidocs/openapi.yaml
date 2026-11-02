@@ -1812,6 +1812,44 @@ paths:
       responses:
         '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } }
         '409': { description: '`quiz_not_ready` or `quiz_has_warnings`', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/teacher/pools:
+    get:
+      operationId: getTeacherPools
+      tags: [quizzes]
+      summary: Every pool the teacher draws from - their question bank and each classroom's pool - with its categories and counts (D-123)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { pools: { type: array, items: { type: object, properties: { kind: { type: string, enum: [bank, pool] }, quiz_id: { type: string, description: '"" until the pool is first opened' }, classroom_id: { type: string }, classroom: { type: string }, role: { type: string, enum: [owner, coteacher] }, questions: { type: integer }, categories: { type: array, items: { type: object, properties: { category: { type: string }, count: { type: integer }, marks: { type: number } } } } } } } } } } } } }
+  /api/teacher/classrooms/{id}/pool:
+    get:
+      operationId: getTeacherClassroomPool
+      tags: [quizzes]
+      summary: The classroom's question pool, made on first use, shared by its teachers (D-123)
+      description: A quiz of kind pool; its questions, import, bulk and category endpoints are the quiz ones. It can't be run or marked ready; quizzes in the classroom draw from it with pool rules of source "class".
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Quiz' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/quizzes/{id}/questions/bulk:
+    post:
+      operationId: postTeacherQuizzesQuestionsBulk
+      tags: [quizzes]
+      summary: Move many questions to a category, or delete them (D-123)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [action, ids], properties: { action: { type: string, enum: [move, delete] }, ids: { type: array, maxItems: 5000, items: { type: string, format: uuid } }, category: { type: string, maxLength: 60 } } } } } }
+      responses: { '200': { description: 'How many changed', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/quizzes/{id}/categories/rename:
+    post:
+      operationId: postTeacherQuizzesCategoriesRename
+      tags: [quizzes]
+      summary: Rename a category (into an existing one, merging them) (D-123)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { from: { type: string }, to: { type: string, maxLength: 60 } } } } } }
+      responses: { '200': { description: 'How many changed', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/quizzes/{id}/categories/delete:
+    post:
+      operationId: postTeacherQuizzesCategoriesDelete
+      tags: [quizzes]
+      summary: Delete a category with its questions, or keep them uncategorised (D-123)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string }, delete_questions: { type: boolean } } } } } }
+      responses: { '200': { description: 'How many changed', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/bank:
     get:
       operationId: getTeacherBank
@@ -1879,8 +1917,12 @@ paths:
       operationId: postTeacherQuizzesQuestionsImport
       tags: [quizzes]
       summary: Bulk import questions from CSV (FR-QZ-05, BA §10.3)
-      description: Valid rows are imported; invalid rows are reported with row numbers and reasons. Limits 2 MB and 1000 rows.
-      parameters: [{ $ref: '#/components/parameters/id' }]
+      description: Valid rows are imported; invalid rows are reported with row numbers and reasons. Limits 2 MB and 1000 rows. With preview=1 nothing is saved and every row comes back as it would be (D-123); category fills rows with none (from the file's name); rename=1 gives a code already in use the next free one (Q1 → Q1-2) instead of refusing the row.
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+        - { name: preview, in: query, schema: { type: boolean } }
+        - { name: category, in: query, schema: { type: string, maxLength: 60 } }
+        - { name: rename, in: query, schema: { type: boolean } }
       requestBody: { $ref: '#/components/requestBodies/CSV' }
       responses: { '200': { description: 'Report', content: { application/json: { schema: { $ref: '#/components/schemas/ImportReport' } } } }, '400': { $ref: '#/components/responses/Error' } }
   /api/teacher/quizzes/{id}/resources/import:

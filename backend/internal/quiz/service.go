@@ -42,8 +42,11 @@ type Quiz struct {
 	Effective        *settings.Effective `json:"effective,omitempty"`
 	QuestionCount    int                 `json:"question_count"`
 	TotalMarks       float64             `json:"total_marks"`
-	// Kind is "quiz", or "bank" for a teacher's question bank (no topic, D-66).
+	// Kind is "quiz", "bank" for a teacher's question bank (no topic, D-66),
+	// or "pool" for a classroom's question pool (D-123).
 	Kind string `json:"kind"`
+	// ClassroomID: a classroom pool's classroom (D-123).
+	ClassroomID string `json:"classroom_id,omitempty"`
 	// Pools: how many questions each student draws from each category (D-66).
 	Pools     []PoolRule `json:"pools"`
 	CreatedAt time.Time  `json:"created_at"`
@@ -140,13 +143,13 @@ func (s *Service) CreateQuiz(ctx context.Context, teacherID, topicID string, in 
 }
 
 const quizCols = `q.id, coalesce(q.topic_id::text, ''), q.teacher_id, q.title, q.description, q.status, q.warnings_accepted, q.settings, q.created_at, q.updated_at,
-	(SELECT count(*) FROM quiz.questions x WHERE x.quiz_id=q.id), (SELECT coalesce(sum(marks),0) FROM quiz.questions x WHERE x.quiz_id=q.id), q.kind, q.pools`
+	(SELECT count(*) FROM quiz.questions x WHERE x.quiz_id=q.id), (SELECT coalesce(sum(marks),0) FROM quiz.questions x WHERE x.quiz_id=q.id), q.kind, q.pools, coalesce(q.classroom_id::text, '')`
 
 func scanQuiz(r pgx.Row) (Quiz, error) {
 	var q Quiz
 	var raw, pools []byte
 	err := r.Scan(&q.ID, &q.TopicID, &q.TeacherID, &q.Title, &q.Description, &q.Status, &q.WarningsAccepted, &raw,
-		&q.CreatedAt, &q.UpdatedAt, &q.QuestionCount, &q.TotalMarks, &q.Kind, &pools)
+		&q.CreatedAt, &q.UpdatedAt, &q.QuestionCount, &q.TotalMarks, &q.Kind, &pools, &q.ClassroomID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return q, httpx.ErrNotFound
 	}
@@ -165,7 +168,8 @@ func scanQuiz(r pgx.Row) (Quiz, error) {
 // the classroom its topic is in, as its owner or a co-teacher (D-121), so
 // someone who leaves a classroom leaves its quizzes too. A question bank
 // has no topic, so it stays its own teacher's.
-const mayTeach = `(CASE WHEN q.topic_id IS NULL THEN q.teacher_id=$2 ELSE content.teaches_topic(q.topic_id, $2) END)`
+const mayTeach = `(CASE WHEN q.topic_id IS NOT NULL THEN content.teaches_topic(q.topic_id, $2)
+	WHEN q.classroom_id IS NOT NULL THEN content.teaches(q.classroom_id, $2) ELSE q.teacher_id=$2 END)`
 
 // GetQuiz returns a quiz teacherID may work on, with its effective settings
 // (platform → teacher → classroom → module → topic → quiz).
@@ -185,7 +189,7 @@ func (s *Service) GetQuiz(ctx context.Context, teacherID, id string) (Quiz, erro
 // QuizLayers returns the settings layers down to quiz level, in merge order,
 // on top of the teacher base.
 func (s *Service) QuizLayers(ctx context.Context, q Quiz) (settings.Effective, []settings.Overrides, error) {
-	if q.Kind == KindBank {
+	if q.Kind == KindBank || q.Kind == KindPool {
 		base, err := s.settings.Base(ctx, q.TeacherID)
 		return base, []settings.Overrides{q.Settings}, err
 	}
@@ -324,7 +328,7 @@ func (s *Service) Readiness(ctx context.Context, teacherID, id string) (blocking
 	}
 	fromBank := false
 	for _, r := range qz.Pools {
-		fromBank = fromBank || r.Source == SourceBank
+		fromBank = fromBank || r.Source == SourceBank || r.Source == SourceClass
 	}
 	if len(qs) == 0 && !fromBank {
 		blocking = append(blocking, "add at least one question")

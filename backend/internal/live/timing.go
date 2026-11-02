@@ -261,16 +261,19 @@ func applyOrder(q quiz.Question, ids []string) quiz.StudentQuestion {
 // poolOrder picks a student's questions from the pools, in snapshot order
 // (the quiz's questions, then the bank's).
 func poolOrder(questions []quiz.Question, pools []quiz.PoolRule, rng *rand.Rand) []int {
-	key := func(fromBank bool, category string) string {
+	key := func(q quiz.Question) string {
 		src := quiz.SourceQuiz
-		if fromBank {
+		switch {
+		case q.FromBank:
 			src = quiz.SourceBank
+		case q.FromClass:
+			src = quiz.SourceClass
 		}
-		return src + "|" + strings.ToLower(category)
+		return src + "|" + strings.ToLower(q.Category)
 	}
 	groups := map[string][]int{}
 	for i, q := range questions {
-		k := key(q.FromBank, q.Category)
+		k := key(q)
 		groups[k] = append(groups[k], i)
 	}
 	ruled := map[string]bool{}
@@ -286,7 +289,7 @@ func poolOrder(questions []quiz.Question, pools []quiz.PoolRule, rng *rand.Rand)
 		picked = append(picked, g...)
 	}
 	for i, q := range questions {
-		if !q.FromBank && !ruled[key(false, q.Category)] {
+		if !q.FromBank && !q.FromClass && !ruled[key(q)] {
 			picked = append(picked, i) // a category without a rule: always asked
 		}
 	}

@@ -237,3 +237,44 @@ func TestPoolOrder(t *testing.T) {
 		}
 	}
 }
+
+// D-123: the classroom pool's questions are drawn by "class" rules, apart
+// from the bank's and the quiz's, and never asked without a rule. 500 in 5
+// categories, 10 from each: 50 questions per student.
+func TestPoolOrderClassPool(t *testing.T) {
+	var qs []quiz.Question
+	cats := []string{"Algebra", "Geometry", "Calculus", "Statistics", "Logic"}
+	for _, c := range cats {
+		for i := 0; i < 100; i++ {
+			qs = append(qs, quiz.Question{ID: fmt.Sprintf("%s%d", c, i), Category: c, FromClass: true})
+		}
+	}
+	qs = append(qs, quiz.Question{ID: "b", Category: "Algebra", FromBank: true}, quiz.Question{ID: "own", Category: "Algebra"})
+	var rules []quiz.PoolRule
+	for _, c := range cats {
+		rules = append(rules, quiz.PoolRule{Source: "class", Category: c, Count: 10})
+	}
+	for seed := uint64(0); seed < 20; seed++ {
+		order := poolOrder(qs, rules, rand.New(rand.NewPCG(seed, 3)))
+		per := map[string]int{}
+		var own, bank int
+		for _, i := range order {
+			switch {
+			case qs[i].FromClass:
+				per[qs[i].Category]++
+			case qs[i].FromBank:
+				bank++
+			default:
+				own++
+			}
+		}
+		if len(order) != 51 || own != 1 || bank != 0 {
+			t.Fatalf("seed %d: %d questions, own %d, bank %d", seed, len(order), own, bank)
+		}
+		for _, c := range cats {
+			if per[c] != 10 {
+				t.Fatalf("seed %d: %s gave %d", seed, c, per[c])
+			}
+		}
+	}
+}
