@@ -119,6 +119,9 @@ func (r *runner) main() {
 	r.client = &http.Client{Timeout: 60 * time.Second, Transport: tr}
 	r.wsClient = &http.Client{Transport: tr}
 	rep.DBMax = r.s.pool.Stat().MaxConns()
+	if l, err := r.s.auth.SignInLimits(ctx); err == nil {
+		rep.SignIn = &SignIn{NetworkBurst: l.NetworkBurst, NetworkPerSec: l.NetworkPerSec, Workers: l.Workers}
+	}
 	r.setPhase("measuring the app's download")
 	rep.PageKB, rep.PageFiles = r.pageWeight(ctx)
 	r.setPhase("creating the virtual class")

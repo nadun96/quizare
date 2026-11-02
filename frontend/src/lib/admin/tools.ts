@@ -25,7 +25,7 @@ export const TOOLS: Record<ConsoleTab, Tool> = {
 	explore: { key: 'explore', label: 'Explore', icon: 'table', blurb: 'Any measure by date, classroom, teacher, topic or question type', group: 'activity' },
 	usage: { key: 'usage', label: 'Usage', icon: 'chart', blurb: 'Counts of people, quizzes and attempts', group: 'activity' },
 	email: { key: 'email', label: 'Email', icon: 'mail', blurb: 'Templates, sending, the mail server and queue', group: 'messages' },
-	settings: { key: 'settings', label: 'Platform settings', icon: 'settings', blurb: 'Defaults for quizzes, approvals and meetings', group: 'settings' },
+	settings: { key: 'settings', label: 'Platform settings', icon: 'settings', blurb: 'Defaults for quizzes, approvals, meetings and sign-in limits', group: 'settings' },
 	signin: { key: 'signin', label: 'Sign-in', icon: 'key', blurb: 'School accounts: OpenID Connect and LDAP', group: 'settings' },
 	ai: { key: 'ai', label: 'AI models', icon: 'sparkles', blurb: 'The school’s own Ollama models for marking', group: 'settings' },
 	drive: { key: 'drive', label: 'Google Drive', icon: 'cloud', blurb: 'The Google app teachers connect through', group: 'settings' },

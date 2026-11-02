@@ -30,11 +30,31 @@ func TestHasherRoundTrip(t *testing.T) {
 func TestHasherPoolIsBounded(t *testing.T) {
 	h := NewHasher(1)
 	h.acquireMax = 20 * time.Millisecond
-	h.slots <- struct{}{} // occupy the only worker
+	if err := h.acquire(context.Background()); err != nil { // occupy the only worker
+		t.Fatal(err)
+	}
 	if _, err := h.Hash(context.Background(), "x"); err != ErrBusy {
 		t.Fatalf("err = %v, want ErrBusy", err)
 	}
-	<-h.slots
+	// D-126: a bigger pool lets a waiting check through at once.
+	done := make(chan error, 1)
+	h.acquireMax = 5 * time.Second
+	go func() { _, err := h.Hash(context.Background(), "x"); done <- err }()
+	time.Sleep(20 * time.Millisecond)
+	h.SetWorkers(2)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("growing the pool didn't wake the waiting check")
+	}
+	h.release()
+	if h.Workers() != 2 {
+		t.Fatalf("workers = %d", h.Workers())
+	}
+	h.acquireMax = 20 * time.Millisecond
 	h.maxQueue = 0
 	if _, err := h.Hash(context.Background(), "x"); err != ErrBusy {
 		t.Fatalf("queue full: err = %v, want ErrBusy", err)
@@ -54,6 +74,20 @@ func TestLimiter(t *testing.T) {
 	now = now.Add(time.Second)
 	if !l.Allow("k") || l.Allow("k") {
 		t.Fatal("refill of 1/s not applied")
+	}
+	// D-126: the admin changes the rate; it applies to buckets already there.
+	l.SetRate(5, 100*time.Millisecond)
+	now = now.Add(time.Second)
+	for i := 0; i < 5; i++ {
+		if !l.Allow("k") {
+			t.Fatalf("new burst: refused at %d", i)
+		}
+	}
+	if l.Allow("k") {
+		t.Fatal("new burst not capped")
+	}
+	if b, r := l.Rate(); b != 5 || r != 10 {
+		t.Fatalf("rate = %d, %v", b, r)
 	}
 }
 

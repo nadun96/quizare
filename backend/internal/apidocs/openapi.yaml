@@ -2203,6 +2203,18 @@ paths:
       summary: Mark a tiny answer with a model on the school's server, to see it works and how long it takes (D-115)
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { model: { type: string } } } } } }
       responses: { '200': { description: 'How it went', content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, error: { type: string }, seconds: { type: number }, score: { type: number } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/admin/sign-in-limits:
+    get:
+      operationId: getAdminSignInLimits
+      tags: [admin]
+      summary: Sign-in limits - sign-ins one internet address may make at once and then each second, and passwords checked at a time, with the server's own setting and its cores (admins only, D-126)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/SignInLimits' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    put:
+      operationId: putAdminSignInLimits
+      tags: [admin]
+      summary: Save the sign-in limits; they apply at once (D-126). The per-account limit, which stops password guessing, stays fixed
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SignInLimits' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/SignInLimits' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/admin/loadtest:
     get:
       operationId: getAdminLoadtest
@@ -3032,6 +3044,15 @@ components:
       content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
 
   schemas:
+    SignInLimits:
+      type: object
+      properties:
+        network_burst: { type: integer, minimum: 50, maximum: 5000, example: 600 }
+        network_per_sec: { type: number, minimum: 1, maximum: 200, example: 20 }
+        password_workers: { type: integer, minimum: 1, maximum: 8, nullable: true, description: "null: the server's own setting (QP_ARGON2_WORKERS)" }
+        workers: { type: integer, readOnly: true }
+        default_workers: { type: integer, readOnly: true }
+        cpus: { type: integer, readOnly: true }
     LoadTestPlan:
       type: object
       properties:

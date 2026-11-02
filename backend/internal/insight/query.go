@@ -277,7 +277,9 @@ func (s *Service) Run(ctx context.Context, sc Scope, q Query) (Result, error) {
 	if fact == FactAnswers {
 		table = "olap.answers"
 	}
-	where := []string{`f.at >= $1::date`, `f.at < $2::date`}
+	// Days are UTC days, as the date dimension groups them: a bare date would be
+	// midnight in the database's own time zone (D-120).
+	where := []string{`f.at >= ($1::timestamp AT TIME ZONE 'UTC')`, `f.at < ($2::timestamp AT TIME ZONE 'UTC')`}
 	if !sc.Staff {
 		me := arg(sc.UserID)
 		// Their own classrooms, and those they co-teach (D-121).

@@ -123,6 +123,9 @@ func (s *Service) AdminRoutes(r chi.Router) {
 	r.With(s.RequireFeature(FeatManageUsers)).Method("POST", "/users/{id}/role", httpx.Handler(s.handleSetRole))
 	r.With(s.RequireFeature(FeatApprovalPolicy)).Method("GET", "/auth-policy", httpx.Handler(s.handleGetPolicy))
 	r.With(s.RequireFeature(FeatApprovalPolicy)).Method("PUT", "/auth-policy", httpx.Handler(s.handleSetPolicy))
+	// How fast people may sign in: admins only, like other server settings (D-126).
+	r.With(RequireRole(RoleAdmin)).Method("GET", "/sign-in-limits", httpx.Handler(s.handleGetSignInLimits))
+	r.With(RequireRole(RoleAdmin)).Method("PUT", "/sign-in-limits", httpx.Handler(s.handleSetSignInLimits))
 	s.managerRoutes(r)
 }
 
