@@ -164,6 +164,10 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		return nil, err
 	}
 	a.ownPool = true
+	// The admin's sign-in limits (D-126).
+	if err := a.Auth.LoadSignInLimits(ctx); err != nil {
+		log.Error("sign-in limits", "err", err)
+	}
 	// A capacity test cut short by a stop or a crash leaves accounts behind (D-125).
 	if err := a.LoadTest.Recover(ctx); err != nil {
 		log.Error("capacity test: removing a cut-short test's accounts", "err", err)

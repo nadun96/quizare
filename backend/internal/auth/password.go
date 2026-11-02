@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,7 +30,10 @@ var ErrBusy = errors.New("password hashing pool busy")
 // Hasher runs Argon2id in a bounded worker pool. Without the cap, 100
 // simultaneous logins would allocate ~1.9 GB (architecture §2.1, risk R1).
 type Hasher struct {
-	slots      chan struct{}
+	mu         sync.Mutex
+	inUse      int
+	workers    int
+	freed      chan struct{} // closed, and replaced, whenever a slot frees or the pool grows
 	waiting    atomic.Int64
 	maxQueue   int64
 	acquireMax time.Duration
@@ -42,7 +46,8 @@ func NewHasher(workers int) *Hasher {
 		workers = 1
 	}
 	return &Hasher{
-		slots:      make(chan struct{}, workers),
+		workers:    workers,
+		freed:      make(chan struct{}),
 		maxQueue:   200,
 		acquireMax: 10 * time.Second,
 		memoryKiB:  argonMemoryKiB,
@@ -57,17 +62,53 @@ func (h *Hasher) acquire(ctx context.Context) error {
 	defer h.waiting.Add(-1)
 	t := time.NewTimer(h.acquireMax)
 	defer t.Stop()
-	select {
-	case h.slots <- struct{}{}:
-		return nil
-	case <-t.C:
-		return ErrBusy
-	case <-ctx.Done():
-		return ctx.Err()
+	for {
+		h.mu.Lock()
+		if h.inUse < h.workers {
+			h.inUse++
+			h.mu.Unlock()
+			return nil
+		}
+		freed := h.freed
+		h.mu.Unlock()
+		select {
+		case <-freed:
+		case <-t.C:
+			return ErrBusy
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
-func (h *Hasher) release() { <-h.slots }
+func (h *Hasher) release() {
+	h.mu.Lock()
+	h.inUse--
+	h.wake()
+	h.mu.Unlock()
+}
+
+// wake lets every waiter look again; h.mu is held.
+func (h *Hasher) wake() {
+	close(h.freed)
+	h.freed = make(chan struct{})
+}
+
+// SetWorkers changes how many passwords are checked at once (D-126).
+// Checks already running finish; a smaller pool takes effect as they do.
+func (h *Hasher) SetWorkers(n int) {
+	h.mu.Lock()
+	h.workers = max(1, n)
+	h.wake()
+	h.mu.Unlock()
+}
+
+// Workers is how many passwords are checked at once.
+func (h *Hasher) Workers() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.workers
+}
 
 // Hash returns a PHC-format Argon2id hash.
 func (h *Hasher) Hash(ctx context.Context, password string) (string, error) {

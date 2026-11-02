@@ -37,7 +37,10 @@ describe('capacity test (D-125)', () => {
 		const r = run('failed', [step(2000, false, { cpu_peak: 97, db_waits: 400, errors: { login_limited: 120, save: 3 } })], 0);
 		const a = advice(r).join(' ');
 		expect(a).toMatch(/120 sign-ins were refused for trying too often/);
-		expect(advice({ ...r, plan: { ...r.plan, one_network: true } }).join(' ')).toMatch(/120 sign-ins were held back by the per-network limit/);
+		expect(advice({ ...r, plan: { ...r.plan, one_network: true } }).join(' ')).toMatch(/120 sign-ins were held back by the per-network limit \(300 at once, then 5 a second/);
+		// D-126: the limits in force when the test ran.
+		const r2 = { ...r, plan: { ...r.plan, one_network: true }, report: { ...r.report!, sign_in: { network_burst: 600, network_per_sec: 20, workers: 3 } } };
+		expect(advice(r2).join(' ')).toMatch(/\(600 at once, then 20 a second/);
 		expect(a).toMatch(/processor reached 97 %/);
 		expect(a).toMatch(/waited for a database connection 400 times/);
 		expect(failures(r.report!.steps[0])).toBe(3);
