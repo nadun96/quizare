@@ -1559,6 +1559,48 @@ paths:
       summary: Students enrolled in a classroom
       parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, name, number, status] } }, { name: category, in: query, description: 'Only students in this category', schema: { type: string, format: uuid } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
+  /api/teacher/classrooms/{id}/teachers:
+    get:
+      operationId: getTeacherClassroomTeachers
+      tags: [classrooms]
+      summary: The classroom's owner and co-teachers, with each invitation's status (D-121)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { teachers: { type: array, items: { $ref: '#/components/schemas/ClassroomTeacher' } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postTeacherClassroomTeachers
+      tags: [classrooms]
+      summary: Invite a teacher, by their account's email, to co-teach (owner only; D-121)
+      description: The teacher must have an active teacher account. They get an email and see the invitation on their Classrooms page; they teach the classroom once they accept.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      responses: { '201': { description: 'Invited', content: { application/json: { schema: { $ref: '#/components/schemas/ClassroomTeacher' } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/teachers/{user}:
+    delete:
+      operationId: deleteTeacherClassroomTeacher
+      tags: [classrooms]
+      summary: Remove a co-teacher or an invitation (owner), or leave the classroom (the co-teacher themself) (D-121)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: user, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '204': { description: 'Removed' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/invitations:
+    get:
+      operationId: getTeacherInvitations
+      tags: [classrooms]
+      summary: Classrooms the teacher has been invited to co-teach and hasn't answered (D-121)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { invitations: { type: array, items: { type: object, properties: { classroom_id: { type: string, format: uuid }, classroom: { type: string }, owner_name: { type: string }, invited_at: { type: string, format: date-time } } } } } } } } } }
+  /api/teacher/invitations/{id}/accept:
+    post:
+      operationId: postTeacherInvitationAccept
+      tags: [classrooms]
+      summary: Accept an invitation to co-teach classroom {id} (D-121)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Now co-teaching' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/invitations/{id}/decline:
+    post:
+      operationId: postTeacherInvitationDecline
+      tags: [classrooms]
+      summary: Decline an invitation to co-teach classroom {id} (D-121)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '204': { description: 'Declined' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/classrooms/{id}/trends:
     get:
       operationId: getTeacherClassroomTrends
@@ -3225,6 +3267,17 @@ components:
           properties:
             source: { type: string, enum: [console, config, log] }
             config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
+    ClassroomTeacher:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        avatar: { type: string }
+        role: { type: string, enum: [owner, coteacher] }
+        status: { type: string, enum: [active, invited] }
+        invited_at: { type: string, format: date-time, nullable: true }
+        accepted_at: { type: string, format: date-time, nullable: true }
     InsightQuery:
       type: object
       required: [measures]
@@ -3687,6 +3740,8 @@ components:
         effective: { $ref: '#/components/schemas/Effective' }
         archived: { type: boolean }
         created_at: { type: string, format: date-time }
+        role: { type: string, enum: [owner, coteacher], description: the asking teacher's part in it (D-121) }
+        owner_name: { type: string }
     ClassroomInput:
       type: object
       properties: { name: { type: string, maxLength: 200 }, description: { type: string }, settings: { $ref: '#/components/schemas/Overrides' } }

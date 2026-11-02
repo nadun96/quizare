@@ -51,7 +51,7 @@ func (s *Service) Announcements(ctx context.Context, u auth.User, classroomID st
 	case auth.RoleStudent:
 		from += studentAnnouncements
 	case auth.RoleTeacher:
-		from += ` JOIN content.classrooms c ON c.id = a.classroom_id WHERE c.teacher_id = $1`
+		from += ` JOIN content.classrooms c ON c.id = a.classroom_id WHERE content.teaches(c.id, $1)`
 	default:
 		return []Announcement{}, 0, nil
 	}
@@ -84,7 +84,7 @@ func (s *Service) Announcements(ctx context.Context, u auth.User, classroomID st
 func (s *Service) owned(ctx context.Context, teacherID, id string) (Announcement, error) {
 	var a Announcement
 	err := s.pool.QueryRow(ctx, announcementCols+`, false, 0, 0 FROM inbox.announcements a LEFT JOIN auth.users w ON w.id = a.author_id
-		JOIN content.classrooms c ON c.id = a.classroom_id WHERE a.id::text = $1 AND c.teacher_id = $2`, id, teacherID).
+		JOIN content.classrooms c ON c.id = a.classroom_id WHERE a.id::text = $1 AND content.teaches(c.id, $2)`, id, teacherID).
 		Scan(&a.ID, &a.ClassroomID, &a.Classroom, &a.Author, &a.AuthorID, &a.Avatar, &a.Title, &a.Body, &a.Emailed, &a.CreatedAt, &a.UpdatedAt, &a.Read, &a.Reads, &a.Students)
 	return a, notFound(err)
 }
@@ -93,8 +93,8 @@ func (s *Service) owned(ctx context.Context, teacherID, id string) (Announcement
 // its students.
 func (s *Service) Announce(ctx context.Context, teacherID, classroomID, title, body string, email bool) (Announcement, error) {
 	var classroom, teacher string
-	err := s.pool.QueryRow(ctx, `SELECT c.name, u.name FROM content.classrooms c JOIN auth.users u ON u.id = c.teacher_id
-		WHERE c.id::text = $1 AND c.teacher_id = $2`, classroomID, teacherID).Scan(&classroom, &teacher)
+	err := s.pool.QueryRow(ctx, `SELECT c.name, u.name FROM content.classrooms c JOIN auth.users u ON u.id = $2
+		WHERE c.id::text = $1 AND content.teaches(c.id, $2)`, classroomID, teacherID).Scan(&classroom, &teacher)
 	if err != nil {
 		return Announcement{}, notFound(err)
 	}

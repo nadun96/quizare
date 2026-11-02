@@ -263,7 +263,7 @@ func (s *Service) teacher(ctx context.Context, uid string, out map[string][]Item
 	rows, err := s.pool.Query(ctx, `SELECT 'quiz', s.id, s.title, c.name, coalesce(s.started_at, s.created_at), '/t/sessions/' || s.id,
 			(SELECT count(*) FROM live.attempts a WHERE a.session_id = s.id AND a.state IN ('waiting', 'admitted', 'in_progress', 'paused'))::int
 		FROM live.sessions s JOIN content.classrooms c ON c.id = s.classroom_id
-		WHERE s.teacher_id = $1 AND s.status <> 'ended'
+		WHERE content.teaches(s.classroom_id, $1) AND s.status <> 'ended'
 		UNION ALL
 		SELECT 'poll', p.id, p.title, coalesce(c.name, ''), coalesce(p.opened_at, p.created_at), '/t/polls/' || p.id,
 			(SELECT count(*) FROM poll.participants x WHERE x.poll_id = p.id)::int
@@ -278,7 +278,7 @@ func (s *Service) teacher(ctx context.Context, uid string, out map[string][]Item
 		FROM presentation.lives l JOIN presentation.presentations p ON p.id = l.presentation_id
 		JOIN content.topics tp ON tp.id = p.topic_id JOIN content.modules m ON m.id = tp.module_id
 		JOIN content.classrooms c ON c.id = m.classroom_id
-		WHERE p.teacher_id = $1 AND l.ended_at IS NULL
+		WHERE content.teaches(c.id, $1) AND l.ended_at IS NULL
 		LIMIT 200`, uid)
 	if err != nil {
 		return err
@@ -310,13 +310,13 @@ func (s *Service) teacher(ctx context.Context, uid string, out map[string][]Item
 				(SELECT count(*) FROM tutorial.runs r WHERE r.tutorial_id = t.id AND r.finished_at IS NOT NULL) AS finished
 			FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 			JOIN content.classrooms c ON c.id = m.classroom_id AND c.archived_at IS NULL
-			WHERE t.teacher_id = $1 AND t.status = 'published'
+			WHERE content.teaches(c.id, $1) AND t.status = 'published'
 			UNION ALL
 			SELECT 'presentation', p.id, p.title, c.id, c.name, p.opens_at, p.due_at,
 				(SELECT count(*) FROM presentation.viewers v WHERE v.presentation_id = p.id AND v.finished_at IS NOT NULL)
 			FROM presentation.presentations p JOIN content.topics tp ON tp.id = p.topic_id JOIN content.modules m ON m.id = tp.module_id
 			JOIN content.classrooms c ON c.id = m.classroom_id AND c.archived_at IS NULL
-			WHERE p.teacher_id = $1 AND p.status = 'published')
+			WHERE content.teaches(c.id, $1) AND p.status = 'published')
 		SELECT kind, id, title, classroom, opens_at, due_at, finished::int,
 			(SELECT count(*) FROM content.enrolments e WHERE e.classroom_id = mine.classroom_id AND e.status = 'active')::int
 		FROM mine WHERE opens_at > $2 OR due_at > $2 - interval '30 days'
@@ -352,19 +352,19 @@ func (s *Service) teacher(ctx context.Context, uid string, out map[string][]Item
 	rows, err = s.pool.Query(ctx, `SELECT 'marking', s.id, s.title, c.name, max(s.ended_at), '/t/sessions/' || s.id || '/results', count(*)::int
 		FROM eval.marks mk JOIN live.attempts a ON a.id = mk.attempt_id JOIN live.sessions s ON s.id = a.session_id
 		JOIN content.classrooms c ON c.id = s.classroom_id
-		WHERE s.teacher_id = $1 AND mk.status IN ('pending', 'needs_manual')
+		WHERE content.teaches(c.id, $1) AND mk.status IN ('pending', 'needs_manual')
 		GROUP BY s.id, s.title, c.name
 		UNION ALL
 		SELECT 'marking', t.id, t.title, c.name, max(an.answered_at), '/t/tutorials/' || t.id, count(*)::int
 		FROM tutorial.answers an JOIN tutorial.runs r ON r.id = an.run_id JOIN tutorial.tutorials t ON t.id = r.tutorial_id
 		JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 		JOIN content.classrooms c ON c.id = m.classroom_id
-		WHERE t.teacher_id = $1 AND an.status = 'pending'
+		WHERE content.teaches(c.id, $1) AND an.status = 'pending'
 		GROUP BY t.id, t.title, c.name
 		UNION ALL
 		SELECT 'enrolment', c.id, c.name, c.name, max(e.created_at), '/t/classrooms/' || c.id, count(*)::int
 		FROM content.enrolments e JOIN content.classrooms c ON c.id = e.classroom_id
-		WHERE c.teacher_id = $1 AND e.status = 'pending'
+		WHERE content.teaches(c.id, $1) AND e.status = 'pending'
 		GROUP BY c.id, c.name
 		LIMIT 200`, uid)
 	if err != nil {

@@ -268,7 +268,8 @@ func (s *Service) UpdateEnrolment(ctx context.Context, teacherID, enrolmentID st
 		e, err = scanEnrolment(tx.QueryRow(ctx, `UPDATE content.enrolments en SET
 			status = coalesce($3, en.status),
 			student_number = CASE WHEN $4 THEN $5 ELSE en.student_number END
-			FROM content.classrooms c WHERE c.id=en.classroom_id AND en.id=$1 AND c.teacher_id=$2
+			FROM content.classrooms c WHERE c.id=en.classroom_id AND en.id=$1 AND content.teaches(c.id, $2)
+				AND ($3::text IS DISTINCT FROM 'removed' OR c.teacher_id=$2)
 			RETURNING en.id, en.classroom_id, en.user_id, en.student_number, en.status, en.created_at`,
 			enrolmentID, teacherID, in.Status, in.StudentNumber != nil, num))
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -326,7 +327,7 @@ type TutoringClassroom struct {
 // TutoringClassrooms lists the classrooms, not archived, a user teaches or
 // is actively enrolled in.
 func (s *Service) TutoringClassrooms(ctx context.Context, userID string) ([]TutoringClassroom, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, name, 'teacher' FROM content.classrooms WHERE teacher_id=$1 AND archived_at IS NULL
+	rows, err := s.pool.Query(ctx, `SELECT id, name, 'teacher' FROM content.classrooms WHERE content.teaches(id, $1) AND archived_at IS NULL
 		UNION ALL
 		SELECT c.id, c.name, 'student' FROM content.enrolments e JOIN content.classrooms c ON c.id=e.classroom_id
 		WHERE e.user_id=$1 AND e.status='active' AND c.archived_at IS NULL`, userID)
@@ -371,7 +372,9 @@ func (s *Service) ClassroomAccess(ctx context.Context, classroomID, userID strin
 	if err != nil {
 		return c, "", err
 	}
-	if c.TeacherID == userID {
+	if ok, err := s.Teaches(ctx, classroomID, userID); err != nil {
+		return c, "", err
+	} else if ok {
 		return c, "teacher", nil
 	}
 	e, err := s.EnsureEnrolled(ctx, classroomID, userID, "")

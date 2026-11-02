@@ -208,6 +208,10 @@ func (s *Service) OverseeTransfer(ctx context.Context, actorID, id, teacherID st
 		if _, err := tx.Exec(ctx, `UPDATE content.classrooms SET teacher_id = $2 WHERE id = $1`, c.ID, teacherID); err != nil {
 			return err
 		}
+		// A co-teacher who becomes the owner isn't also a co-teacher (D-121).
+		if _, err := tx.Exec(ctx, `DELETE FROM content.classroom_teachers WHERE classroom_id = $1 AND user_id = $2`, c.ID, teacherID); err != nil {
+			return err
+		}
 		tag, err := tx.Exec(ctx, `UPDATE quiz.quizzes SET teacher_id = $2 WHERE `+inClass, c.ID, teacherID)
 		if err != nil {
 			return err

@@ -102,7 +102,7 @@ func (s *Service) queue(ctx context.Context, tx pgx.Tx, m mail.Message) error {
 func (s *Service) teaches(ctx context.Context, teacherID, studentID string) (bool, error) {
 	var ok bool
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM content.classrooms c JOIN content.enrolments e ON e.classroom_id = c.id
-		WHERE c.teacher_id = $1 AND e.user_id::text = $2 AND e.status = 'active' AND c.archived_at IS NULL)`, teacherID, studentID).Scan(&ok)
+		WHERE content.teaches(c.id, $1) AND e.user_id::text = $2 AND e.status = 'active' AND c.archived_at IS NULL)`, teacherID, studentID).Scan(&ok)
 	return ok, err
 }
 

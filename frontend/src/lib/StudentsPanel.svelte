@@ -25,13 +25,16 @@
 		classroomId,
 		count = $bindable(0),
 		oneditnumber,
-		onstatus
+		onstatus,
+		canRemove = true
 	}: {
 		classroomId: string;
 		/** Students in the classroom, for the tab label. */
 		count?: number;
 		oneditnumber: (e: Enrolment) => Promise<void>;
 		onstatus: (e: Enrolment, status: string) => Promise<void>;
+		/** Only the classroom's owner removes students (D-121). */
+		canRemove?: boolean;
 	} = $props();
 
 	let categories = $state<Category[]>([]);
@@ -213,7 +216,7 @@
 							<td class="whitespace-nowrap">
 								{#if en.status !== 'active'}<button class="btn btn-sm" onclick={() => setStatus(en, 'active')}>Approve</button>{/if}
 								{#if en.status === 'pending'}<button class="btn btn-sm" onclick={() => setStatus(en, 'rejected')}>Reject</button>{/if}
-								{#if en.status === 'active'}<button class="btn btn-sm btn-error btn-outline" onclick={() => setStatus(en, 'removed')}>Remove</button>{/if}
+								{#if en.status === 'active' && canRemove}<button class="btn btn-sm btn-error btn-outline" onclick={() => setStatus(en, 'removed')}>Remove</button>{/if}
 							</td>
 						</tr>
 					{:else}

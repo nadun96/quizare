@@ -279,7 +279,9 @@ func (s *Service) Run(ctx context.Context, sc Scope, q Query) (Result, error) {
 	}
 	where := []string{`f.at >= $1::date`, `f.at < $2::date`}
 	if !sc.Staff {
-		where = append(where, `c.teacher_id = `+arg(sc.UserID))
+		me := arg(sc.UserID)
+		// Their own classrooms, and those they co-teach (D-121).
+		where = append(where, fmt.Sprintf(`(c.teacher_id = %s OR EXISTS (SELECT 1 FROM olap.coteachers ct WHERE ct.classroom_id = c.id AND ct.user_id = %s))`, me, me))
 	}
 	for k, vals := range q.Filters {
 		d := findDim(k)

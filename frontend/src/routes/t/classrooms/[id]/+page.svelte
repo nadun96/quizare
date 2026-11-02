@@ -1,4 +1,5 @@
 <script lang="ts">
+	import TeachersPanel from '$lib/classroom/TeachersPanel.svelte';
 	import ClassroomTrends from '$lib/trends/ClassroomTrends.svelte';
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
@@ -25,11 +26,13 @@
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
 	let c = $state<Classroom | null>(null);
+	// The classroom itself is its owner's; co-teachers teach it (D-121).
+	const owner = $derived(c?.role !== 'coteacher');
 	// Modules one page at a time, in the teacher's order; each lists its own topics (PL-FR-02).
 	const modules = new Paged<Module>(() => '/api/teacher/classrooms/' + id + '/modules', 'modules', { url: urlState, prefix: 'mod', sort: 'position' });
 	let studentCount = $state(0);
 	// ?tab=files: back from connecting Google Drive (D-71).
-	let tab = $state<'content' | 'students' | 'results' | 'trends' | 'attendance' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
+	let tab = $state<'content' | 'students' | 'results' | 'trends' | 'teachers' | 'attendance' | 'files' | 'settings' | 'join'>(page.url.searchParams.get('tab') === 'files' ? 'files' : 'content');
 	// Attendance at tutoring sessions, when tutoring is on (D-87).
 	let tutoring = $state(false);
 	tutoringConfig().then((c) => (tutoring = c.enabled), () => {});
@@ -110,11 +113,11 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 <div class="page-container vstack">
 	{#if c}
 		<div class="row"><a href="/t">← Classrooms</a></div>
-		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}<span class="spacer"></span>
+		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}{#if !owner}<span class="badge badge-soft" title="You co-teach this classroom">Co-teacher · owned by {c.owner_name}</span>{/if}<span class="spacer"></span>
 			{#if !c.archived}<a class="btn btn-sm" href="/inbox?tab=announcements&classroom={c.id}&new=1"><Icon name="mail" size={16} />Announce</a>{/if}</div>
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ['trends', 'Trends'], ...(tutoring ? [['attendance', 'Attendance']] : []), ['files', 'Files'], ['settings', 'Settings'], ['join', 'Join code']] as [k, l] (k)}
+			{#each [['content', 'Modules & topics'], ['students', `Students (${studentCount})`], ['results', 'Results'], ['trends', 'Trends'], ['teachers', 'Teachers'], ...(tutoring ? [['attendance', 'Attendance']] : []), ['files', 'Files'], ...(owner ? [['settings', 'Settings']] : []), ['join', 'Join code']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -136,16 +139,18 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 				<button class="btn btn-primary">Add module</button>
 			</form>
 		{:else if tab === 'students'}
-			<StudentsPanel classroomId={id} bind:count={studentCount} oneditnumber={editNumber} onstatus={setEnrolment} />
+			<StudentsPanel classroomId={id} bind:count={studentCount} oneditnumber={editNumber} onstatus={setEnrolment} canRemove={owner} />
 		{:else if tab === 'results'}
 			<ClassroomResults classroomId={id} classroomName={c.name} />
+		{:else if tab === 'teachers'}
+			<TeachersPanel classroomId={id} classroomName={c.name} {owner} />
 		{:else if tab === 'trends'}
 			<ClassroomTrends classroomId={id} />
 		{:else if tab === 'attendance' && tutoring}
 			<ClassroomAttendance classroomId={id} classroomName={c.name} />
 		{:else if tab === 'files'}
 			<ClassroomFiles classroomId={id} />
-		{:else if tab === 'settings'}
+		{:else if tab === 'settings' && owner}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">
 				<button class="btn" onclick={() => archive(!c!.archived)}>{c.archived ? 'Unarchive' : 'Archive'} classroom</button>
@@ -157,7 +162,7 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 				<p style="font-size:2rem;font-weight:700;letter-spacing:0.1em">{c.join_code}</p>
 				<QrCode text={joinUrl} size={260} />
 				<p class="small"><a href={joinUrl}>{joinUrl}</a></p>
-				<div><button class="btn" onclick={newCode}>Generate a new code</button></div>
+				{#if owner}<div><button class="btn" onclick={newCode}>Generate a new code</button></div>{/if}
 			</div>
 		{/if}
 	{/if}

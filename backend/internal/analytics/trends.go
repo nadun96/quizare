@@ -260,7 +260,7 @@ func span(now time.Time, months int) []time.Time {
 
 func (s *Service) ownClassroom(ctx context.Context, teacherID, classroomID string) (string, error) {
 	var name string
-	err := s.pool.QueryRow(ctx, `SELECT name FROM content.classrooms WHERE id = $1 AND teacher_id = $2`, classroomID, teacherID).Scan(&name)
+	err := s.pool.QueryRow(ctx, `SELECT name FROM content.classrooms WHERE id = $1 AND content.teaches(id, $2)`, classroomID, teacherID).Scan(&name)
 	if err == pgx.ErrNoRows {
 		return "", httpx.ErrNotFound
 	}

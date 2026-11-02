@@ -34,7 +34,7 @@ func (s *Service) CreateTutorialQuestions(ctx context.Context, teacherID, topicI
 
 // DeleteTutorialQuestions removes a tutorial's quiz and its questions.
 func (s *Service) DeleteTutorialQuestions(ctx context.Context, teacherID, quizID string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM quiz.quizzes WHERE id=$1 AND teacher_id=$2 AND kind='tutorial'`, quizID, teacherID)
+	_, err := s.pool.Exec(ctx, `DELETE FROM quiz.quizzes q WHERE q.id=$1 AND q.kind='tutorial' AND `+mayTeach, quizID, teacherID)
 	return err
 }
 
@@ -70,7 +70,7 @@ func (s *Service) TutorialQuestions(ctx context.Context, quizID string) ([]Quest
 // the order asked.
 func (s *Service) CopyQuestions(ctx context.Context, teacherID, quizID string, ids []string) ([]Question, error) {
 	var kind string
-	if err := s.pool.QueryRow(ctx, `SELECT kind FROM quiz.quizzes WHERE id=$1 AND teacher_id=$2`, quizID, teacherID).Scan(&kind); err != nil || kind != KindTutorial {
+	if err := s.pool.QueryRow(ctx, `SELECT q.kind FROM quiz.quizzes q WHERE q.id=$1 AND `+mayTeach, quizID, teacherID).Scan(&kind); err != nil || kind != KindTutorial {
 		return nil, httpx.ErrNotFound
 	}
 	if len(ids) == 0 || len(ids) > 50 {

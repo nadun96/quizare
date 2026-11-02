@@ -105,7 +105,8 @@ func (s *Service) Pools(ctx context.Context, teacherID, quizID string) (PoolInfo
 	if q.Kind == KindBank {
 		return PoolInfo{}, errBankNotAQuiz
 	}
-	bank, err := s.Bank(ctx, teacherID)
+	// Pools draw from the bank of the quiz's own teacher, whoever runs it (D-121).
+	bank, err := s.Bank(ctx, q.TeacherID)
 	if err != nil {
 		return PoolInfo{}, err
 	}
@@ -156,7 +157,7 @@ func (s *Service) SetPools(ctx context.Context, teacherID, quizID string, rules 
 	if err := s.notAQuiz(ctx, quizID); err != nil {
 		return PoolInfo{}, err
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE quiz.quizzes SET pools=$3, updated_at=now() WHERE id=$1 AND teacher_id=$2`, quizID, teacherID, mustJSON(rules))
+	tag, err := s.pool.Exec(ctx, `UPDATE quiz.quizzes SET pools=$3, updated_at=now() FROM quiz.quizzes q WHERE quizzes.id=q.id AND q.id=$1 AND `+mayTeach, quizID, teacherID, mustJSON(rules))
 	if err != nil {
 		return PoolInfo{}, err
 	}
@@ -230,7 +231,7 @@ func (s *Service) SessionQuestions(ctx context.Context, teacherID string, q Quiz
 	if len(want) == 0 {
 		return qs, nil
 	}
-	bank, err := s.Bank(ctx, teacherID)
+	bank, err := s.Bank(ctx, q.TeacherID)
 	if err != nil {
 		return nil, err
 	}

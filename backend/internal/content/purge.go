@@ -53,11 +53,11 @@ func (s *Service) scope(ctx context.Context, q interface {
 	case "module":
 		sql = `SELECT m.name, coalesce(array_agg(t.id) FILTER (WHERE t.id IS NOT NULL), '{}')::text[]
 			FROM content.modules m JOIN content.classrooms c ON c.id=m.classroom_id LEFT JOIN content.topics t ON t.module_id=m.id
-			WHERE m.id::text=$1 AND c.teacher_id=$2 GROUP BY m.id`
+			WHERE m.id::text=$1 AND content.teaches(c.id, $2) GROUP BY m.id`
 	case "topic":
 		sql = `SELECT t.name, ARRAY[t.id::text]
 			FROM content.topics t JOIN content.modules m ON m.id=t.module_id JOIN content.classrooms c ON c.id=m.classroom_id
-			WHERE t.id::text=$1 AND c.teacher_id=$2`
+			WHERE t.id::text=$1 AND content.teaches(c.id, $2)`
 	default:
 		return "", nil, errUnknownLevel
 	}

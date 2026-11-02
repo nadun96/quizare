@@ -55,7 +55,7 @@ func conversationCols(me string) string {
 		c.last_at,
 		(SELECT count(*) FROM inbox.messages m WHERE m.conversation_id = c.id AND m.sender_id IS DISTINCT FROM $1 AND m.created_at > coalesce(c.` + me + `_read_at, '-infinity'))::int,
 		EXISTS (SELECT 1 FROM content.classrooms k JOIN content.enrolments e ON e.classroom_id = k.id
-			WHERE k.teacher_id = c.teacher_id AND e.user_id = c.student_id AND e.status = 'active' AND k.archived_at IS NULL)`
+			WHERE content.teaches(k.id, c.teacher_id) AND e.user_id = c.student_id AND e.status = 'active' AND k.archived_at IS NULL)`
 }
 
 func scanConversation(r pgx.Row) (Conversation, error) {
@@ -221,12 +221,14 @@ func (s *Service) Contacts(ctx context.Context, u auth.User, classroomID string,
 	switch u.Role {
 	case auth.RoleStudent:
 		from = ` FROM content.enrolments e JOIN content.classrooms k ON k.id = e.classroom_id AND k.archived_at IS NULL
-			JOIN auth.users o ON o.id = k.teacher_id AND o.status = 'active'
+			JOIN LATERAL (SELECT k.teacher_id AS id UNION SELECT ct.user_id FROM content.classroom_teachers ct
+				WHERE ct.classroom_id = k.id AND ct.status = 'active') tk ON true
+			JOIN auth.users o ON o.id = tk.id AND o.status = 'active'
 			WHERE e.user_id = $1 AND e.status = 'active'`
 	case auth.RoleTeacher:
 		from = ` FROM content.classrooms k JOIN content.enrolments e ON e.classroom_id = k.id AND e.status = 'active'
 			JOIN auth.users o ON o.id = e.user_id AND o.status = 'active'
-			WHERE k.teacher_id = $1 AND k.archived_at IS NULL`
+			WHERE content.teaches(k.id, $1) AND k.archived_at IS NULL`
 	default:
 		return []Person{}, 0, nil
 	}
