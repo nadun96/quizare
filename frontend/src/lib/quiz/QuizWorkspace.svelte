@@ -11,6 +11,7 @@
 	import Sortable from 'sortablejs';
 	import { api, ApiError } from '$lib/api';
 	import { describeKey } from '$lib/answerText';
+	import { plain } from '$lib/pools/pools';
 	import { confirmDialog, promptDialog } from '$lib/ui/dialog.svelte';
 	import { confirmTitle } from '$lib/deleting';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -37,7 +38,8 @@
 	const sessions = new Paged<Session>(() => '/api/teacher/quizzes/' + id + '/sessions', 'sessions', { url: urlState, prefix: 'ses', sort: 'created', desc: true });
 	let readiness = $state<{ blocking: string[]; warnings: string[] }>({ blocking: [], warnings: [] });
 	let tab = $state<'questions' | 'import' | 'pools' | 'settings' | 'sessions' | 'preview'>('questions');
-	const bank = $derived(quiz?.kind === 'bank');
+	// A question bank (D-66) or a classroom's pool (D-123): questions, import and preview only.
+	const bank = $derived(quiz?.kind === 'bank' || quiz?.kind === 'pool');
 	// Categories (D-66): a filter over the list, and suggestions in the editor.
 	let filter = $state<string | null>(null);
 	let bankCategories = $state<string[]>([]);
@@ -46,6 +48,15 @@
 	const shown = $derived(filter === null ? questions : questions.filter((q) => q.category === filter));
 	const uncategorised = $derived(questions.filter((q) => !q.category).length);
 	let editing = $state<Question | 'new' | null>(null);
+	// The list shows one line per question; a click opens it (text, answer, resources).
+	let open = $state<Set<string>>(new Set());
+	function toggle(qid: string) {
+		const s = new Set(open);
+		if (!s.delete(qid)) s.add(qid);
+		open = s;
+	}
+	const allOpen = $derived(shown.length > 0 && shown.every((q) => open.has(q.id)));
+	const isEditing =(q: Question) => editing !== null && editing !== 'new' && editing.id === q.id;
 	let report = $state<Report | null>(null);
 	let resReport = $state<Report | null>(null);
 	let preview = $state<StudentQuestion[]>([]);
@@ -56,7 +67,7 @@
 	async function load() {
 		quiz = await api.get<Quiz>('/api/teacher/quizzes/' + id);
 		questions = (await api.get<{ questions: Question[] }>('/api/teacher/quizzes/' + id + '/questions')).questions ?? [];
-		if (quiz.kind === 'bank') return;
+		if (quiz.kind === 'bank' || quiz.kind === 'pool') return;
 		await sessions.load();
 		readiness = await api.get('/api/teacher/quizzes/' + id + '/readiness');
 		api.get<PoolInfo>('/api/teacher/quizzes/' + id + '/pools').then((p) => (bankCategories = p.bank.map((c) => c.category).filter(Boolean)), () => {});
@@ -219,9 +230,10 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 	{#if quiz}
 		{#if bank}
 			<div class="row">
-				<h1 style="margin:0">Question bank</h1>
+				<h1 style="margin:0">{quiz.kind === 'pool' ? quiz.title : 'Question bank'}</h1>
 			</div>
-			<p class="muted small m-0">Your questions for any of your quizzes: give them categories, then draw from those categories in a quiz's <strong>Pools</strong>. {count(questions.length, 'question')} in {count(categories.length, 'category', 'categories')}.</p>
+			<p class="small m-0">{#if quiz.kind === 'pool'}<a href="/t/classrooms/{quiz.classroom_id}">← Classroom</a>{:else}<a href="/t/bank">← Question pools</a>{/if}</p>
+			<p class="muted small m-0">{quiz.kind === 'pool' ? 'Questions for this classroom’s quizzes' : 'Your questions for any of your quizzes'}: give them categories, then draw from those categories in a quiz's <strong>Pools</strong>. {count(questions.length, 'question')} in {count(categories.length, 'category', 'categories')}.</p>
 		{:else}
 		<p class="small"><a href={'/t/topics/' + quiz.topic_id}>← Topic</a></p>
 		<div class="row">
@@ -254,14 +266,19 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 		</div>
 
 		{#if tab === 'questions'}
-			{#if editing}
-				{#key editing}
-					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
-						<QuestionEditor quizId={id} categories={suggestions} question={editing === 'new' ? null : editing} onsaved={(saved) => { toast(`Question ${saved.code} saved`); editing = null; load(); }} oncancel={() => (editing = null)} />
-					</div>
-				{/key}
+			{#if editing === 'new'}
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
+					<QuestionEditor quizId={id} categories={suggestions} question={null} onsaved={(saved) => { toast(`Question ${saved.code} saved`); editing = null; load(); }} oncancel={() => (editing = null)} />
+				</div>
 			{:else}
-				<button class="btn btn-primary" onclick={() => (editing = 'new')}>Add a question</button>
+				<div class="flex flex-wrap items-center gap-2">
+					<button class="btn btn-primary" onclick={() => (editing = 'new')}><Icon name="plus" size={16} />Add a question</button>
+					<span class="spacer"></span>
+					{#if questions.length}
+						<span class="small muted">{count(shown.length, 'question')} · click one to see it</span>
+						<button class="btn btn-sm btn-ghost" onclick={() => (open = allOpen ? new Set() : new Set(shown.map((q) => q.id)))}>{allOpen ? 'Collapse all' : 'Expand all'}</button>
+					{/if}
+				</div>
 			{/if}
 			{#if categories.length}
 				<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Show questions by category">
@@ -274,23 +291,37 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 				</div>
 				{#if filter !== null}<p class="small muted m-0">Showing one category. Show all to drag questions into a new order.</p>{/if}
 			{/if}
-			<div bind:this={listEl} class="vstack">
+			<div bind:this={listEl} class="qlist card card-border bg-base-100 shadow-sm">
 				{#each shown as q (q.id)}
-					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" data-id={q.id}>
-						<div class="row">
-							{#if filter === null}<span class="tooltip handle" data-tip="Drag to reorder" style="cursor:grab"><Icon name="menu" size={16} /></span>{/if}
-							<strong>{q.code}</strong><span class="badge badge-soft">{QTYPE_LABEL[q.type]}</span>{#if q.category}<span class="badge badge-soft badge-primary">{q.category}</span>{/if}<span class="small muted">{count(q.marks, 'mark')}</span>
-							{#if q.settings?.question_time_limit_sec}<span class="small muted">· {q.settings.question_time_limit_sec}s</span>{/if}
-							<span class="spacer"></span>
-							<button class="btn btn-sm" onclick={() => (editing = q)}><Icon name="pencil" size={14} />Edit</button>
+					{@const isOpen = open.has(q.id)}
+					{@const broken = q.resources.some((r) => r.status === 'broken')}
+					<div class="qitem" class:on={isOpen || isEditing(q)} data-id={q.id}>
+						<div class="qrow">
+							{#if filter === null}<span class="handle" title="Drag to reorder"><Icon name="grip" size={16} /></span>{/if}
+							<button class="qsum" aria-expanded={isOpen} onclick={() => toggle(q.id)}>
+								<Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />
+								<strong class="qcode tabular">{q.code}</strong>
+								<span class="badge badge-soft badge-sm flex-none">{QTYPE_LABEL[q.type]}</span>
+								{#if q.category}<span class="badge badge-soft badge-primary badge-sm flex-none">{q.category}</span>{/if}
+								<span class="qtext">{plain(q.text)}</span>
+								{#if broken}<span class="text-warning flex-none" title="A resource link is broken"><Icon name="alert" size={15} /></span>{/if}
+								<span class="small muted tabular flex-none">{count(q.marks, 'mark')}{#if q.settings?.question_time_limit_sec}{' · '}{q.settings.question_time_limit_sec}s{/if}</span>
+							</button>
+							<button class="btn btn-sm btn-ghost" onclick={() => (editing = q)}><Icon name="pencil" size={14} /><span class="hide-sm">Edit</span></button>
 							<RowMenu hint="More actions for {q.code}" actions={[
 								{ label: 'Duplicate', icon: 'copy', onclick: () => dup(q) },
 								{ label: 'Delete question', icon: 'trash', danger: true, onclick: () => delQ(q) }
 							]} />
 						</div>
+						{#if isEditing(q)}
+							<div class="qbody">
+								<QuestionEditor quizId={id} categories={suggestions} question={q} onsaved={(saved) => { toast(`Question ${saved.code} saved`); editing = null; load(); }} oncancel={() => (editing = null)} />
+							</div>
+						{:else if isOpen}
+						<div class="qbody vstack">
 						<RichText text={q.text} format={q.body.format} blanks="chip" />
 						<p class="small muted" style="margin:0">Answer: <MathText text={describeKey(q.type, q.body, q.key) || '(marked by LLM or manually)'} /></p>
-						<details>
+						<details open={q.resources.length > 0}>
 							<summary class="small">Resources ({q.resources.length})</summary>
 							{#each q.resources as r (r.id)}
 								<div class="row small">
@@ -310,7 +341,11 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 								<button class="btn btn-sm">Attach</button>
 							</form>
 						</details>
+						</div>
+						{/if}
 					</div>
+				{:else}
+					<p class="muted m-0 p-4">No questions yet. Add one, or import a CSV.</p>
 				{/each}
 			</div>
 		{:else if tab === 'import'}
@@ -368,3 +403,23 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 		{/if}
 	{/if}
 </div>
+
+<style>
+	.qlist { overflow: hidden; }
+	.qitem + .qitem { border-top: 1px solid var(--color-base-300); }
+	.qitem.on { background: color-mix(in oklab, var(--color-base-200) 45%, transparent); }
+	.qrow { display: flex; align-items: center; gap: 0.25rem; padding: 0.3rem 0.5rem; min-width: 0; }
+	.handle { flex: none; display: inline-flex; padding: 0.25rem; cursor: grab; color: var(--color-base-content); opacity: 0.45; }
+	.handle:hover { opacity: 1; }
+	.qsum { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; padding: 0.4rem 0.25rem; text-align: left; border-radius: var(--radius-field); }
+	.qsum:hover { background: var(--color-base-200); }
+	.qcode { flex: none; min-width: 3.25rem; font-size: 0.9rem; }
+	.qtext { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.qbody { padding: 0.25rem 1rem 1rem 2.75rem; }
+	@media (max-width: 640px) {
+		.qsum { flex-wrap: wrap; }
+		.qtext { flex-basis: 100%; order: 5; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+		.qbody { padding-left: 1rem; }
+		.hide-sm { display: none; }
+	}
+</style>

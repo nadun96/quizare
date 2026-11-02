@@ -2,6 +2,7 @@ package quiz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -20,9 +21,11 @@ const (
 	KindQuiz     = "quiz"
 	KindBank     = "bank"
 	KindTutorial = "tutorial" // a tutorial's questions (D-74)
+	KindPool     = "pool"     // a classroom's question pool (D-123)
 
-	SourceQuiz = "quiz"
-	SourceBank = "bank"
+	SourceQuiz  = "quiz"
+	SourceBank  = "bank"
+	SourceClass = "class" // the quiz's classroom pool (D-123)
 )
 
 // PoolRule draws Count questions (0 = all) from one category of a source.
@@ -35,6 +38,7 @@ type PoolRule struct {
 var (
 	errBankNotAQuiz     = httpx.NewError(http.StatusConflict, "question_bank", "the question bank isn't a quiz: draw from it through a quiz's pools")
 	errTutorialNotAQuiz = httpx.NewError(http.StatusConflict, "tutorial_questions", "these are a tutorial's questions: change the tutorial instead")
+	errPoolNotAQuiz     = httpx.NewError(http.StatusConflict, "class_pool", "the classroom's question pool isn't a quiz: draw from it through a quiz's pools")
 )
 
 // notAQuiz refuses what only a quiz can do (pools, status, deleting) for the
@@ -47,8 +51,43 @@ func (s *Service) notAQuiz(ctx context.Context, id string) error {
 		return errBankNotAQuiz
 	case KindTutorial:
 		return errTutorialNotAQuiz
+	case KindPool:
+		return errPoolNotAQuiz
 	}
 	return nil
+}
+
+// ClassPool returns a classroom's question pool (D-123), creating it on
+// first use, for any of its teachers.
+func (s *Service) ClassPool(ctx context.Context, teacherID, classroomID string) (Quiz, error) {
+	var ok bool
+	if err := s.pool.QueryRow(ctx, `SELECT content.teaches($1, $2)`, classroomID, teacherID).Scan(&ok); err != nil || !ok {
+		return Quiz{}, httpx.ErrNotFound
+	}
+	if _, err := s.pool.Exec(ctx, `INSERT INTO quiz.quizzes(topic_id, classroom_id, teacher_id, title, kind)
+		SELECT NULL, c.id, $2, 'Question pool: ' || c.name, 'pool' FROM content.classrooms c WHERE c.id = $1
+		ON CONFLICT (classroom_id) WHERE kind = 'pool' DO NOTHING`, classroomID, teacherID); err != nil {
+		return Quiz{}, err
+	}
+	var id string
+	if err := s.pool.QueryRow(ctx, `SELECT id FROM quiz.quizzes WHERE classroom_id=$1 AND kind='pool'`, classroomID).Scan(&id); err != nil {
+		return Quiz{}, err
+	}
+	return s.GetQuiz(ctx, teacherID, id)
+}
+
+// classPoolOf finds the pool of a quiz's classroom, if it has one ("" if not).
+func (s *Service) classPoolOf(ctx context.Context, q Quiz) (string, error) {
+	if q.TopicID == "" {
+		return "", nil
+	}
+	var id string
+	err := s.pool.QueryRow(ctx, `SELECT p.id FROM quiz.quizzes p JOIN content.modules m ON m.classroom_id = p.classroom_id
+		JOIN content.topics t ON t.module_id = m.id WHERE t.id = $1 AND p.kind = 'pool'`, q.TopicID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
 }
 
 // Bank returns the teacher's question bank, creating it on first use.
@@ -78,6 +117,9 @@ type PoolInfo struct {
 	Quiz   []PoolCount `json:"quiz"`
 	Bank   []PoolCount `json:"bank"`
 	BankID string      `json:"bank_id"`
+	// The quiz's classroom pool (D-123): its categories, and its id ("" until made).
+	Class       []PoolCount `json:"class"`
+	ClassPoolID string      `json:"class_pool_id"`
 }
 
 func (s *Service) categories(ctx context.Context, quizID string) ([]PoolCount, error) {
@@ -105,6 +147,9 @@ func (s *Service) Pools(ctx context.Context, teacherID, quizID string) (PoolInfo
 	if q.Kind == KindBank {
 		return PoolInfo{}, errBankNotAQuiz
 	}
+	if q.Kind == KindPool {
+		return PoolInfo{}, errPoolNotAQuiz
+	}
 	// Pools draw from the bank of the quiz's own teacher, whoever runs it (D-121).
 	bank, err := s.Bank(ctx, q.TeacherID)
 	if err != nil {
@@ -114,7 +159,14 @@ func (s *Service) Pools(ctx context.Context, teacherID, quizID string) (PoolInfo
 	if info.Quiz, err = s.categories(ctx, q.ID); err != nil {
 		return info, err
 	}
-	info.Bank, err = s.categories(ctx, bank.ID)
+	if info.Bank, err = s.categories(ctx, bank.ID); err != nil {
+		return info, err
+	}
+	info.Class = []PoolCount{}
+	if info.ClassPoolID, err = s.classPoolOf(ctx, q); err != nil || info.ClassPoolID == "" {
+		return info, err
+	}
+	info.Class, err = s.categories(ctx, info.ClassPoolID)
 	return info, err
 }
 
@@ -130,8 +182,8 @@ func normaliseRules(in []PoolRule) ([]PoolRule, error) {
 		r.Category = strings.Join(strings.Fields(r.Category), " ")
 		k := fmt.Sprintf("pools.%d", i)
 		switch {
-		case r.Source != SourceQuiz && r.Source != SourceBank:
-			f[k] = "a pool comes from this quiz or from your question bank"
+		case r.Source != SourceQuiz && r.Source != SourceBank && r.Source != SourceClass:
+			f[k] = "a pool comes from this quiz, your question bank or the classroom's question pool"
 		case r.Count < 0 || r.Count > 1000:
 			f[k] = "draw between 0 (all of them) and 1000"
 		case seen[r.Source+"|"+strings.ToLower(r.Category)]:
@@ -183,6 +235,9 @@ func (s *Service) poolProblems(ctx context.Context, teacherID string, q Quiz) ([
 	for _, c := range info.Bank {
 		have[SourceBank+"|"+strings.ToLower(c.Category)] = c.Count
 	}
+	for _, c := range info.Class {
+		have[SourceClass+"|"+strings.ToLower(c.Category)] = c.Count
+	}
 	var out []string
 	for _, r := range q.Pools {
 		n := have[r.Source+"|"+strings.ToLower(r.Category)]
@@ -203,8 +258,11 @@ func PoolName(r PoolRule) string {
 	if name == "" {
 		name = "uncategorised"
 	}
-	if r.Source == SourceBank {
+	switch r.Source {
+	case SourceBank:
 		return "bank: " + name
+	case SourceClass:
+		return "class pool: " + name
 	}
 	return name
 }
@@ -222,10 +280,33 @@ func (s *Service) SessionQuestions(ctx context.Context, teacherID string, q Quiz
 	} else if len(problems) > 0 {
 		return nil, errNotReady(problems)
 	}
-	want := map[string]bool{}
+	want, wantClass := map[string]bool{}, map[string]bool{}
 	for _, r := range q.Pools {
-		if r.Source == SourceBank {
+		switch r.Source {
+		case SourceBank:
 			want[strings.ToLower(r.Category)] = true
+		case SourceClass:
+			wantClass[strings.ToLower(r.Category)] = true
+		}
+	}
+	// The classroom pool's questions a rule draws from, marked FromClass with codes "P-…" (D-123).
+	if len(wantClass) > 0 {
+		id, err := s.classPoolOf(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		if id != "" {
+			pq, err := s.loadQuestions(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			for _, p := range pq {
+				if wantClass[strings.ToLower(p.Category)] {
+					p.FromClass = true
+					p.Code = "P-" + p.Code
+					qs = append(qs, p)
+				}
+			}
 		}
 	}
 	if len(want) == 0 {
