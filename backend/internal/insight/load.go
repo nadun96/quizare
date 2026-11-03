@@ -104,12 +104,12 @@ func (s *Service) Load(ctx context.Context) (LoadStats, error) {
 				CASE WHEN a.started_at IS NOT NULL AND a.submitted_at > a.started_at THEN extract(epoch FROM a.submitted_at - a.started_at) / 60 END
 			FROM eval.results r JOIN live.attempts a ON a.id = r.attempt_id JOIN live.sessions s ON s.id = r.session_id
 			LEFT JOIN quiz.quizzes q ON q.id = s.quiz_id
-			WHERE r.updated_at >= $1 AND r.complete AND NOT r.invalidated
+			WHERE r.updated_at >= $1 AND r.complete AND NOT r.invalidated AND r.counts
 			ON CONFLICT (kind, source_id) DO UPDATE SET at = EXCLUDED.at, classroom_id = EXCLUDED.classroom_id, topic_id = EXCLUDED.topic_id,
 				item_id = EXCLUDED.item_id, session_id = EXCLUDED.session_id, user_id = EXCLUDED.user_id, pct = EXCLUDED.pct,
 				passed = EXCLUDED.passed, minutes = EXCLUDED.minutes`},
 		{nil, `DELETE FROM olap.activity f USING eval.results r
-			WHERE f.kind = 'quiz' AND f.source_id = r.attempt_id AND r.updated_at >= $1 AND (NOT r.complete OR r.invalidated)`},
+			WHERE f.kind = 'quiz' AND f.source_id = r.attempt_id AND r.updated_at >= $1 AND (NOT r.complete OR r.invalidated OR NOT r.counts)`},
 		// Tutorials finished; a run restarted since leaves.
 		{&st.Tutorials, `INSERT INTO olap.activity (kind, source_id, at, classroom_id, topic_id, item_id, session_id, user_id, pct, passed, minutes)
 			SELECT 'tutorial', ru.id, ru.finished_at, m.classroom_id, tu.topic_id, tu.id, NULL, ru.user_id, NULL, NULL,
@@ -179,7 +179,7 @@ var dimensionLoads = []string{
 // reconcile removes what no longer exists at its source.
 var reconcile = []string{
 	`DELETE FROM olap.activity f WHERE f.kind = 'quiz' AND NOT EXISTS
-		(SELECT 1 FROM eval.results r WHERE r.attempt_id = f.source_id AND r.complete AND NOT r.invalidated)`,
+		(SELECT 1 FROM eval.results r WHERE r.attempt_id = f.source_id AND r.complete AND NOT r.invalidated AND r.counts)`,
 	`DELETE FROM olap.activity f WHERE f.kind = 'tutorial' AND NOT EXISTS
 		(SELECT 1 FROM tutorial.runs ru WHERE ru.id = f.source_id AND ru.finished_at IS NOT NULL)`,
 	`DELETE FROM olap.answers a WHERE NOT EXISTS (SELECT 1 FROM olap.activity f WHERE f.kind = 'quiz' AND f.source_id = a.attempt_id)`,

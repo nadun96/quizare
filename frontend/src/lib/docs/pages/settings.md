@@ -37,6 +37,7 @@ When a session is created, defaults, platform, teacher and the classroom-to-quiz
 | Key | Levels | Default | Values |
 |-----|--------|---------|--------|
 | `countdown_seconds` | teacher, classroom, quiz, session | 60 | 0–3600 |
+| `tries` | quiz, session | 1 | 1–10: times a student may take the quiz in a session, starting again after handing in; the best try counts, and the teacher can always let a student retry (D-131) |
 | `question_time_limit_sec` | quiz, question | 0 (none) | seconds |
 | `quiz_time_limit_sec` | topic, quiz, session, student | 0 (none) | seconds |
 | `admission_mode` | classroom, session | `manual` | `manual`, `auto` |

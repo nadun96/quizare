@@ -76,6 +76,11 @@ export type StudentState = {
 	allowed_warnings: number;
 	blur_grace_ms: number;
 	invalid_reason?: string;
+	/** Retries (D-131): this try, the tries allowed, whether the student may start again, and the newer try that replaced this one. */
+	try?: number;
+	tries?: number;
+	can_retry?: boolean;
+	next_attempt_id?: string;
 };
 
 export type Classroom = { id: string; name: string; description: string; join_code: string; settings: Overrides; effective?: Effective; archived: boolean; role?: 'owner' | 'coteacher'; owner_name?: string; props: Props; students: number; created_at?: string };
@@ -103,6 +108,8 @@ export type PoolCount = { category: string; count: number; marks: number };
 export type PoolInfo = { pools: PoolRule[]; quiz: PoolCount[]; bank: PoolCount[]; bank_id: string; class: PoolCount[]; class_pool_id: string };
 export type Session = { id: string; quiz_id: string; title: string; join_code: string; join_url: string; status: string; settings: Overrides; extension_sec: number; created_at: string; results_released_at?: string; started_at?: string };
 export type DashboardRow = {
+	/** Which try this is (D-131). */
+	try?: number;
 	attempt_id: string;
 	name: string;
 	user_id: string;

@@ -125,7 +125,7 @@ func (s *Service) student(ctx context.Context, uid string, out map[string][]Item
 		FROM live.sessions s
 		JOIN content.classrooms c ON c.id = s.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
-		LEFT JOIN live.attempts a ON a.session_id = s.id AND a.user_id = $1
+		LEFT JOIN live.attempts a ON a.session_id = s.id AND a.user_id = $1 AND a.superseded_at IS NULL
 		WHERE s.status <> 'ended' AND (a.id IS NULL OR a.state IN ('waiting', 'admitted', 'in_progress', 'paused'))
 		LIMIT 200`, uid)
 	if err != nil {
@@ -158,7 +158,7 @@ func (s *Service) student(ctx context.Context, uid string, out map[string][]Item
 		FROM live.sessions s
 		JOIN content.classrooms c ON c.id = s.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active' AND e.created_at < s.created_at
-		LEFT JOIN live.attempts a ON a.session_id = s.id AND a.user_id = $1
+		LEFT JOIN live.attempts a ON a.session_id = s.id AND a.user_id = $1 AND a.superseded_at IS NULL
 		WHERE s.status = 'ended' AND s.ended_at > $2 AND (a.id IS NULL OR a.state IN ('not_started', 'waiting'))
 		ORDER BY s.ended_at DESC LIMIT 200`, uid, now.AddDate(0, 0, -60))
 	if err != nil {
