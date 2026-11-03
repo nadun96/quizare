@@ -132,6 +132,15 @@ func TestGradebook(t *testing.T) {
 	if len(g.Items) != 3 || g.Items[0].Title != "Heat check" || g.Items[2].Kind != "tutorial" || g.WeightTotal != 0 || len(g.Students) != 3 {
 		t.Fatalf("gradebook = %+v", g)
 	}
+	// D-130: where each item sits, and the sessions run here, each with its numbers.
+	for _, it := range g.Items {
+		if it.ModuleID == "" || it.TopicID == "" || it.Module == "" {
+			t.Fatalf("item without its module or topic: %+v", it)
+		}
+	}
+	if len(g.Sessions) != 2 || g.Sessions[0].QuizID == "" || g.Sessions[0].Attempts < 1 || g.Sessions[0].Results < 1 || g.Sessions[0].Avg == nil {
+		t.Fatalf("sessions = %+v", g.Sessions)
+	}
 	s2 := student(g, "Student s2")
 	if s2.Marks[grading.Key("tutorial", tu.ID)].Pct != 50 || s2.Final != nil || *s2.Average != 50 {
 		t.Fatalf("before weights, s2 = %+v", s2)
@@ -179,6 +188,9 @@ func TestGradebook(t *testing.T) {
 	teacher.Call("GET", path+"/attendance", nil, 200, &a)
 	if len(a.Events) != 2 || len(a.Students) != 3 {
 		t.Fatalf("attendance = %+v", a)
+	}
+	if e := a.Events[0]; e.QuizID == "" || e.TopicID == "" || e.ModuleID == "" || e.Module == "" {
+		t.Fatalf("a quiz session without where it sits: %+v", e)
 	}
 	byName := map[string]int{}
 	for _, s := range a.Students {
