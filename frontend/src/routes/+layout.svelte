@@ -10,6 +10,7 @@
 	import DisplayMenu from '$lib/ui/DisplayMenu.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Toaster from '$lib/ui/Toaster.svelte';
+	import UpdateNotice from '$lib/ui/UpdateNotice.svelte';
 	import DialogHost from '$lib/ui/DialogHost.svelte';
 	import { tutoringConfig } from '$lib/tutoring/client';
 	import LevelRing from '$lib/progress/LevelRing.svelte';
@@ -244,6 +245,7 @@
 {/if}
 
 <Toaster />
+<UpdateNotice {bare} />
 <DialogHost />
 
 <style>
