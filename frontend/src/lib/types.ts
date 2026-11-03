@@ -1,3 +1,4 @@
+import type { Props } from './props/props';
 // Shapes of the Go API's JSON (see backend/internal/*).
 
 export type QType = 'SINGLE' | 'MULTI' | 'MATCH' | 'BLANK_OPT' | 'BLANK_TEXT' | 'DRAG' | 'ESSAY';
@@ -77,7 +78,7 @@ export type StudentState = {
 	invalid_reason?: string;
 };
 
-export type Classroom = { id: string; name: string; description: string; join_code: string; settings: Overrides; effective?: Effective; archived: boolean; role?: 'owner' | 'coteacher'; owner_name?: string };
+export type Classroom = { id: string; name: string; description: string; join_code: string; settings: Overrides; effective?: Effective; archived: boolean; role?: 'owner' | 'coteacher'; owner_name?: string; props: Props; students: number; created_at?: string };
 export type Module = { id: string; classroom_id: string; name: string; position: number; settings: Overrides };
 export type Topic = { id: string; module_id: string; name: string; position: number; settings: Overrides };
 export type Quiz = {

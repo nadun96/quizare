@@ -1492,8 +1492,8 @@ paths:
     get:
       operationId: getTeacherClassrooms
       tags: [classrooms]
-      summary: My classrooms
-      parameters: [{ name: archived, in: query, description: '`1` to include archived', schema: { type: string, enum: ['1'] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, name] } }]
+      summary: My classrooms, searched by name, course code, department or tag and narrowed by their details (D-128)
+      parameters: [{ name: archived, in: query, description: '`1` to include archived', schema: { type: string, enum: ['1'] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, name, starts, year] } }, { name: department, in: query, schema: { type: string } }, { name: course_code, in: query, schema: { type: string } }, { name: year, in: query, schema: { type: integer } }, { name: semester, in: query, schema: { type: string } }, { name: tag, in: query, description: 'repeat for several; all must match', schema: { type: string } }, { name: when, in: query, description: "by the term's dates", schema: { type: string, enum: [current, upcoming, past] } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, classrooms: { type: array, items: { $ref: '#/components/schemas/Classroom' } } } } } } } }
     post:
       operationId: postTeacherClassrooms
@@ -1501,6 +1501,13 @@ paths:
       summary: Create a classroom (FR-CLS-01)
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ClassroomInput' } } } }
       responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/Classroom' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classroom-facets:
+    get:
+      operationId: getTeacherClassroomFacets
+      tags: [classrooms]
+      summary: The details in use among my classrooms - departments, course codes, years, semesters and tags, each with how many have it - for the list's filters (D-128)
+      parameters: [{ name: archived, in: query, description: '`1` to include archived', schema: { type: string, enum: ['1'] } }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Facets' } } } } }
   /api/teacher/classrooms/{id}:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -3044,6 +3051,28 @@ components:
       content: { application/json: { schema: { type: object, properties: { overrides: { $ref: '#/components/schemas/Overrides' }, effective: { $ref: '#/components/schemas/Effective' } } } } }
 
   schemas:
+    Props:
+      type: object
+      description: Optional details for finding things (D-128); a classroom also has its term's dates
+      properties:
+        department: { type: string }
+        course_code: { type: string, example: IS2201 }
+        year: { type: integer, nullable: true, example: 2025 }
+        semester: { type: string, example: Semester 1 }
+        tags: { type: array, maxItems: 10, items: { type: string } }
+        starts_on: { type: string, format: date, nullable: true }
+        ends_on: { type: string, format: date, nullable: true }
+    Facets:
+      type: object
+      properties:
+        departments: { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+        course_codes: { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+        years: { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+        semesters: { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+        tags: { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+    FacetCount:
+      type: object
+      properties: { value: { type: string }, count: { type: integer } }
     SignInLimits:
       type: object
       properties:
@@ -3908,11 +3937,13 @@ components:
         effective: { $ref: '#/components/schemas/Effective' }
         archived: { type: boolean }
         created_at: { type: string, format: date-time }
+        props: { $ref: '#/components/schemas/Props' }
+        students: { type: integer, description: active students }
         role: { type: string, enum: [owner, coteacher], description: the asking teacher's part in it (D-121) }
         owner_name: { type: string }
     ClassroomInput:
       type: object
-      properties: { name: { type: string, maxLength: 200 }, description: { type: string }, settings: { $ref: '#/components/schemas/Overrides' } }
+      properties: { name: { type: string, maxLength: 200 }, description: { type: string }, settings: { $ref: '#/components/schemas/Overrides' }, props: { $ref: '#/components/schemas/Props' } }
     NodeInput:
       type: object
       properties: { name: { type: string, maxLength: 200 }, position: { type: integer }, settings: { $ref: '#/components/schemas/Overrides' } }

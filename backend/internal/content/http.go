@@ -8,11 +8,21 @@ import (
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/page"
+	"github.com/nadun96/quizplatform/internal/platform/props"
 )
 
 // TeacherRoutes mounts teacher endpoints (teacher role enforced by caller).
 func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("GET", "/classrooms", httpx.Handler(s.hListClassrooms))
+	// The details in use, for the list's filters (D-128).
+	r.Method("GET", "/classroom-facets", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		f, err := s.ClassroomFacets(r.Context(), uid(r), r.URL.Query().Get("archived") == "1")
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, f)
+		return nil
+	}))
 	r.Method("POST", "/classrooms", httpx.Handler(s.hCreateClassroom))
 	r.Method("GET", "/classrooms/{id}", httpx.Handler(s.hGetClassroom))
 	r.Method("PATCH", "/classrooms/{id}", httpx.Handler(s.hUpdateClassroom))
@@ -54,7 +64,7 @@ func uid(r *http.Request) string { return auth.MustUser(r.Context()).ID }
 
 func (s *Service) hListClassrooms(w http.ResponseWriter, r *http.Request) error {
 	p := page.Parse(r, ClassroomSorts, "created", true)
-	list, total, err := s.ListClassrooms(r.Context(), uid(r), r.URL.Query().Get("archived") == "1", p)
+	list, total, err := s.ListClassrooms(r.Context(), uid(r), r.URL.Query().Get("archived") == "1", props.FilterFrom(r.URL.Query()), p)
 	if err != nil {
 		return err
 	}
