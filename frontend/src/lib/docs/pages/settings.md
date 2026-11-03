@@ -59,6 +59,7 @@ When a session is created, defaults, platform, teacher and the classroom-to-quiz
 | `results_show_answers` / `_correct` / `_feedback` | quiz, session | true | D-26 |
 | `pass_mark_pct` | classroom, quiz | 50 | 0–100 |
 | `student_id_required` | classroom | false | FR-CLS-05 |
+| `student_id_editable` | classroom | false | students may set or change their own ID for the classroom (D-134); IDs stay unique and quizzes already taken keep theirs |
 | `enrolment_approval` | classroom | false | FR-CLS-04 |
 | `auto_enrol_on_join` | classroom | true | BR-02, D-08 |
 | `team_mode` | quiz, session | `off` | `off`, `manual`, `random`, `categories`, `self` (D-44) |

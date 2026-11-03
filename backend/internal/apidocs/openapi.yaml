@@ -2395,6 +2395,14 @@ paths:
       summary: Classrooms I am enrolled in
       parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [name] } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, classrooms: { type: array, items: { type: object, properties: { classroom_id: { type: string }, name: { type: string }, status: { type: string }, student_number: { type: [string, 'null'] } } } } } } } } } }
+  /api/my/classrooms/{id}/student-number:
+    put:
+      operationId: putMyClassroomsStudentNumber
+      tags: [student]
+      summary: Set or change my student ID in a classroom whose teacher allows it (student_id_editable, D-134); quizzes already taken keep the ID they were taken with
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { student_number: { type: string, maxLength: 64 } } } } } }
+      responses: { '200': { description: 'Saved' }, '403': { description: 'The teacher sets IDs here (student_id_locked)' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/my/data:
     get:
       operationId: getMyData
