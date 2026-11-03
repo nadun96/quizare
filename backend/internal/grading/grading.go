@@ -27,17 +27,17 @@ func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool} }
 
 // Item is a quiz or tutorial that can count towards the final result.
 type Item struct {
-	Kind   string   `json:"kind"` // quiz or tutorial
-	ID     string   `json:"id"`
-	Title  string   `json:"title"`
-	Topic  string   `json:"topic"`
+	Kind  string `json:"kind"` // quiz or tutorial
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Topic string `json:"topic"`
 	// Where it sits, so a report can cover one module or topic (D-130); empty for a quiz outside them.
-	TopicID  string `json:"topic_id"`
-	ModuleID string `json:"module_id"`
-	Module   string `json:"module"`
-	Weight *float64 `json:"weight"` // percent of the final result; nil: doesn't count
-	Taken  int      `json:"taken"`  // students with a mark
-	Avg    *float64 `json:"avg"`    // their average percentage
+	TopicID  string   `json:"topic_id"`
+	ModuleID string   `json:"module_id"`
+	Module   string   `json:"module"`
+	Weight   *float64 `json:"weight"` // percent of the final result; nil: doesn't count
+	Taken    int      `json:"taken"`  // students with a mark
+	Avg      *float64 `json:"avg"`    // their average percentage
 }
 
 // Mark is one student's mark on one item.
