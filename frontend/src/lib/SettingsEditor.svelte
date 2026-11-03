@@ -27,6 +27,14 @@
 	const sections = $derived(SECTIONS.map((s) => ({ ...s, metas: metas.filter((m) => m.section === s.id) })).filter((s) => s.metas.length));
 	// A short list is shown open; a long one starts closed with its summaries.
 	const openAll = $derived(metas.length <= 6);
+	// Which sections the teacher opened or closed. Kept here, so typing in one
+	// (which redraws its summary) never closes it again.
+	let opened = $state<Record<string, boolean>>({});
+	const isOpen = (id: string, ms: Meta[]) => opened[id] ?? (openAll || hasError(ms));
+	// A section with a problem opens to show it.
+	$effect(() => {
+		for (const sec of sections) if (hasError(sec.metas)) opened[sec.id] = true;
+	});
 	const dirty = $derived(JSON.stringify(sorted(draft)) !== JSON.stringify(sorted(value)));
 
 	function sorted(o: Overrides) {
@@ -71,7 +79,7 @@
 	<div class="sections">
 		{#each sections as s (s.id)}
 			{@const changed = changedIn(s.metas)}
-			<details class="section" open={openAll || hasError(s.metas)}>
+			<details class="section" open={isOpen(s.id, s.metas)} ontoggle={(e) => (opened[s.id] = e.currentTarget.open)}>
 				<summary>
 					<span class="s-icon" aria-hidden="true"><Icon name={s.icon} size={17} /></span>
 					<span class="min-w-0 flex-1">
