@@ -16,7 +16,7 @@
 	import Pager from '$lib/ui/Pager.svelte';
 
 	type Mark = { question_id: string; code: string; type: QType; text: string; response: Response | null; key: Key; method: string; status: string; score: number | null; max_score: number; correct: boolean | null; feedback: string; ai_feedback: string; ai_rationale?: string; ai_marked: boolean; flagged: boolean; flag_reason?: string };
-	type Result = { attempt_id: string; user_id: string; student_number: string | null; state: string; score: number; max_score: number; pct: number; passed: boolean; complete: boolean; invalidated: boolean; marks: Mark[] };
+	type Result = { attempt_id: string; user_id: string; student_number: string | null; state: string; score: number; max_score: number; pct: number; passed: boolean; complete: boolean; invalidated: boolean; marks: Mark[]; try?: number; tries?: number };
 	type Link = { id: string; scope?: string; token?: string; views: string[]; identify: string; show_answers: boolean; label: string; expires_at: string | null; revoked_at: string | null; created_at: string };
 	type Ev = { id: number; kind: string; attempt_id: string | null; details: Record<string, unknown>; created_at: string };
 
@@ -34,6 +34,8 @@
 	const events = new Paged<Ev>(() => '/api/teacher/sessions/' + id + '/events', 'events', { url: urlState, prefix: 'log', sort: 'time', filters: () => ({ kind }) });
 	let stats = $state<any>(null);
 	let names = $state<Record<string, string>>({});
+	// By student too: the try that counts may be an earlier one than the dashboard's (D-131).
+	let byUser = $state<Record<string, string>>({});
 	let estimate = $state<{ answers: number; estimated_tokens: number } | null>(null);
 	let notice = $state('');
 	let newToken = $state('');
@@ -41,9 +43,10 @@
 	let bodies = $state<Record<string, Body>>({});
 
 	async function load() {
-		const dash = await api.get<{ session: Session; rows: { attempt_id: string; name: string }[] }>('/api/teacher/sessions/' + id);
+		const dash = await api.get<{ session: Session; rows: { attempt_id: string; user_id: string; name: string }[] }>('/api/teacher/sessions/' + id);
 		session = dash.session;
 		names = Object.fromEntries(dash.rows.map((r) => [r.attempt_id, r.name]));
+		byUser = Object.fromEntries(dash.rows.map((r) => [r.user_id, r.name]));
 		await results.load();
 		const qs = (await api.get<{ questions: { id: string; body: Body }[] }>('/api/teacher/quizzes/' + session.quiz_id + '/questions')).questions ?? [];
 		bodies = Object.fromEntries(qs.map((q) => [q.id, q.body]));
@@ -151,7 +154,7 @@
 			{#each shown as r (r.attempt_id)}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 					<div class="row">
-						<strong>{names[r.attempt_id] ?? 'Student'}</strong><span class="muted small">{r.student_number ?? ''}</span>
+						<strong>{names[r.attempt_id] ?? byUser[r.user_id] ?? 'Student'}</strong><span class="muted small">{r.student_number ?? ''}</span>{#if (r.tries ?? 1) > 1}<span class="badge badge-soft badge-info badge-sm" title="The best try counts">best of {r.tries} tries · try {r.try}</span>{/if}
 						<span class="spacer"></span>
 						{#if r.invalidated}<span class="badge badge-soft badge-error">invalidated</span>{/if}
 						{#if !r.complete}<span class="badge badge-soft badge-warning">incomplete</span>{/if}

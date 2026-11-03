@@ -246,9 +246,9 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 	// The sessions, for a report of each.
 	rows, err = s.pool.Query(ctx, `
 		SELECT se.id::text, se.quiz_id::text, se.title, se.status, coalesce(se.started_at, se.created_at),
-			(SELECT count(*)::int FROM live.attempts a WHERE a.session_id = se.id AND a.state <> 'waiting'),
-			(SELECT count(*)::int FROM eval.results r WHERE r.session_id = se.id AND NOT r.invalidated),
-			(SELECT round(avg(r.pct), 1)::float8 FROM eval.results r WHERE r.session_id = se.id AND NOT r.invalidated)
+			(SELECT count(*)::int FROM live.attempts a WHERE a.session_id = se.id AND a.state <> 'waiting' AND a.superseded_at IS NULL),
+			(SELECT count(*)::int FROM eval.results r WHERE r.session_id = se.id AND NOT r.invalidated AND r.counts),
+			(SELECT round(avg(r.pct), 1)::float8 FROM eval.results r WHERE r.session_id = se.id AND NOT r.invalidated AND r.counts)
 		FROM live.sessions se WHERE se.classroom_id = $1
 		ORDER BY coalesce(se.started_at, se.created_at) DESC LIMIT 500`, classroomID)
 	if err != nil {
@@ -393,7 +393,7 @@ func (s *Service) Attendance(ctx context.Context, teacherID, classroomID string,
 	rows, err = s.pool.Query(ctx, `
 		SELECT a.user_id::text, s.id::text, NULL::float8 FROM live.attempts a JOIN live.sessions s ON s.id = a.session_id
 		WHERE s.classroom_id = $1 AND coalesce(s.started_at, s.created_at) >= $2 AND coalesce(s.started_at, s.created_at) < $3
-			AND a.state <> 'waiting'
+			AND a.state <> 'waiting' AND a.superseded_at IS NULL
 		UNION ALL
 		SELECT a.user_id::text, m.id::text, extract(epoch FROM a.last_seen - a.first_joined)::float8 / 60
 		FROM meet.attendance a JOIN meet.meetings m ON m.id = a.meeting_id

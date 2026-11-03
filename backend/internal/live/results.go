@@ -41,6 +41,7 @@ type MarkingData struct {
 	ExtensionSec  int
 	Warnings      int
 	Violations    int
+	Try           int                // which try this is (D-131)
 	Session       settings.Effective // session-level effective settings for this student
 	Released      bool               // results visible to the student (BR-12)
 	Items         []MarkingItem      // in the order the student saw them
@@ -97,7 +98,7 @@ func (s *Service) markingData(ctx context.Context, sess Session, a *Attempt) (*M
 		AttemptID: a.ID, SessionID: sess.ID, SessionTitle: sess.Title, QuizTitle: sess.Snapshot.QuizTitle,
 		TeacherID: sess.TeacherID, ClassroomID: sess.ClassroomID, UserID: a.UserID, StudentNumber: a.StudentNumber, State: a.State,
 		StartedAt: a.StartedAt, SubmittedAt: a.SubmittedAt, ExtensionSec: a.ExtensionSec, Warnings: a.Warnings, Violations: a.Violations,
-		Session: eff, Released: released(sess, a, eff),
+		Try: a.Try, Session: eff, Released: released(sess, a, eff),
 	}
 	for i := range a.Order {
 		q := sess.question(a, i)
@@ -132,7 +133,7 @@ func (s *Service) SessionMarkingData(ctx context.Context, teacherID, sessionID s
 	}
 	v := s.sessionView(sess)
 	rows, err := s.pool.Query(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1
-		AND a.state IN ('submitted','invalidated') ORDER BY a.created_at`, sessionID)
+		AND a.state IN ('submitted','invalidated') AND live.counted(a.id) ORDER BY a.created_at`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +188,7 @@ func (s *Service) SessionIDsForQuiz(ctx context.Context, teacherID, quizID strin
 
 // AttemptCounts returns how many students joined a session, by state.
 func (s *Service) AttemptCounts(ctx context.Context, sessionID string) (map[string]int, error) {
-	rows, err := s.pool.Query(ctx, `SELECT state, count(*) FROM live.attempts WHERE session_id=$1 GROUP BY state`, sessionID)
+	rows, err := s.pool.Query(ctx, `SELECT state, count(*) FROM live.attempts WHERE session_id=$1 AND superseded_at IS NULL GROUP BY state`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +287,7 @@ type StudentAttempt struct {
 // by session or quiz title, and how many there are (PL-FR-02 "My results").
 func (s *Service) MyAttempts(ctx context.Context, userID string, p page.Request) ([]StudentAttempt, int, error) {
 	where := ` FROM live.attempts a JOIN live.sessions s ON s.id = a.session_id
-		WHERE a.user_id=$1 AND ($2 = '' OR s.title ILIKE $2 OR s.snapshot->>'quiz_title' ILIKE $2)`
+		WHERE a.user_id=$1 AND live.counted(a.id) AND ($2 = '' OR s.title ILIKE $2 OR s.snapshot->>'quiz_title' ILIKE $2)`
 	args := []any{userID, p.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {

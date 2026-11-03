@@ -153,10 +153,10 @@ func (s *Service) Insights(ctx context.Context, u auth.User, days int) (Insights
 func (s *Service) studentInsights(ctx context.Context, uid string, now, from, since time.Time, out *Insights) error {
 	prevFrom := from.AddDate(0, 0, -out.Days)
 	rows, err := s.pool.Query(ctx, `SELECT coalesce(a.submitted_at, s.ended_at, a.created_at), s.title, c.name, r.pct::float8, r.passed,
-		(SELECT avg(r2.pct)::float8 FROM eval.results r2 WHERE r2.session_id = s.id AND r2.complete AND NOT r2.invalidated)
+		(SELECT avg(r2.pct)::float8 FROM eval.results r2 WHERE r2.session_id = s.id AND r2.complete AND NOT r2.invalidated AND r2.counts)
 		FROM eval.results r JOIN live.attempts a ON a.id = r.attempt_id JOIN live.sessions s ON s.id = r.session_id
 		JOIN content.classrooms c ON c.id = s.classroom_id
-		WHERE r.user_id = $1 AND s.released_at IS NOT NULL AND r.complete AND NOT r.invalidated
+		WHERE r.user_id = $1 AND s.released_at IS NOT NULL AND r.complete AND NOT r.invalidated AND r.counts
 		AND coalesce(a.submitted_at, s.ended_at, a.created_at) >= $2 ORDER BY 1`, uid, since)
 	if err != nil {
 		return err
@@ -242,7 +242,7 @@ func (s *Service) teacherInsights(ctx context.Context, tid string, now, from, si
 		coalesce(a.submitted_at, s.ended_at, a.created_at)
 		FROM eval.results r JOIN live.attempts a ON a.id = r.attempt_id JOIN live.sessions s ON s.id = r.session_id
 		JOIN content.classrooms c ON c.id = s.classroom_id
-		WHERE content.teaches(s.classroom_id, $1) AND r.complete AND NOT r.invalidated AND coalesce(a.submitted_at, s.ended_at, a.created_at) >= $2`, tid, since)
+		WHERE content.teaches(s.classroom_id, $1) AND r.complete AND NOT r.invalidated AND r.counts AND coalesce(a.submitted_at, s.ended_at, a.created_at) >= $2`, tid, since)
 	if err != nil {
 		return err
 	}

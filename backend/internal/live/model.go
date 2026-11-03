@@ -107,4 +107,8 @@ type Attempt struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	TeamID         *string    `json:"team_id,omitempty"` // D-44
 	Captain        bool       `json:"captain,omitempty"`
+	// Try is which time the student takes the quiz in this session (D-131);
+	// SupersededAt is set once a newer try replaced this one.
+	Try          int        `json:"try"`
+	SupersededAt *time.Time `json:"-"`
 }

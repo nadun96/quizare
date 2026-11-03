@@ -45,6 +45,7 @@ const ORDER: Option[] = [
 ];
 
 export const SETTINGS: Meta[] = [
+	{ key: 'tries', short: 'Tries', label: 'Tries per student', kind: 'int', section: 'start', levels: ['quiz', 'session'], help: 'How many times a student may take the quiz in a session, starting again themselves after handing in. The best try counts. You can always let a student retry from the dashboard.' },
 	{ key: 'countdown_seconds', short: 'Countdown', label: 'Countdown before the first question', kind: 'int', unit: 's', section: 'start', levels: ['teacher', 'classroom', 'quiz', 'session'] },
 	{ key: 'admission_mode', short: 'Admission', label: 'Letting students in', kind: 'enum', section: 'start', levels: ['classroom', 'session'], options: [
 		{ v: 'manual', label: 'I admit them', icon: 'user', hint: 'Students wait until you admit them from the dashboard.' },
