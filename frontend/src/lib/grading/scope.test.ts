@@ -39,6 +39,8 @@ describe('reports of part of a classroom (D-130)', () => {
 		expect(ann).toMatchObject({ total: 25, final: 83.3, average: 75, missing: 0 });
 		expect(Object.keys(ann.marks)).toEqual(['quiz:q1', 'quiz:q2']);
 		expect(ben).toMatchObject({ total: 10, final: 33.3, average: 100, missing: 1 });
+		// D-133: marks over the module's items, a missed one counting its marks.
+		expect(scopedGradebook({ ...g, items: g.items.map((i) => ({ ...i, max_marks: 10 })), students: g.students.map((st) => ({ ...st, marks: Object.fromEntries(Object.entries(st.marks).map(([k, m]) => [k, { ...m, score: m.pct / 10, max: 10 }])) })) }, { kind: 'module', id: 'phy' }).students[1]).toMatchObject({ marks_total: 10, marks_max: 20 });
 		expect(p.sessions?.map((x) => x.id)).toEqual(['s1', 's2']);
 	});
 

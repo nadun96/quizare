@@ -5,13 +5,13 @@ const g: Gradebook = {
 	classroom: 'Physics',
 	weight_total: 15,
 	items: [
-		{ kind: 'quiz', id: 'q1', title: 'Heat check', topic: 'Heat', weight: 10, taken: 2, avg: 77.5 },
+		{ kind: 'quiz', id: 'q1', title: 'Heat check', topic: 'Heat', weight: 10, taken: 2, avg: 77.5, high: 100, low: 55, max_marks: 10 },
 		{ kind: 'quiz', id: 'q2', title: 'Light', topic: 'Light', weight: null, taken: 1, avg: 50 },
 		{ kind: 'tutorial', id: 't1', title: 'Cells, part 1', topic: 'Cells', weight: 5, taken: 1, avg: 50 }
 	],
 	students: [
-		{ user_id: 'a', name: 'Ann', student_number: 'S1', marks: { 'quiz:q1': { pct: 55, points: 5.5 }, 'quiz:q2': { pct: 50 } }, average: 52.5, total: 5.5, missing: 1, final: 36.7 },
-		{ user_id: 'b', name: 'Ben', marks: {}, average: null, total: 0, missing: 2, final: 0 }
+		{ user_id: 'a', name: 'Ann', student_number: 'S1', marks: { 'quiz:q1': { pct: 55, points: 5.5 }, 'quiz:q2': { pct: 50 } }, average: 52.5, total: 5.5, missing: 1, final: 36.7, marks_total: 11, marks_max: 20 },
+		{ user_id: 'b', name: 'Ben', marks: {}, average: null, total: 0, missing: 2, final: 0, marks_total: 0, marks_max: 20 }
 	]
 };
 
@@ -47,9 +47,14 @@ describe('gradebook and reports (D-122)', () => {
 
 	it('writes the results report with points, totals and the class rows', () => {
 		const lines = rows(gradebookCSV(g).trim());
-		expect(lines[0]).toBe('Student,Student ID,Heat check (%),Heat check (points of 10),Light (%),"Cells, part 1 (%)","Cells, part 1 (points of 5)",Average (%),Weighted total,Out of,Final (%),Weighted items missed');
-		expect(lines[1]).toBe('Ann,S1,55,5.5,50,,0,52.5,5.5,15,36.7,1');
-		expect(lines[2]).toBe('Ben,,,0,,,0,,0,15,0,2');
+		expect(lines[0]).toBe('Student,Student ID,Heat check (%),Heat check (points of 10),Light (%),"Cells, part 1 (%)","Cells, part 1 (points of 5)",Average (%),Total marks,Marks out of,Weighted total,Out of,Final (%),Weighted items missed');
+		expect(lines[1]).toBe('Ann,S1,55,5.5,50,,0,52.5,11,20,5.5,15,36.7,1');
+		expect(lines[2]).toBe('Ben,,,0,,,0,,0,20,0,15,0,2');
+		// D-133: the class's totals, and each item's highest and lowest.
+		expect(lines.find((l) => l.startsWith('Class average'))).toBe('Class average,,77.5,,50,50,,52.5,5.5');
+		expect(lines.find((l) => l.startsWith('Highest'))).toBe('Highest,,100,,,,,52.5,11');
+		expect(lines.find((l) => l.startsWith('Lowest'))).toBe('Lowest,,55,,,,,52.5,0');
+		expect(lines.find((l) => l.startsWith('Out of (marks)'))).toMatch(/^Out of \(marks\),,10,/);
 		expect(lines.at(-1)).toContain('Weight (% of the final result),,10,,not counted,5,');
 	});
 

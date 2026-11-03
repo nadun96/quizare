@@ -38,12 +38,19 @@ type Item struct {
 	Weight   *float64 `json:"weight"` // percent of the final result; nil: doesn't count
 	Taken    int      `json:"taken"`  // students with a mark
 	Avg      *float64 `json:"avg"`    // their average percentage
+	// Totals (D-133): the highest and lowest percentage, and the marks it is
+	// out of (a quiz drawn from pools can differ per student: the most seen).
+	High     *float64 `json:"high"`
+	Low      *float64 `json:"low"`
+	MaxMarks float64  `json:"max_marks"`
 }
 
 // Mark is one student's mark on one item.
 type Mark struct {
 	Pct    float64  `json:"pct"`
 	Points *float64 `json:"points,omitempty"` // pct × weight / 100, when the item counts
+	Score  float64  `json:"score"`            // marks gained (D-133)
+	Max    float64  `json:"max"`              // out of
 }
 
 type Student struct {
@@ -55,6 +62,9 @@ type Student struct {
 	Total         float64         `json:"total"`   // weighted points
 	Missing       int             `json:"missing"` // weighted items with no mark (count as 0)
 	Final         *float64        `json:"final"`   // total as a percentage of the weights, when any are set
+	// Marks gained on every item and what they're out of, a missed item counting its marks (D-133).
+	MarksTotal float64 `json:"marks_total"`
+	MarksMax   float64 `json:"marks_max"`
 }
 
 type Gradebook struct {
@@ -142,15 +152,18 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 	g.WeightTotal = round(g.WeightTotal, 2)
 
 	// Each student's mark on each: the best valid quiz attempt, a finished tutorial's score out of its marks.
-	marks := map[string]map[string]float64{}
+	type raw struct{ pct, score, max float64 }
+	marks := map[string]map[string]raw{}
 	rows, err = s.pool.Query(ctx, `
-		SELECT r.user_id::text, 'quiz:' || se.quiz_id::text, max(r.pct)::float8
+		(SELECT DISTINCT ON (r.user_id, se.quiz_id) r.user_id::text, 'quiz:' || se.quiz_id::text, r.pct::float8, r.score::float8, r.max_score::float8
 		FROM eval.results r JOIN live.sessions se ON se.id = r.session_id
-		WHERE se.classroom_id = $1 AND NOT r.invalidated GROUP BY r.user_id, se.quiz_id
+		WHERE se.classroom_id = $1 AND NOT r.invalidated ORDER BY r.user_id, se.quiz_id, r.pct DESC)
 		UNION ALL
 		SELECT ru.user_id::text, 'tutorial:' || t.id::text,
 			100 * coalesce((SELECT sum(a.score) FROM tutorial.answers a WHERE a.run_id = ru.id), 0)::float8
-				/ (SELECT sum(x.marks) FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)::float8
+				/ (SELECT sum(x.marks) FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)::float8,
+			coalesce((SELECT sum(a.score) FROM tutorial.answers a WHERE a.run_id = ru.id), 0)::float8,
+			(SELECT sum(x.marks) FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)::float8
 		FROM tutorial.runs ru JOIN tutorial.tutorials t ON t.id = ru.tutorial_id
 		JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 		WHERE m.classroom_id = $1 AND ru.finished_at IS NOT NULL
@@ -160,15 +173,17 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 	}
 	for rows.Next() {
 		var user, key string
-		var pct float64
-		if err := rows.Scan(&user, &key, &pct); err != nil {
+		var m raw
+		if err := rows.Scan(&user, &key, &m.pct, &m.score, &m.max); err != nil {
 			rows.Close()
 			return g, err
 		}
 		if marks[user] == nil {
-			marks[user] = map[string]float64{}
+			marks[user] = map[string]raw{}
 		}
-		marks[user][key] = round(math.Max(0, math.Min(100, pct)), 1)
+		m.pct = round(math.Max(0, math.Min(100, m.pct)), 1)
+		m.score, m.max = round(m.score, 2), round(m.max, 2)
+		marks[user][key] = m
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -197,6 +212,27 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 
 	sums := map[string]float64{}
 	counts := map[string]int{}
+	high, low := map[string]float64{}, map[string]float64{}
+	// What each item is out of: the marks seen most often (D-133).
+	outOf := map[string]map[float64]int{}
+	for _, byItem := range marks {
+		for k, m := range byItem {
+			if outOf[k] == nil {
+				outOf[k] = map[float64]int{}
+			}
+			outOf[k][m.max]++
+		}
+	}
+	maxOf := map[string]float64{}
+	for k, seen := range outOf {
+		best, n := 0.0, 0
+		for v, c := range seen {
+			if c > n || (c == n && v > best) {
+				best, n = v, c
+			}
+		}
+		maxOf[k] = best
+	}
 	for i := range g.Students {
 		st := &g.Students[i]
 		st.Marks = map[string]Mark{}
@@ -204,14 +240,24 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 		n := 0
 		for _, it := range g.Items {
 			k := Key(it.Kind, it.ID)
-			pct, ok := marks[st.UserID][k]
+			got, ok := marks[st.UserID][k]
 			if !ok {
 				if it.Weight != nil {
 					st.Missing++
 				}
+				st.MarksMax += maxOf[k]
 				continue
 			}
-			m := Mark{Pct: pct}
+			pct := got.pct
+			m := Mark{Pct: pct, Score: got.score, Max: got.max}
+			st.MarksTotal += got.score
+			st.MarksMax += got.max
+			if c := counts[k]; c == 0 || pct > high[k] {
+				high[k] = pct
+			}
+			if c := counts[k]; c == 0 || pct < low[k] {
+				low[k] = pct
+			}
 			if it.Weight != nil {
 				p := round(pct**it.Weight/100, 2)
 				m.Points = &p
@@ -224,6 +270,7 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 			counts[k]++
 		}
 		st.Total = round(st.Total, 2)
+		st.MarksTotal, st.MarksMax = round(st.MarksTotal, 2), round(st.MarksMax, 2)
 		if n > 0 {
 			a := round(sum/float64(n), 1)
 			st.Average = &a
@@ -236,9 +283,11 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 	for i := range g.Items {
 		k := Key(g.Items[i].Kind, g.Items[i].ID)
 		g.Items[i].Taken = counts[k]
+		g.Items[i].MaxMarks = maxOf[k]
 		if counts[k] > 0 {
 			a := round(sums[k]/float64(counts[k]), 1)
-			g.Items[i].Avg = &a
+			h, l := high[k], low[k]
+			g.Items[i].Avg, g.Items[i].High, g.Items[i].Low = &a, &h, &l
 		}
 	}
 	sort.SliceStable(g.Students, func(i, j int) bool { return strings.ToLower(g.Students[i].Name) < strings.ToLower(g.Students[j].Name) })
