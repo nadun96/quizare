@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -111,6 +112,8 @@ type Question struct {
 	FromBank bool `json:"from_bank,omitempty"`
 	// FromClass: drawn in from the classroom's question pool (D-123).
 	FromClass bool `json:"from_class,omitempty"`
+	// ReviewedAt: when a teacher marked it checked (D-132); nil, not yet.
+	ReviewedAt *time.Time `json:"reviewed_at,omitempty"`
 }
 
 // StudentQuestion is what the student's browser receives.

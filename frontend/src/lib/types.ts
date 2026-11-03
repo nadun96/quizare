@@ -44,6 +44,8 @@ export type Question = StudentQuestion & {
 	settings: Overrides;
 	/** Puts the question in a pool (D-66); "" = none. */
 	category: string;
+	/** When a teacher marked it checked (D-132). */
+	reviewed_at?: string | null;
 };
 
 export type StudentState = {
