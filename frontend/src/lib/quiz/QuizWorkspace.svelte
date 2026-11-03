@@ -5,6 +5,7 @@
 	// same page with only questions, import and preview.
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import PoolsEditor from '$lib/PoolsEditor.svelte';
+	import CsvGuide from '$lib/quiz/CsvGuide.svelte';
 	import { count } from '$lib/words';
 	import Icon from '$lib/ui/Icon.svelte';
 	import { goto } from '$app/navigation';
@@ -353,6 +354,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 				<h3 style="margin-top:0">Import questions</h3>
 				<p class="small">One row per question. Download the <a href="/api/teacher/quiz-template.csv" download>template</a> for examples of all seven types. Add a <code>category</code> column to sort questions into pools. Valid rows are imported; invalid ones are listed below so you can fix and re-upload just those.</p>
 				<input class="file-input w-full" type="file" accept=".csv,text/csv" onchange={(e) => upload('questions', e.currentTarget)} aria-label="Questions CSV" />
+				<CsvGuide />
 				{#if drive}<div><button class="btn" onclick={importFromDrive}><Icon name="cloud" size={16} />Import from Google Drive</button> <span class="small muted">A CSV file, or a Google Sheet with the same columns.</span></div>{/if}
 				{#if report}
 					<p class="alert alert-soft {report.rejected.length ? '' : 'ok'}">Imported {report.imported} question(s); rejected {report.rejected.length}.</p>
