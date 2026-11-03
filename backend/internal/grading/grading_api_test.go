@@ -141,6 +141,18 @@ func TestGradebook(t *testing.T) {
 	if len(g.Sessions) != 2 || g.Sessions[0].QuizID == "" || g.Sessions[0].Attempts < 1 || g.Sessions[0].Results < 1 || g.Sessions[0].Avg == nil {
 		t.Fatalf("sessions = %+v", g.Sessions)
 	}
+	// D-133: marks gained and out of, a missed item counting its marks; each item's highest and lowest.
+	for name, want := range map[string][2]float64{"Student s1": {3, 6}, "Student s2": {2, 6}, "Student s3": {0, 6}} {
+		if st := student(g, name); st.MarksTotal != want[0] || st.MarksMax != want[1] {
+			t.Fatalf("%s: %v of %v marks, want %v of %v", name, st.MarksTotal, st.MarksMax, want[0], want[1])
+		}
+	}
+	if it := g.Items[0]; it.MaxMarks != 2 || it.High == nil || *it.High != 100 || *it.Low != 50 {
+		t.Fatalf("first quiz totals = %+v", it)
+	}
+	if m := student(g, "Student s1").Marks[grading.Key("quiz", g.Items[0].ID)]; m.Score != 2 || m.Max != 2 {
+		t.Fatalf("s1's raw mark = %+v", m)
+	}
 	s2 := student(g, "Student s2")
 	if s2.Marks[grading.Key("tutorial", tu.ID)].Pct != 50 || s2.Final != nil || *s2.Average != 50 {
 		t.Fatalf("before weights, s2 = %+v", s2)

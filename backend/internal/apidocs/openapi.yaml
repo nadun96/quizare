@@ -3473,7 +3473,7 @@ components:
       properties:
         classroom: { type: string }
         weight_total: { type: number }
-        items: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, tutorial] }, id: { type: string }, title: { type: string }, topic: { type: string }, topic_id: { type: string }, module_id: { type: string }, module: { type: string, description: 'where it sits, for reports of one module or topic (D-130)' }, weight: { type: number, nullable: true }, taken: { type: integer }, avg: { type: number, nullable: true } } } }
+        items: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, tutorial] }, id: { type: string }, title: { type: string }, topic: { type: string }, topic_id: { type: string }, module_id: { type: string }, module: { type: string, description: 'where it sits, for reports of one module or topic (D-130)' }, weight: { type: number, nullable: true }, taken: { type: integer }, avg: { type: number, nullable: true }, high: { type: number, nullable: true }, low: { type: number, nullable: true }, max_marks: { type: number, description: 'what it is out of, the marks seen most often (D-133)' } } } }
         sessions: { type: array, description: 'the quiz sessions run here, newest first, each with its own report (D-130)', items: { type: object, properties: { id: { type: string }, quiz_id: { type: string }, title: { type: string }, status: { type: string }, at: { type: string, format: date-time }, attempts: { type: integer }, results: { type: integer }, avg: { type: number, nullable: true } } } }
         students:
           type: array
@@ -3483,11 +3483,13 @@ components:
               user_id: { type: string, format: uuid }
               name: { type: string }
               student_number: { type: string }
-              marks: { type: object, description: 'by "kind:id"', additionalProperties: { type: object, properties: { pct: { type: number }, points: { type: number } } } }
+              marks: { type: object, description: 'by "kind:id"', additionalProperties: { type: object, properties: { pct: { type: number }, points: { type: number }, score: { type: number }, max: { type: number } } } }
               average: { type: number, nullable: true }
               total: { type: number }
               missing: { type: integer }
               final: { type: number, nullable: true }
+              marks_total: { type: number, description: 'marks gained on every item (D-133)' }
+              marks_max: { type: number, description: 'what they are out of; a missed item counts its marks' }
     ClassroomAttendance:
       type: object
       properties:

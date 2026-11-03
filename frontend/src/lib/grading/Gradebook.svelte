@@ -10,7 +10,7 @@
 	import { toast } from '../ui/toast.svelte';
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
-	import { gradebookCSV, key, mergeTutoring, openPrint, printHTML, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
+	import { classAverage, gradebookCSV, key, marksLine, studentRange, totalAverage, mergeTutoring, openPrint, printHTML, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
 	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
@@ -87,7 +87,7 @@
 		const g = shown;
 		if (!g) return;
 		const attendance = scoped ? null : attendanceAll;
-		const head = ['Student', 'ID', ...g.items.map((it) => it.title + (it.weight ? ` (${it.weight}%)` : '')), 'Average', ...(weighted ? ['Points', 'Final'] : []), ...(attendance ? ['Attendance'] : [])];
+		const head = ['Student', 'ID', ...g.items.map((it) => it.title + (it.weight ? ` (${it.weight}%)` : '')), 'Average', 'Total marks', ...(weighted ? ['Points', 'Final'] : []), ...(attendance ? ['Attendance'] : [])];
 		const rows = g.students.map((s) => [
 			s.name,
 			s.student_number ?? '',
@@ -96,6 +96,7 @@
 				return m ? (it.weight ? `${m.pct}% · ${m.points}` : `${m.pct}%`) : it.weight ? '– · 0' : '–';
 			}),
 			s.average == null ? '–' : s.average + '%',
+			marksLine(s),
 			...(weighted ? [`${s.total} / ${g!.weight_total}`, s.final == null ? '–' : s.final + '%'] : []),
 			...(attendance ? [attendance.get(s.user_id)?.rate != null ? attendance.get(s.user_id)!.rate + '%' : '–'] : [])
 		]);
@@ -111,6 +112,7 @@
 	{:else if shown}
 		{@const g = shown}
 		{@const attendance = scoped ? null : attendanceAll}
+		{@const range = studentRange(g)}
 		<div class="flex flex-wrap items-center gap-2">
 			{#if full && full.items.length}<ScopePicker options={scopeOptions(full.items)} value={scopeValue(scope)} onchange={(v) => ((scope = scopeFrom(v)), (editing = false))} />{/if}
 			<span class="grow"></span>
@@ -158,6 +160,7 @@
 								<th class="num" title={it.topic}>{it.title}<br /><span class="small muted font-normal">{it.kind === 'tutorial' ? 'Tutorial' : 'Quiz'}{it.weight ? ` · ${it.weight}%` : weighted ? ' · not counted' : ''}</span></th>
 							{/each}
 							<th class="num">Average</th>
+							<th class="num">Total marks</th>
 							{#if weighted}<th class="num">Points<br /><span class="small muted font-normal">of {g.weight_total}</span></th><th class="num">Final</th>{/if}
 							{#if attendance}<th class="num">Attendance</th>{/if}
 						</tr>
@@ -168,9 +171,10 @@
 								<td>{s.name}{#if s.student_number}<br /><span class="small muted">{s.student_number}</span>{/if}</td>
 								{#each g.items as it (key(it))}
 									{@const m = s.marks[key(it)]}
-									<td class="num tabular">{#if m}{m.pct}%{#if m.points != null}<br /><span class="small muted">{m.points} pts</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
+									<td class="num tabular">{#if m}{m.pct}%{#if m.max}<br /><span class="small muted">{m.score} / {m.max}</span>{/if}{#if m.points != null}<br /><span class="small muted">{m.points} pts</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
 								{/each}
 								<td class="num tabular">{fmt(s.average, '%')}</td>
+								<td class="num tabular whitespace-nowrap">{marksLine(s)}</td>
 								{#if weighted}
 									<td class="num tabular font-semibold">{fmt(s.total)}{#if s.missing}<br /><span class="small text-warning">{s.missing} missed</span>{/if}</td>
 									<td class="num tabular font-semibold">{fmt(s.final, '%')}</td>
@@ -178,15 +182,31 @@
 								{#if attendance}<td class="num tabular">{fmt(attendance.get(s.user_id)?.rate, '%')}</td>{/if}
 							</tr>
 						{:else}
-							<tr><td colspan={g.items.length + 4} class="muted">No students yet.</td></tr>
+							<tr><td colspan={g.items.length + 5} class="muted">No students yet.</td></tr>
 						{/each}
 					</tbody>
 					{#if g.students.length && g.items.length}
 						<tfoot>
 							<tr>
 								<th>Class average</th>
-								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.avg, '%')}<br /><span class="small muted">{it.taken} took it</span></td>{/each}
-								<td colspan={1 + (weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
+								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.avg, '%')}<br /><span class="small muted">{it.taken} took it{#if it.max_marks} · out of {it.max_marks}{/if}</span></td>{/each}
+								<td class="num tabular">{fmt(classAverage(g), '%')}</td>
+								<td class="num tabular">{fmt(totalAverage(g))}</td>
+								<td colspan={(weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
+							</tr>
+							<tr class="sub">
+								<th>Highest</th>
+								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.high, '%')}</td>{/each}
+								<td class="num tabular">{fmt(range.avgHigh, '%')}</td>
+								<td class="num tabular">{fmt(range.totalHigh)}</td>
+								<td colspan={(weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
+							</tr>
+							<tr class="sub">
+								<th>Lowest</th>
+								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.low, '%')}</td>{/each}
+								<td class="num tabular">{fmt(range.avgLow, '%')}</td>
+								<td class="num tabular">{fmt(range.totalLow)}</td>
+								<td colspan={(weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
 							</tr>
 						</tfoot>
 					{/if}
@@ -225,5 +245,5 @@
 	.weights { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }
 	.weight { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; border: 1px solid var(--color-base-300); font-weight: 400; }
 	.weight > span:first-child { flex: 1; }
-	tfoot th, tfoot td { border-top: 2px solid var(--color-base-300); }
+	tfoot tr:first-child th, tfoot tr:first-child td { border-top: 2px solid var(--color-base-300); }
 </style>
