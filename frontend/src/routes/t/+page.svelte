@@ -1,4 +1,7 @@
 <script lang="ts">
+	// The teacher's classrooms (D-128): cards with each classroom's course
+	// code, department, year, semester, term and tags, filtered by them and
+	// grouped by one of them; the address keeps the view.
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
 	import type { Classroom } from '$lib/types';
@@ -11,18 +14,33 @@
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { flyIn } from '$lib/ui/motion';
 	import { toast } from '$lib/ui/toast.svelte';
+	import PropsFields from '$lib/props/PropsFields.svelte';
+	import PropsFilters from '$lib/props/PropsFilters.svelte';
+	import { activeFilters, emptyProps, filterFrom, filterParams, groupBy, hueOf, noFacets, propsLine, term, type Facets, type PropFilter } from '$lib/props/props';
 
 	const ready = requireRole('teacher');
 	let showArchived = $state(Paged.fromUrl(urlState, 'archived') === '1');
+	let filter = $state<PropFilter>(filterFrom(urlState.read()));
+	type Group = '' | 'department' | 'year' | 'semester';
+	let group = $state<Group>((['department', 'year', 'semester'].includes(Paged.fromUrl(urlState, 'group')) ? Paged.fromUrl(urlState, 'group') : '') as Group);
 	// One page of classrooms at a time, newest first (PL-FR-01).
 	const list = new Paged<Classroom>(() => '/api/teacher/classrooms', 'classrooms', {
-		url: urlState, sort: 'created', desc: true, filters: () => ({ archived: showArchived ? '1' : undefined })
+		url: urlState, sort: 'created', desc: true,
+		filters: () => ({ archived: showArchived ? '1' : undefined, group: group || undefined, ...filterParams(filter) })
 	});
-	let name = $state('');
-	let error = $state('');
+	let facets = $state<Facets>(noFacets());
+	async function loadFacets() {
+		facets = await api.get<Facets>('/api/teacher/classroom-facets' + (showArchived ? '?archived=1' : '')).catch(() => noFacets());
+	}
+
 	// The form opens from the header; a teacher with no classrooms gets it open.
 	let adding = $state(false);
-	const formOpen = $derived(adding || (list.loaded && list.total === 0 && !list.q && !showArchived));
+	let name = $state('');
+	let details = $state(emptyProps());
+	let more = $state(false);
+	let errors = $state<Record<string, string>>({});
+	const filtered = $derived(activeFilters(filter) > 0 || !!list.q || showArchived);
+	const formOpen = $derived(adding || (list.loaded && list.total === 0 && !filtered));
 	let nameEl = $state<HTMLInputElement>();
 	function openForm() {
 		adding = true;
@@ -32,6 +50,7 @@
 	$effect(() => {
 		if (ready()) {
 			list.load();
+			loadFacets();
 			loadInvitations();
 		}
 	});
@@ -55,26 +74,37 @@
 	function toggleArchived() {
 		showArchived = !showArchived;
 		list.refilter();
+		loadFacets();
 	}
 
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
+		errors = {};
 		try {
-			await api.post('/api/teacher/classrooms', { name });
+			await api.post('/api/teacher/classrooms', { name, props: details });
 			toast(`Classroom “${name}” created`);
 			name = '';
-			adding = false;
+			details = emptyProps();
+			more = adding = false;
 			list.load();
+			loadFacets();
 		} catch (err) {
-			error = err instanceof ApiError ? (err.fields.name ?? err.message) : 'Could not create';
+			if (err instanceof ApiError) {
+				errors = err.fields;
+				if (Object.keys(err.fields).some((k) => k.startsWith('props.'))) more = true;
+			} else errors = { name: 'Could not create' };
 		}
 	}
+	const groups = $derived(groupBy(list.rows, group, { department: 'No department', year: 'No year', semester: 'No semester', '': '' }[group]));
+	const TONE = { running: 'badge-success', upcoming: 'badge-info', ended: 'badge-ghost' } as const;
 </script>
 
 <div class="page-container vstack">
 	<div class="row">
-		<h1 class="m-0">Classrooms</h1>
+		<div>
+			<h1 class="m-0">Classrooms</h1>
+			{#if list.loaded && list.total}<p class="m-0 small muted">{list.total} {list.total === 1 ? 'classroom' : 'classrooms'}{filtered ? ' match' : ''}</p>{/if}
+		</div>
 		<span class="spacer"></span>
 		{#if !formOpen}<button class="btn btn-primary" onclick={openForm}><Icon name="plus" size={16} />New classroom</button>{/if}
 	</div>
@@ -87,49 +117,94 @@
 		</div>
 	{/each}
 	{#if formOpen}
-		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-5 row" onsubmit={create} in:flyIn>
-			<div style="flex:1;min-width:14rem"><label for="n">Classroom name</label><input class="input w-full" id="n" bind:this={nameEl} bind:value={name} placeholder="e.g. Grade 10 Science" required /></div>
-			<div class="flex gap-2" style="align-self:flex-end">
-				{#if list.total > 0}<button type="button" class="btn btn-ghost" onclick={() => ((adding = false), (error = ''))}>Cancel</button>{/if}
-				<button class="btn btn-primary">Create classroom</button>
+		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-5 vstack gap-3" onsubmit={create} in:flyIn>
+			<div class="row items-end">
+				<label class="flex flex-col gap-1" style="flex:1;min-width:14rem"><span>Classroom name</span><input class="input w-full" class:input-error={errors.name} bind:this={nameEl} bind:value={name} placeholder="e.g. MGT/IS/2025" required /></label>
+				<button type="button" class="btn btn-ghost" aria-expanded={more} onclick={() => (more = !more)}><Icon name={more ? 'chevron-down' : 'chevron-right'} size={16} />Details</button>
 			</div>
-			{#if error}<p class="field-error" style="width:100%">{error}</p>{/if}
+			{#if errors.name}<p class="field-error m-0">{errors.name}</p>{/if}
+			{#if more}
+				<div in:flyIn>
+					<p class="small muted m-0 mb-2">All optional: they help you find and filter classrooms later.</p>
+					<PropsFields bind:value={details} {facets} dates {errors} id="new-classroom" />
+				</div>
+			{/if}
+			<div class="flex gap-2">
+				<button class="btn btn-primary">Create classroom</button>
+				{#if list.total > 0}<button type="button" class="btn btn-ghost" onclick={() => ((adding = false), (errors = {}))}>Cancel</button>{/if}
+			</div>
 		</form>
 	{/if}
-	<div class="flex flex-wrap items-center gap-3">
-		<ListSearch {list} placeholder="Search classrooms" label="Search classrooms" />
-		<label class="row small" style="font-weight:400"><input class="checkbox" type="checkbox" checked={showArchived} onchange={toggleArchived} /> Show archived</label>
-		<span class="spacer"></span>
-		<label class="small muted flex items-center gap-2">Sort
-			<select class="select select-sm w-auto" value={list.sort} onchange={(e) => list.sortBy(e.currentTarget.value, e.currentTarget.value === 'created')}>
-				<option value="created">Newest first</option><option value="name">Name A–Z</option>
-			</select></label>
-	</div>
-	{#if !list.loaded}
-		<div class="auto-grid"><Skeleton lines={1} /><Skeleton lines={1} /><Skeleton lines={1} /></div>
-	{:else}
-		<div class="auto-grid">
-			{#each list.rows as c, i (c.id)}
-				<a class="card card-border interactive bg-base-100 p-4 text-inherit no-underline shadow-sm sm:p-5" href={'/t/classrooms/' + c.id} in:flyIn={{ delay: Math.min(i, 8) * 40 }}>
-					<div class="flex items-start gap-3">
-						<span class="grid size-10 flex-none place-items-center rounded-xl bg-primary/10 text-primary" aria-hidden="true"><Icon name="book" size={20} /></span>
-						<div class="min-w-0 flex-1">
-							<h3 class="m-0 truncate">{c.name}</h3>
-							{#if c.description}<p class="small muted m-0 mt-1 truncate">{c.description}</p>{/if}
-							<p class="small muted m-0 mt-1 whitespace-nowrap">Join code <strong class="tabular">{c.join_code}</strong>{#if c.archived}{' '}<span class="badge badge-soft badge-sm">Archived</span>{/if}</p>
-							{#if c.role === 'coteacher'}<p class="small m-0 mt-1 truncate"><span class="badge badge-soft badge-sm">Co-teacher</span> <span class="muted">with {c.owner_name}</span></p>{/if}
-						</div>
-						<span class="muted" aria-hidden="true"><Icon name="arrow-right" size={18} /></span>
-					</div>
-				</a>
-			{:else}
-				<div class="card card-border col-span-full bg-base-100">
-					{#if list.q}<EmptyState icon="search" title="No classrooms match “{list.q}”">Try another name.</EmptyState>
-					{:else if showArchived}<EmptyState icon="book" title="No archived classrooms">Classrooms you archive appear here.</EmptyState>
-					{:else}<EmptyState icon="book" title="No classrooms yet">Name your first one above. You'll add modules, topics and quizzes inside it.</EmptyState>{/if}
-				</div>
-			{/each}
+
+	<div class="filters card card-border bg-base-100 p-3 sm:p-4 vstack gap-3">
+		<div class="flex flex-wrap items-center gap-3">
+			<ListSearch {list} placeholder="Search name, course code, department or tag" label="Search classrooms" />
+			<label class="row small" style="font-weight:400"><input class="checkbox checkbox-sm" type="checkbox" checked={showArchived} onchange={toggleArchived} /> Show archived</label>
+			<span class="spacer"></span>
+			<label class="small muted flex items-center gap-2">Group
+				<select class="select select-sm w-auto" bind:value={group} onchange={() => list.refilter()}>
+					<option value="">None</option><option value="department">Department</option><option value="year">Year</option><option value="semester">Semester</option>
+				</select></label>
+			<label class="small muted flex items-center gap-2">Sort
+				<select class="select select-sm w-auto" value={list.sort} onchange={(e) => list.sortBy(e.currentTarget.value, ['created', 'starts', 'year'].includes(e.currentTarget.value))}>
+					<option value="created">Newest first</option><option value="name">Name A–Z</option><option value="starts">Start date</option><option value="year">Year</option>
+				</select></label>
 		</div>
+		<PropsFilters bind:value={filter} {facets} when onchange={() => list.refilter()} />
+	</div>
+
+	{#if !list.loaded}
+		<div class="auto-grid"><Skeleton lines={3} /><Skeleton lines={3} /><Skeleton lines={3} /></div>
+	{:else}
+		{#each groups as g (g.label)}
+			{#if g.label}<h2 class="group-h">{g.label} <span class="badge badge-soft badge-sm">{g.rows.length}</span></h2>{/if}
+			<div class="auto-grid">
+				{#each g.rows as c, i (c.id)}
+					{@const t = term(c.props)}
+					{@const line = propsLine(c.props, false)}
+					<a class="room card card-border interactive bg-base-100 text-inherit no-underline shadow-sm" style="--hue:{c.props.department ? hueOf(c.props.department) : 150}" href={'/t/classrooms/' + c.id} in:flyIn={{ delay: Math.min(i, 8) * 40 }}>
+						<div class="p-4 sm:p-5 vstack gap-2">
+							<div class="flex items-center gap-2">
+								{#if c.props.course_code}<span class="code">{c.props.course_code}</span>{:else}<span class="icon" aria-hidden="true"><Icon name="book" size={16} /></span>{/if}
+								{#if t}<span class="badge badge-soft badge-sm {TONE[t.state]}">{t.label}</span>{/if}
+								{#if c.archived}<span class="badge badge-soft badge-sm">Archived</span>{/if}
+								<span class="spacer"></span>
+								<span class="muted" aria-hidden="true"><Icon name="arrow-right" size={16} /></span>
+							</div>
+							<h3 class="m-0 text-lg leading-tight">{c.name}</h3>
+							{#if line}<p class="small m-0 muted">{line}</p>{/if}
+							{#if c.description}<p class="small muted m-0 line-clamp-2">{c.description}</p>{/if}
+							{#if t}
+								<div class="vstack gap-1">
+									<span class="small muted flex items-center gap-1"><Icon name="clock" size={13} />{t.range}</span>
+									{#if t.progress !== null}<progress class="progress progress-success h-1.5" value={Math.round(t.progress * 100)} max="100" aria-label="Through the term"></progress>{/if}
+								</div>
+							{/if}
+							{#if c.props.tags.length}<div class="flex flex-wrap gap-1">{#each c.props.tags as tag (tag)}<span class="badge badge-ghost badge-sm">{tag}</span>{/each}</div>{/if}
+						</div>
+						<div class="foot small">
+							<span class="flex items-center gap-1"><Icon name="users" size={14} />{c.students} {c.students === 1 ? 'student' : 'students'}</span>
+							{#if c.role === 'coteacher'}<span class="truncate">Co-teacher with {c.owner_name}</span>{:else}<span class="muted">Code <strong class="tabular">{c.join_code}</strong></span>{/if}
+						</div>
+					</a>
+				{/each}
+			</div>
+		{:else}
+			<div class="card card-border bg-base-100">
+				{#if filtered}<EmptyState icon="search" title="No classrooms match">Try fewer filters or another search.</EmptyState>
+				{:else}<EmptyState icon="book" title="No classrooms yet">Name your first one above. You'll add modules, topics and quizzes inside it.</EmptyState>{/if}
+			</div>
+		{/each}
 		<Pager {list} label="Classrooms" />
 	{/if}
 </div>
+
+<style>
+	.room { display: flex; flex-direction: column; overflow: hidden; border-top: 3px solid oklch(0.68 0.15 var(--hue)); }
+	/* The department's hue, mixed with the theme's text so it reads on light and dark themes alike. */
+	.code, .icon { color: color-mix(in oklab, oklch(0.62 0.16 var(--hue)) 65%, var(--color-base-content)); background: oklch(0.68 0.15 var(--hue) / 0.14); }
+	.code { font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; padding: 0.1rem 0.45rem; }
+	.icon { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; }
+	.foot { display: flex; justify-content: space-between; gap: 0.75rem; margin-top: auto; padding: 0.55rem 1rem; border-top: 1px solid var(--color-base-200); background: color-mix(in oklab, var(--color-base-200) 40%, transparent); }
+	.group-h { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0 0; font-size: 1rem; }
+</style>
