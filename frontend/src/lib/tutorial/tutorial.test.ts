@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, changed, checkpointNote, CHECKPOINTS, duration, emptyBlock, FEEDBACK, fromLocalInput, LEAVING, leavingNote, move, progressText, toLocalInput, type QuestionView } from './tutorial';
+import { BLOCKS, changed, checkpointNote, CHECKPOINTS, duration, emptyBlock, FEEDBACK, fromLocalInput, LEAVING, leavingNote, move, progressRows, progressText, toLocalInput, type ProgressRow, type QuestionView } from './tutorial';
 
 const q = (id: string, more: Partial<QuestionView> = {}): QuestionView => ({ id, code: id, type: 'SINGLE', text: '', body: {}, marks: 1, resources: [], checked: false, locked: false, tries: 0, ...more });
 
@@ -68,5 +68,17 @@ describe('tutorials', () => {
 		expect(duration(45)).toBe('45 s');
 		expect(duration(185)).toBe('3 min 05 s');
 		expect(duration(4800)).toBe('1 h 20 min');
+	});
+});
+
+describe('a tutorial report (D-130)', () => {
+	it('has a row per student and the class at the end', () => {
+		const row = (over: Partial<ProgressRow>): ProgressRow => ({ name: 'Ann', email: 'ann@x', started: true, reached: 2, finished: true, answered: 4, score: 6, pending: 0, seconds: 330, leaves: 1, locked: 0, ...over });
+		const rows = progressRows({ pages: 3, questions: 4, max_score: 8, students: [row({}), row({ name: 'Ben', email: 'ben@x', student_number: 'S2', finished: false, reached: 1, answered: 2, score: 2, pending: 1, leaves: 0 }), row({ name: 'Cal', email: 'cal@x', started: false, finished: false })] });
+		expect(rows[0][0]).toBe('Student');
+		expect(rows[1]).toEqual(['Ann', '', 'ann@x', 'Finished', '4/4', 6, 8, 75, '', 5.5, 1, '']);
+		expect(rows[2].slice(0, 9)).toEqual(['Ben', 'S2', 'ben@x', 'Page 2 of 3', '2/4', 2, 8, 25, 1]);
+		expect(rows[3].slice(3, 8)).toEqual(['Not started', '', '', 8, '']);
+		expect(rows[5].slice(0, 8)).toEqual(['Finished', '', '', '1 of 3', '', '', '', 75]);
 	});
 });

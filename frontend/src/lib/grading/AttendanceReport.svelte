@@ -9,13 +9,19 @@
 	import { toast } from '../ui/toast.svelte';
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
-	import { attendanceDetailCSV, attendanceSummaryCSV, mergeTutoring, openPrint, printHTML, summarise, type Attendance } from './grading';
+	import { attendanceDetailCSV, attendanceScopes, attendanceSummaryCSV, mergeTutoring, openPrint, printHTML, scopedAttendance, scopeFrom, scopeValue, summarise, type Attendance } from './grading';
+	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
 	const day = (d: Date) => d.toISOString().slice(0, 10);
 	let from = $state(day(new Date(Date.now() - 90 * 864e5)));
 	let to = $state(day(new Date()));
-	let data = $state<Attendance | null>(null);
+	let all = $state<Attendance | null>(null);
+	// A module, topic or quiz counts only its quiz sessions (D-130).
+	let scope = $state(scopeFrom(null));
+	const scopes = $derived(all ? attendanceScopes(all) : []);
+	const scopeName = $derived(scopes.find((o) => o.value === scopeValue(scope))?.label.replace(/ · quiz$/, '') ?? '');
+	const data = $derived(all ? scopedAttendance(all, scope) : null);
 	let tutoring = $state<ClassroomReport | null>(null);
 	let tutoringOn = $state(false);
 	let error = $state('');
@@ -33,7 +39,7 @@
 				end.setDate(end.getDate() + 1);
 				tutoring = await new TutorClient().get<ClassroomReport>(`/api/classrooms/${classroomId}/attendance?from=${start.toISOString()}&to=${end.toISOString()}`).catch(() => null);
 			}
-			data = mergeTutoring(a, tutoring);
+			all = mergeTutoring(a, tutoring);
 		} catch (e) {
 			error = e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : 'The report didn’t load';
 		} finally {
@@ -61,13 +67,13 @@
 	const rows = $derived(data ? summarise(data) : []);
 	const kinds = $derived(data ? (['quiz', 'meeting', 'tutoring'] as const).filter((k) => data!.events.some((e) => e.kind === k)) : []);
 	const LABEL = { quiz: 'Quiz sessions', meeting: 'Meetings', tutoring: 'Tutoring' } as const;
-	const file = (what: string) => `${what}-${classroomName}-${from}-to-${to}`.replace(/[\\/:*?"<>|]+/g, '-');
+	const file = (what: string) => `${what}-${classroomName}${scope.kind !== 'all' ? '-' + scopeName : ''}-${from}-to-${to}`.replace(/[\\/:*?"<>|]+/g, '-');
 
 	function print() {
 		if (!data) return;
 		const head = ['Student', 'ID', ...kinds.map((k) => LABEL[k]), 'Attended', 'Rate', 'Minutes'];
 		const body = rows.map((r) => [r.name, r.number, ...kinds.map((k) => `${r.byKind[k].came}/${r.byKind[k].of}`), `${r.came}/${r.of}`, r.rate == null ? '–' : r.rate + '%', r.minutes]);
-		if (!openPrint(printHTML(`Attendance · ${data.classroom}`, `${from} to ${to} · ${data.events.length} sessions`, head, body))) toast('Allow pop-ups for this site to print', 'error');
+		if (!openPrint(printHTML(`Attendance · ${data.classroom}${scope.kind !== 'all' ? ' · ' + scopeName : ''}`, `${from} to ${to} · ${data.events.length} sessions`, head, body))) toast('Allow pop-ups for this site to print', 'error');
 	}
 </script>
 
@@ -76,6 +82,7 @@
 		<label class="small">From <input class="input input-sm" type="date" bind:value={from} max={to} /></label>
 		<label class="small">To <input class="input input-sm" type="date" bind:value={to} min={from} /></label>
 		<button class="btn btn-sm" onclick={load} disabled={busy}>Show</button>
+		{#if scopes.length > 1}<ScopePicker options={scopes} value={scopeValue(scope)} onchange={(v) => (scope = scopeFrom(v))} />{/if}
 		<span class="grow"></span>
 		{#if data}
 			<button class="btn btn-sm" onclick={() => saveFile(file('attendance') + '.csv', attendanceSummaryCSV(data!))} disabled={!rows.length}><Icon name="download" size={15} />Summary CSV</button>
@@ -87,7 +94,7 @@
 	{#if !data}
 		{#if !error}<Skeleton lines={5} />{/if}
 	{:else}
-		<p class="small muted m-0">{data.events.length} {data.events.length === 1 ? 'session' : 'sessions'} from {from} to {to}: {kinds.map((k) => `${data!.events.filter((e) => e.kind === k).length} ${LABEL[k].toLowerCase()}`).join(', ') || 'none yet'}. A student came to a quiz session when admitted to it, to a meeting when they joined it{tutoringOn ? ', and to a tutoring session when connected while it was live' : ''}.</p>
+		<p class="small muted m-0">{data.events.length} {data.events.length === 1 ? 'session' : 'sessions'} from {from} to {to}: {kinds.map((k) => `${data!.events.filter((e) => e.kind === k).length} ${LABEL[k].toLowerCase()}`).join(', ') || 'none yet'}. {#if scope.kind !== 'all'}Only <strong>{scopeName}</strong>’s quiz sessions: meetings and tutoring belong to no module. {/if}A student came to a quiz session when admitted to it, to a meeting when they joined it{tutoringOn ? ', and to a tutoring session when connected while it was live' : ''}.</p>
 		{#if tutoring}
 			<label class="flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={tutoring.counts_in_results} onchange={(e) => setCounts(e.currentTarget.checked)} /> Show attendance in the classroom’s results</label>
 		{/if}

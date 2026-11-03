@@ -15,7 +15,9 @@
 	import BankPicker from '$lib/tutorial/BankPicker.svelte';
 	import BlockEditor from '$lib/tutorial/BlockEditor.svelte';
 	import Blocks from '$lib/tutorial/Blocks.svelte';
-	import { CHECKPOINTS, duration, FEEDBACK, fromLocalInput, LEAVING, move, toLocalInput, type Editor, type Leaving, type Page, type Tutorial } from '$lib/tutorial/tutorial';
+	import { CHECKPOINTS, duration, FEEDBACK, fromLocalInput, LEAVING, move, progressRows, toLocalInput, type Editor, type Leaving, type Page, type Tutorial } from '$lib/tutorial/tutorial';
+	import { openPrint, printHTML } from '$lib/grading/grading';
+	import { saveFile, toCSV } from '$lib/tutoring/types';
 	import type { Question, Response } from '$lib/types';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import { confirmTitle } from '$lib/deleting';
@@ -278,6 +280,17 @@
 			fail(e, 'Could not unlock it');
 		}
 	}
+	// The report of this tutorial, to download or print (D-130).
+	const reportName = () => `tutorial-${ed?.tutorial.title ?? ''}-${new Date().toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
+	function downloadReport() {
+		if (progress) saveFile(reportName() + '.csv', toCSV(progressRows(progress)));
+	}
+	function printReport() {
+		const t = ed?.tutorial;
+		if (!progress || !t) return;
+		const [head, ...rows] = progressRows(progress).filter((r) => r.length);
+		if (!openPrint(printHTML(`Tutorial · ${t.title}`, `${progress.pages} pages, ${progress.questions} questions, ${progress.max_score} marks`, head.filter((_, i) => i !== 2).map(String), rows.map((r) => r.filter((_, i) => i !== 2))))) toast('Allow pop-ups for this site to print', 'error');
+	}
 	const status = (s: Student) => (s.finished ? 'Finished' : s.started ? `Page ${s.reached + 1} of ${progress?.pages}` : 'Not started');
 </script>
 
@@ -466,6 +479,10 @@
 			{/if}
 			{#if !progress}<Skeleton lines={4} />
 			{:else}
+				<div class="flex flex-wrap items-center justify-end gap-2">
+					<button class="btn btn-sm" onclick={downloadReport} disabled={!progress.students.length}><Icon name="download" size={15} />CSV</button>
+					<button class="btn btn-sm" onclick={printReport} disabled={!progress.students.length}><Icon name="table" size={15} />Print / PDF</button>
+				</div>
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
 						<thead><tr><th>Student</th><th>Progress</th><th>Score</th><th>Time</th><th>Left the app</th><th><span class="sr-only">Actions</span></th></tr></thead>

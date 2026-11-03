@@ -10,7 +10,8 @@
 	import { toast } from '../ui/toast.svelte';
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
-	import { gradebookCSV, key, mergeTutoring, openPrint, printHTML, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
+	import { gradebookCSV, key, mergeTutoring, openPrint, printHTML, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
+	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
 	let g = $state<Gradebook | null>(null);
@@ -18,7 +19,14 @@
 	let editing = $state(false);
 	let draft = $state<Record<string, number | null>>({});
 	let saving = $state(false);
-	let attendance = $state<Map<string, AttendanceSummary> | null>(null);
+	// Attendance counts for the whole classroom only, so a part of it shows none.
+	let attendanceAll = $state<Map<string, AttendanceSummary> | null>(null);
+	// The report covers the whole classroom, a module, a topic, or one quiz or tutorial (D-130).
+	let scope = $state(scopeFrom(null));
+	const full = $derived(g);
+	const shown = $derived(full ? scopedGradebook(full, scope) : null);
+	const scoped = $derived(scope.kind !== 'all');
+	const scopeName = $derived(full ? scopeLabel(full.items, scope) : '');
 
 	async function load() {
 		try {
@@ -40,7 +48,7 @@
 				if (!rep.counts_in_results) return;
 				const day = (d: Date) => d.toISOString().slice(0, 10);
 				const a = await api.get<Attendance>(`/api/teacher/classrooms/${classroomId}/attendance?from=${day(from)}&to=${day(to)}`);
-				attendance = new Map(summarise(mergeTutoring(a, rep)).map((s) => [s.user_id, s]));
+				attendanceAll = new Map(summarise(mergeTutoring(a, rep)).map((s) => [s.user_id, s]));
 			} catch {
 				/* the results show without it */
 			}
@@ -68,15 +76,17 @@
 		}
 	}
 
-	const weighted = $derived(!!g && g.weight_total > 0);
+	const weighted = $derived(!!shown && shown.weight_total > 0);
 	const fmt = (v: number | null | undefined, unit = '') => (v == null ? '–' : `${Math.round(v * 100) / 100}${unit}`);
 	const file = (what: string) => `${what}-${classroomName}-${new Date().toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
 
 	function download() {
-		if (g) saveFile(file('results') + '.csv', gradebookCSV(g, attendance ?? undefined));
+		if (shown) saveFile(file(scoped ? `results-${scopeName}` : 'results') + '.csv', gradebookCSV(shown, scoped ? undefined : (attendanceAll ?? undefined)));
 	}
 	function print() {
+		const g = shown;
 		if (!g) return;
+		const attendance = scoped ? null : attendanceAll;
 		const head = ['Student', 'ID', ...g.items.map((it) => it.title + (it.weight ? ` (${it.weight}%)` : '')), 'Average', ...(weighted ? ['Points', 'Final'] : []), ...(attendance ? ['Attendance'] : [])];
 		const rows = g.students.map((s) => [
 			s.name,
@@ -89,7 +99,7 @@
 			...(weighted ? [`${s.total} / ${g!.weight_total}`, s.final == null ? '–' : s.final + '%'] : []),
 			...(attendance ? [attendance.get(s.user_id)?.rate != null ? attendance.get(s.user_id)!.rate + '%' : '–'] : [])
 		]);
-		const ok = openPrint(printHTML(`Results · ${g.classroom}`, weighted ? `Weighted items count for ${g.weight_total}% of the final result; a mark shows as percent · points.` : 'Each student’s best mark on each quiz and tutorial.', head, rows));
+		const ok = openPrint(printHTML(`Results · ${g.classroom}${scoped ? ' · ' + scopeName : ''}`, weighted ? `Weighted items count for ${g.weight_total}% of the final result; a mark shows as percent · points.` : 'Each student’s best mark on each quiz and tutorial.', head, rows));
 		if (!ok) toast('Allow pop-ups for this site to print', 'error');
 	}
 </script>
@@ -98,15 +108,22 @@
 	{#if error}<p class="alert alert-soft alert-error m-0">{error}</p>{/if}
 	{#if !g}
 		{#if !error}<Skeleton lines={5} />{/if}
-	{:else}
+	{:else if shown}
+		{@const g = shown}
+		{@const attendance = scoped ? null : attendanceAll}
 		<div class="flex flex-wrap items-center gap-2">
-			<p class="small muted m-0 grow">
-				{#if weighted}Weighted items make up <strong>{g.weight_total}%</strong> of the final result; each mark becomes points (55% on an item worth 10% is 5.5), and a weighted item a student hasn’t done counts 0.
-				{:else}Each student’s best mark on each quiz and tutorial. Set weights to work out a final result.{/if}
-			</p>
-			{#if !editing}<button class="btn btn-sm" onclick={startEditing} disabled={!g.items.length}><Icon name="sliders" size={15} />Weights</button>{/if}
+			{#if full && full.items.length}<ScopePicker options={scopeOptions(full.items)} value={scopeValue(scope)} onchange={(v) => ((scope = scopeFrom(v)), (editing = false))} />{/if}
+			<span class="grow"></span>
+			{#if !editing && !scoped}<button class="btn btn-sm" onclick={startEditing} disabled={!g.items.length}><Icon name="sliders" size={15} />Weights</button>{/if}
 			<button class="btn btn-sm" onclick={download} disabled={!g.students.length}><Icon name="download" size={15} />CSV</button>
 			<button class="btn btn-sm" onclick={print} disabled={!g.students.length}><Icon name="table" size={15} />Print / PDF</button>
+		</div>
+		<div class="flex flex-wrap items-center gap-2">
+			<p class="small muted m-0 grow">
+				{#if scoped}<strong>{scopeName}</strong>: {g.items.length} {g.items.length === 1 ? 'item' : 'items'}{#if weighted}, worth <strong>{g.weight_total}%</strong> of the final result; the final here is the points as a percentage of that{/if}. Weights are set for the whole classroom.
+				{:else if weighted}Weighted items make up <strong>{g.weight_total}%</strong> of the final result; each mark becomes points (55% on an item worth 10% is 5.5), and a weighted item a student hasn’t done counts 0.
+				{:else}Each student’s best mark on each quiz and tutorial. Set weights to work out a final result.{/if}
+			</p>
 		</div>
 
 		{#if editing}
@@ -177,6 +194,29 @@
 			</div>
 		</div>
 		{#if !g.items.length}<p class="muted small m-0">Results appear once quizzes are run in this classroom or tutorials with questions are published.</p>{/if}
+
+		{#if g.sessions?.length}
+			<details class="card card-border bg-base-100" open={scope.kind === 'item'}>
+				<summary class="p-3 sm:px-4 cursor-pointer font-semibold">Each session’s report <span class="badge badge-soft badge-sm">{g.sessions.length}</span></summary>
+				<div class="table-wrap px-2 pb-2 sm:px-4">
+					<table class="table table-sm">
+						<thead><tr><th>Session</th><th>When</th><th class="num">Took part</th><th class="num">Results</th><th class="num">Average</th><th><span class="sr-only">Reports</span></th></tr></thead>
+						<tbody>
+							{#each g.sessions as x (x.id)}
+								<tr>
+									<td>{x.title}{#if x.status !== 'ended'} <span class="badge badge-soft badge-sm">{x.status}</span>{/if}</td>
+									<td class="small">{new Date(x.at).toLocaleString()}</td>
+									<td class="num tabular">{x.attempts}</td>
+									<td class="num tabular">{x.results}</td>
+									<td class="num tabular">{fmt(x.avg, '%')}</td>
+									<td class="text-right whitespace-nowrap"><a class="btn btn-xs" href={'/t/sessions/' + x.id + '/results'}>Results</a> <a class="btn btn-xs btn-ghost" href={'/api/teacher/sessions/' + x.id + '/export.csv'} download><Icon name="download" size={13} />CSV</a></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</details>
+		{/if}
 	{/if}
 </section>
 
