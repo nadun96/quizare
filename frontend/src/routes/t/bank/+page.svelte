@@ -8,6 +8,7 @@
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import PoolBrowser from '$lib/pools/PoolBrowser.svelte';
 	import PoolImporter from '$lib/pools/PoolImporter.svelte';
+	import PoolTabs from '$lib/pools/PoolTabs.svelte';
 	import type { PoolSummary } from '$lib/pools/pools';
 
 	const ready = requireRole('teacher');
@@ -60,7 +61,11 @@
 		{#if current && currentPool}
 			<section class="vstack gap-2" aria-label={name(currentPool)}>
 				<h2 class="m-0 text-lg">{name(currentPool)}</h2>
-				{#key current + version}<PoolBrowser quizId={current} onchange={load} />{/key}
+				{#key current}
+					<PoolTabs quizId={current} onchange={load}>
+						{#snippet questions()}{#key version}<PoolBrowser quizId={current} onchange={load} />{/key}{/snippet}
+					</PoolTabs>
+				{/key}
 			</section>
 		{/if}
 	{/if}

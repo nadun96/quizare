@@ -1841,6 +1841,22 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [action, ids], properties: { action: { type: string, enum: [move, delete] }, ids: { type: array, maxItems: 5000, items: { type: string, format: uuid } }, category: { type: string, maxLength: 60 } } } } } }
       responses: { '200': { description: 'How many changed', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/quizzes/{id}/questions/review:
+    post:
+      operationId: postTeacherQuizzesQuestionsReview
+      tags: [quizzes]
+      summary: Mark questions reviewed (checked by a teacher), or not (D-132). Optional - unreviewed questions are still asked; changing a question clears its mark
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: string, format: uuid } }, reviewed: { type: boolean } } } } } }
+      responses: { '200': { $ref: '#/components/responses/Affected' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/quizzes/{id}/questions/balance:
+    post:
+      operationId: postTeacherQuizzesQuestionsBalance
+      tags: [quizzes]
+      summary: Spread the right answers - reorder single-answer questions' options so the right one falls evenly on A, B, C…, shuffling the others, and shuffle multiple-answer ones; options whose order matters ("All of the above", True/False) are left. Option ids stay, so keys and results are unchanged (D-132)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { category: { type: string, nullable: true, description: 'one category; null for every question' } } } } } }
+      responses: { '200': { description: 'What moved', content: { application/json: { schema: { type: object, properties: { moved: { type: integer }, shuffled: { type: integer }, kept: { type: integer } } } } } } }
   /api/teacher/quizzes/{id}/categories/rename:
     post:
       operationId: postTeacherQuizzesCategoriesRename
@@ -2025,6 +2041,14 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { $ref: '#/components/requestBodies/Target' }
       responses: { '200': { $ref: '#/components/responses/Affected' }, '410': { $ref: '#/components/responses/Gone' } }
+  /api/teacher/sessions/{id}/retry:
+    post:
+      operationId: postTeacherSessionsRetry
+      tags: [sessions]
+      summary: Let students who finished (handed in or removed) take the quiz again from the first question, whatever the tries setting; each gets a new try, admitted at once, with questions drawn and ordered afresh. The earlier try is kept and the best counts (D-131). Not in team sessions
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { $ref: '#/components/requestBodies/Target' }
+      responses: { '200': { $ref: '#/components/responses/Affected' }, '409': { $ref: '#/components/responses/Conflict' }, '410': { $ref: '#/components/responses/Gone' } }
   /api/teacher/sessions/{id}/start:
     post:
       operationId: postTeacherSessionsStart
@@ -2402,6 +2426,13 @@ paths:
       summary: Current attempt state (REST fallback for the WebSocket)
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { $ref: '#/components/responses/State' } }
+  /api/attempts/{id}/retry:
+    post:
+      operationId: postAttemptsRetry
+      tags: [student]
+      summary: Start again from the first question after handing in, within the session's tries (D-131); returns the new try's state. The old try's state then names it in next_attempt_id
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { $ref: '#/components/responses/State' }, '409': { description: 'No tries left (no_tries_left), not handed in (not_finished) or a team quiz (team_retry)' }, '410': { $ref: '#/components/responses/Gone' } }
   /api/attempts/{id}/start:
     post:
       operationId: postAttemptsStart

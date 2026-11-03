@@ -41,13 +41,16 @@ type Overrides struct {
 	AdmissionMode        *string `json:"admission_mode,omitempty" levels:"classroom,session" enum:"manual,auto"`
 	// StartMode: "countdown" starts each student's countdown on admission;
 	// "teacher" holds admitted students until the teacher starts (D-53).
-	StartMode          *string `json:"start_mode,omitempty" levels:"teacher,classroom,quiz,session" enum:"countdown,teacher"`
-	EvaluationMethod   *string `json:"evaluation_method,omitempty" levels:"teacher,quiz,question" enum:"key,llm,manual"`
-	LLMKeyID           *string `json:"llm_key_id,omitempty" levels:"teacher,quiz,question"`
-	LLMModel           *string `json:"llm_model,omitempty" levels:"teacher,quiz,question"`
-	FeedbackMode       *string `json:"feedback_mode,omitempty" levels:"teacher,quiz,question" enum:"none,predefined,ai,both"`
-	ViolationPolicy    *string `json:"violation_policy,omitempty" levels:"classroom,quiz,session" enum:"invalidate,warn_then_invalidate,log_only"`
-	AllowedWarnings    *int    `json:"allowed_warnings,omitempty" levels:"classroom,quiz,session"`
+	StartMode        *string `json:"start_mode,omitempty" levels:"teacher,classroom,quiz,session" enum:"countdown,teacher"`
+	EvaluationMethod *string `json:"evaluation_method,omitempty" levels:"teacher,quiz,question" enum:"key,llm,manual"`
+	LLMKeyID         *string `json:"llm_key_id,omitempty" levels:"teacher,quiz,question"`
+	LLMModel         *string `json:"llm_model,omitempty" levels:"teacher,quiz,question"`
+	FeedbackMode     *string `json:"feedback_mode,omitempty" levels:"teacher,quiz,question" enum:"none,predefined,ai,both"`
+	ViolationPolicy  *string `json:"violation_policy,omitempty" levels:"classroom,quiz,session" enum:"invalidate,warn_then_invalidate,log_only"`
+	AllowedWarnings  *int    `json:"allowed_warnings,omitempty" levels:"classroom,quiz,session"`
+	// Tries: how many times a student may take the quiz in one session,
+	// starting again themselves after submitting (D-131); the teacher can always allow more.
+	Tries              *int    `json:"tries,omitempty" levels:"quiz,session"`
 	BlurGraceMs        *int    `json:"blur_grace_ms,omitempty" levels:"classroom,quiz,session"`
 	DisconnectGraceSec *int    `json:"disconnect_grace_sec,omitempty" levels:"classroom,quiz,session"`
 	QuestionOrder      *string `json:"question_order,omitempty" levels:"quiz,session" enum:"fixed,shuffled"`
@@ -86,6 +89,7 @@ type Effective struct {
 	FeedbackMode         string `json:"feedback_mode"`
 	ViolationPolicy      string `json:"violation_policy"`
 	AllowedWarnings      int    `json:"allowed_warnings"`
+	Tries                int    `json:"tries"`
 	BlurGraceMs          int    `json:"blur_grace_ms"`
 	DisconnectGraceSec   int    `json:"disconnect_grace_sec"`
 	QuestionOrder        string `json:"question_order"`
@@ -116,7 +120,8 @@ func Defaults() Effective {
 		EvaluationMethod:   "key",
 		FeedbackMode:       "predefined",
 		ViolationPolicy:    "invalidate",
-		AllowedWarnings:    1,    // used only by warn_then_invalidate
+		AllowedWarnings:    1, // used only by warn_then_invalidate
+		Tries:              1,
 		BlurGraceMs:        2000, // BA risk R-01: short blur threshold
 		DisconnectGraceSec: 10,   // architecture heartbeat rule: 5-10 s
 		QuestionOrder:      "fixed",
@@ -182,6 +187,10 @@ func checkInt(name string, x int) string {
 	case "countdown_seconds":
 		if x < 0 || x > 3600 {
 			return "must be between 0 and 3600"
+		}
+	case "tries":
+		if x < 1 || x > 10 {
+			return "between 1 and 10"
 		}
 	case "question_draw":
 		if x < 0 || x > 1000 {

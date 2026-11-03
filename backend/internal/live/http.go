@@ -75,6 +75,8 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		}
 	}
 	r.Method("POST", "/sessions/{id}/admit", bulk(func(r *http.Request, t Target) (int, error) { return s.Admit(r.Context(), uid(r), pid(r), t) }))
+	// Let students who finished take the quiz again from the start (D-131).
+	r.Method("POST", "/sessions/{id}/retry", bulk(func(r *http.Request, t Target) (int, error) { return s.Retry(r.Context(), uid(r), pid(r), t) }))
 	r.Method("POST", "/sessions/{id}/start", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in StartInput
 		if err := httpx.Decode(w, r, &in); err != nil {
@@ -254,6 +256,19 @@ func (s *Service) StudentRoutes(r chi.Router) {
 	}
 	r.Method("GET", "/attempts/{id}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		return state(w, r, nil)
+	}))
+	// Start again, within the session's tries (D-131): the new try's state.
+	r.Method("POST", "/attempts/{id}/retry", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		a, err := s.StudentRetry(r.Context(), uid(r), pid(r))
+		if err != nil {
+			return err
+		}
+		st, err := s.StudentState(r.Context(), uid(r), a.ID)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, st)
+		return nil
 	}))
 	r.Method("POST", "/attempts/{id}/start", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		_, err := s.Start(r.Context(), uid(r), pid(r))

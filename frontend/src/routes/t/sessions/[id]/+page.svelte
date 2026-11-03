@@ -90,12 +90,24 @@
 		notice = '';
 		try {
 			const r = await api.post<{ affected: number }>('/api/teacher/sessions/' + id + '/' + action, { all, attempt_ids: all ? [] : [...selected], ...extra });
-			const verb: Record<string, string> = { admit: 'Admitted', pause: 'Paused', resume: 'Resumed', extend: 'Extended time for', start: 'Started' };
+			const verb: Record<string, string> = { admit: 'Admitted', pause: 'Paused', resume: 'Resumed', extend: 'Extended time for', start: 'Started', retry: 'Started a new try for' };
 			toast(`${verb[action] ?? action} ${r.affected} student${r.affected === 1 ? '' : 's'}`, r.affected ? 'success' : 'info');
 			if (!all) selected = new Set();
 		} catch (e) {
 			toast(e instanceof ApiError ? e.message : 'Command failed', 'error');
 		}
+	}
+	// Let students who finished take the quiz again from the start (D-131).
+	const finishedCount = $derived(rows.filter((r) => r.state === 'submitted' || r.state === 'invalidated').length);
+	const selectedFinished = $derived(rows.filter((r) => selected.has(r.attempt_id) && (r.state === 'submitted' || r.state === 'invalidated')).length);
+	async function letRetry(all: boolean) {
+		const n = all ? finishedCount : selectedFinished;
+		const ok = await confirmDialog({
+			title: `Let ${n} ${n === 1 ? 'student' : 'students'} retry?`,
+			body: 'They start again from the first question, with the questions drawn and ordered afresh. Their earlier try is kept, and the best try counts.',
+			confirm: 'Let them retry'
+		});
+		if (ok) cmd('retry', all);
 	}
 	async function end() {
 		const ok = await confirmDialog({ title: 'End the session now?', body: 'Running attempts are submitted as they are, and nobody else can join.', confirm: 'End session', danger: true });
@@ -235,12 +247,16 @@
 						<button class="btn" onclick={() => cmd('resume', selected.size === 0)}>Resume {selected.size ? 'selected' : 'all'}</button>
 						<span class="row"><input class="input w-full" type="number" min="1" style="width:5rem" bind:value={extendMin} aria-label="Minutes" />
 							<button class="btn" onclick={() => cmd('extend', selected.size === 0, { seconds: extendMin * 60 })}>+ min {selected.size ? 'selected' : 'everyone'}</button></span>
+						{#if selected.size ? selectedFinished : finishedCount}
+							<button class="btn" onclick={() => letRetry(selected.size === 0)} title="They start again from the first question; the best try counts"><Icon name="undo" size={16} />Let {selected.size ? `${selectedFinished} selected` : `all ${finishedCount} finished`} retry</button>
+						{/if}
 					</div>
 						<div class="row small">
 							<span class="muted">Select:</span> <button class="btn btn-sm" onclick={() => selectState('waiting')}>waiting</button>
 						<button class="btn btn-sm" onclick={() => selectState('admitted')}>admitted</button>
 						<button class="btn btn-sm" onclick={() => selectState('in_progress')}>in progress</button>
 						<button class="btn btn-sm" onclick={() => selectState('paused')}>paused</button>
+						<button class="btn btn-sm" onclick={() => selectState('submitted')}>finished</button>
 						<button class="btn btn-sm" onclick={() => (selected = new Set())}>none</button>
 					</div>
 				{/if}
@@ -253,7 +269,7 @@
 							{#each rows as r (r.attempt_id)}
 									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
 									{#if !ended}<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>{/if}
-									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
+									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}{#if (r.try ?? 1) > 1}{' '}<span class="badge badge-soft badge-info badge-xs" title="Which try this is">try {r.try}</span>{/if}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
 									{#if teamsOn}
 										{@const team = d.teams?.find((t) => t.id === r.team_id)}
 										<td class="small">{#if team}<span class="inline-flex items-center gap-1"><span class="tdot" style:background="var(--cat-{team.color})" aria-hidden="true"></span>{team.name}{#if r.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>{:else}<span class="muted">—</span>{/if}</td>

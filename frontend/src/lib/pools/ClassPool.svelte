@@ -6,6 +6,7 @@
 	import Skeleton from '../ui/Skeleton.svelte';
 	import PoolBrowser from './PoolBrowser.svelte';
 	import PoolImporter from './PoolImporter.svelte';
+	import PoolTabs from './PoolTabs.svelte';
 	import type { PoolSummary } from './pools';
 
 	let { classroomId, classroomName }: { classroomId: string; classroomName: string } = $props();
@@ -29,7 +30,11 @@
 	{#if error}<p class="alert alert-soft alert-error m-0">{error}</p>
 	{:else if !poolId}<Skeleton lines={4} />
 	{:else}
-		<PoolImporter {pools} {classroomId} onimported={() => version++} />
-		{#key version}<PoolBrowser quizId={poolId} />{/key}
+		<PoolTabs quizId={poolId}>
+			{#snippet questions()}
+				<PoolImporter {pools} {classroomId} onimported={() => version++} />
+				{#key version}<PoolBrowser quizId={poolId} />{/key}
+			{/snippet}
+		</PoolTabs>
 	{/if}
 </div>

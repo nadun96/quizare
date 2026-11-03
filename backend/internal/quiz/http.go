@@ -37,7 +37,8 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("PUT", "/questions/{id}/resources", httpx.Handler(s.hSetResource))
 	r.Method("DELETE", "/resources/{id}", httpx.Handler(s.hDeleteResource))
 
-	s.poolRoutes(r) // classroom pools, bulk changes and categories (D-123)
+	s.poolRoutes(r)   // classroom pools, bulk changes and categories (D-123)
+	s.reviewRoutes(r) // reviewing and balancing a pool (D-132)
 	// Question pools and the question bank (D-66).
 	r.Method("GET", "/bank", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		b, err := s.Bank(r.Context(), uid(r))

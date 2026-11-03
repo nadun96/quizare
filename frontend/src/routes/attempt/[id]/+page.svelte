@@ -45,10 +45,28 @@
 	const running = () => st?.state === 'in_progress';
 
 	function apply(next: StudentState) {
+		// The teacher let them retry (D-131): carry on in the new try.
+		if (next.next_attempt_id && next.next_attempt_id !== id) {
+			location.replace('/attempt/' + next.next_attempt_id);
+			return;
+		}
 		const wasRunning = st?.state === 'in_progress';
 		st = next;
 		if (!wasRunning && next.state === 'in_progress' && !document.fullscreenElement && document.fullscreenEnabled) fullscreenOffer = true;
 		if (next.state !== 'in_progress' && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+	}
+
+	// Starting again, within the tries the session allows (D-131).
+	let retrying = $state(false);
+	async function retry() {
+		retrying = true;
+		try {
+			const next = await api.post<StudentState>('/api/attempts/' + id + '/retry');
+			location.assign('/attempt/' + next.attempt_id);
+		} catch (e) {
+			notice = e instanceof ApiError ? e.message : 'That didn’t work; try again';
+			retrying = false;
+		}
 	}
 
 	async function refresh() {
@@ -376,7 +394,11 @@
 				<div class="state-icon bg-success/15 text-success" in:scaleIn={{ start: 0.5, duration: 350 }}><Icon name="check" size={34} /></div>
 				<h1>Submitted</h1>
 				<p class="lead">Your answers are in. Results appear when your teacher releases them.</p>
-				<a class="btn btn-primary" href="/my">My quizzes</a>
+				{#if (st.tries ?? 1) > 1}<p class="small muted m-0">Try {st.try} of {st.tries}. Your best try counts.</p>{/if}
+				<div class="flex flex-wrap justify-center gap-2">
+					{#if st.can_retry}<button class="btn btn-primary" disabled={retrying} onclick={retry}><Icon name="undo" size={16} />Try again from the start</button>{/if}
+					<a class="btn" class:btn-primary={!st.can_retry} href="/my">My quizzes</a>
+				</div>
 			</div>
 		{:else if st.state === 'invalidated'}
 			<div class="state-card" in:flyIn>
