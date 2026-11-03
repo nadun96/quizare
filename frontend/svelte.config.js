@@ -7,6 +7,8 @@ export default {
 	preprocess: vitePreprocess(),
 	kit: {
 		adapter: adapter({ pages: 'build', assets: 'build', fallback: 'index.html', precompress: false, strict: true }),
+		// Open pages notice a new version on the server, every 5 minutes (D-137).
+		version: { pollInterval: 300000 },
 		// Strict CSP without inline scripts (ADR-16): Kit hashes its own boot script
 		// into a <meta> CSP; Caddy's header CSP covers everything else.
 		csp: {
