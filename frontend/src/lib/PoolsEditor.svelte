@@ -28,7 +28,9 @@
 	const key = (r: { source: string; category: string }) => r.source + '|' + r.category.toLowerCase();
 	const listOf = (source: PoolRule['source']) => (source === 'bank' ? info?.bank : source === 'class' ? info?.class : info?.quiz) ?? [];
 	const sizeOf = (r: PoolRule) => listOf(r.source).find((c) => c.category.toLowerCase() === r.category.toLowerCase())?.count ?? 0;
-	const drawn = (r: PoolRule) => (r.count > 0 ? Math.min(r.count, sizeOf(r)) : sizeOf(r));
+	// 0 means all of them; an empty box (null, while typing) counts nothing yet.
+	const drawn = (r: PoolRule) => (r.count === 0 ? sizeOf(r) : Math.min(Number(r.count) || 0, sizeOf(r)));
+	const blank = (r: PoolRule) => r.count !== 0 && !(Number(r.count) >= 1);
 	// Quiz categories without a rule: always asked.
 	const fixed = $derived((info?.quiz ?? []).filter((c) => !rules.some((r) => key(r) === key({ source: 'quiz', category: c.category }))));
 	const fixedCount = $derived(fixed.reduce((n, c) => n + c.count, 0));
@@ -60,6 +62,7 @@
 		rules = rules.filter((_, j) => j !== i);
 	}
 	async function save() {
+		if (rules.some(blank)) return; // an empty box would save as 0, "all of them"
 		saving = true;
 		errors = {};
 		try {
@@ -106,8 +109,9 @@
 								{ v: 'some', label: 'Some', icon: 'shuffle' },
 								{ v: 'all', label: 'All of them', icon: 'check' }
 							]} />
-							{#if r.count > 0}
-								<label class="input input-sm w-28" class:input-error={errors['pools.' + i] || r.count > sizeOf(r)}>
+							{#if r.count !== 0}
+								<!-- Shown while the box is empty too, so the teacher can clear it and type another number. -->
+								<label class="input input-sm w-28" class:input-error={errors['pools.' + i] || r.count > sizeOf(r) || blank(r)}>
 									<input type="number" min="1" max={sizeOf(r)} bind:value={r.count} aria-label="How many from {label(r.category)}" />
 									<span class="muted">of {sizeOf(r)}</span>
 								</label>
@@ -115,7 +119,7 @@
 							<button type="button" class="btn btn-sm btn-ghost btn-square" aria-label="Remove the pool {label(r.category)}" title="Remove" onclick={() => remove(i)}><Icon name="x" size={16} /></button>
 						</span>
 					</div>
-					{#if errors['pools.' + i]}<p class="field-error m-0">{errors['pools.' + i]}</p>{:else if r.count > sizeOf(r)}<p class="field-error m-0">Only {sizeOf(r)} in this pool.</p>{/if}
+					{#if errors['pools.' + i]}<p class="field-error m-0">{errors['pools.' + i]}</p>{:else if r.count > sizeOf(r)}<p class="field-error m-0">Only {sizeOf(r)} in this pool.</p>{:else if blank(r)}<p class="field-error m-0">How many? 1 to {sizeOf(r)}.</p>{/if}
 				{/each}
 			</div>
 		{/if}
@@ -174,7 +178,7 @@
 		</div>
 
 		<div class="row">
-			<button class="btn btn-primary" disabled={saving} onclick={save}>Save pools</button>
+			<button class="btn btn-primary" disabled={saving || rules.some(blank)} onclick={save}>Save pools</button>
 			{#if rules.length}<button class="btn btn-ghost" disabled={saving} onclick={() => { rules = []; save(); }}>Remove all pools</button>{/if}
 		</div>
 		<p class="small muted m-0">With pools, “Questions per student” in Settings doesn't apply. Running sessions keep the questions they started with.</p>
