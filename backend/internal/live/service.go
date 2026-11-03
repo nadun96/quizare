@@ -369,7 +369,7 @@ func (s *Service) event(ctx context.Context, tx pgx.Tx, sessionID, attemptID, ac
 const attemptCols = `a.id, a.session_id, a.user_id, a.student_number, a.state, a.overrides, a.extension_sec,
 	a.countdown_deadline, a.started_at, a.quiz_deadline, a.quiz_remaining_ms, a.current_index, a.question_deadline,
 	a.question_remaining_ms, a.paused_at, a.question_order, a.option_orders, a.warnings, a.violations, a.disconnected_at,
-	a.submitted_at, a.invalidated_at, a.invalid_reason, a.created_at, a.team_id, a.captain`
+	a.submitted_at, a.invalidated_at, a.invalid_reason, a.created_at, a.team_id, a.captain, a.try, a.superseded_at`
 
 func scanAttempt(r pgx.Row) (*Attempt, error) {
 	var a Attempt
@@ -378,7 +378,7 @@ func scanAttempt(r pgx.Row) (*Attempt, error) {
 	err := r.Scan(&a.ID, &a.SessionID, &a.UserID, &a.StudentNumber, &a.State, &ov, &a.ExtensionSec,
 		&a.CountdownDeadline, &a.StartedAt, &a.QuizDeadline, &a.QuizRemainingMs, &a.Current, &a.QuestionDeadline,
 		&a.QuestionRemainingMs, &a.PausedAt, &order, &oo, &a.Warnings, &a.Violations, &a.DisconnectedAt,
-		&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt, &a.TeamID, &a.Captain)
+		&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt, &a.TeamID, &a.Captain, &a.Try, &a.SupersededAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.ErrNotFound
 	}
@@ -524,7 +524,7 @@ func (s *Service) Preview(ctx context.Context, userID, code string) (JoinPreview
 			return p, err
 		}
 	}
-	a, err := scanAttempt(s.pool.QueryRow(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1 AND a.user_id=$2`, v.ID, userID))
+	a, err := scanAttempt(s.pool.QueryRow(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1 AND a.user_id=$2 AND a.superseded_at IS NULL`, v.ID, userID))
 	if err == nil {
 		p.Attempt = a
 	} else if !errors.Is(err, httpx.ErrNotFound) {
@@ -570,13 +570,13 @@ func (s *Service) Join(ctx context.Context, userID, code, studentNumber, teamID 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var id string
 		err := tx.QueryRow(ctx, `INSERT INTO live.attempts(session_id, user_id, student_number, state, question_order, option_orders, created_at, updated_at)
-			VALUES ($1,$2,$3,'waiting',$4,$5,$6,$6) ON CONFLICT (session_id, user_id) DO NOTHING RETURNING id`,
+			VALUES ($1,$2,$3,'waiting',$4,$5,$6,$6) ON CONFLICT (session_id, user_id) WHERE superseded_at IS NULL DO NOTHING RETURNING id`,
 			v.ID, userID, en.StudentNumber, order32, optsJSON, s.now()).Scan(&id)
 		created = err == nil
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		a, err = scanAttempt(tx.QueryRow(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1 AND a.user_id=$2 FOR UPDATE`, v.ID, userID))
+		a, err = scanAttempt(tx.QueryRow(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1 AND a.user_id=$2 AND a.superseded_at IS NULL FOR UPDATE`, v.ID, userID))
 		if err != nil || !created {
 			return err
 		}
@@ -707,7 +707,7 @@ func (s *Service) targets(ctx context.Context, sessionID string, t Target, state
 	if !t.All && len(t.AttemptIDs) == 0 {
 		return nil, httpx.BadRequest("choose students or all")
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id FROM live.attempts WHERE session_id=$1 AND state = ANY($2)
+	rows, err := s.pool.Query(ctx, `SELECT id FROM live.attempts WHERE session_id=$1 AND state = ANY($2) AND superseded_at IS NULL
 		AND ($3 OR id::text = ANY($4)) ORDER BY created_at`, sessionID, states, t.All, t.AttemptIDs)
 	if err != nil {
 		return nil, err
@@ -845,7 +845,7 @@ func (s *Service) endSession(ctx context.Context, sess *Session, actor string) e
 		if tag.RowsAffected() == 0 {
 			return errSessionEnded
 		}
-		rows, err := tx.Query(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1
+		rows, err := tx.Query(ctx, `SELECT `+attemptCols+` FROM live.attempts a WHERE a.session_id=$1 AND a.superseded_at IS NULL
 			AND a.state IN ('waiting','admitted','in_progress','paused') FOR UPDATE`, sess.ID)
 		if err != nil {
 			return err

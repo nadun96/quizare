@@ -332,6 +332,9 @@ type AttemptResult struct {
 	Complete      bool       `json:"complete"`
 	Invalidated   bool       `json:"invalidated"`
 	Marks         []MarkView `json:"marks"`
+	// Retries (D-131): the try shown, the best that counts, and how many the student took.
+	Try   int `json:"try"`
+	Tries int `json:"tries"`
 }
 
 func (s *Service) loadMarks(ctx context.Context, attemptID string) (map[string]MarkView, error) {
@@ -354,10 +357,13 @@ func (s *Service) loadMarks(ctx context.Context, attemptID string) (map[string]M
 }
 
 func (s *Service) result(ctx context.Context, d *live.MarkingData) (AttemptResult, error) {
-	r := AttemptResult{AttemptID: d.AttemptID, UserID: d.UserID, StudentNumber: d.StudentNumber, State: d.State, Marks: []MarkView{}}
+	r := AttemptResult{AttemptID: d.AttemptID, UserID: d.UserID, StudentNumber: d.StudentNumber, State: d.State, Marks: []MarkView{}, Try: d.Try, Tries: 1}
 	err := s.pool.QueryRow(ctx, `SELECT score, max_score, pct, pass_mark_pct, passed, complete, invalidated FROM eval.results WHERE attempt_id=$1`, d.AttemptID).
 		Scan(&r.Score, &r.MaxScore, &r.Pct, &r.PassMarkPct, &r.Passed, &r.Complete, &r.Invalidated)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return r, err
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)::int FROM live.attempts WHERE session_id=$1 AND user_id=$2`, d.SessionID, d.UserID).Scan(&r.Tries); err != nil {
 		return r, err
 	}
 	marks, err := s.loadMarks(ctx, d.AttemptID)

@@ -216,6 +216,12 @@ type StudentState struct {
 	InvalidReason       string                `json:"invalid_reason,omitempty"`
 	Team                *TeamInfo             `json:"team,omitempty"` // D-44
 	Captain             bool                  `json:"captain,omitempty"`
+	// Retries (D-131): this try, the tries allowed, whether the student may
+	// start again now, and the newer try that replaced this one.
+	Try           int    `json:"try"`
+	Tries         int    `json:"tries"`
+	CanRetry      bool   `json:"can_retry,omitempty"`
+	NextAttemptID string `json:"next_attempt_id,omitempty"`
 }
 
 func (s *Service) studentState(ctx context.Context, sess *Session, a *Attempt) (StudentState, error) {
@@ -230,6 +236,12 @@ func (s *Service) studentState(ctx context.Context, sess *Session, a *Attempt) (
 		QuestionRemainingMs: a.QuestionRemainingMs, Index: a.Current, Total: len(a.Order), OneWay: eff.OneWayNavigation,
 		Policy: eff.ViolationPolicy, Warnings: a.Warnings, AllowedWarnings: eff.AllowedWarnings,
 		BlurGraceMs: eff.BlurGraceMs, InvalidReason: a.InvalidReason, Captain: a.Captain,
+		Try: a.Try, Tries: eff.Tries,
+	}
+	if a.SupersededAt != nil {
+		_ = s.pool.QueryRow(ctx, `SELECT id FROM live.attempts WHERE session_id=$1 AND user_id=$2 AND superseded_at IS NULL`, a.SessionID, a.UserID).Scan(&st.NextAttemptID)
+	} else {
+		st.CanRetry = s.selfRetry(v, eff, a) == nil
 	}
 	if a.TeamID != nil {
 		var t TeamInfo
@@ -329,6 +341,7 @@ type DashboardRow struct {
 	InvalidReason     string  `json:"invalid_reason,omitempty"`
 	TeamID            *string `json:"team_id,omitempty"`
 	Captain           bool    `json:"captain,omitempty"`
+	Try               int     `json:"try"` // D-131
 }
 
 type Dashboard struct {
@@ -349,7 +362,7 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 	}
 	v := s.sessionView(sess)
 	rows, err := s.pool.Query(ctx, `SELECT `+attemptCols+`, (SELECT count(*) FROM live.answers x WHERE x.attempt_id=a.id)
-		FROM live.attempts a WHERE a.session_id=$1 ORDER BY a.created_at`, sessionID)
+		FROM live.attempts a WHERE a.session_id=$1 AND a.superseded_at IS NULL ORDER BY a.created_at`, sessionID)
 	if err != nil {
 		return Dashboard{}, err
 	}
@@ -365,7 +378,7 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 		err := r.Scan(&a.ID, &a.SessionID, &a.UserID, &a.StudentNumber, &a.State, &ov, &a.ExtensionSec,
 			&a.CountdownDeadline, &a.StartedAt, &a.QuizDeadline, &a.QuizRemainingMs, &a.Current, &a.QuestionDeadline,
 			&a.QuestionRemainingMs, &a.PausedAt, &order, &oo, &a.Warnings, &a.Violations, &a.DisconnectedAt,
-			&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt, &a.TeamID, &a.Captain, &p.answered)
+			&a.SubmittedAt, &a.InvalidatedAt, &a.InvalidReason, &a.CreatedAt, &a.TeamID, &a.Captain, &a.Try, &a.SupersededAt, &p.answered)
 		a.Order = make([]int, len(order))
 		p.a = &a
 		return p, err
@@ -389,7 +402,7 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 			AttemptID: a.ID, UserID: a.UserID, Name: users[a.UserID].Name, Avatar: users[a.UserID].Avatar, StudentNumber: a.StudentNumber, State: a.State,
 			Index: a.Current, Total: len(a.Order), Answered: p.answered, Warnings: a.Warnings, Violations: a.Violations,
 			ExtensionSec: a.ExtensionSec, QuizDeadline: ms(a.QuizDeadline), RemainingMs: a.QuizRemainingMs, CountdownDeadline: ms(a.CountdownDeadline),
-			Connected: s.hub.isConnected(a.ID), InvalidReason: a.InvalidReason, TeamID: a.TeamID, Captain: a.Captain,
+			Connected: s.hub.isConnected(a.ID), InvalidReason: a.InvalidReason, TeamID: a.TeamID, Captain: a.Captain, Try: a.Try,
 		})
 	}
 	d.StartMode = v.Effective(nil, settings.Overrides{}).StartMode

@@ -155,6 +155,7 @@
 							<li>
 								<input type="checkbox" class="checkbox checkbox-sm" checked={selected.has(q.id)} aria-label="Select {q.code}" onchange={() => (selected = toggle(selected, q.id))} />
 								<span class="code tabular">{q.code}</span>
+								{#if q.reviewed_at}<span class="text-success flex-none" title="Reviewed"><Icon name="check-circle" size={14} /><span class="sr-only">reviewed</span></span>{/if}
 								<span class="badge badge-ghost badge-sm flex-none">{QTYPE_LABEL[q.type] ?? q.type}</span>
 								<span class="text grow">{plain(q.text)}</span>
 								<span class="small muted tabular flex-none">{q.marks} {q.marks === 1 ? 'mark' : 'marks'}</span>

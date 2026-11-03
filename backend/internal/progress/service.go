@@ -25,7 +25,7 @@ func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool, now: 
 func (s *Service) Of(ctx context.Context, userID string) (Progress, error) {
 	rows, err := s.pool.Query(ctx, `SELECT s.title, coalesce(a.submitted_at, s.ended_at, a.created_at), r.pct::float8, r.passed
 		FROM eval.results r JOIN live.attempts a ON a.id = r.attempt_id JOIN live.sessions s ON s.id = r.session_id
-		WHERE r.user_id = $1 AND s.released_at IS NOT NULL AND r.complete AND NOT r.invalidated`, userID)
+		WHERE r.user_id = $1 AND s.released_at IS NOT NULL AND r.complete AND NOT r.invalidated AND r.counts`, userID)
 	if err != nil {
 		return Progress{}, err
 	}

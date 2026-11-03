@@ -133,7 +133,7 @@ func (s *Service) rollupPairs(ctx context.Context, tx pgx.Tx, rooms []string, mo
 		JOIN eval.results r ON r.session_id = s.id
 		JOIN live.attempts a ON a.id = r.attempt_id
 		CROSS JOIN LATERAL (SELECT coalesce(a.submitted_at, s.ended_at, a.created_at) AS at) t
-		WHERE r.complete AND NOT r.invalidated
+		WHERE r.complete AND NOT r.invalidated AND r.counts
 		  AND t.at >= p.month::timestamp AT TIME ZONE 'UTC' AND t.at < (p.month + interval '1 month')::timestamp AT TIME ZONE 'UTC'
 		UNION ALL
 		SELECT p.classroom_id, p.month, ru.user_id, (ru.finished_at AT TIME ZONE 'UTC')::date, NULL, NULL, NULL, true
