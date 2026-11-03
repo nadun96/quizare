@@ -4,6 +4,7 @@
 	// teacher picks. Every file is checked first and shown as it would be
 	// saved; nothing is saved until the teacher approves it. Codes already in
 	// the pool are renumbered (Q1 → Q1-2), so files from the same template fit.
+	import CsvGuide from '../quiz/CsvGuide.svelte';
 	import { api, ApiError } from '../api';
 	import Icon from '../ui/Icon.svelte';
 	import { toast } from '../ui/toast.svelte';
@@ -96,6 +97,7 @@
 		<input type="file" accept=".csv,text/csv" multiple class="sr-only" onchange={(ev) => { add(ev.currentTarget.files ?? []); ev.currentTarget.value = ''; }} />
 	</label>
 	<p class="m-0 small muted">Use the <a href="/api/teacher/quiz-template.csv" download>CSV template</a>: one row per question, with a <code>category</code> column (or leave it out and name the file after the category).</p>
+	<CsvGuide />
 
 	{#each entries as e (e.key)}
 		<div class="card card-border bg-base-100 p-3 vstack gap-2" class:saved={e.state === 'saved'}>
