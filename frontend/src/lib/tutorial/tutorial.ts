@@ -195,3 +195,27 @@ export function readingMinutes(blocks: { type: string; text?: string }[]): numbe
 	const words = blocks.filter((b) => b.type === 'text').reduce((n, b) => n + (b.text ?? '').split(/\s+/).filter(Boolean).length, 0);
 	return Math.max(1, Math.round(words / 200));
 }
+
+// ---------- a tutorial's report (D-130) ----------
+
+/** One student's progress on a tutorial, as /api/teacher/tutorials/{id}/progress gives it. */
+export type ProgressRow = {
+	name: string; email: string; student_number?: string; started: boolean; reached: number; finished: boolean;
+	answered: number; score: number; pending: number; seconds: number; leaves: number; locked: number;
+};
+
+/** Where a student is: finished, on a page, or not started. */
+export const progressStatus = (s: ProgressRow, pages: number) => (s.finished ? 'Finished' : s.started ? `Page ${s.reached + 1} of ${pages}` : 'Not started');
+
+/** The report as rows: a header, then one row per student, then the class. */
+export function progressRows(p: { pages: number; questions: number; max_score: number; students: ProgressRow[] }): (string | number)[][] {
+	const pct = (s: ProgressRow) => (s.started && p.max_score > 0 ? Math.round((s.score / p.max_score) * 1000) / 10 : '');
+	const rows: (string | number)[][] = [['Student', 'Student ID', 'Email', 'Progress', 'Questions answered', 'Score', 'Out of', 'Score (%)', 'Still to mark', 'Minutes', 'Left the app', 'Pages locked']];
+	for (const s of p.students)
+		rows.push([s.name, s.student_number ?? '', s.email, progressStatus(s, p.pages), s.started ? `${s.answered}/${p.questions}` : '', s.started ? s.score : '', p.max_score, pct(s), s.pending || '', s.started ? Math.round(s.seconds / 6) / 10 : '', s.leaves || '', s.locked || '']);
+	const done = p.students.filter((s) => s.finished);
+	const avg = done.length && p.max_score > 0 ? Math.round((done.reduce((a, s) => a + s.score, 0) / done.length / p.max_score) * 1000) / 10 : '';
+	rows.push([]);
+	rows.push(['Finished', '', '', `${done.length} of ${p.students.length}`, '', '', '', avg, '', '', '', '']);
+	return rows;
+}

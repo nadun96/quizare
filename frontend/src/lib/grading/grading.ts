@@ -4,12 +4,13 @@
 import type { ClassroomReport } from '../tutoring/types';
 import { toCSV } from '../tutoring/types';
 
-export type Item = { kind: 'quiz' | 'tutorial'; id: string; title: string; topic: string; weight: number | null; taken: number; avg: number | null };
+export type Item = { kind: 'quiz' | 'tutorial'; id: string; title: string; topic: string; topic_id?: string; module_id?: string; module?: string; weight: number | null; taken: number; avg: number | null };
+export type SessionRef = { id: string; quiz_id: string; title: string; status: string; at: string; attempts: number; results: number; avg: number | null };
 export type Mark = { pct: number; points?: number };
 export type GradeStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, Mark>; average: number | null; total: number; missing: number; final: number | null };
-export type Gradebook = { classroom: string; items: Item[]; students: GradeStudent[]; weight_total: number };
+export type Gradebook = { classroom: string; items: Item[]; students: GradeStudent[]; weight_total: number; sessions?: SessionRef[] };
 
-export type Event = { kind: 'quiz' | 'meeting' | 'tutoring'; id: string; title: string; at: string };
+export type Event = { kind: 'quiz' | 'meeting' | 'tutoring'; id: string; title: string; at: string; quiz_id?: string; topic_id?: string; topic?: string; module_id?: string; module?: string };
 export type Attendee = { user_id: string; name: string; student_number?: string; attended: string[]; minutes: Record<string, number> };
 export type Attendance = { classroom: string; from: string; to: string; events: Event[]; students: Attendee[] };
 
@@ -151,4 +152,100 @@ export function openPrint(html: string) {
 	w.document.write(html);
 	w.document.close();
 	return true;
+}
+
+// ---------- reports of part of a classroom (D-130) ----------
+
+/** What a report covers: the whole classroom, a module, a topic, or one quiz or tutorial (by key). */
+export type Scope = { kind: 'all' } | { kind: 'module'; id: string } | { kind: 'topic'; id: string } | { kind: 'item'; id: string };
+export type ScopeOption = { value: string; label: string; group: string };
+
+export const scopeValue = (s: Scope) => (s.kind === 'all' ? 'all' : `${s.kind}:${s.id}`);
+export function scopeFrom(v: string | null | undefined): Scope {
+	const [kind, ...rest] = (v ?? '').split(':');
+	const id = rest.join(':');
+	return (kind === 'module' || kind === 'topic' || kind === 'item') && id ? { kind, id } : { kind: 'all' };
+}
+
+/** The scopes a classroom's items offer: its modules, its topics, then each quiz and tutorial. */
+export function scopeOptions(items: Item[]): ScopeOption[] {
+	const out: ScopeOption[] = [{ value: 'all', label: 'The whole classroom', group: '' }];
+	const seen = new Set<string>();
+	for (const it of items) if (it.module_id && !seen.has('m' + it.module_id)) {
+		seen.add('m' + it.module_id);
+		out.push({ value: `module:${it.module_id}`, label: it.module || 'Module', group: 'Modules' });
+	}
+	for (const it of items) if (it.topic_id && !seen.has('t' + it.topic_id)) {
+		seen.add('t' + it.topic_id);
+		out.push({ value: `topic:${it.topic_id}`, label: it.module ? `${it.topic} (${it.module})` : it.topic, group: 'Topics' });
+	}
+	for (const it of items) out.push({ value: `item:${key(it)}`, label: `${it.title} · ${it.kind === 'quiz' ? 'quiz' : 'tutorial'}`, group: 'Quizzes and tutorials' });
+	return out;
+}
+
+export function inScope(it: Pick<Item, 'kind' | 'id' | 'topic_id' | 'module_id'>, s: Scope): boolean {
+	switch (s.kind) {
+		case 'all': return true;
+		case 'module': return it.module_id === s.id;
+		case 'topic': return it.topic_id === s.id;
+		case 'item': return key(it) === s.id;
+	}
+}
+
+/** The scope's name, for titles and file names. */
+export function scopeLabel(items: Item[], s: Scope): string {
+	return scopeOptions(items).find((o) => o.value === scopeValue(s))?.label.replace(/ · (quiz|tutorial)$/, '') ?? 'The whole classroom';
+}
+
+/**
+ * The gradebook for part of the classroom: only the scope's items, and each
+ * student's average, points, missed items and final result worked out again
+ * over them, as the server does for the whole classroom.
+ */
+export function scopedGradebook(g: Gradebook, s: Scope): Gradebook {
+	if (s.kind === 'all') return g;
+	const items = g.items.filter((it) => inScope(it, s));
+	const weightTotal = r2(items.reduce((a, it) => a + (it.weight ?? 0), 0));
+	const keys = new Set(items.map(key));
+	const students = g.students.map((st) => {
+		const marks = Object.fromEntries(Object.entries(st.marks).filter(([k]) => keys.has(k)));
+		let sum = 0, n = 0, total = 0, missing = 0;
+		for (const it of items) {
+			const m = marks[key(it)];
+			if (!m) {
+				if (it.weight) missing++;
+				continue;
+			}
+			sum += m.pct;
+			n++;
+			if (it.weight) total += m.points ?? points(m.pct, it.weight);
+		}
+		total = r2(total);
+		return { ...st, marks, average: n ? Math.round((sum / n) * 10) / 10 : null, total, missing, final: weightTotal > 0 ? Math.round((total / weightTotal) * 1000) / 10 : null };
+	});
+	const quizIds = new Set(items.filter((it) => it.kind === 'quiz').map((it) => it.id));
+	return { ...g, items, students, weight_total: weightTotal, sessions: (g.sessions ?? []).filter((x) => quizIds.has(x.quiz_id)) };
+}
+
+/**
+ * Attendance for part of the classroom: the scope's quiz sessions. Meetings
+ * and tutoring sessions belong to no module, so they count only for the
+ * whole classroom.
+ */
+export function scopedAttendance(a: Attendance, s: Scope): Attendance {
+	if (s.kind === 'all') return a;
+	const events = a.events.filter((e) => e.kind === 'quiz' && inScope({ kind: 'quiz', id: e.quiz_id ?? '', topic_id: e.topic_id, module_id: e.module_id }, s));
+	const ids = new Set(events.map((e) => e.id));
+	return { ...a, events, students: a.students.map((st) => ({ ...st, attended: st.attended.filter((id) => ids.has(id)) })) };
+}
+
+/** The scopes attendance offers, from its quiz sessions: modules, topics, quizzes. */
+export function attendanceScopes(a: Attendance): ScopeOption[] {
+	const items: Item[] = [];
+	const seen = new Set<string>();
+	for (const e of a.events) if (e.kind === 'quiz' && e.quiz_id && !seen.has(e.quiz_id)) {
+		seen.add(e.quiz_id);
+		items.push({ kind: 'quiz', id: e.quiz_id, title: e.title, topic: e.topic ?? '', topic_id: e.topic_id, module_id: e.module_id, module: e.module, weight: null, taken: 0, avg: null });
+	}
+	return scopeOptions(items);
 }
