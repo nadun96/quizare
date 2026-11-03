@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/platform/page"
+	"github.com/nadun96/quizplatform/internal/platform/props"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
 
@@ -30,6 +32,9 @@ type Classroom struct {
 	Effective   *settings.Effective `json:"effective,omitempty"`
 	Archived    bool                `json:"archived"`
 	CreatedAt   time.Time           `json:"created_at"`
+	// Optional details for finding it (D-128), and its active students.
+	Props    props.Props `json:"props"`
+	Students int         `json:"students"`
 	// For the asking teacher (D-121): owner, or coteacher; and the owner's name.
 	Role      string `json:"role,omitempty"`
 	OwnerName string `json:"owner_name,omitempty"`
@@ -131,6 +136,7 @@ type ClassroomInput struct {
 	Name        *string             `json:"name"`
 	Description *string             `json:"description"`
 	Settings    *settings.Overrides `json:"settings"`
+	Props       *props.Props        `json:"props"` // replaced whole when given (D-128)
 }
 
 func (s *Service) CreateClassroom(ctx context.Context, teacherID string, in ClassroomInput) (Classroom, error) {
@@ -144,16 +150,25 @@ func (s *Service) CreateClassroom(ctx context.Context, teacherID string, in Clas
 		c.Description = strings.TrimSpace(*in.Description)
 	}
 	validateSettings(in.Settings, settings.LevelClassroom, f)
+	if in.Props != nil {
+		maps.Copy(f, in.Props.Clean("props.", true))
+		c.Props = *in.Props
+	}
 	if len(f) > 0 {
 		return c, httpx.Invalid(f)
 	}
 	if in.Settings != nil {
 		c.Settings = *in.Settings
 	}
+	if c.Props.Tags == nil {
+		c.Props.Tags = []string{}
+	}
 	for range 5 {
 		c.JoinCode = newJoinCode()
-		err := s.pool.QueryRow(ctx, `INSERT INTO content.classrooms(teacher_id, name, description, join_code, settings)
-			VALUES ($1,$2,$3,$4,$5) RETURNING id, created_at`, teacherID, c.Name, c.Description, c.JoinCode, c.Settings.JSON()).
+		err := s.pool.QueryRow(ctx, `INSERT INTO content.classrooms(teacher_id, name, description, join_code, settings,
+				department, course_code, academic_year, semester, tags, starts_on, ends_on)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, created_at`,
+			append([]any{teacherID, c.Name, c.Description, c.JoinCode, c.Settings.JSON()}, c.Props.Values(true)...)...).
 			Scan(&c.ID, &c.CreatedAt)
 		if isUnique(err, "") {
 			continue
@@ -163,13 +178,16 @@ func (s *Service) CreateClassroom(ctx context.Context, teacherID string, in Clas
 	return c, errors.New("could not allocate a unique join code")
 }
 
-const classroomCols = `id, teacher_id, name, description, join_code, settings, archived_at IS NOT NULL, created_at,
-	coalesce((SELECT u.name FROM auth.users u WHERE u.id = teacher_id), '')`
+const classroomCols = `c.id, c.teacher_id, c.name, c.description, c.join_code, c.settings, c.archived_at IS NOT NULL, c.created_at,
+	coalesce((SELECT u.name FROM auth.users u WHERE u.id = c.teacher_id), ''),
+	(SELECT count(*)::int FROM content.enrolments e WHERE e.classroom_id = c.id AND e.status = 'active'), `
+
+var propCols = props.Columns("c", true)
 
 func scanClassroom(row pgx.Row) (Classroom, error) {
 	var c Classroom
 	var raw []byte
-	err := row.Scan(&c.ID, &c.TeacherID, &c.Name, &c.Description, &c.JoinCode, &raw, &c.Archived, &c.CreatedAt, &c.OwnerName)
+	err := row.Scan(append([]any{&c.ID, &c.TeacherID, &c.Name, &c.Description, &c.JoinCode, &raw, &c.Archived, &c.CreatedAt, &c.OwnerName, &c.Students}, c.Props.Dest(true)...)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, httpx.ErrNotFound
 	}
@@ -181,18 +199,20 @@ func scanClassroom(row pgx.Row) (Classroom, error) {
 }
 
 // ClassroomSorts are the orders of a teacher's classroom list (PL-FR-01).
-var ClassroomSorts = page.Sorts{"created": "created_at", "name": "lower(name)"}
+var ClassroomSorts = page.Sorts{"created": "c.created_at", "name": "lower(c.name)", "starts": "c.starts_on", "year": "c.academic_year"}
 
 // ListClassrooms returns one page of the classrooms a teacher owns or
-// co-teaches (D-121), searched by name, and how many there are in all.
-func (s *Service) ListClassrooms(ctx context.Context, teacherID string, includeArchived bool, p page.Request) ([]Classroom, int, error) {
-	where := ` FROM content.classrooms WHERE content.teaches(id, $1) AND ($2 OR archived_at IS NULL) AND ($3 = '' OR name ILIKE $3)`
+// co-teaches (D-121), searched by name, course code, department or tag and
+// narrowed by their details (D-128), and how many there are in all.
+func (s *Service) ListClassrooms(ctx context.Context, teacherID string, includeArchived bool, f props.Filter, p page.Request) ([]Classroom, int, error) {
 	args := []any{teacherID, includeArchived, p.Like()}
+	where := ` FROM content.classrooms c WHERE content.teaches(c.id, $1) AND ($2 OR c.archived_at IS NULL)
+		AND ($3 = '' OR c.name ILIKE $3 OR c.course_code ILIKE $3 OR c.department ILIKE $3 OR EXISTS (SELECT 1 FROM unnest(c.tags) t WHERE t ILIKE $3))` + f.SQL("c", &args)
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT `+classroomCols+where+p.OrderBy(ClassroomSorts, "id")+p.Limit(), args...)
+	rows, err := s.pool.Query(ctx, `SELECT `+classroomCols+propCols+where+p.OrderBy(ClassroomSorts, "c.id")+p.Limit(), args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -202,6 +222,11 @@ func (s *Service) ListClassrooms(ctx context.Context, teacherID string, includeA
 		return c, err
 	})
 	return list, total, err
+}
+
+// ClassroomFacets are the details in use among a teacher's classrooms, for the list's filters (D-128).
+func (s *Service) ClassroomFacets(ctx context.Context, teacherID string, includeArchived bool) (props.Facets, error) {
+	return props.LoadFacets(ctx, s.pool, `FROM content.classrooms c WHERE content.teaches(c.id, $1) AND ($2 OR c.archived_at IS NULL)`, "c", teacherID, includeArchived)
 }
 
 func roleOf(c Classroom, teacherID string) string {
@@ -217,7 +242,7 @@ var errOwnerOnly = httpx.NewError(http.StatusForbidden, "owner_only", "only the 
 // GetClassroom returns a classroom teacherID teaches (owns or co-teaches),
 // with effective settings from its owner's defaults.
 func (s *Service) GetClassroom(ctx context.Context, teacherID, id string) (Classroom, error) {
-	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+` FROM content.classrooms WHERE id=$1 AND content.teaches(id, $2)`, id, teacherID))
+	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+propCols+` FROM content.classrooms c WHERE c.id=$1 AND content.teaches(c.id, $2)`, id, teacherID))
 	if err != nil {
 		return c, err
 	}
@@ -247,14 +272,19 @@ func (s *Service) UpdateClassroom(ctx context.Context, teacherID, id string, in 
 		c.Description = strings.TrimSpace(*in.Description)
 	}
 	validateSettings(in.Settings, settings.LevelClassroom, f)
+	if in.Props != nil {
+		maps.Copy(f, in.Props.Clean("props.", true))
+		c.Props = *in.Props
+	}
 	if len(f) > 0 {
 		return c, httpx.Invalid(f)
 	}
 	if in.Settings != nil {
 		c.Settings = *in.Settings
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE content.classrooms SET name=$3, description=$4, settings=$5 WHERE id=$1 AND teacher_id=$2`,
-		id, teacherID, c.Name, c.Description, c.Settings.JSON()); err != nil {
+	if _, err := s.pool.Exec(ctx, `UPDATE content.classrooms SET name=$3, description=$4, settings=$5,
+			department=$6, course_code=$7, academic_year=$8, semester=$9, tags=$10, starts_on=$11, ends_on=$12 WHERE id=$1 AND teacher_id=$2`,
+		append([]any{id, teacherID, c.Name, c.Description, c.Settings.JSON()}, c.Props.Values(true)...)...); err != nil {
 		return c, err
 	}
 	return s.GetClassroom(ctx, teacherID, id)
