@@ -1841,6 +1841,22 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [action, ids], properties: { action: { type: string, enum: [move, delete] }, ids: { type: array, maxItems: 5000, items: { type: string, format: uuid } }, category: { type: string, maxLength: 60 } } } } } }
       responses: { '200': { description: 'How many changed', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/quizzes/{id}/questions/review:
+    post:
+      operationId: postTeacherQuizzesQuestionsReview
+      tags: [quizzes]
+      summary: Mark questions reviewed (checked by a teacher), or not (D-132). Optional - unreviewed questions are still asked; changing a question clears its mark
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: string, format: uuid } }, reviewed: { type: boolean } } } } } }
+      responses: { '200': { $ref: '#/components/responses/Affected' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/quizzes/{id}/questions/balance:
+    post:
+      operationId: postTeacherQuizzesQuestionsBalance
+      tags: [quizzes]
+      summary: Spread the right answers - reorder single-answer questions' options so the right one falls evenly on A, B, C…, shuffling the others, and shuffle multiple-answer ones; options whose order matters ("All of the above", True/False) are left. Option ids stay, so keys and results are unchanged (D-132)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { category: { type: string, nullable: true, description: 'one category; null for every question' } } } } } }
+      responses: { '200': { description: 'What moved', content: { application/json: { schema: { type: object, properties: { moved: { type: integer }, shuffled: { type: integer }, kept: { type: integer } } } } } } }
   /api/teacher/quizzes/{id}/categories/rename:
     post:
       operationId: postTeacherQuizzesCategoriesRename

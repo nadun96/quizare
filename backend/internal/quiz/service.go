@@ -385,12 +385,12 @@ func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string, a
 
 // ---------- questions ----------
 
-const questionCols = `id, quiz_id, code, position, type, text, body, answer_key, feedback, marks, negative_marks, partial_credit, settings, category`
+const questionCols = `id, quiz_id, code, position, type, text, body, answer_key, feedback, marks, negative_marks, partial_credit, settings, category, reviewed_at`
 
 func scanQuestion(r pgx.Row) (Question, error) {
 	var q Question
 	var body, key, fb, st []byte
-	err := r.Scan(&q.ID, &q.QuizID, &q.Code, &q.Position, &q.Type, &q.Text, &body, &key, &fb, &q.Marks, &q.NegativeMarks, &q.PartialCredit, &st, &q.Category)
+	err := r.Scan(&q.ID, &q.QuizID, &q.Code, &q.Position, &q.Type, &q.Text, &body, &key, &fb, &q.Marks, &q.NegativeMarks, &q.PartialCredit, &st, &q.Category, &q.ReviewedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return q, httpx.ErrNotFound
 	}
@@ -551,7 +551,8 @@ func (s *Service) UpdateQuestion(ctx context.Context, teacherID, id string, q Qu
 		return q, err
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE quiz.questions SET code=$2, type=$3, text=$4, body=$5, answer_key=$6, feedback=$7,
-		marks=$8, negative_marks=$9, partial_credit=$10, settings=$11, category=$12, updated_at=now() WHERE id=$1`,
+		marks=$8, negative_marks=$9, partial_credit=$10, settings=$11, category=$12, updated_at=now(),
+		reviewed_at=NULL, reviewed_by=NULL WHERE id=$1`, // a changed question needs checking again (D-132)
 		id, q.Code, q.Type, q.Text, mustJSON(q.Body), mustJSON(q.Key), mustJSON(q.Feedback), q.Marks, q.NegativeMarks, q.PartialCredit, q.Settings.JSON(), q.Category)
 	if isUnique(err) {
 		return q, httpx.Invalid(map[string]string{"code": "question code " + q.Code + " already exists in this quiz"})
