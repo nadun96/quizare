@@ -4,10 +4,10 @@
 import type { ClassroomReport } from '../tutoring/types';
 import { toCSV } from '../tutoring/types';
 
-export type Item = { kind: 'quiz' | 'tutorial'; id: string; title: string; topic: string; topic_id?: string; module_id?: string; module?: string; weight: number | null; taken: number; avg: number | null };
+export type Item = { kind: 'quiz' | 'tutorial'; id: string; title: string; topic: string; topic_id?: string; module_id?: string; module?: string; weight: number | null; taken: number; avg: number | null; high?: number | null; low?: number | null; max_marks?: number };
 export type SessionRef = { id: string; quiz_id: string; title: string; status: string; at: string; attempts: number; results: number; avg: number | null };
-export type Mark = { pct: number; points?: number };
-export type GradeStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, Mark>; average: number | null; total: number; missing: number; final: number | null };
+export type Mark = { pct: number; points?: number; score?: number; max?: number };
+export type GradeStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, Mark>; average: number | null; total: number; missing: number; final: number | null; marks_total?: number; marks_max?: number };
 export type Gradebook = { classroom: string; items: Item[]; students: GradeStudent[]; weight_total: number; sessions?: SessionRef[] };
 
 export type Event = { kind: 'quiz' | 'meeting' | 'tutoring'; id: string; title: string; at: string; quiz_id?: string; topic_id?: string; topic?: string; module_id?: string; module?: string };
@@ -84,7 +84,7 @@ export function gradebookCSV(g: Gradebook, att?: Map<string, AttendanceSummary>)
 		head.push(`${it.title} (%)`);
 		if (it.weight) head.push(`${it.title} (points of ${it.weight})`);
 	}
-	head.push('Average (%)');
+	head.push('Average (%)', 'Total marks', 'Marks out of');
 	if (weighted.length) head.push('Weighted total', `Out of`, 'Final (%)', 'Weighted items missed');
 	if (att) head.push('Sessions attended', 'Sessions', 'Attendance (%)');
 	const rows: (string | number)[][] = [head];
@@ -95,7 +95,7 @@ export function gradebookCSV(g: Gradebook, att?: Map<string, AttendanceSummary>)
 			row.push(m ? m.pct : '');
 			if (it.weight) row.push(m?.points ?? 0);
 		}
-		row.push(s.average ?? '');
+		row.push(s.average ?? '', s.marks_total ?? '', s.marks_max ?? '');
 		if (weighted.length) row.push(s.total, g.weight_total, s.final ?? '', s.missing);
 		if (att) {
 			const a = att.get(s.user_id);
@@ -105,7 +105,12 @@ export function gradebookCSV(g: Gradebook, att?: Map<string, AttendanceSummary>)
 	}
 	// The class: each item's average and how many took it.
 	rows.push([]);
-	rows.push(['Class average', '', ...g.items.flatMap((it) => (it.weight ? [it.avg ?? '', ''] : [it.avg ?? '']))]);
+	const per = (f: (it: Item) => string | number) => g.items.flatMap((it) => (it.weight ? [f(it), ''] : [f(it)]));
+	rows.push(['Class average', '', ...per((it) => it.avg ?? ''), classAverage(g) ?? '', totalAverage(g) ?? '']);
+	const range = studentRange(g);
+	rows.push(['Highest', '', ...per((it) => it.high ?? ''), range.avgHigh ?? '', range.totalHigh ?? '']);
+	rows.push(['Lowest', '', ...per((it) => it.low ?? ''), range.avgLow ?? '', range.totalLow ?? '']);
+	rows.push(['Out of (marks)', '', ...per((it) => it.max_marks ?? '')]);
 	rows.push(['Students with a mark', '', ...g.items.flatMap((it) => (it.weight ? [it.taken, ''] : [it.taken]))]);
 	if (weighted.length) rows.push(['Weight (% of the final result)', '', ...g.items.flatMap((it) => (it.weight ? [it.weight, ''] : ['not counted']))]);
 	return toCSV(rows);
@@ -209,19 +214,22 @@ export function scopedGradebook(g: Gradebook, s: Scope): Gradebook {
 	const keys = new Set(items.map(key));
 	const students = g.students.map((st) => {
 		const marks = Object.fromEntries(Object.entries(st.marks).filter(([k]) => keys.has(k)));
-		let sum = 0, n = 0, total = 0, missing = 0;
+		let sum = 0, n = 0, total = 0, missing = 0, got = 0, outOf = 0;
 		for (const it of items) {
 			const m = marks[key(it)];
 			if (!m) {
 				if (it.weight) missing++;
+				outOf += it.max_marks ?? 0;
 				continue;
 			}
+			got += m.score ?? 0;
+			outOf += m.max ?? it.max_marks ?? 0;
 			sum += m.pct;
 			n++;
 			if (it.weight) total += m.points ?? points(m.pct, it.weight);
 		}
 		total = r2(total);
-		return { ...st, marks, average: n ? Math.round((sum / n) * 10) / 10 : null, total, missing, final: weightTotal > 0 ? Math.round((total / weightTotal) * 1000) / 10 : null };
+		return { ...st, marks, average: n ? Math.round((sum / n) * 10) / 10 : null, total, missing, final: weightTotal > 0 ? Math.round((total / weightTotal) * 1000) / 10 : null, marks_total: r2(got), marks_max: r2(outOf) };
 	});
 	const quizIds = new Set(items.filter((it) => it.kind === 'quiz').map((it) => it.id));
 	return { ...g, items, students, weight_total: weightTotal, sessions: (g.sessions ?? []).filter((x) => quizIds.has(x.quiz_id)) };
@@ -248,4 +256,36 @@ export function attendanceScopes(a: Attendance): ScopeOption[] {
 		items.push({ kind: 'quiz', id: e.quiz_id, title: e.title, topic: e.topic ?? '', topic_id: e.topic_id, module_id: e.module_id, module: e.module, weight: null, taken: 0, avg: null });
 	}
 	return scopeOptions(items);
+}
+
+// ---------- totals (D-133) ----------
+
+/** The class's average of the students' averages. */
+export function classAverage(g: Gradebook): number | null {
+	const xs = g.students.map((s) => s.average).filter((x): x is number => x != null);
+	return xs.length ? Math.round((xs.reduce((a, x) => a + x, 0) / xs.length) * 10) / 10 : null;
+}
+
+/** The students' average total marks. */
+export function totalAverage(g: Gradebook): number | null {
+	if (!g.students.length) return null;
+	return r2(g.students.reduce((a, s) => a + (s.marks_total ?? 0), 0) / g.students.length);
+}
+
+/** The highest and lowest student average and total marks. */
+export function studentRange(g: Gradebook): { avgHigh: number | null; avgLow: number | null; totalHigh: number | null; totalLow: number | null } {
+	const avgs = g.students.map((s) => s.average).filter((x): x is number => x != null);
+	const totals = g.students.map((s) => s.marks_total ?? 0);
+	return {
+		avgHigh: avgs.length ? Math.max(...avgs) : null,
+		avgLow: avgs.length ? Math.min(...avgs) : null,
+		totalHigh: totals.length ? Math.max(...totals) : null,
+		totalLow: totals.length ? Math.min(...totals) : null
+	};
+}
+
+/** "38 / 50 (76%)": a student's marks gained of what they're out of. */
+export function marksLine(s: Pick<GradeStudent, 'marks_total' | 'marks_max'>): string {
+	if (!s.marks_max) return '–';
+	return `${r2(s.marks_total ?? 0)} / ${r2(s.marks_max)} (${Math.round(((s.marks_total ?? 0) / s.marks_max) * 100)}%)`;
 }
