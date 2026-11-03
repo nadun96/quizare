@@ -32,7 +32,7 @@ type ClassroomPreview struct {
 }
 
 func (s *Service) classroomByCode(ctx context.Context, code string) (Classroom, settings.Effective, error) {
-	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+` FROM content.classrooms WHERE join_code=$1`,
+	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+propCols+` FROM content.classrooms c WHERE c.join_code=$1`,
 		strings.ToUpper(strings.TrimSpace(code))))
 	if err != nil {
 		return c, settings.Effective{}, err
@@ -80,7 +80,7 @@ func (s *Service) EnrolByCode(ctx context.Context, userID, code, studentNumber s
 // classroom allows it. The returned enrolment may still be "pending" when the
 // classroom requires approval; callers must check Status.
 func (s *Service) EnsureEnrolled(ctx context.Context, classroomID, userID, studentNumber string) (Enrolment, error) {
-	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+` FROM content.classrooms WHERE id=$1`, classroomID))
+	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+propCols+` FROM content.classrooms c WHERE c.id=$1`, classroomID))
 	if err != nil {
 		return Enrolment{}, err
 	}
@@ -368,7 +368,7 @@ func (s *Service) ClassroomMembers(ctx context.Context, classroomID string) (str
 // active enrolment. Joining may enrol the student, as joining a quiz does
 // (BR-02); otherwise the error says why not.
 func (s *Service) ClassroomAccess(ctx context.Context, classroomID, userID string) (Classroom, string, error) {
-	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+` FROM content.classrooms WHERE id=$1`, classroomID))
+	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+propCols+` FROM content.classrooms c WHERE c.id=$1`, classroomID))
 	if err != nil {
 		return c, "", err
 	}

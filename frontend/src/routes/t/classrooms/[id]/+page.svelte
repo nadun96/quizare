@@ -23,6 +23,8 @@
 	import { deleteWithContents } from '$lib/deleting';
 	import AttendanceReport from '$lib/grading/AttendanceReport.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
+	import ClassroomDetails from '$lib/props/ClassroomDetails.svelte';
+	import { propsLine, term } from '$lib/props/props';
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
 	let c = $state<Classroom | null>(null);
@@ -112,6 +114,10 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 		<div class="row"><a href="/t">← Classrooms</a></div>
 		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}{#if !owner}<span class="badge badge-soft" title="You co-teach this classroom">Co-teacher · owned by {c.owner_name}</span>{/if}<span class="spacer"></span>
 			{#if !c.archived}<a class="btn btn-sm" href="/inbox?tab=announcements&classroom={c.id}&new=1"><Icon name="mail" size={16} />Announce</a>{/if}</div>
+		{#if propsLine(c.props) || term(c.props) || c.props?.tags?.length}
+			{@const t = term(c.props)}
+			<p class="m-0 small muted flex flex-wrap items-center gap-x-2 gap-y-1">{propsLine(c.props)}{#if t}<span>{propsLine(c.props) ? '· ' : ''}{t.range} · {t.label}</span>{/if}{#each c.props.tags as tag (tag)}<span class="badge badge-ghost badge-sm">{tag}</span>{/each}</p>
+		{/if}
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
 			{#each [['content', 'Modules & topics'], ['pool', 'Question pool'], ['students', `Students (${studentCount})`], ['results', 'Results'], ['trends', 'Trends'], ['teachers', 'Teachers'], ['attendance', 'Attendance'], ['files', 'Files'], ...(owner ? [['settings', 'Settings']] : []), ['join', 'Join code']] as [k, l] (k)}
@@ -150,6 +156,7 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 		{:else if tab === 'files'}
 			<ClassroomFiles classroomId={id} />
 		{:else if tab === 'settings' && owner}
+			<ClassroomDetails classroom={c} onsaved={(x) => (c = { ...c!, ...x })} />
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">
 				<button class="btn" onclick={() => archive(!c!.archived)}>{c.archived ? 'Unarchive' : 'Archive'} classroom</button>
