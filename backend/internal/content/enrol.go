@@ -292,6 +292,8 @@ type StudentClassroom struct {
 	Name          string  `json:"name"`
 	Status        string  `json:"status"`
 	StudentNumber *string `json:"student_number"`
+	// CanEditID: the teacher lets students set their own ID here (D-134).
+	CanEditID bool `json:"can_edit_id"`
 }
 
 // MyClassrooms returns one page of a student's classrooms, by name.
@@ -313,7 +315,68 @@ func (s *Service) MyClassrooms(ctx context.Context, userID string, p page.Reques
 		err := r.Scan(&sc.ClassroomID, &sc.Name, &sc.Status, &sc.StudentNumber)
 		return sc, err
 	})
-	return list, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range list {
+		if _, eff, err := s.classroomEffective(ctx, list[i].ClassroomID); err == nil {
+			list[i].CanEditID = eff.StudentIDEditable
+		}
+	}
+	return list, total, nil
+}
+
+func (s *Service) classroomEffective(ctx context.Context, classroomID string) (Classroom, settings.Effective, error) {
+	c, err := scanClassroom(s.pool.QueryRow(ctx, `SELECT `+classroomCols+propCols+` FROM content.classrooms c WHERE c.id=$1`, classroomID))
+	if err != nil {
+		return c, settings.Effective{}, err
+	}
+	eff, err := s.effectiveFor(ctx, c)
+	return c, eff, err
+}
+
+var errIDLocked = httpx.NewError(http.StatusForbidden, "student_id_locked", "your teacher sets student IDs in this classroom; ask them to change yours")
+
+// SetMyStudentNumber lets a student set or change their own ID in a
+// classroom whose teacher allows it (D-134). Quizzes already taken keep the
+// ID they were taken with, as when a teacher changes it.
+func (s *Service) SetMyStudentNumber(ctx context.Context, userID, classroomID, number string) (Enrolment, error) {
+	c, eff, err := s.classroomEffective(ctx, classroomID)
+	if err != nil {
+		return Enrolment{}, err
+	}
+	if !eff.StudentIDEditable || c.Archived {
+		return Enrolment{}, errIDLocked
+	}
+	number = strings.TrimSpace(number)
+	switch {
+	case len(number) > 64:
+		return Enrolment{}, httpx.Invalid(map[string]string{"student_number": "at most 64 characters"})
+	case number == "" && eff.StudentIDRequired:
+		return Enrolment{}, errNeedStudentNum
+	}
+	var num any
+	if number != "" {
+		num = number
+	}
+	var e Enrolment
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+		e, err = scanEnrolment(tx.QueryRow(ctx, `UPDATE content.enrolments SET student_number = $3
+			WHERE classroom_id = $1 AND user_id = $2 AND status IN ('active','pending')
+			RETURNING id, classroom_id, user_id, student_number, status, created_at`, classroomID, userID, num))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return httpx.ErrNotFound
+		}
+		if isUnique(err, "enrolments_student_number_key") {
+			return errNumberTaken
+		}
+		if err != nil {
+			return err
+		}
+		return audit.Log(ctx, tx, userID, "student_number_changed", "enrolment", e.ID, map[string]any{"student_number": num})
+	})
+	return e, err
 }
 
 // TutoringClassroom is a classroom someone teaches or is actively enrolled

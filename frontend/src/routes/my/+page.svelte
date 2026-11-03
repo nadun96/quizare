@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { api } from '$lib/api';
+	import { api, ApiError } from '$lib/api';
+	import { promptDialog } from '$lib/ui/dialog.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import MyFiles from '$lib/drive/MyFiles.svelte';
 	import MyPresentations from '$lib/presentation/MyPresentations.svelte';
 	import MyTutorials from '$lib/tutorial/MyTutorials.svelte';
@@ -32,7 +34,19 @@
 	});
 
 	type Attempt = { attempt_id: string; session_title: string; quiz_title: string; state: string; released: boolean; created_at: string };
-	type Cls = { classroom_id: string; name: string; status: string; student_number: string | null };
+	type Cls = { classroom_id: string; name: string; status: string; student_number: string | null; can_edit_id?: boolean };
+	// Your own student ID, where the teacher allows it (D-134).
+	async function changeID(c: Cls) {
+		const v = await promptDialog({ title: c.student_number ? 'Change your student ID' : 'Add your student ID', label: `Student ID in ${c.name}`, value: c.student_number ?? '', maxlength: 64, confirm: 'Save', body: 'Use the ID your school gave you. Quizzes you’ve already taken keep the ID they were taken with.' });
+		if (v === null || v.trim() === (c.student_number ?? '')) return;
+		try {
+			await api.put(`/api/my/classrooms/${c.classroom_id}/student-number`, { student_number: v });
+			toast('Student ID saved');
+			classes.load();
+		} catch (e) {
+			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : 'Could not save it', 'error');
+		}
+	}
 	// Results and classrooms, one page at a time (PL-FR-02 "My results").
 	const attempts = new Paged<Attempt>(() => '/api/my/attempts', 'attempts', { url: urlState, sort: 'created', desc: true });
 	const classes = new Paged<Cls>(() => '/api/my/classrooms', 'classrooms', { url: urlState, prefix: 'cls', sort: 'name' });
@@ -110,7 +124,12 @@
 					<li>
 						<div class="min-w-0">
 							<p class="m-0 truncate font-semibold">{c.name}</p>
-							{#if c.student_number}<p class="small muted m-0">Your student ID: {c.student_number}</p>{/if}
+							{#if c.student_number || c.can_edit_id}
+								<p class="small muted m-0 flex flex-wrap items-center gap-2">
+									{#if c.student_number}<span>Your student ID: <strong class="tabular">{c.student_number}</strong></span>{:else}<span>No student ID yet</span>{/if}
+									{#if c.can_edit_id}<button class="btn btn-ghost btn-xs" onclick={() => changeID(c)}><Icon name="pencil" size={12} />{c.student_number ? 'Change' : 'Add'}</button>{/if}
+								</p>
+							{/if}
 							{#if c.status === 'active'}<MyFiles classroomId={c.classroom_id} />{/if}
 						</div>
 						{#if c.status === 'pending'}<div class="end"><span class="badge badge-soft badge-warning whitespace-nowrap">Waiting for approval</span></div>{/if}

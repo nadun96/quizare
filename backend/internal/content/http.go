@@ -58,6 +58,21 @@ func (s *Service) StudentRoutes(r chi.Router) {
 	r.Method("GET", "/join/classrooms/{code}", httpx.Handler(s.hPreview))
 	r.Method("POST", "/enrolments", httpx.Handler(s.hEnrol))
 	r.Method("GET", "/my/classrooms", httpx.Handler(s.hMyClassrooms))
+	// A student's own ID, where the teacher allows it (D-134).
+	r.Method("PUT", "/my/classrooms/{id}/student-number", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			StudentNumber string `json:"student_number"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		e, err := s.SetMyStudentNumber(r.Context(), uid(r), chi.URLParam(r, "id"), in.StudentNumber)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, e)
+		return nil
+	}))
 }
 
 func uid(r *http.Request) string { return auth.MustUser(r.Context()).ID }
