@@ -67,8 +67,10 @@ type Overrides struct {
 	ResultsShowFeedback *bool   `json:"results_show_feedback,omitempty" levels:"quiz,session"`
 	PassMarkPct         *int    `json:"pass_mark_pct,omitempty" levels:"classroom,quiz"`
 	StudentIDRequired   *bool   `json:"student_id_required,omitempty" levels:"classroom"`
-	EnrolmentApproval   *bool   `json:"enrolment_approval,omitempty" levels:"classroom"`
-	AutoEnrolOnJoin     *bool   `json:"auto_enrol_on_join,omitempty" levels:"classroom"`
+	// StudentIDEditable: students may set or change their own ID for the classroom (D-134).
+	StudentIDEditable *bool `json:"student_id_editable,omitempty" levels:"classroom"`
+	EnrolmentApproval *bool `json:"enrolment_approval,omitempty" levels:"classroom"`
+	AutoEnrolOnJoin   *bool `json:"auto_enrol_on_join,omitempty" levels:"classroom"`
 	// Teams in live sessions (V2-06, V2-07, D-44).
 	TeamMode       *string `json:"team_mode,omitempty" levels:"quiz,session" enum:"off,manual,random,categories,self"`
 	TeamAcceptance *string `json:"team_acceptance,omitempty" levels:"quiz,session" enum:"all,first,captain,best"`
@@ -104,6 +106,7 @@ type Effective struct {
 	ResultsShowFeedback  bool   `json:"results_show_feedback"`
 	PassMarkPct          int    `json:"pass_mark_pct"`
 	StudentIDRequired    bool   `json:"student_id_required"`
+	StudentIDEditable    bool   `json:"student_id_editable"`
 	EnrolmentApproval    bool   `json:"enrolment_approval"`
 	AutoEnrolOnJoin      bool   `json:"auto_enrol_on_join"`
 	TeamMode             string `json:"team_mode"`

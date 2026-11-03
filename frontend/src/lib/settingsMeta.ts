@@ -119,6 +119,7 @@ export const SETTINGS: Meta[] = [
 		{ v: 'min', label: 'Lowest', icon: 'arrow-down' }
 	] },
 	{ key: 'student_id_required', short: 'Student ID', label: 'Student ID', kind: 'bool', section: 'enrolment', levels: ['classroom'], on: 'Required', off: 'Optional', help: 'Students give their classroom ID when they join.' },
+	{ key: 'student_id_editable', short: 'Own ID', label: 'Students can change their ID', kind: 'bool', section: 'enrolment', levels: ['classroom'], on: 'Allowed', off: 'Teacher only', help: 'Students set or change their own student ID for this classroom on their My classrooms page. IDs stay unique, and quizzes already taken keep the ID they were taken with.' },
 	{ key: 'enrolment_approval', short: 'New students', label: 'New students', kind: 'bool', section: 'enrolment', levels: ['classroom'], on: 'I approve them', off: 'Join directly' },
 	{ key: 'auto_enrol_on_join', short: 'Joining a session', label: 'Joining a session', kind: 'bool', section: 'enrolment', levels: ['classroom'], on: 'Enrols the student', off: 'Doesn’t enrol' }
 ];
