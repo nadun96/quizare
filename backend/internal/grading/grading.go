@@ -31,6 +31,10 @@ type Item struct {
 	ID     string   `json:"id"`
 	Title  string   `json:"title"`
 	Topic  string   `json:"topic"`
+	// Where it sits, so a report can cover one module or topic (D-130); empty for a quiz outside them.
+	TopicID  string `json:"topic_id"`
+	ModuleID string `json:"module_id"`
+	Module   string `json:"module"`
 	Weight *float64 `json:"weight"` // percent of the final result; nil: doesn't count
 	Taken  int      `json:"taken"`  // students with a mark
 	Avg    *float64 `json:"avg"`    // their average percentage
@@ -58,6 +62,19 @@ type Gradebook struct {
 	Items       []Item    `json:"items"`
 	Students    []Student `json:"students"`
 	WeightTotal float64   `json:"weight_total"` // the sum of the weights: what the total is out of
+	Sessions    []Session `json:"sessions"`     // the quiz sessions run here, newest first, each with its own report (D-130)
+}
+
+// Session is one quiz session run in the classroom.
+type Session struct {
+	ID       string    `json:"id"`
+	QuizID   string    `json:"quiz_id"`
+	Title    string    `json:"title"`
+	Status   string    `json:"status"`
+	At       time.Time `json:"at"`
+	Attempts int       `json:"attempts"` // students who started
+	Results  int       `json:"results"`  // valid results
+	Avg      *float64  `json:"avg"`      // their average percentage
 }
 
 // Key names an item in a student's marks.
@@ -85,17 +102,20 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 	if err != nil {
 		return Gradebook{}, err
 	}
-	g := Gradebook{Classroom: name, Items: []Item{}, Students: []Student{}}
+	g := Gradebook{Classroom: name, Items: []Item{}, Students: []Student{}, Sessions: []Session{}}
 
 	// Quizzes run here (in the order first run), and tutorials with questions.
 	rows, err := s.pool.Query(ctx, `
-		SELECT 'quiz', q.id::text, q.title, coalesce(tp.name, ''), w.weight::float8, se.first
+		SELECT 'quiz', q.id::text, q.title, coalesce(tp.name, ''), w.weight::float8, se.first,
+			coalesce(tp.id::text, ''), coalesce(m.id::text, ''), coalesce(m.name, '')
 		FROM quiz.quizzes q
 		JOIN (SELECT quiz_id, min(created_at) AS first FROM live.sessions WHERE classroom_id = $1 GROUP BY quiz_id) se ON se.quiz_id = q.id
 		LEFT JOIN content.topics tp ON tp.id = q.topic_id
+		LEFT JOIN content.modules m ON m.id = tp.module_id
 		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = 'quiz' AND w.item_id = q.id
 		UNION ALL
-		SELECT 'tutorial', t.id::text, t.title, tp.name, w.weight::float8, coalesce(t.published_at, t.created_at)
+		SELECT 'tutorial', t.id::text, t.title, tp.name, w.weight::float8, coalesce(t.published_at, t.created_at),
+			tp.id::text, m.id::text, m.name
 		FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = 'tutorial' AND w.item_id = t.id
 		WHERE m.classroom_id = $1 AND t.status = 'published' AND EXISTS (SELECT 1 FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)
@@ -106,7 +126,7 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 	for rows.Next() {
 		var it Item
 		var at time.Time
-		if err := rows.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Weight, &at); err != nil {
+		if err := rows.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Weight, &at, &it.TopicID, &it.ModuleID, &it.Module); err != nil {
 			rows.Close()
 			return g, err
 		}
@@ -222,7 +242,23 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 		}
 	}
 	sort.SliceStable(g.Students, func(i, j int) bool { return strings.ToLower(g.Students[i].Name) < strings.ToLower(g.Students[j].Name) })
-	return g, nil
+
+	// The sessions, for a report of each.
+	rows, err = s.pool.Query(ctx, `
+		SELECT se.id::text, se.quiz_id::text, se.title, se.status, coalesce(se.started_at, se.created_at),
+			(SELECT count(*)::int FROM live.attempts a WHERE a.session_id = se.id AND a.state <> 'waiting'),
+			(SELECT count(*)::int FROM eval.results r WHERE r.session_id = se.id AND NOT r.invalidated),
+			(SELECT round(avg(r.pct), 1)::float8 FROM eval.results r WHERE r.session_id = se.id AND NOT r.invalidated)
+		FROM live.sessions se WHERE se.classroom_id = $1
+		ORDER BY coalesce(se.started_at, se.created_at) DESC LIMIT 500`, classroomID)
+	if err != nil {
+		return g, err
+	}
+	g.Sessions, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (Session, error) {
+		var x Session
+		return x, r.Scan(&x.ID, &x.QuizID, &x.Title, &x.Status, &x.At, &x.Attempts, &x.Results, &x.Avg)
+	})
+	return g, err
 }
 
 // WeightInput sets one item's weight; 0 (or none) means it doesn't count.
@@ -291,6 +327,12 @@ type Event struct {
 	ID    string    `json:"id"`
 	Title string    `json:"title"`
 	At    time.Time `json:"at"`
+	// A quiz session's quiz, topic and module, so attendance can cover one of them (D-130).
+	QuizID   string `json:"quiz_id,omitempty"`
+	TopicID  string `json:"topic_id,omitempty"`
+	Topic    string `json:"topic,omitempty"`
+	ModuleID string `json:"module_id,omitempty"`
+	Module   string `json:"module,omitempty"`
 }
 
 type Attendee struct {
@@ -321,10 +363,13 @@ func (s *Service) Attendance(ctx context.Context, teacherID, classroomID string,
 	out := Attendance{Classroom: name, From: from.Format("2006-01-02"), To: to.Format("2006-01-02"), Events: []Event{}, Students: []Attendee{}}
 	end := to.AddDate(0, 0, 1)
 	rows, err := s.pool.Query(ctx, `
-		SELECT 'quiz', s.id::text, s.title, coalesce(s.started_at, s.created_at) FROM live.sessions s
+		SELECT 'quiz', s.id::text, s.title, coalesce(s.started_at, s.created_at),
+			s.quiz_id::text, coalesce(tp.id::text, ''), coalesce(tp.name, ''), coalesce(md.id::text, ''), coalesce(md.name, '')
+		FROM live.sessions s JOIN quiz.quizzes q ON q.id = s.quiz_id
+		LEFT JOIN content.topics tp ON tp.id = q.topic_id LEFT JOIN content.modules md ON md.id = tp.module_id
 		WHERE s.classroom_id = $1 AND coalesce(s.started_at, s.created_at) >= $2 AND coalesce(s.started_at, s.created_at) < $3
 		UNION ALL
-		SELECT 'meeting', m.id::text, m.title, m.created_at FROM meet.meetings m
+		SELECT 'meeting', m.id::text, m.title, m.created_at, '', '', '', '', '' FROM meet.meetings m
 		WHERE m.classroom_id = $1 AND m.created_at >= $2 AND m.created_at < $3
 		ORDER BY 4, 2`, classroomID, from, end)
 	if err != nil {
@@ -332,7 +377,7 @@ func (s *Service) Attendance(ctx context.Context, teacherID, classroomID string,
 	}
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.Kind, &e.ID, &e.Title, &e.At); err != nil {
+		if err := rows.Scan(&e.Kind, &e.ID, &e.Title, &e.At, &e.QuizID, &e.TopicID, &e.Topic, &e.ModuleID, &e.Module); err != nil {
 			rows.Close()
 			return out, err
 		}
