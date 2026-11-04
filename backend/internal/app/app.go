@@ -329,6 +329,17 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	}, tutorMail)
 	a.Progress = progress.NewService(pool)
 	a.Dashboard = dashboard.NewService(pool)
+	a.Dashboard.SetFinishedQuizzes(func(ctx context.Context, userID, classroomID string) ([]dashboard.FinishedQuiz, error) {
+		list, err := a.Live.MyFinishedIn(ctx, userID, classroomID)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]dashboard.FinishedQuiz, len(list))
+		for i, x := range list {
+			out[i] = dashboard.FinishedQuiz{AttemptID: x.AttemptID, Title: x.SessionTitle, State: x.State, Released: x.Released, At: x.SubmittedAt}
+		}
+		return out, nil
+	})
 	a.Mailing = mailing.NewService(pool, rc, cfg.BaseURL) // email to groups (D-102)
 	// The mail server set in the console takes over from the config file (D-104).
 	a.Mailing.SetServer(vault, mailer, mailing.ConfigInfo{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom, User: cfg.SMTPUser})

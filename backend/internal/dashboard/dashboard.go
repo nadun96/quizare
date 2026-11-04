@@ -50,8 +50,9 @@ type Summary struct {
 }
 
 type Service struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool     *pgxpool.Pool
+	now      func() time.Time
+	finished func(ctx context.Context, userID, classroomID string) ([]FinishedQuiz, error) // D-138
 }
 
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool, now: time.Now} }
@@ -71,7 +72,7 @@ func (s *Service) Lists(ctx context.Context, u auth.User) (map[string][]Item, er
 	var err error
 	switch u.Role {
 	case auth.RoleStudent:
-		err = s.student(ctx, u.ID, out)
+		err = s.student(ctx, u.ID, "", out)
 	case auth.RoleTeacher:
 		err = s.teacher(ctx, u.ID, out)
 	}
@@ -118,7 +119,8 @@ func classify(now time.Time, opens, due *time.Time, started, finished bool) (lis
 	}
 }
 
-func (s *Service) student(ctx context.Context, uid string, out map[string][]Item) error {
+// student fills the lists for a student, across their classrooms or in one (D-138).
+func (s *Service) student(ctx context.Context, uid, classroom string, out map[string][]Item) error {
 	now := s.now()
 	// Quiz sessions open or live in their classrooms, unless they've finished.
 	rows, err := s.pool.Query(ctx, `SELECT s.id, s.title, c.name, coalesce(s.started_at, s.created_at), s.join_code, a.id, coalesce(a.state, '')
@@ -127,7 +129,8 @@ func (s *Service) student(ctx context.Context, uid string, out map[string][]Item
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
 		LEFT JOIN live.attempts a ON a.session_id = s.id AND a.user_id = $1 AND a.superseded_at IS NULL
 		WHERE s.status <> 'ended' AND (a.id IS NULL OR a.state IN ('waiting', 'admitted', 'in_progress', 'paused'))
-		LIMIT 200`, uid)
+			AND ($2 = '' OR c.id::text = $2)
+		LIMIT 200`, uid, classroom)
 	if err != nil {
 		return err
 	}
@@ -160,7 +163,8 @@ func (s *Service) student(ctx context.Context, uid string, out map[string][]Item
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active' AND e.created_at < s.created_at
 		LEFT JOIN live.attempts a ON a.session_id = s.id AND a.user_id = $1 AND a.superseded_at IS NULL
 		WHERE s.status = 'ended' AND s.ended_at > $2 AND (a.id IS NULL OR a.state IN ('not_started', 'waiting'))
-		ORDER BY s.ended_at DESC LIMIT 200`, uid, now.AddDate(0, 0, -60))
+			AND ($3 = '' OR c.id::text = $3)
+		ORDER BY s.ended_at DESC LIMIT 200`, uid, now.AddDate(0, 0, -60), classroom)
 	if err != nil {
 		return err
 	}
@@ -184,7 +188,7 @@ func (s *Service) student(ctx context.Context, uid string, out map[string][]Item
 		JOIN content.classrooms c ON c.id = m.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
 		LEFT JOIN tutorial.runs r ON r.tutorial_id = t.id AND r.user_id = $1
-		WHERE t.status = 'published'
+		WHERE t.status = 'published' AND ($2 = '' OR c.id::text = $2)
 		UNION ALL
 		SELECT 'presentation', p.id, p.title, c.name, p.opens_at, p.due_at, v.id IS NOT NULL, v.finished_at IS NOT NULL
 		FROM presentation.presentations p
@@ -192,8 +196,8 @@ func (s *Service) student(ctx context.Context, uid string, out map[string][]Item
 		JOIN content.classrooms c ON c.id = m.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
 		LEFT JOIN presentation.viewers v ON v.presentation_id = p.id AND v.user_id = $1
-		WHERE p.status = 'published' AND p.version > 0
-		LIMIT 500`, uid)
+		WHERE p.status = 'published' AND p.version > 0 AND ($2 = '' OR c.id::text = $2)
+		LIMIT 500`, uid, classroom)
 	if err != nil {
 		return err
 	}
@@ -229,13 +233,13 @@ func (s *Service) student(ctx context.Context, uid string, out map[string][]Item
 		JOIN content.topics tp ON tp.id = p.topic_id JOIN content.modules m ON m.id = tp.module_id
 		JOIN content.classrooms c ON c.id = m.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
-		WHERE l.ended_at IS NULL
+		WHERE l.ended_at IS NULL AND ($2 = '' OR c.id::text = $2)
 		UNION ALL
 		SELECT 'meeting', mt.id, mt.title, c.name, mt.created_at, mt.code
 		FROM meet.meetings mt JOIN content.classrooms c ON c.id = mt.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
-		WHERE mt.status = 'open'
-		LIMIT 200`, uid)
+		WHERE mt.status = 'open' AND ($2 = '' OR c.id::text = $2)
+		LIMIT 200`, uid, classroom)
 	if err != nil {
 		return err
 	}
@@ -421,7 +425,8 @@ func (s *Service) Routes(r chi.Router) {
 		httpx.JSON(w, http.StatusOK, sum)
 		return nil
 	}))
-	r.Method("GET", "/my/dashboard/insights", httpx.Handler(s.insightsRoute)) // charts (D-105)
+	r.Method("GET", "/my/dashboard/insights", httpx.Handler(s.insightsRoute))    // charts (D-105)
+	r.Method("GET", "/my/classrooms/{id}/work", httpx.Handler(s.classroomRoute)) // one classroom's due and completed (D-138)
 	r.Method("GET", "/my/dashboard/{list}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		u := auth.MustUser(r.Context())
 		list := chi.URLParam(r, "list")
