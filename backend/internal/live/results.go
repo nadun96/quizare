@@ -314,6 +314,36 @@ func (s *Service) MyAttempts(ctx context.Context, userID string, p page.Request)
 	return out, total, nil
 }
 
+// MyFinishedIn lists a student's finished quizzes in a classroom, newest
+// first: the try that counts for each session (D-138).
+func (s *Service) MyFinishedIn(ctx context.Context, userID, classroomID string) ([]StudentAttempt, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+attemptCols+` FROM live.attempts a JOIN live.sessions s ON s.id = a.session_id
+		WHERE a.user_id=$1 AND s.classroom_id::text=$2 AND a.state IN ('submitted','invalidated') AND live.counted(a.id)
+		ORDER BY a.created_at DESC LIMIT 500`, userID, classroomID)
+	if err != nil {
+		return nil, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (*Attempt, error) { return scanAttempt(r) })
+	if err != nil {
+		return nil, err
+	}
+	out := make([]StudentAttempt, 0, len(list))
+	for _, a := range list {
+		sess, err := s.session(ctx, a.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		v := s.sessionView(sess)
+		at := a.SubmittedAt
+		if at == nil {
+			at = a.InvalidatedAt
+		}
+		out = append(out, StudentAttempt{AttemptID: a.ID, SessionID: v.ID, SessionTitle: v.Title, QuizTitle: v.Snapshot.QuizTitle,
+			State: a.State, Released: released(v, a, v.Effective(nil, a.Overrides)), SubmittedAt: at, CreatedAt: a.CreatedAt})
+	}
+	return out, nil
+}
+
 // OwnMarkingData returns an attempt's data for the student who owns it.
 func (s *Service) OwnMarkingData(ctx context.Context, userID, attemptID string) (*MarkingData, error) {
 	d, err := s.MarkingData(ctx, attemptID)

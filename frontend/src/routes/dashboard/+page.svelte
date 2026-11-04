@@ -117,7 +117,7 @@
 				<ul class="classes">
 					{#each classes.rows as c (c.id ?? c.classroom_id)}
 						<li>
-							{#if teacher}<a href={'/t/classrooms/' + c.id}>{c.name}</a>{:else}<span>{c.name}</span>{/if}
+							{#if teacher}<a href={'/t/classrooms/' + c.id}>{c.name}</a>{:else if c.status !== 'pending'}<a href={'/my/classrooms/' + c.classroom_id}>{c.name}</a>{:else}<span>{c.name}</span>{/if}
 							{#if c.status === 'pending'}<span class="badge badge-soft badge-warning badge-sm">{t('dash.waitingApproval')}</span>{/if}
 							{#if c.archived}<span class="badge badge-soft badge-sm">{t('dash.archived')}</span>{/if}
 						</li>

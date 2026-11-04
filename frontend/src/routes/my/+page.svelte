@@ -123,7 +123,7 @@
 				{#each classes.rows as c (c.classroom_id)}
 					<li>
 						<div class="min-w-0">
-							<p class="m-0 truncate font-semibold">{c.name}</p>
+							<p class="m-0 truncate font-semibold">{#if c.status === 'active'}<a href={'/my/classrooms/' + c.classroom_id}>{c.name}</a>{:else}{c.name}{/if}</p>
 							{#if c.student_number || c.can_edit_id}
 								<p class="small muted m-0 flex flex-wrap items-center gap-2">
 									{#if c.student_number}<span>Your student ID: <strong class="tabular">{c.student_number}</strong></span>{:else}<span>No student ID yet</span>{/if}
@@ -132,7 +132,7 @@
 							{/if}
 							{#if c.status === 'active'}<MyFiles classroomId={c.classroom_id} />{/if}
 						</div>
-						{#if c.status === 'pending'}<div class="end"><span class="badge badge-soft badge-warning whitespace-nowrap">Waiting for approval</span></div>{/if}
+						{#if c.status === 'pending'}<div class="end"><span class="badge badge-soft badge-warning whitespace-nowrap">Waiting for approval</span></div>{:else}<div class="end"><a class="btn btn-sm" href={'/my/classrooms/' + c.classroom_id}>Due and completed</a></div>{/if}
 					</li>
 				{/each}
 			</ul>

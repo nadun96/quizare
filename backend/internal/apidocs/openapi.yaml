@@ -2395,6 +2395,13 @@ paths:
       summary: Classrooms I am enrolled in
       parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [name] } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, classrooms: { type: array, items: { type: object, properties: { classroom_id: { type: string }, name: { type: string }, status: { type: string }, student_number: { type: [string, 'null'] } } } } } } } } } }
+  /api/my/classrooms/{id}/work:
+    get:
+      operationId: getMyClassroomWork
+      tags: [student]
+      summary: One classroom I'm enrolled in - what's on now, due (overdue first) and coming, and everything I've completed, with marks only once I may see them (D-138). Tutoring sessions come from the tutoring service
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classroom_id: { type: string }, name: { type: string }, description: { type: string }, teacher: { type: string }, status: { type: string, enum: [active, pending] }, student_number: { type: string, nullable: true }, live: { type: array, items: { type: object } }, due: { type: array, items: { type: object } }, upcoming: { type: array, items: { type: object } }, completed: { type: array, items: { type: object, properties: { kind: { type: string }, id: { type: string }, title: { type: string }, at: { type: string, format: date-time }, status: { type: string }, released: { type: boolean }, score: { type: number }, max: { type: number }, pct: { type: number }, passed: { type: boolean }, pending: { type: boolean }, tries: { type: integer }, href: { type: string } } } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/my/classrooms/{id}/student-number:
     put:
       operationId: putMyClassroomsStudentNumber
