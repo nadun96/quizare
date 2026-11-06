@@ -14,6 +14,7 @@ export const ta: Record<Key, string> = {
 	'nav.polls': 'கருத்துக் கணிப்புகள்',
 	'nav.meetings': 'கூட்டங்கள்',
 	'nav.tutoring': 'பயிற்சி வகுப்புகள்',
+	'nav.archive': 'முடிந்த அமர்வுகள்',
 	'nav.myQuizzes': 'எனது வினாடி வினாக்கள்',
 	'nav.join': 'சேர்',
 	'nav.admin': 'நிர்வாகம்',

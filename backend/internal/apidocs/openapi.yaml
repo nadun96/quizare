@@ -1380,6 +1380,46 @@ paths:
       tags: [meetings]
       summary: What an admin allows for meetings; 0 is unlimited (D-72)
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/MeetingLimits' } } } } }
+  /api/teacher/archive:
+    get:
+      operationId: getTeacherArchive
+      tags: [sessions]
+      summary: The teacher's finished quiz sessions, polls, meetings and live presentations, or those in the archive (D-149)
+      parameters:
+        - { name: view, in: query, schema: { type: string, enum: [past, archived] } }
+        - { name: kind, in: query, schema: { type: string, enum: [quiz, poll, meeting, presentation] } }
+        - { name: classroom_id, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/dir' }
+        - { name: sort, in: query, schema: { type: string, enum: [ended, started, title, kind, classroom, archived] } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer }, items: { type: array, items: { type: object } } } } } } }, '422': { description: 'A date is not valid' } }
+  /api/teacher/archive/{kind}/{id}:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { type: string, enum: [quiz, poll, meeting, presentation] } }
+      - { $ref: '#/components/parameters/id' }
+    post:
+      operationId: postTeacherArchive
+      tags: [sessions]
+      summary: Put a finished activity in the archive. Its marks and attendance stay (D-149)
+      responses: { '204': { description: 'Archived' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { description: 'Still running' } }
+    delete:
+      operationId: deleteTeacherArchive
+      tags: [sessions]
+      summary: Delete an archived activity for good, with its marks, answers and attendance (D-149)
+      responses: { '204': { description: 'Deleted' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { description: 'Not in the archive' } }
+  /api/teacher/archive/{kind}/{id}/restore:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { type: string, enum: [quiz, poll, meeting, presentation] } }
+      - { $ref: '#/components/parameters/id' }
+    post:
+      operationId: postTeacherArchiveRestore
+      tags: [sessions]
+      summary: Bring an activity back from the archive (D-149)
+      responses: { '204': { description: 'Restored' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/meetings:
     get:
       operationId: getTeacherMeetings

@@ -13,6 +13,7 @@ export const en = {
 	'nav.polls': 'Polls',
 	'nav.meetings': 'Meetings',
 	'nav.tutoring': 'Tutoring',
+	'nav.archive': 'Past sessions',
 	'nav.myQuizzes': 'My quizzes',
 	'nav.join': 'Join',
 	'nav.admin': 'Admin',
