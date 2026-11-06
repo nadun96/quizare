@@ -125,6 +125,17 @@
 			toast(e instanceof ApiError ? e.message : 'Could not reinstate', 'error');
 		}
 	}
+	// A student who handed in by mistake carries on where they were (D-139).
+	async function reopen(attemptId: string) {
+		const reason = await promptDialog({ title: 'Reopen this attempt?', body: 'The student carries on with their answers and the time they had left, which starts running now. Any marks are cleared and given again when they hand in. If results were already showing, they may have seen them. Your reason is logged with the attempt.', label: 'Reason', confirm: 'Reopen', multiline: true, maxlength: 500 });
+		if (!reason) return;
+		try {
+			await api.post('/api/teacher/attempts/' + attemptId + '/reopen', { reason });
+			toast('Attempt reopened');
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Could not reopen', 'error');
+		}
+	}
 	async function saveSessionSettings() {
 		const o: Record<string, unknown> = { ...(d?.session.settings ?? {}) };
 		if (countdown === '') delete o.countdown_seconds;
@@ -281,7 +292,7 @@
 									</td>
 									<td class="small tabular" class:text-error={(left(r) ?? Infinity) < 60_000 && r.state === 'in_progress'}>{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">+{Math.round(r.extension_sec / 60)} min extra</span>{/if}</td>
 									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1"><Icon name="flag" size={12} />{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
-									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{/if}</td>
+									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{:else if r.state === 'submitted' && !ended && !teamsOn}<button class="btn btn-sm" onclick={() => reopen(r.attempt_id)} title="For a student who handed in by mistake: they carry on with their answers">Reopen</button>{/if}</td>
 								</tr>
 							{:else}<tr><td colspan="8"><div class="muted py-6 text-center">{#if ended}Nobody joined this session.{:else}<span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…{/if}</div></td></tr>{/each}
 						</tbody>

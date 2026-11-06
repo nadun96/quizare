@@ -107,6 +107,22 @@ func (s *Service) OnAttemptFinished(ctx context.Context, tx pgx.Tx, _ string, at
 	return err
 }
 
+// OnAttemptReopened forgets the marks of an attempt put back in progress
+// (D-139): its answers can change, so handing in again marks it afresh. An AI
+// mark still on its way finds no row and is dropped.
+func (s *Service) OnAttemptReopened(ctx context.Context, tx pgx.Tx, sessionID, attemptID string) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM eval.marks WHERE attempt_id=$1`, attemptID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM eval.results WHERE attempt_id=$1`, attemptID); err != nil {
+		return err
+	}
+	if s.onResults != nil {
+		return s.onResults(ctx, tx, sessionID)
+	}
+	return nil
+}
+
 // OnSessionEnded queues marking for invalidated attempts so the teacher can
 // still review what those students answered.
 func (s *Service) OnSessionEnded(ctx context.Context, tx pgx.Tx, sessionID string) error {

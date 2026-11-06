@@ -364,6 +364,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Eval.SetResultsHook(a.Analytics.OnResults)
 	a.Live.SetHooks(live.Hooks{
 		AttemptFinished: a.Eval.OnAttemptFinished,
+		AttemptReopened: a.Eval.OnAttemptReopened,
 		SessionEnded: func(ctx context.Context, tx pgx.Tx, sessionID string) error {
 			if err := a.Eval.OnSessionEnded(ctx, tx, sessionID); err != nil {
 				return err
