@@ -135,7 +135,7 @@ func (s *Service) loadGroups(ctx context.Context, classroomID string, rep *Class
 		}
 		m := groupMark(it.GroupRule, marks, len(row.Members), it.MaxMarks)
 		if it.Weight > 0 {
-			p := round(m.Pct*it.Weight/100, 2)
+			p := round(m.Pct*it.Weight, 2)
 			m.Points = &p
 			row.Total += p
 		}
@@ -157,8 +157,8 @@ func (s *Service) loadGroups(ctx context.Context, classroomID string, rep *Class
 				mark(&row, &rep.Items[i])
 			}
 			row.Total = round(row.Total, 2)
-			if rep.WeightTotal > 0 && len(row.Members) > 0 {
-				f := round(row.Total/rep.WeightTotal*100, 1)
+			if rep.OutOf > 0 && len(row.Members) > 0 {
+				f := round(row.Total/rep.OutOf*100, 1)
 				row.Final = &f
 			}
 			rep.ClassGroups = append(rep.ClassGroups, row)

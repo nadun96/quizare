@@ -126,17 +126,17 @@ func TestClassReport(t *testing.T) {
 	in := setupFor(r, func(x *grading.ReportItemInput) {
 		switch x.ID {
 		case q1:
-			x.Weight, x.Pick = 20, grading.PickLow
+			x.Weight, x.Pick = 0.2, grading.PickLow
 		case q2:
-			x.Weight = 30
+			x.Weight = 0.3
 		case q3:
 			x.Included = false
 		}
 	})
 	r = grading.ClassReport{}
 	f.teacher.Call("PUT", url, in, 200, &r)
-	if r.WeightTotal != 50 {
-		t.Fatalf("weights total %v", r.WeightTotal)
+	if r.WeightTotal != 0.5 || r.OutOf != 50 {
+		t.Fatalf("weights total %v, out of %v", r.WeightTotal, r.OutOf)
 	}
 	var a, b grading.ReportStudent
 	for _, st := range r.Students {
@@ -182,13 +182,13 @@ func TestClassReport(t *testing.T) {
 		if !ok || two.Points != nil {
 			t.Fatalf("weight 0 mark = %+v, %v", two, ok)
 		}
-		if st.Total != 20 || *st.Final != 100 || r.WeightTotal != 20 {
+		if st.Total != 20 || *st.Final != 100 || r.OutOf != 20 {
 			t.Fatalf("highest: %+v of %v", st, r.WeightTotal)
 		}
 	}
 
 	// Checked, audited, and the classroom's teachers' only.
-	bad := setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 1001 })
+	bad := setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 1.5 })
 	f.teacher.Call("PUT", url, bad, 422, nil)
 	bad = setupFor(r, func(x *grading.ReportItemInput) { x.Pick = "middle" })
 	f.teacher.Call("PUT", url, bad, 422, nil)
@@ -351,5 +351,31 @@ func TestTutorialVisibility(t *testing.T) {
 	}
 	if v = open(); v.Page.Questions[0].Mark != nil || !v.Review.Closed || v.Score == nil {
 		t.Fatalf("after the review: %+v", v)
+	}
+}
+
+// D-142: a weight is a fraction, and the gradebook's percent starts it off.
+func TestReportWeightIsAFraction(t *testing.T) {
+	f := newReportFx(t)
+	q := f.quiz(t, "One")
+	s := f.student(t)
+	f.take(t, s, q, 1) // 50 %
+	url := "/api/teacher/classrooms/" + f.class.ID + "/class-report"
+	f.teacher.Call("PUT", "/api/teacher/classrooms/"+f.class.ID+"/weights", map[string]any{"weights": []map[string]any{{"kind": "quiz", "id": q, "weight": 40}}}, 200, nil)
+	var r grading.ClassReport
+	f.teacher.Call("GET", url, nil, 200, &r)
+	if r.Items[0].Weight != 0.4 {
+		t.Fatalf("started from %v", r.Items[0].Weight)
+	}
+	// 50 % × 0.125 keeps the precision of the weight.
+	in := setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 0.125 })
+	r = grading.ClassReport{}
+	f.teacher.Call("PUT", url, in, 200, &r)
+	st := r.Students[0]
+	if m := st.Marks["quiz:"+q]; m.Points == nil || *m.Points != 6.25 {
+		t.Fatalf("final mark: %+v", m)
+	}
+	if st.Total != 6.25 || r.OutOf != 12.5 || *st.Final != 50 {
+		t.Fatalf("total %v of %v, final %v", st.Total, r.OutOf, *st.Final)
 	}
 }
