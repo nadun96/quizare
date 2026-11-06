@@ -122,6 +122,7 @@
 	function wake(e?: PointerEvent) {
 		if (e && isDrawing(e)) {
 			idle = !pinned; // get out of the way
+			barsHaveFocus = false; // a finger on the board doesn't take focus from the last button pressed
 			return;
 		}
 		idle = false;
