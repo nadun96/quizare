@@ -6,10 +6,13 @@
 // drawing.
 
 export type Cell = string | number;
-export type Tone = 'high' | 'middle' | 'low' | 'missing';
+/** A range's colour, or a mark that counts and is missing. */
+export type Tone = string;
+export type ColorRange = { from: number; color: string };
 export type Sheet = { heading?: string; head: string[]; rows: Cell[][]; tones?: (Tone | null)[][]; frozen?: number };
-export type ReportHeader = { classroom: string; teacher: string; title: string; subtitle: string; institution: string; date_mode: 'today' | 'custom' | 'none'; date_value: string; show_teacher: boolean; footer: string; page_numbers: boolean; logo: string; accent: string; color_marks: boolean; band_high: number; band_middle: number };
-export type Bands = { high: number; middle: number };
+export type ReportHeader = { classroom: string; teacher: string; title: string; subtitle: string; institution: string; date_mode: 'today' | 'custom' | 'none'; date_value: string; show_teacher: boolean; footer: string; page_numbers: boolean; logo: string; accent: string; color_marks: boolean; color_ranges: ColorRange[] };
+/** Highest first, the last from 0 (D-146). */
+export type Bands = ColorRange[];
 
 export type Measure = (text: string, bold: boolean) => number;
 export type Geometry = { width: number; height: number; margin: number; headerHeight: number; footerHeight: number; lineHeight: number; padding: number; headingHeight: number; maxColumn: number };
@@ -29,33 +32,81 @@ export const ACCENTS: { v: string; label: string }[] = [
 	{ v: '#334155', label: 'Slate' }
 ];
 
-/** Where the colours change until a classroom says otherwise (D-144). */
-export const DEFAULT_BANDS: Bands = { high: 75, middle: 50 };
-export const bandsOf = (h: Pick<ReportHeader, 'band_high' | 'band_middle'>): Bands => ({ high: h.band_high, middle: h.band_middle });
+/** A classroom's mark colours until it says otherwise. */
+export const DEFAULT_BANDS: Bands = [
+	{ from: 75, color: '#dcfce7' },
+	{ from: 50, color: '#fef3c7' },
+	{ from: 0, color: '#fee2e2' }
+];
+export const bandsOf = (h: Pick<ReportHeader, 'color_ranges'>): Bands => h.color_ranges;
 
-/** How high a mark is: the bands behind the colours. */
+export const MAX_RANGES = 6;
+/** The colours a new range starts with: light, so printing stays cheap and readable. */
+const RANGE_COLOURS = ['#dcfce7', '#fef3c7', '#fee2e2', '#dbeafe', '#ede9fe', '#ffedd5', '#ccfbf1', '#fce7f3'];
+
+/** The colour of a mark: its range's. */
 export function toneFor(pct: number | null | undefined, bands: Bands = DEFAULT_BANDS): Tone | null {
-	if (pct == null) return null;
-	return pct >= bands.high ? 'high' : pct >= bands.middle ? 'middle' : 'low';
+	if (pct == null || !bands.length) return null;
+	return (bands.find((r) => pct >= r.from) ?? bands[bands.length - 1]).color;
 }
 
-/** Dark text on a light tint, so each reads when printed in grey too. */
-export const TONE_COLOURS: Record<Tone, { bg: string; fg: string }> = {
-	high: { bg: '#dcfce7', fg: '#14532d' },
-	middle: { bg: '#fef3c7', fg: '#713f12' },
-	low: { bg: '#fee2e2', fg: '#7f1d1d' },
-	missing: { bg: '#f1f5f9', fg: '#475569' }
-};
+/** What a cell of that tone looks like on paper. */
+export function toneColours(t: Tone): { bg: string; fg: string } {
+	return t === 'missing' ? { bg: '#f1f5f9', fg: '#475569' } : { bg: t, fg: contrastText(t) };
+}
+
+/** A range in words. */
+export function rangeLabel(b: Bands, i: number): string {
+	const r = b[i];
+	if (i === 0) return r.from === 0 ? 'All marks' : r.from === 100 ? '100%' : `${r.from}% and above`;
+	return r.from === 0 ? `Below ${b[i - 1].from}%` : `${r.from}% to under ${b[i - 1].from}%`;
+}
 
 /** The key to the colours. */
-export const legend = (b: Bands): { tone: Tone; label: string }[] => [
-	{ tone: 'high', label: `${b.high}% and above` },
-	{ tone: 'middle', label: `${b.middle}% to under ${b.high}%` },
-	{ tone: 'low', label: `Below ${b.middle}%` }
-];
+export const legend = (b: Bands): { tone: Tone; label: string }[] => b.map((r, i) => ({ tone: r.color, label: rangeLabel(b, i) }));
 
-/** Tints for the screen: a background only, so the text keeps its own contrast in both themes. */
-export const toneClass = (t: Tone | null | undefined) => (t === 'high' ? 'bg-success/15' : t === 'middle' ? 'bg-warning/20' : t === 'low' ? 'bg-error/15' : t === 'missing' ? 'bg-base-200' : '');
+/** What's wrong with ranges being edited, or empty. */
+export function rangesProblem(b: Bands): string {
+	if (!b.length || b.length > MAX_RANGES) return `Use from 1 to ${MAX_RANGES} ranges.`;
+	for (let i = 0; i < b.length; i++) {
+		const x = b[i].from;
+		if (!Number.isInteger(x) || x < 0 || x > 100 || (i > 0 && x >= b[i - 1].from)) return 'Each range must start below the one above it, in whole percents up to 100.';
+	}
+	return b[b.length - 1].from === 0 ? '' : 'The lowest range must start from 0%.';
+}
+
+/** The ranges with one more, splitting the widest, in a colour not in use; the same if there's no room. */
+export function addRange(b: Bands): Bands {
+	if (b.length >= MAX_RANGES || rangesProblem(b)) return b;
+	let at = 0;
+	let top = 100;
+	let widest = 100 - b[0].from;
+	for (let i = 1; i < b.length; i++) {
+		if (b[i - 1].from - b[i].from > widest) {
+			widest = b[i - 1].from - b[i].from;
+			at = i;
+			top = b[i - 1].from;
+		}
+	}
+	if (widest < 2) return b;
+	const color = RANGE_COLOURS.find((c) => !b.some((r) => r.color === c)) ?? RANGE_COLOURS[0];
+	return [...b.slice(0, at), { from: top - Math.floor(widest / 2), color }, ...b.slice(at)];
+}
+
+/** Colours a cell on screen. Its small text takes the same colour, to read on any range's. */
+export function toned(node: HTMLElement, tone: Tone | null | undefined) {
+	const set = (t: Tone | null | undefined) => {
+		const c = t && t !== 'missing' ? toneColours(t) : null;
+		node.style.background = t === 'missing' ? 'var(--color-base-200)' : (c?.bg ?? '');
+		node.style.color = c?.fg ?? '';
+		for (const name of ['--color-muted', '--color-warning']) {
+			if (c) node.style.setProperty(name, c.fg);
+			else node.style.removeProperty(name);
+		}
+	};
+	set(tone);
+	return { update: set };
+}
 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
@@ -194,7 +245,7 @@ export function printReportHTML(sheets: Sheet[], h: ReportHeader, fallbackTitle:
 	const l = headerLines(h, fallbackTitle, today);
 	const on = contrastText(h.accent);
 	const anyTone = h.color_marks && sheets.some((s) => s.tones?.some((r) => r.some((t) => t && t !== 'missing')));
-	const cellStyle = (t: Tone | null | undefined) => (h.color_marks && t ? ` style="background:${TONE_COLOURS[t].bg};color:${TONE_COLOURS[t].fg}"` : '');
+	const cellStyle = (t: Tone | null | undefined) => (h.color_marks && t ? ` style="background:${toneColours(t).bg};color:${toneColours(t).fg}"` : '');
 	const table = (s: Sheet) => `${s.heading ? `<h2>${esc(s.heading)}</h2>` : ''}<table><thead><tr>${s.head.map((x) => `<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>
 ${s.rows.map((r, ri) => `<tr>${r.map((c, ci) => `<td${cellStyle(s.tones?.[ri]?.[ci])}>${esc(c)}</td>`).join('')}</tr>`).join('\n')}
 </tbody></table>`;
@@ -212,7 +263,7 @@ footer{margin-top:14px;border-top:1px solid ${h.accent};padding-top:4px;color:#5
 @page{size:landscape;margin:12mm}</style></head><body>
 <header>${h.logo ? `<img src="${esc(h.logo)}" alt="">` : ''}<div>${l.institution ? `<div class="inst">${esc(l.institution)}</div>` : ''}<h1>${esc(l.title)}</h1>${l.subtitle ? `<div class="sub">${esc(l.subtitle)}</div>` : ''}${l.meta ? `<div class="meta">${esc(l.meta)}</div>` : ''}</div></header>
 ${sheets.map(table).join('\n')}
-${anyTone ? `<p class="legend">${legend(bandsOf(h)).map((x) => `<i style="background:${TONE_COLOURS[x.tone].bg}"></i>${esc(x.label)}`).join('')}</p>` : ''}
+${anyTone ? `<p class="legend">${legend(bandsOf(h)).map((x) => `<i style="background:${x.tone}"></i>${esc(x.label)}`).join('')}</p>` : ''}
 ${h.footer ? `<footer>${esc(h.footer)}</footer>` : ''}
 </body></html>`;
 }
@@ -332,10 +383,10 @@ export async function exportPdf(sheets: Sheet[], header: ReportHeader, fallbackT
 			cells.forEach((cellLines, i) => {
 				const tone = header.color_marks ? tones?.[i] : null;
 				if (tone) {
-					c.fillStyle = TONE_COLOURS[tone].bg;
+					c.fillStyle = toneColours(tone).bg;
 					c.fillRect(x, y, p.widths[i], height);
 				}
-				cellLines.forEach((l, k) => text(l, 9, x + g.padding, y + g.padding + g.lineHeight * (k + 1) - 3, bold, tone ? TONE_COLOURS[tone].fg : ink));
+				cellLines.forEach((l, k) => text(l, 9, x + g.padding, y + g.padding + g.lineHeight * (k + 1) - 3, bold, tone ? toneColours(tone).fg : ink));
 				x += p.widths[i];
 			});
 			c.strokeStyle = line;
@@ -361,10 +412,11 @@ export async function exportPdf(sheets: Sheet[], header: ReportHeader, fallbackT
 		if (header.page_numbers) text(pageLabel(n, pages.length), 8, g.width - g.margin, foot, false, '#555', 'right');
 		if (showLegend) {
 			// The bands, in the middle of the foot's line above it.
-			let lx = g.width / 2 - 150;
+			const key = legend(bandsOf(header));
+			let lx = g.width / 2 - key.length * 50;
 			const ly = foot - 22;
-			for (const item of legend(bandsOf(header))) {
-				c.fillStyle = TONE_COLOURS[item.tone].bg;
+			for (const item of key) {
+				c.fillStyle = item.tone;
 				c.fillRect(lx, ly - 7, 8, 8);
 				c.strokeStyle = '#999';
 				c.strokeRect(lx, ly - 7, 8, 8);
