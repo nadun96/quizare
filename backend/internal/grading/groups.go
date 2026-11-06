@@ -288,6 +288,10 @@ type ReportHeader struct {
 	Logo        string `json:"logo"`        // a data: URL, PNG or JPEG; empty: none (D-143)
 	Accent      string `json:"accent"`      // the reports' colour, #rrggbb
 	ColorMarks  bool   `json:"color_marks"` // tint marks by how high they are
+	// Where the colours change, in percent: this and above is green, down to
+	// BandMiddle amber, below that red (D-144).
+	BandHigh   int `json:"band_high"`
+	BandMiddle int `json:"band_middle"`
 }
 
 const (
@@ -322,7 +326,7 @@ func decodeLogo(s string) (data []byte, contentType string, problem string) {
 
 // GetReportHeader is the saved header, or the defaults.
 func (s *Service) GetReportHeader(ctx context.Context, teacherID, classroomID string) (ReportHeader, error) {
-	h := ReportHeader{DateMode: "today", ShowTeacher: true, PageNumbers: true, Accent: defaultAccent, ColorMarks: true}
+	h := ReportHeader{DateMode: "today", ShowTeacher: true, PageNumbers: true, Accent: defaultAccent, ColorMarks: true, BandHigh: 75, BandMiddle: 50}
 	var err error
 	if h.Classroom, err = s.teaches(ctx, teacherID, classroomID); err != nil {
 		return h, err
@@ -333,9 +337,9 @@ func (s *Service) GetReportHeader(ctx context.Context, teacherID, classroomID st
 	var logo []byte
 	var logoType string
 	err = s.pool.QueryRow(ctx, `SELECT title, subtitle, institution, date_mode, coalesce(to_char(date_value, 'YYYY-MM-DD'), ''), show_teacher, footer, page_numbers,
-			logo, coalesce(logo_type, ''), accent, color_marks
+			logo, coalesce(logo_type, ''), accent, color_marks, band_high, band_middle
 		FROM grading.report_headers WHERE classroom_id = $1`, classroomID).
-		Scan(&h.Title, &h.Subtitle, &h.Institution, &h.DateMode, &h.DateValue, &h.ShowTeacher, &h.Footer, &h.PageNumbers, &logo, &logoType, &h.Accent, &h.ColorMarks)
+		Scan(&h.Title, &h.Subtitle, &h.Institution, &h.DateMode, &h.DateValue, &h.ShowTeacher, &h.Footer, &h.PageNumbers, &logo, &logoType, &h.Accent, &h.ColorMarks, &h.BandHigh, &h.BandMiddle)
 	if err == pgx.ErrNoRows {
 		return h, nil
 	}
@@ -372,6 +376,9 @@ func (s *Service) SetReportHeader(ctx context.Context, teacherID, classroomID st
 	if !accentPattern.MatchString(in.Accent) {
 		bad["accent"] = "choose a colour"
 	}
+	if in.BandMiddle < 1 || in.BandHigh > 100 || in.BandMiddle >= in.BandHigh {
+		bad["band_high"] = "green must start above amber, between 1% and 100%"
+	}
 	var logo []byte
 	var logoType *string
 	if in.Logo != "" {
@@ -385,11 +392,11 @@ func (s *Service) SetReportHeader(ctx context.Context, teacherID, classroomID st
 		return in, httpx.Invalid(bad)
 	}
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO grading.report_headers (classroom_id, title, subtitle, institution, date_mode, date_value, show_teacher, footer, page_numbers, updated_by, logo, logo_type, accent, color_marks)
-			VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10, $11, $12, $13, $14)
+		if _, err := tx.Exec(ctx, `INSERT INTO grading.report_headers (classroom_id, title, subtitle, institution, date_mode, date_value, show_teacher, footer, page_numbers, updated_by, logo, logo_type, accent, color_marks, band_high, band_middle)
+			VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 			ON CONFLICT (classroom_id) DO UPDATE SET title = $2, subtitle = $3, institution = $4, date_mode = $5, date_value = $6::date,
-				show_teacher = $7, footer = $8, page_numbers = $9, updated_by = $10, logo = $11, logo_type = $12, accent = $13, color_marks = $14, updated_at = now()`,
-			classroomID, in.Title, in.Subtitle, in.Institution, in.DateMode, date, in.ShowTeacher, in.Footer, in.PageNumbers, teacherID, logo, logoType, in.Accent, in.ColorMarks); err != nil {
+				show_teacher = $7, footer = $8, page_numbers = $9, updated_by = $10, logo = $11, logo_type = $12, accent = $13, color_marks = $14, band_high = $15, band_middle = $16, updated_at = now()`,
+			classroomID, in.Title, in.Subtitle, in.Institution, in.DateMode, date, in.ShowTeacher, in.Footer, in.PageNumbers, teacherID, logo, logoType, in.Accent, in.ColorMarks, in.BandHigh, in.BandMiddle); err != nil {
 			return err
 		}
 		return audit.Log(ctx, tx, teacherID, "report_header_set", "classroom", classroomID, nil)

@@ -6,7 +6,7 @@ import { exportPdf } from './reportPdf';
 
 vi.mock('./reportPdf', async (real) => ({ ...(await real<typeof import('./reportPdf')>()), exportPdf: vi.fn(async () => {}) }));
 
-const saved = { classroom: 'Science', teacher: 'Ms P', title: 'Term report', subtitle: '', institution: '', date_mode: 'today', date_value: '', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true };
+const saved = { classroom: 'Science', teacher: 'Ms P', title: 'Term report', subtitle: '', institution: '', date_mode: 'today', date_value: '', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true, band_high: 80, band_middle: 40 };
 const calls: { method: string; body?: unknown }[] = [];
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -40,7 +40,7 @@ describe('downloading a report (D-141)', () => {
 		const { target, done } = render();
 		button(target, 'Download PDF').click();
 		await settle();
-		expect(calls.map((c) => c.method)).toEqual(['GET']); // nothing saved, no form
+		expect(calls.every((c) => c.method === 'GET')).toBe(true); // nothing saved, no form
 		expect(exportPdf).toHaveBeenCalledOnce();
 		const [sheets, header, title, file] = vi.mocked(exportPdf).mock.calls[0];
 		expect(sheets[0].rows).toEqual([['Amaya']]);
@@ -48,6 +48,19 @@ describe('downloading a report (D-141)', () => {
 		expect(title).toBe('Science: class report');
 		expect(file).toBe('Science');
 		done();
+	});
+
+	test('tells the page where its colours change', async () => {
+		const seen: unknown[] = [];
+		vi.stubGlobal('fetch', async () => new Response(JSON.stringify(saved), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+		const target = document.createElement('div');
+		document.body.append(target);
+		const c = mount(ReportPdfButton, { target, props: { classroomId: 'c1', title: 'T', fileName: 'F', sheets: () => [], onbands: (b: unknown) => seen.push(b) } });
+		flushSync();
+		await settle();
+		expect(seen[0]).toEqual({ high: 80, middle: 40 });
+		unmount(c);
+		target.remove();
 	});
 
 	test('Print opens at once, and writes the report with the saved header', async () => {

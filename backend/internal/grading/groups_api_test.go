@@ -224,3 +224,27 @@ func TestReportLogoAndColour(t *testing.T) {
 		t.Fatalf("not removed: %q", got.Logo)
 	}
 }
+
+// D-144: where a classroom's mark colours change is its teacher's choice.
+func TestReportColourBands(t *testing.T) {
+	f := newReportFx(t)
+	url := "/api/teacher/classrooms/" + f.class.ID + "/report-header"
+	var h grading.ReportHeader
+	f.teacher.Call("GET", url, nil, 200, &h)
+	if h.BandHigh != 75 || h.BandMiddle != 50 {
+		t.Fatalf("defaults: %+v", h)
+	}
+	h.BandHigh, h.BandMiddle = 80, 40
+	var got grading.ReportHeader
+	f.teacher.Call("PUT", url, h, 200, &got)
+	got = grading.ReportHeader{}
+	f.teacher.Call("GET", url, nil, 200, &got)
+	if got.BandHigh != 80 || got.BandMiddle != 40 {
+		t.Fatalf("saved: %+v", got)
+	}
+	for _, b := range [][2]int{{50, 50}, {40, 60}, {101, 50}, {75, 0}} {
+		x := h
+		x.BandHigh, x.BandMiddle = b[0], b[1]
+		f.teacher.Call("PUT", url, x, 422, nil)
+	}
+}

@@ -5,22 +5,34 @@
 	import { api, ApiError } from '../api';
 	import Icon from '../ui/Icon.svelte';
 	import { toast } from '../ui/toast.svelte';
-	import { ACCENTS, exportPdf, logoDataUrl, printReportHTML, type ReportHeader, type Sheet } from './reportPdf';
+	import { ACCENTS, bandsOf, exportPdf, logoDataUrl, printReportHTML, type Bands, type ReportHeader, type Sheet } from './reportPdf';
 
-	let { classroomId, title, fileName, sheets, disabled = false }: { classroomId: string; title: string; fileName: string; sheets: () => Sheet[]; disabled?: boolean } = $props();
+	let { classroomId, title, fileName, sheets, disabled = false, onbands }: { classroomId: string; title: string; fileName: string; sheets: () => Sheet[]; disabled?: boolean; onbands?: (b: Bands) => void } = $props();
 	let dialog = $state<HTMLDialogElement>();
 	let h = $state<ReportHeader | null>(null);
 	let busy = $state(false);
 	let error = $state('');
 	const url = $derived(`/api/teacher/classrooms/${classroomId}/report-header`);
+	const bandsProblem = $derived(h && !(h.band_middle >= 1 && h.band_high <= 100 && h.band_middle < h.band_high) ? 'Green must start above amber, between 1% and 100%.' : '');
+
+	// The saved header, and tells the page where its colours change: the sheets depend on it.
+	async function saved() {
+		const x = await api.get<ReportHeader>(url);
+		onbands?.(bandsOf(x));
+		return x;
+	}
+	$effect(() => {
+		void url;
+		saved().catch(() => {}); // the page keeps the usual bands
+	});
 
 	// The window must open in the click itself, or the browser blocks it.
 	async function print() {
 		const w = window.open('', '_blank');
 		if (!w) return toast('Allow pop-ups for this site to print', 'error');
 		try {
-			const saved = await api.get<ReportHeader>(url);
-			w.document.write(printReportHTML(sheets(), saved, title));
+			const header = await saved();
+			w.document.write(printReportHTML(sheets(), header, title));
 			w.document.close();
 			// Called from here: the site's content policy stops a script inside the page.
 			const img = w.document.querySelector('img');
@@ -35,7 +47,8 @@
 	async function download() {
 		busy = true;
 		try {
-			await exportPdf(sheets(), await api.get<ReportHeader>(url), title, fileName);
+			const header = await saved();
+			await exportPdf(sheets(), header, title, fileName);
 			toast('PDF downloaded');
 		} catch (e) {
 			toast(e instanceof ApiError ? e.message : 'The PDF couldn’t be made. Try again.', 'error');
@@ -72,8 +85,9 @@
 		busy = true;
 		error = '';
 		try {
-			const saved = await api.put<ReportHeader>(url, h);
-			if (andDownload) await exportPdf(sheets(), saved, title, fileName);
+			const header = await api.put<ReportHeader>(url, h);
+			onbands?.(bandsOf(header));
+			if (andDownload) await exportPdf(sheets(), header, title, fileName);
 			dialog?.close();
 			toast(andDownload ? 'PDF downloaded' : 'Header and footer saved');
 		} catch (err) {
@@ -110,7 +124,13 @@
 					<label class="flex items-center gap-1">Other <input class="picker" type="color" bind:value={h.accent} aria-label="Another colour" /></label>
 				</div>
 			</fieldset>
-			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.color_marks} />Colour marks by how high they are: 75% and above, 50% to 74%, below 50%</label>
+			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.color_marks} />Colour marks by how high they are in printed and downloaded reports</label>
+			<div class="flex flex-wrap items-end gap-3">
+				<label class="vstack gap-1 small">Green from (%)<input class="input w-24 tabular" type="number" min="2" max="100" step="1" bind:value={h.band_high} required /></label>
+				<label class="vstack gap-1 small">Amber from (%)<input class="input w-24 tabular" type="number" min="1" max="99" step="1" bind:value={h.band_middle} required /></label>
+				<span class="small muted pb-2">Below that is red.</span>
+			</div>
+			{#if bandsProblem}<p class="m-0 small text-error" role="alert">{bandsProblem}</p>{/if}
 			<div class="flex flex-wrap gap-2 items-end">
 				<label class="vstack gap-1 small">Date
 					<select class="select" bind:value={h.date_mode}><option value="today">The day it’s made</option><option value="custom">A date I choose</option><option value="none">No date</option></select>
@@ -123,8 +143,8 @@
 			{#if error}<p class="m-0 small text-error" role="alert">{error}</p>{/if}
 			<div class="flex flex-wrap justify-end gap-2">
 				<button type="button" class="btn" onclick={() => dialog?.close()}>Cancel</button>
-				<button class="btn" value="save" disabled={busy}>Save</button>
-				<button class="btn btn-primary" value="download" disabled={busy || disabled}>{busy ? 'Making the PDF…' : 'Save and download'}</button>
+				<button class="btn" value="save" disabled={busy || !!bandsProblem}>Save</button>
+				<button class="btn btn-primary" value="download" disabled={busy || disabled || !!bandsProblem}>{busy ? 'Making the PDF…' : 'Save and download'}</button>
 			</div>
 		</form>
 	{/if}

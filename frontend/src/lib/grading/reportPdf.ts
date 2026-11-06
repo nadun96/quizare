@@ -8,7 +8,8 @@
 export type Cell = string | number;
 export type Tone = 'high' | 'middle' | 'low' | 'missing';
 export type Sheet = { heading?: string; head: string[]; rows: Cell[][]; tones?: (Tone | null)[][]; frozen?: number };
-export type ReportHeader = { classroom: string; teacher: string; title: string; subtitle: string; institution: string; date_mode: 'today' | 'custom' | 'none'; date_value: string; show_teacher: boolean; footer: string; page_numbers: boolean; logo: string; accent: string; color_marks: boolean };
+export type ReportHeader = { classroom: string; teacher: string; title: string; subtitle: string; institution: string; date_mode: 'today' | 'custom' | 'none'; date_value: string; show_teacher: boolean; footer: string; page_numbers: boolean; logo: string; accent: string; color_marks: boolean; band_high: number; band_middle: number };
+export type Bands = { high: number; middle: number };
 
 export type Measure = (text: string, bold: boolean) => number;
 export type Geometry = { width: number; height: number; margin: number; headerHeight: number; footerHeight: number; lineHeight: number; padding: number; headingHeight: number; maxColumn: number };
@@ -28,10 +29,14 @@ export const ACCENTS: { v: string; label: string }[] = [
 	{ v: '#334155', label: 'Slate' }
 ];
 
+/** Where the colours change until a classroom says otherwise (D-144). */
+export const DEFAULT_BANDS: Bands = { high: 75, middle: 50 };
+export const bandsOf = (h: Pick<ReportHeader, 'band_high' | 'band_middle'>): Bands => ({ high: h.band_high, middle: h.band_middle });
+
 /** How high a mark is: the bands behind the colours. */
-export function toneFor(pct: number | null | undefined): Tone | null {
+export function toneFor(pct: number | null | undefined, bands: Bands = DEFAULT_BANDS): Tone | null {
 	if (pct == null) return null;
-	return pct >= 75 ? 'high' : pct >= 50 ? 'middle' : 'low';
+	return pct >= bands.high ? 'high' : pct >= bands.middle ? 'middle' : 'low';
 }
 
 /** Dark text on a light tint, so each reads when printed in grey too. */
@@ -42,10 +47,11 @@ export const TONE_COLOURS: Record<Tone, { bg: string; fg: string }> = {
 	missing: { bg: '#f1f5f9', fg: '#475569' }
 };
 
-export const LEGEND: { tone: Tone; label: string }[] = [
-	{ tone: 'high', label: '75% and above' },
-	{ tone: 'middle', label: '50% to 74%' },
-	{ tone: 'low', label: 'Below 50%' }
+/** The key to the colours. */
+export const legend = (b: Bands): { tone: Tone; label: string }[] => [
+	{ tone: 'high', label: `${b.high}% and above` },
+	{ tone: 'middle', label: `${b.middle}% to under ${b.high}%` },
+	{ tone: 'low', label: `Below ${b.middle}%` }
 ];
 
 /** Tints for the screen: a background only, so the text keeps its own contrast in both themes. */
@@ -206,7 +212,7 @@ footer{margin-top:14px;border-top:1px solid ${h.accent};padding-top:4px;color:#5
 @page{size:landscape;margin:12mm}</style></head><body>
 <header>${h.logo ? `<img src="${esc(h.logo)}" alt="">` : ''}<div>${l.institution ? `<div class="inst">${esc(l.institution)}</div>` : ''}<h1>${esc(l.title)}</h1>${l.subtitle ? `<div class="sub">${esc(l.subtitle)}</div>` : ''}${l.meta ? `<div class="meta">${esc(l.meta)}</div>` : ''}</div></header>
 ${sheets.map(table).join('\n')}
-${anyTone ? `<p class="legend">${LEGEND.map((x) => `<i style="background:${TONE_COLOURS[x.tone].bg}"></i>${esc(x.label)}`).join('')}</p>` : ''}
+${anyTone ? `<p class="legend">${legend(bandsOf(h)).map((x) => `<i style="background:${TONE_COLOURS[x.tone].bg}"></i>${esc(x.label)}`).join('')}</p>` : ''}
 ${h.footer ? `<footer>${esc(h.footer)}</footer>` : ''}
 </body></html>`;
 }
@@ -355,15 +361,15 @@ export async function exportPdf(sheets: Sheet[], header: ReportHeader, fallbackT
 		if (header.page_numbers) text(pageLabel(n, pages.length), 8, g.width - g.margin, foot, false, '#555', 'right');
 		if (showLegend) {
 			// The bands, in the middle of the foot's line above it.
-			let lx = g.width / 2 - 120;
+			let lx = g.width / 2 - 150;
 			const ly = foot - 22;
-			for (const item of LEGEND) {
+			for (const item of legend(bandsOf(header))) {
 				c.fillStyle = TONE_COLOURS[item.tone].bg;
 				c.fillRect(lx, ly - 7, 8, 8);
 				c.strokeStyle = '#999';
 				c.strokeRect(lx, ly - 7, 8, 8);
 				text(item.label, 7.5, lx + 11, ly, false, '#555');
-				lx += 80;
+				lx += 100;
 			}
 		}
 
