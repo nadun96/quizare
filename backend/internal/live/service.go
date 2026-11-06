@@ -51,6 +51,8 @@ type Users interface {
 type Hooks struct {
 	AttemptFinished func(ctx context.Context, tx pgx.Tx, sessionID, attemptID string) error
 	SessionEnded    func(ctx context.Context, tx pgx.Tx, sessionID string) error
+	// AttemptReopened clears the marks of an attempt put back in progress (D-139).
+	AttemptReopened func(ctx context.Context, tx pgx.Tx, sessionID, attemptID string) error
 }
 
 type Service struct {
@@ -920,6 +922,51 @@ func (s *Service) Reinstate(ctx context.Context, teacherID, attemptID, reason st
 			return err
 		}
 		return audit.Log(ctx, tx, teacherID, "attempt_reinstated", "attempt", a.ID, map[string]string{"reason": reason})
+	})
+}
+
+// Reopen puts a handed-in attempt back in progress for a student who submitted
+// by mistake, with a logged reason: same answers, same question, the time they
+// had left (D-139). Marks already given are cleared; handing in marks it afresh.
+func (s *Service) Reopen(ctx context.Context, teacherID, attemptID, reason string) (*Attempt, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" || len(reason) > 500 {
+		return nil, httpx.Invalid(map[string]string{"reason": "give a reason (at most 500 characters)"})
+	}
+	return s.change(ctx, attemptID, func(tx pgx.Tx, sess *Session, a *Attempt) error {
+		v := s.sessionView(sess)
+		if ok, err := s.Teaches(ctx, v.ClassroomID, teacherID); err != nil || !ok {
+			return httpx.ErrNotFound
+		}
+		eff := v.Effective(nil, a.Overrides)
+		switch {
+		case v.Status == SessionEnded:
+			return errSessionEnded
+		case a.State != StateSubmitted || a.SupersededAt != nil:
+			return errWrongState("only the latest handed-in attempt can be reopened")
+		case eff.TeamMode != "off":
+			return errWrongState("attempts in a team quiz can't be reopened")
+		}
+		// Handed in before the time left was kept: work it out from the limits.
+		if a.QuizRemainingMs == nil && eff.QuizTimeLimitSec > 0 && a.StartedAt != nil && a.SubmittedAt != nil {
+			limit := time.Duration(eff.QuizTimeLimitSec+v.ExtensionSec+a.ExtensionSec) * time.Second
+			a.QuizRemainingMs = ptrInt64(max(0, (limit - a.SubmittedAt.Sub(*a.StartedAt)).Milliseconds()))
+		}
+		if q := sess.questionLimit(a, a.Current); a.QuestionRemainingMs == nil && q > 0 {
+			a.QuestionRemainingMs = ptrInt64(int64(q) * 1000)
+		}
+		reopen(a, s.now())
+		a.DisconnectedAt = nil
+		if err := s.event(ctx, tx, sess.ID, a.ID, teacherID, "reopened", map[string]string{"reason": reason}); err != nil {
+			return err
+		}
+		if err := audit.Log(ctx, tx, teacherID, "attempt_reopened", "attempt", a.ID, map[string]string{"reason": reason}); err != nil {
+			return err
+		}
+		if s.hooks.AttemptReopened != nil {
+			return s.hooks.AttemptReopened(ctx, tx, sess.ID, a.ID)
+		}
+		return nil
 	})
 }
 

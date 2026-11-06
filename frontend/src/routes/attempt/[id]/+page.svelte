@@ -9,7 +9,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { AnswerQueue } from '$lib/answerQueue';
-	import { flaggedList, submitWarning } from '$lib/flags';
+	import { flaggedList, submitDialog } from '$lib/flags';
 	import { formatDuration } from '$lib/clock';
 	import { Proctor, enterFullscreen, type ViolationKind } from '$lib/proctor';
 	import { LiveSocket } from '$lib/socket';
@@ -160,11 +160,11 @@
 
 	async function next() {
 		if (!st?.question) return;
+		if (isLast) return submitNow(); // the last Next hands in: ask first (D-139)
 		advancing = true;
 		try {
 			await queue.flush();
-			if (!st.one_way && isLast) apply(await api.post<StudentState>('/api/attempts/' + id + '/submit'));
-			else apply(await api.post<StudentState>('/api/attempts/' + id + '/advance', { question_id: st.question.id }));
+			apply(await api.post<StudentState>('/api/attempts/' + id + '/advance', { question_id: st.question.id }));
 		} catch (e) {
 			notice = e instanceof ApiError ? e.message : 'Could not continue; we will retry';
 		} finally {
@@ -206,15 +206,17 @@
 	});
 
 	async function submitNow() {
-		const ok = await confirmDialog({
-			title: 'Submit your answers?',
-			body: submitWarning(st?.answered, st?.flagged),
-			confirm: 'Submit quiz',
-			cancel: 'Keep working'
-		});
-		if (!ok) return;
-		await queue.flush();
-		apply(await api.post<StudentState>('/api/attempts/' + id + '/submit'));
+		const ok = await confirmDialog(submitDialog(st?.answered, st?.flagged));
+		if (!ok || st?.state !== 'in_progress') return; // time may have run out while asking
+		advancing = true;
+		try {
+			await queue.flush();
+			apply(await api.post<StudentState>('/api/attempts/' + id + '/submit'));
+		} catch (e) {
+			notice = e instanceof ApiError ? e.message : 'Could not submit; try again';
+		} finally {
+			advancing = false;
+		}
 	}
 
 	// Time-left notices (research: students want them; WCAG 4.1.3 status messages).

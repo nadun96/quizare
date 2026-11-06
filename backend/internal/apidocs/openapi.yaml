@@ -2118,6 +2118,14 @@ paths:
       summary: Hide released results again
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '204': { description: 'Hidden' } }
+  /api/teacher/attempts/{id}/reopen:
+    post:
+      operationId: postTeacherAttemptsReopen
+      tags: [sessions]
+      summary: Put a handed-in attempt back in progress, answers and time left kept, with a logged reason (D-139)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Attempt' } } } }, '409': { $ref: '#/components/responses/Conflict' }, '410': { $ref: '#/components/responses/Gone' } }
   /api/teacher/attempts/{id}/reinstate:
     post:
       operationId: postTeacherAttemptsReinstate
