@@ -38,6 +38,7 @@
 	let editing = $state<PollQuestion | 'new' | null>(null);
 	let settings = $state<PollSettings | null>(null);
 	let classroomId = $state<string | null>(null);
+	let topicId = $state<string | null>(null);
 	let connected = $state(false);
 	let socket: LiveSocket | null = null;
 
@@ -45,6 +46,7 @@
 		poll = await api.get<Poll>('/api/teacher/polls/' + id);
 		settings = settingsOf(poll);
 		classroomId = poll.classroom_id;
+		topicId = poll.topic_id;
 		if (!poll.questions?.length) editing = 'new';
 	}
 	$effect(() => {
@@ -81,7 +83,7 @@
 	async function saveSettings() {
 		if (!settings) return;
 		try {
-			poll = await api.put<Poll>('/api/teacher/polls/' + id, { settings, classroom_id: classroomId ?? '' });
+			poll = await api.put<Poll>('/api/teacher/polls/' + id, { settings, classroom_id: classroomId ?? '', topic_id: (classroomId && topicId) || '' });
 			toast('Settings saved');
 		} catch (e) {
 			toast(e instanceof ApiError ? Object.values(e.fields)[0] ?? e.message : 'Could not save', 'error');
@@ -241,7 +243,7 @@
 			<GroupsPanel pollId={id} settings={settingsOf(poll)} hasClassroom={!!poll.classroom_id} participants={poll.participants} />
 		{:else if tab === 'settings'}
 			<div class="card card-border vstack bg-base-100 p-4 shadow-sm sm:p-6">
-				<PollSettingsForm bind:settings bind:classroomId {classrooms} locked={poll.participants > 0} />
+				<PollSettingsForm bind:settings bind:classroomId bind:topicId {classrooms} locked={poll.participants > 0} />
 				<div class="flex flex-wrap gap-2">
 					<button class="btn btn-primary" onclick={saveSettings}>Save settings</button>
 					<span class="spacer"></span>

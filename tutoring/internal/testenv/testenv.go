@@ -130,6 +130,7 @@ var Secret = bytes.Repeat([]byte{5}, 32)
 type Platform struct {
 	mu       sync.Mutex
 	Teachers map[string]string          // classroom → teacher
+	Topics   map[string]string          // topic → classroom
 	Enrolled map[string]map[string]bool // classroom → students
 	Archived map[string]bool
 	Paused   map[string]string          // teacher → why the admin paused new activities (D-90)
@@ -167,7 +168,7 @@ func (p *Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if _, err := jwt.Parse(raw, func(*jwt.Token) (any, error) { return Secret, nil }, jwt.WithIssuer("tutoring"), jwt.WithAudience("quiz-platform"),
 		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()); err != nil ||
-		(r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/teacher" && r.URL.Path != "/internal/tutoring/categories" &&
+		(r.URL.Path != "/internal/tutoring/access" && r.URL.Path != "/internal/tutoring/topic" && r.URL.Path != "/internal/tutoring/teacher" && r.URL.Path != "/internal/tutoring/categories" &&
 			r.URL.Path != "/internal/tutoring/classrooms" && r.URL.Path != "/internal/tutoring/notify") {
 		p.BadTokens++
 		w.WriteHeader(404)
@@ -199,6 +200,19 @@ func (p *Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		p.Notices = append(p.Notices, n)
 		_ = json.NewEncoder(w).Encode(map[string]int{"sent": 1})
+		return
+	}
+	if r.URL.Path == "/internal/tutoring/topic" {
+		var in struct {
+			TopicID string `json:"topic_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		c, ok := p.Topics[in.TopicID]
+		if !ok {
+			w.WriteHeader(404)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"classroom_id": c})
 		return
 	}
 	if r.URL.Path == "/internal/tutoring/categories" {

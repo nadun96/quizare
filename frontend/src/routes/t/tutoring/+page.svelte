@@ -3,6 +3,8 @@
 	// for a classroom, and every session one page at a time.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import TopicSelect from '$lib/classroom/TopicSelect.svelte';
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
 	import { Paged } from '$lib/paged.svelte';
@@ -22,6 +24,7 @@
 	const ready = requireRole('teacher');
 	const client = new TutorClient();
 	let enabled = $state<boolean | null>(null);
+	let topicId = $state<string | null>(page.url.searchParams.get('topic_id')); // from a topic's Schedule
 	let classrooms = $state<{ id: string; name: string }[]>([]);
 	let classroom = $state(Paged.fromUrl(urlState, 'classroom_id'));
 	let status = $state(Paged.fromUrl(urlState, 'status'));
@@ -70,14 +73,14 @@
 		busy = true;
 		try {
 			if (!later) {
-				const s = await client.post<TutoringSession>('/api/sessions', { classroom_id: pick, title, admit_mode: manual ? 'manual' : 'auto' });
+				const s = await client.post<TutoringSession>('/api/sessions', { classroom_id: pick, topic_id: topicId ?? '', title, admit_mode: manual ? 'manual' : 'auto' });
 				goto('/tutor/' + s.join_code);
 				return;
 			}
 			const r = schedule.repeat;
 			const repeat = r.freq ? { freq: r.freq, interval: r.interval || 1, days: r.freq === 'weekly' ? r.days : undefined, ...(schedule.ends === 'count' ? { count: r.count } : { until: r.until }) } : { freq: '' };
 			const out = await client.post<{ sessions: TutoringSession[] }>('/api/schedule', {
-				classroom_id: pick, title, admit_mode: manual ? 'manual' : 'auto', start: schedule.start, time_zone: schedule.time_zone,
+				classroom_id: pick, topic_id: topicId ?? '', title, admit_mode: manual ? 'manual' : 'auto', start: schedule.start, time_zone: schedule.time_zone,
 				duration_min: schedule.duration_min, open_early_min: schedule.open_early_min, reminders: schedule.reminders, repeat
 			});
 			toast(out.sessions.length === 1 ? 'Scheduled. The classroom’s students are reminded by email.' : `${out.sessions.length} sessions scheduled. Students are reminded before each.`);
@@ -108,6 +111,7 @@
 					<select id="ts-class" class="select w-full" bind:value={pick} required>
 						{#each classrooms as c (c.id)}<option value={c.id}>{c.name}</option>{:else}<option value="">No classrooms yet</option>{/each}
 					</select>
+					{#if pick}<div class="mt-2"><TopicSelect classroomId={pick} bind:value={topicId} /></div>{/if}
 				</div>
 			</div>
 			<div class="join" role="group" aria-label="When">

@@ -57,6 +57,8 @@ type Classrooms interface {
 	// For scheduling (D-84): someone's classrooms, and a classroom's people.
 	TutoringClassrooms(ctx context.Context, userID string) ([]content.TutoringClassroom, error)
 	ClassroomMembers(ctx context.Context, classroomID string) (string, []string, error)
+	// For a session under a topic (D-147).
+	TopicContext(ctx context.Context, teacherID, topicID string) (content.TopicContext, error)
 }
 
 // Teachers finds teacher accounts, for co-teachers (TS-FR-70), and anyone's
@@ -184,6 +186,7 @@ func InternalRoutes(s *Service) func(chi.Router) {
 		r.Method("POST", "/access", httpx.Handler(s.handleAccess))
 		r.Method("POST", "/teacher", httpx.Handler(s.handleTeacher))
 		r.Method("POST", "/categories", httpx.Handler(s.handleCategories))
+		r.Method("POST", "/topic", httpx.Handler(s.handleTopic))
 		r.Method("POST", "/classrooms", httpx.Handler(s.handleClassrooms))
 		r.Method("POST", "/notify", httpx.Handler(s.handleNotify))
 	}
@@ -291,6 +294,22 @@ type CategoryGroup struct {
 
 // handleCategories lists a classroom's categories with their students, as
 // its teacher would see them.
+// handleTopic says which classroom a topic is in.
+func (s *Service) handleTopic(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		TopicID string `json:"topic_id"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	tc, err := s.classrooms.TopicContext(r.Context(), "", in.TopicID)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, 200, map[string]string{"classroom_id": tc.ClassroomID})
+	return nil
+}
+
 func (s *Service) handleCategories(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		ClassroomID string `json:"classroom_id"`

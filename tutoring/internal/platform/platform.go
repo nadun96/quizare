@@ -197,6 +197,15 @@ func (c *Client) Classrooms(ctx context.Context, userID string) ([]Classroom, er
 	return out.Classrooms, err
 }
 
+// TopicClassroom says which classroom a topic is in (D-147).
+func (c *Client) TopicClassroom(ctx context.Context, topicID string) (string, error) {
+	var out struct {
+		ClassroomID string `json:"classroom_id"`
+	}
+	err := c.post(ctx, "topic", map[string]string{"topic_id": topicID}, &out)
+	return out.ClassroomID, err
+}
+
 // Notice is an email to a classroom's people: its teacher, its active
 // students when Students is set, and the people named (D-84, TS-FR-87).
 type Notice struct {
