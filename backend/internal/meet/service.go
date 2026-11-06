@@ -48,6 +48,7 @@ type Meeting struct {
 	Title       string     `json:"title"`
 	Code        string     `json:"code"`
 	ClassroomID *string    `json:"classroom_id"`
+	TopicID     *string    `json:"topic_id"` // under this topic of the classroom (D-147)
 	MaxPeople   int        `json:"max_people"`
 	Status      string     `json:"status"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -67,6 +68,7 @@ type ICEServer struct {
 type Classrooms interface {
 	GetClassroom(ctx context.Context, teacherID, id string) (content.Classroom, error)
 	GetEnrolment(ctx context.Context, classroomID, userID string) (content.Enrolment, bool, error)
+	TopicContext(ctx context.Context, teacherID, topicID string) (content.TopicContext, error)
 }
 
 // Users gives names for the people in a room.
@@ -146,6 +148,7 @@ func newCode() string {
 type MeetingInput struct {
 	Title       string  `json:"title"`
 	ClassroomID *string `json:"classroom_id"`
+	TopicID     *string `json:"topic_id"` // sets the classroom too
 	// MaxPeople: nil takes the default; 0 is no limit of the meeting's own,
 	// when the admin allows that.
 	MaxPeople *int `json:"max_people"`
@@ -197,12 +200,12 @@ func capOf(own, limit int) int {
 	return own
 }
 
-const cols = `m.id, m.host_id, coalesce(u.name, ''), m.title, m.code, m.classroom_id, m.max_people, m.status, m.created_at, m.ended_at`
+const cols = `m.id, m.host_id, coalesce(u.name, ''), m.title, m.code, m.classroom_id, m.topic_id, m.max_people, m.status, m.created_at, m.ended_at`
 const from = ` FROM meet.meetings m LEFT JOIN auth.users u ON u.id = m.host_id`
 
 func (s *Service) scan(r pgx.Row) (Meeting, error) {
 	var m Meeting
-	err := r.Scan(&m.ID, &m.HostID, &m.HostName, &m.Title, &m.Code, &m.ClassroomID, &m.MaxPeople, &m.Status, &m.CreatedAt, &m.EndedAt)
+	err := r.Scan(&m.ID, &m.HostID, &m.HostName, &m.Title, &m.Code, &m.ClassroomID, &m.TopicID, &m.MaxPeople, &m.Status, &m.CreatedAt, &m.EndedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return m, httpx.ErrNotFound
 	}
@@ -240,6 +243,22 @@ func (s *Service) Create(ctx context.Context, host auth.User, in MeetingInput) (
 	if in.ClassroomID != nil && *in.ClassroomID == "" {
 		in.ClassroomID = nil
 	}
+	if in.TopicID != nil && *in.TopicID == "" {
+		in.TopicID = nil
+	}
+	if in.TopicID != nil {
+		tc, err := s.classrooms.TopicContext(ctx, host.ID, *in.TopicID)
+		switch {
+		case errors.Is(err, httpx.ErrNotFound):
+			f["topic_id"] = "choose a topic in one of your classrooms"
+		case err != nil:
+			return Meeting{}, err
+		case in.ClassroomID != nil && *in.ClassroomID != tc.ClassroomID:
+			f["topic_id"] = "that topic is in another classroom"
+		default:
+			in.ClassroomID = &tc.ClassroomID
+		}
+	}
 	if in.ClassroomID != nil {
 		if _, err := s.classrooms.GetClassroom(ctx, host.ID, *in.ClassroomID); err != nil {
 			f["classroom_id"] = "choose one of your classrooms"
@@ -260,8 +279,8 @@ func (s *Service) Create(ctx context.Context, host auth.User, in MeetingInput) (
 	var id string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		for range 5 {
-			err := tx.QueryRow(ctx, `INSERT INTO meet.meetings(host_id, title, code, classroom_id, max_people) VALUES ($1,$2,$3,$4,$5)
-				ON CONFLICT (code) DO NOTHING RETURNING id`, host.ID, in.Title, newCode(), in.ClassroomID, size).Scan(&id)
+			err := tx.QueryRow(ctx, `INSERT INTO meet.meetings(host_id, title, code, classroom_id, topic_id, max_people) VALUES ($1,$2,$3,$4,$5,$6)
+				ON CONFLICT (code) DO NOTHING RETURNING id`, host.ID, in.Title, newCode(), in.ClassroomID, in.TopicID, size).Scan(&id)
 			if err == nil {
 				return audit.Log(ctx, tx, host.ID, "meeting_created", "meeting", id, nil)
 			}
@@ -280,14 +299,18 @@ func (s *Service) Create(ctx context.Context, host auth.User, in MeetingInput) (
 // Sorts are the orders of a host's meeting list.
 var Sorts = page.Sorts{"created": "m.created_at", "title": "lower(m.title)", "status": "m.status"}
 
+// Filter narrows a host's list of meetings.
+type Filter struct{ ClassroomID, TopicID string }
+
 // List returns one page of a host's meetings.
-func (s *Service) List(ctx context.Context, hostID string, p page.Request) ([]Meeting, int, error) {
-	where := from + ` WHERE m.host_id=$1 AND ($2 = '' OR m.title ILIKE $2 OR m.code ILIKE $2)`
+func (s *Service) List(ctx context.Context, hostID string, f Filter, p page.Request) ([]Meeting, int, error) {
+	where := from + ` WHERE m.host_id=$1 AND ($2 = '' OR m.title ILIKE $2 OR m.code ILIKE $2)
+		AND ($3 = '' OR m.classroom_id::text = $3) AND ($4 = '' OR m.topic_id::text = $4)`
 	var total int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, hostID, p.Like()).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, hostID, p.Like(), f.ClassroomID, f.TopicID).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT `+cols+where+p.OrderBy(Sorts, "m.id")+p.Limit(), hostID, p.Like())
+	rows, err := s.pool.Query(ctx, `SELECT `+cols+where+p.OrderBy(Sorts, "m.id")+p.Limit(), hostID, p.Like(), f.ClassroomID, f.TopicID)
 	if err != nil {
 		return nil, 0, err
 	}

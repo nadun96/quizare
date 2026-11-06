@@ -1386,6 +1386,8 @@ paths:
       tags: [meetings]
       summary: Your meetings, newest first, with how many people are in each now (D-69)
       parameters:
+        - { name: classroom_id, in: query, schema: { type: string, format: uuid } }
+        - { name: topic_id, in: query, schema: { type: string, format: uuid } }
         - { $ref: '#/components/parameters/page' }
         - { $ref: '#/components/parameters/size' }
         - { $ref: '#/components/parameters/q' }
@@ -1396,7 +1398,7 @@ paths:
       operationId: postTeacherMeetings
       tags: [meetings]
       summary: Open a meeting (D-69)
-      description: With a classroom, only you and its enrolled students may join; without one, anyone signed in who has the code.
+      description: With a classroom, only you and its enrolled students may join; without one, anyone signed in who has the code. A topic_id puts it under that topic and brings its classroom (D-147).
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [title], properties: { title: { type: string, maxLength: 120 }, classroom_id: { type: string, format: uuid, nullable: true }, max_people: { type: integer, minimum: 0, default: 6, description: 'Within the admin''s limit (GET /api/teacher/meeting-limits); 0 is no limit, where the admin allows it. Everyone sends to everyone, so meetings stay small' } } } } } }
       responses: { '201': { description: 'Opened', content: { application/json: { schema: { $ref: '#/components/schemas/Meeting' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/meetings/{id}/end:
@@ -1454,6 +1456,15 @@ paths:
       security: []
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [classroom_id, teacher_id], properties: { classroom_id: { type: string, format: uuid }, teacher_id: { type: string, format: uuid } } } } } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { categories: { type: array, items: { type: object, properties: { name: { type: string }, color: { type: integer }, user_ids: { type: array, items: { type: string, format: uuid } } } } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /internal/tutoring/topic:
+    post:
+      operationId: postInternalTutoringTopic
+      tags: [tutoring]
+      summary: Which classroom a topic is in, for a session under a topic (D-147)
+      description: Same protection as /internal/tutoring/access.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [topic_id], properties: { topic_id: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { classroom_id: { type: string, format: uuid } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /internal/tutoring/classrooms:
     post:
       operationId: postInternalTutoringClassrooms
@@ -2739,7 +2750,7 @@ paths:
       operationId: getTeacherPolls
       tags: [polls]
       summary: The teacher's polls, newest first
-      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, title, status] } }, { name: status, in: query, schema: { type: string, enum: [draft, open, closed] } }]
+      parameters: [{ name: classroom_id, in: query, schema: { type: string, format: uuid } }, { name: topic_id, in: query, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [created, title, status] } }, { name: status, in: query, schema: { type: string, enum: [draft, open, closed] } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, polls: { type: array, items: { $ref: '#/components/schemas/Poll' } } } } } } } }
     post:
       operationId: postTeacherPolls
@@ -3542,8 +3553,14 @@ components:
         logo: { type: string, description: 'a data URL, PNG or JPEG, at most 300 KB; empty: none (D-143)' }
         accent: { type: string, description: "the reports' colour, #rrggbb" }
         color_marks: { type: boolean, description: 'tint marks by how high they are' }
-        band_high: { type: integer, description: 'this percent and above is green (D-144)' }
-        band_middle: { type: integer, description: 'this percent and above is amber, below it red (D-144)' }
+        color_ranges:
+          type: array
+          description: 'the mark colours, at most 6, highest first, the last from 0 (D-146)'
+          items:
+            type: object
+            properties:
+              from: { type: integer, description: 'this percent and above, up to the next range' }
+              color: { type: string, description: '#rrggbb' }
     GroupRow:
       type: object
       properties:
@@ -3855,6 +3872,7 @@ components:
         title: { type: string }
         code: { type: string, example: K7Q2XM3P }
         classroom_id: { type: string, format: uuid, nullable: true }
+        topic_id: { type: string, format: uuid, nullable: true }
         max_people: { type: integer }
         status: { type: string, enum: [open, ended] }
         created_at: { type: string, format: date-time }
@@ -4748,6 +4766,7 @@ components:
       properties:
         title: { type: string }
         classroom_id: { type: [string, 'null'], format: uuid }
+        topic_id: { type: [string, 'null'], description: "a topic, which brings its classroom; empty takes the poll out of its topic (D-147)" }
         settings: { $ref: '#/components/schemas/PollSettings' }
     Poll:
       allOf:
@@ -4757,6 +4776,7 @@ components:
             id: { type: string, format: uuid }
             title: { type: string }
             classroom_id: { type: [string, 'null'], format: uuid }
+            topic_id: { type: [string, 'null'], format: uuid }
             join_code: { type: string, example: PK7Q2X }
             join_url: { type: string }
             status: { type: string, enum: [draft, open, closed] }

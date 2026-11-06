@@ -144,7 +144,7 @@ func (s *Service) hCreate(w http.ResponseWriter, r *http.Request) error {
 func (s *Service) hList(w http.ResponseWriter, r *http.Request) error {
 	pg := ParsePage(r, sessionSorts, "created", true)
 	q := r.URL.Query()
-	list, total, err := s.List(r.Context(), me(r), q.Get("classroom_id"), q.Get("status"), pg)
+	list, total, err := s.List(r.Context(), me(r), q.Get("classroom_id"), q.Get("topic_id"), q.Get("status"), pg)
 	if err != nil {
 		return err
 	}

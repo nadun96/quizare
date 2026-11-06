@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { A4, ACCENTS, contrastText, headerLines, layout, pageLabel, pdfName, legend, printReportHTML, tint, toneFor, wrap, type ReportHeader, type Sheet } from './reportPdf';
+import { A4, ACCENTS, addRange, contrastText, DEFAULT_BANDS, MAX_RANGES, rangesProblem, toned, headerLines, layout, pageLabel, pdfName, legend, printReportHTML, tint, toneFor, wrap, type ReportHeader, type Sheet } from './reportPdf';
 
 // Each character is 5 points wide.
 const measure = (t: string) => t.length * 5;
 const g = { ...A4, headerHeight: 60 };
-const header: ReportHeader = { classroom: 'Science', teacher: 'Ms P', title: '', subtitle: 'Term 1', institution: 'RUSL', date_mode: 'custom', date_value: '2026-11-06', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true, band_high: 75, band_middle: 50 };
+const header: ReportHeader = { classroom: 'Science', teacher: 'Ms P', title: '', subtitle: 'Term 1', institution: 'RUSL', date_mode: 'custom', date_value: '2026-11-06', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true, color_ranges: DEFAULT_BANDS };
 
 describe('locked report PDFs (D-141)', () => {
 	it('wraps words, and breaks one too long to fit', () => {
@@ -64,10 +64,10 @@ describe('locked report PDFs (D-141)', () => {
 });
 
 describe('logo and colour on reports (D-143)', () => {
-	const sheet: Sheet = { heading: 'Marks', head: ['Student', 'Quiz'], rows: [['Amaya', '8 / 10 (80%)'], ['<b>Ben</b>', '—']], tones: [[null, 'high'], [null, 'missing']] };
+	const sheet: Sheet = { heading: 'Marks', head: ['Student', 'Quiz'], rows: [['Amaya', '8 / 10 (80%)'], ['<b>Ben</b>', '—']], tones: [[null, '#dcfce7'], [null, 'missing']] };
 
 	it('bands marks', () => {
-		expect([toneFor(100), toneFor(75), toneFor(74.9), toneFor(50), toneFor(49.9), toneFor(0), toneFor(null)]).toEqual(['high', 'high', 'middle', 'middle', 'low', 'low', null]);
+		expect([toneFor(100), toneFor(75), toneFor(74.9), toneFor(50), toneFor(49.9), toneFor(0), toneFor(null)]).toEqual(['#dcfce7', '#dcfce7', '#fef3c7', '#fef3c7', '#fee2e2', '#fee2e2', null]);
 	});
 
 	it('picks text that reads on the colour', () => {
@@ -85,7 +85,7 @@ describe('logo and colour on reports (D-143)', () => {
 
 	it('keeps each row’s colours through the page layout', () => {
 		const pages = layout([sheet], measure, g);
-		expect(pages[0].tones).toEqual([[null, 'high'], [null, 'missing']]);
+		expect(pages[0].tones).toEqual([[null, '#dcfce7'], [null, 'missing']]);
 		const many: Sheet = { head: ['S', 'M'], rows: Array.from({ length: 80 }, (_, i) => [`S${i}`, i]), tones: Array.from({ length: 80 }, (_, i) => [null, i === 79 ? 'low' : 'high']) };
 		const split = layout([many], measure, g);
 		expect(split.length).toBeGreaterThan(1);
@@ -111,16 +111,52 @@ describe('logo and colour on reports (D-143)', () => {
 	});
 });
 
-describe('a classroom’s own colour bands (D-144)', () => {
-	const bands = { high: 80, middle: 40 };
-	it('puts marks in the bands the teacher chose', () => {
-		expect([toneFor(80, bands), toneFor(79.9, bands), toneFor(40, bands), toneFor(39.9, bands)]).toEqual(['high', 'middle', 'middle', 'low']);
+describe('a classroom’s own ranges and colours (D-146)', () => {
+	const bands = [{ from: 90, color: '#0f766e' }, { from: 70, color: '#dbeafe' }, { from: 40, color: '#ffedd5' }, { from: 0, color: '#7f1d1d' }];
+	it('gives a mark its range’s colour', () => {
+		expect([100, 90, 89.9, 70, 69.9, 40, 39.9, 0].map((p) => toneFor(p, bands))).toEqual(['#0f766e', '#0f766e', '#dbeafe', '#dbeafe', '#ffedd5', '#ffedd5', '#7f1d1d', '#7f1d1d']);
+		expect(toneFor(null, bands)).toBeNull();
 	});
-	it('says so in the key', () => {
-		expect(legend(bands).map((x) => x.label)).toEqual(['80% and above', '40% to under 80%', 'Below 40%']);
-		const html = printReportHTML([{ head: ['A'], rows: [['x']], tones: [['high']] }], { ...header, band_high: 80, band_middle: 40 }, 'Report');
-		expect(html).toContain('80% and above');
+	it('says the ranges in the key, with one colour for all if there’s one', () => {
+		expect(legend(bands).map((x) => x.label)).toEqual(['90% and above', '70% to under 90%', '40% to under 70%', 'Below 40%']);
+		expect(legend([{ from: 0, color: '#dbeafe' }])[0].label).toBe('All marks');
+	});
+	it('prints the colours, with text that reads on each', () => {
+		const html = printReportHTML([{ head: ['A', 'B'], rows: [['x', 'y']], tones: [['#7f1d1d', '#dbeafe']] }], { ...header, color_ranges: bands }, 'Report');
+		expect(html).toContain('style="background:#7f1d1d;color:#ffffff"');
+		expect(html).toContain('style="background:#dbeafe;color:#111111"');
+		expect(html).toContain('<i style="background:#0f766e"></i>90% and above');
 		expect(html).not.toContain('75% and above');
 	});
+	it('catches ranges the server would refuse', () => {
+		expect(rangesProblem(bands)).toBe('');
+		expect(rangesProblem([])).toMatch(/from 1 to/);
+		expect(rangesProblem([{ from: 50, color: '#fff000' }])).toMatch(/from 0%/);
+		expect(rangesProblem([{ from: 40, color: '#fff000' }, { from: 60, color: '#fff000' }, { from: 0, color: '#fff000' }])).toMatch(/below the one above/);
+		expect(rangesProblem([{ from: 101, color: '#fff000' }, { from: 0, color: '#fff000' }])).toMatch(/below the one above/);
+		expect(rangesProblem([{ from: 50.5, color: '#fff000' }, { from: 0, color: '#fff000' }])).toMatch(/whole percents/);
+	});
+	it('adds a range in the widest gap, in a colour not in use, up to the limit', () => {
+		const more = addRange(DEFAULT_BANDS);
+		expect(more.map((r) => r.from)).toEqual([75, 50, 25, 0]);
+		expect(new Set(more.map((r) => r.color)).size).toBe(4);
+		expect(rangesProblem(more)).toBe('');
+		let b = DEFAULT_BANDS;
+		for (let i = 0; i < 10; i++) b = addRange(b);
+		expect(b.length).toBe(MAX_RANGES);
+		expect(rangesProblem(b)).toBe('');
+		const full = [{ from: 1, color: '#fff000' }, { from: 0, color: '#fff000' }];
+		expect(addRange([{ from: 100, color: '#fff000' }, ...full]).length).toBe(4); // room between 100 and 1
+		expect(addRange([{ from: 0, color: '#fff000' }]).map((r) => r.from)).toEqual([50, 0]);
+	});
+	it('colours a cell on screen, its small text too, and clears it', () => {
+		const props = new Map<string, string>();
+		const node = { style: { background: '', color: '', setProperty: (k: string, v: string) => props.set(k, v), removeProperty: (k: string) => props.delete(k) } } as unknown as HTMLElement;
+		const a = toned(node, '#7f1d1d');
+		expect([node.style.background, node.style.color, props.get('--color-muted')]).toEqual(['#7f1d1d', '#ffffff', '#ffffff']);
+		a.update('missing');
+		expect([node.style.background, node.style.color, props.size]).toEqual(['var(--color-base-200)', '', 0]);
+		a.update(null);
+		expect(node.style.background).toBe('');
+	});
 });
-

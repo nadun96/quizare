@@ -5,7 +5,7 @@
 	import { api, ApiError } from '../api';
 	import Icon from '../ui/Icon.svelte';
 	import { toast } from '../ui/toast.svelte';
-	import { ACCENTS, bandsOf, exportPdf, logoDataUrl, printReportHTML, type Bands, type ReportHeader, type Sheet } from './reportPdf';
+	import { ACCENTS, addRange, bandsOf, exportPdf, logoDataUrl, MAX_RANGES, printReportHTML, rangeLabel, rangesProblem, type Bands, type ReportHeader, type Sheet } from './reportPdf';
 
 	let { classroomId, title, fileName, sheets, disabled = false, onbands }: { classroomId: string; title: string; fileName: string; sheets: () => Sheet[]; disabled?: boolean; onbands?: (b: Bands) => void } = $props();
 	let dialog = $state<HTMLDialogElement>();
@@ -13,7 +13,8 @@
 	let busy = $state(false);
 	let error = $state('');
 	const url = $derived(`/api/teacher/classrooms/${classroomId}/report-header`);
-	const bandsProblem = $derived(h && !(h.band_middle >= 1 && h.band_high <= 100 && h.band_middle < h.band_high) ? 'Green must start above amber, between 1% and 100%.' : '');
+	const bandsProblem = $derived(h ? rangesProblem(h.color_ranges) : '');
+	const canAdd = $derived(!!h && addRange(h.color_ranges) !== h.color_ranges);
 
 	// The saved header, and tells the page where its colours change: the sheets depend on it.
 	async function saved() {
@@ -125,11 +126,19 @@
 				</div>
 			</fieldset>
 			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.color_marks} />Colour marks by how high they are in printed and downloaded reports</label>
-			<div class="flex flex-wrap items-end gap-3">
-				<label class="vstack gap-1 small">Green from (%)<input class="input w-24 tabular" type="number" min="2" max="100" step="1" bind:value={h.band_high} required /></label>
-				<label class="vstack gap-1 small">Amber from (%)<input class="input w-24 tabular" type="number" min="1" max="99" step="1" bind:value={h.band_middle} required /></label>
-				<span class="small muted pb-2">Below that is red.</span>
-			</div>
+			<fieldset class="vstack gap-2 small">
+				<legend class="mb-1">Mark colours</legend>
+				{#each h.color_ranges as r, i (i)}
+					{@const last = i === h.color_ranges.length - 1}
+					<div class="flex flex-wrap items-center gap-2">
+						<input class="picker" type="color" bind:value={r.color} aria-label={`Colour of range ${i + 1}`} />
+						<label class="flex items-center gap-1">From <input class="input input-sm w-20 tabular" type="number" min="0" max="100" step="1" bind:value={r.from} readonly={last} required aria-label={`Where range ${i + 1} starts, in percent`} />%</label>
+						<span class="muted grow">{bandsProblem ? '' : rangeLabel(h.color_ranges, i)}</span>
+						{#if !last}<button type="button" class="btn btn-ghost btn-xs" aria-label={`Remove range ${i + 1}`} onclick={() => h && h.color_ranges.splice(i, 1)}><Icon name="x" size={14} /></button>{/if}
+					</div>
+				{/each}
+				<div><button type="button" class="btn btn-xs" disabled={!canAdd} title={canAdd ? '' : `At most ${MAX_RANGES} ranges`} onclick={() => h && (h.color_ranges = addRange(h.color_ranges))}>Add a range</button></div>
+			</fieldset>
 			{#if bandsProblem}<p class="m-0 small text-error" role="alert">{bandsProblem}</p>{/if}
 			<div class="flex flex-wrap gap-2 items-end">
 				<label class="vstack gap-1 small">Date

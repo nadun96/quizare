@@ -6,7 +6,7 @@ import { exportPdf } from './reportPdf';
 
 vi.mock('./reportPdf', async (real) => ({ ...(await real<typeof import('./reportPdf')>()), exportPdf: vi.fn(async () => {}) }));
 
-const saved = { classroom: 'Science', teacher: 'Ms P', title: 'Term report', subtitle: '', institution: '', date_mode: 'today', date_value: '', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true, band_high: 80, band_middle: 40 };
+const saved = { classroom: 'Science', teacher: 'Ms P', title: 'Term report', subtitle: '', institution: '', date_mode: 'today', date_value: '', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true, color_ranges: [{ from: 80, color: '#dbeafe' }, { from: 0, color: '#fee2e2' }] };
 const calls: { method: string; body?: unknown }[] = [];
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -58,7 +58,7 @@ describe('downloading a report (D-141)', () => {
 		const c = mount(ReportPdfButton, { target, props: { classroomId: 'c1', title: 'T', fileName: 'F', sheets: () => [], onbands: (b: unknown) => seen.push(b) } });
 		flushSync();
 		await settle();
-		expect(seen[0]).toEqual({ high: 80, middle: 40 });
+		expect(seen[0]).toEqual(saved.color_ranges);
 		unmount(c);
 		target.remove();
 	});
@@ -75,6 +75,25 @@ describe('downloading a report (D-141)', () => {
 		expect(doc.write.mock.calls[0][0]).toContain('© RUSL');
 		expect(doc.write.mock.calls[0][0]).toContain('Amaya');
 		expect(printed).toHaveBeenCalledOnce();
+		done();
+	});
+
+	test('the form adds a range and saves it with its colour (D-146)', async () => {
+		HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true; };
+		HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.open = false; };
+		const { target, done } = render();
+		await settle();
+		button(target, 'Header and footer').click();
+		await settle();
+		button(target, 'Add a range').click();
+		flushSync();
+		expect(target.querySelectorAll('input[aria-label^="Where range"]').length).toBe(3);
+		const form = target.querySelector('form')!;
+		form.requestSubmit(target.querySelector('button[value="save"]') as HTMLButtonElement);
+		await settle();
+		const put = calls.find((c) => c.method === 'PUT')!.body as { color_ranges: { from: number; color: string }[] };
+		expect(put.color_ranges.map((r) => r.from)).toEqual([80, 40, 0]);
+		expect(new Set(put.color_ranges.map((r) => r.color)).size).toBe(3);
 		done();
 	});
 

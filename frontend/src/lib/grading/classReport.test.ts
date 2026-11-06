@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classReportCSV, markTone, draftFrom, draftProblem, draftWeightTotal, finalRange, groupSheets, groupsCSV, groupsProblem, individualSheet, reviewParts, setAllPicks, setupPayload, splitIntoGroups, toMinutes, ungrouped, type ClassReport, type ReportItem } from './classReport';
+import { classReportCSV, markTone, draftFrom, draftProblem, draftWeightTotal, finalRange, groupSheets, groupsCSV, groupsProblem, individualSheet, reviewParts, setAllPicks, setupPayload, splitIntoGroups, toMinutes, ungrouped, weightText, type ClassReport, type ReportItem } from './classReport';
 
 const item = (more: Partial<ReportItem>): ReportItem => ({ group_rule: 'average', kind: 'quiz', id: 'q1', title: 'Cells', topic: 'T', module: 'M', included: true, weight: 0.2, pick: 'high', detail: '', review_minutes: 0, taken: 1, avg: 80, high: 80, low: 80, max_marks: 10, ...more });
 const report = (): ClassReport => ({
@@ -68,7 +68,27 @@ describe('the class report (D-140)', () => {
 		expect(csv).not.toContain('Left out');
 		const t = individualSheet(report());
 		expect(t.head).toContain('Atoms (Not in the total)');
-		expect(t.rows[0]).toEqual(['Amaya', 'S1', '8 / 10 (80%)', '1 / 2 (50%)', '16 / 20', '80%']);
+		expect(t.rows[0]).toEqual(['Amaya', 'S1', '8 / 10 (80%), final mark 16', '1 / 2 (50%)', '16 / 20', '80%']);
+	});
+
+	it('follows the product owner’s example on paper (D-145)', () => {
+		const a = (id: string, weight: number) => item({ id, title: id, weight });
+		const r: ClassReport = {
+			...report(),
+			weight_total: 0.4,
+			out_of: 40,
+			items: [a('A1', 0.1), a('A2', 0.2), a('A3', 0.1)],
+			students: [{ user_id: 'u1', name: 'Student 1', marks: { 'quiz:A1': { score: 30, max: 40, pct: 75, points: 7.5, submissions: 1 }, 'quiz:A2': { score: 20, max: 20, pct: 100, points: 20, submissions: 1 }, 'quiz:A3': { score: 75, max: 100, pct: 75, points: 7.5, submissions: 1 } }, total: 35, missing: 0, final: 87.5 }]
+		};
+		const t = individualSheet(r);
+		expect(t.head).toEqual(['Student', 'ID', 'A1 (Weight 0.1, 10%)', 'A2 (Weight 0.2, 20%)', 'A3 (Weight 0.1, 10%)', 'Total', 'Final']);
+		expect(t.rows[0]).toEqual(['Student 1', '', '30 / 40 (75%), final mark 7.5', '20 / 20 (100%), final mark 20', '75 / 100 (75%), final mark 7.5', '35 / 40', '87.5%']);
+	});
+
+	it('says a weight as a percent without floating point noise', () => {
+		expect(weightText({ weight: 0.07 })).toBe('Weight 0.07, 7%');
+		expect(weightText({ weight: 0.125 })).toBe('Weight 0.125, 12.5%');
+		expect(weightText({ weight: 0 })).toBe('Not in the total');
 	});
 
 	it('gives the class’s range of final results', () => {
@@ -99,7 +119,7 @@ describe('groups on mark sheets (D-141)', () => {
 	it('builds a sheet for the class and one for an item’s own groups', () => {
 		const sheets = groupSheets(withGroups());
 		expect(sheets.map((s) => s.heading)).toEqual(['Marks by class group', 'Marks by Atoms’s own groups']);
-		expect(sheets[0].rows[0]).toEqual(['Group 1', 'Amaya', '8 / 10 (80%)', '—', '16 / 20', '80%']);
+		expect(sheets[0].rows[0]).toEqual(['Group 1', 'Amaya', '8 / 10 (80%), final mark 16', '—', '16 / 20', '80%']);
 		expect(sheets[1].rows[0]).toEqual(['Red', 'Amaya, Ben', '0.5 / 2 (25%)']);
 		expect(groupsCSV(withGroups())).toContain('Marks by class group');
 	});
@@ -120,19 +140,19 @@ describe('groups on mark sheets (D-141)', () => {
 
 describe('colours on mark sheets (D-143)', () => {
 	it('colours a mark by its height, and a missing one only if it counts', () => {
-		expect(markTone({ pct: 80 }, 0.2)).toBe('high');
+		expect(markTone({ pct: 80 }, 0.2)).toBe('#dcfce7');
 		expect(markTone(undefined, 0.2)).toBe('missing');
 		expect(markTone(undefined, 0)).toBeNull();
 	});
 
 	it('uses the classroom’s own bands', () => {
-		const t = individualSheet(report(), { high: 90, middle: 60 });
-		expect(t.tones?.[0]).toEqual([null, null, 'middle', 'low', null, 'middle']);
+		const t = individualSheet(report(), [{ from: 90, color: '#111111' }, { from: 60, color: '#222222' }, { from: 0, color: '#333333' }]);
+		expect(t.tones?.[0]).toEqual([null, null, '#222222', '#333333', null, '#222222']);
 	});
 
 	it('gives the individual sheet a colour for each cell', () => {
 		const t = individualSheet(report());
-		expect(t.tones?.[0]).toEqual([null, null, 'high', 'middle', null, 'high']);
+		expect(t.tones?.[0]).toEqual([null, null, '#dcfce7', '#fef3c7', null, '#dcfce7']);
 		expect(t.tones?.[0].length).toBe(t.head.length);
 	});
 });

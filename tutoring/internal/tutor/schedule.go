@@ -51,6 +51,7 @@ type Repeat struct {
 // ScheduleInput is a new scheduled session or series.
 type ScheduleInput struct {
 	ClassroomID  string `json:"classroom_id"`
+	TopicID      string `json:"topic_id"` // one of the classroom's topics; optional
 	Title        string `json:"title"`
 	AdmitMode    string `json:"admit_mode"`
 	Plan         *Plan  `json:"plan,omitempty"`
@@ -250,6 +251,9 @@ func (s *Service) Schedule(ctx context.Context, p authn.Person, in ScheduleInput
 	if a.Role != "teacher" {
 		return Scheduled{}, web.NewError(http.StatusForbidden, "forbidden", "only the classroom's teacher can schedule its sessions")
 	}
+	if _, err := s.topicIn(ctx, a.ClassroomID, in.TopicID); err != nil {
+		return Scheduled{}, err
+	}
 	if a.Archived {
 		return Scheduled{}, web.Conflict("this classroom is archived")
 	}
@@ -280,9 +284,9 @@ func (s *Service) insertScheduled(ctx context.Context, tx pgx.Tx, p authn.Person
 	seriesID *string, at time.Time, loc *time.Location, openEarly int, reminders []int) (Session, error) {
 	for range 5 {
 		sess, err := scanSession(tx.QueryRow(ctx, `INSERT INTO tutoring.sessions (teacher_id, teacher_name, classroom_id, classroom_name, title, join_code, admit_mode,
-				scheduled_at, plan, series_id, duration_min, time_zone, open_early_min, reminders)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (join_code) DO NOTHING RETURNING `+sessionCols,
-			p.ID, p.Name, a.ClassroomID, a.ClassroomName, in.Title, newCode(), in.AdmitMode, at.UTC(), planRaw, seriesID, in.DurationMin, loc.String(), openEarly, reminders))
+				scheduled_at, plan, series_id, duration_min, time_zone, open_early_min, reminders, topic_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,nullif($15, '')::uuid) ON CONFLICT (join_code) DO NOTHING RETURNING `+sessionCols,
+			p.ID, p.Name, a.ClassroomID, a.ClassroomName, in.Title, newCode(), in.AdmitMode, at.UTC(), planRaw, seriesID, in.DurationMin, loc.String(), openEarly, reminders, in.TopicID))
 		if errors.Is(err, web.ErrNotFound) {
 			continue // the join code was taken
 		}

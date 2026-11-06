@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -38,6 +39,7 @@ type GroupMark struct {
 	Pct    float64  `json:"pct"`
 	Points *float64 `json:"points,omitempty"`
 	Marked int      `json:"marked"` // members with a mark
+	exact  float64  // the percentage before rounding for showing: final marks use this
 }
 
 // GroupRow is a group with its marks.
@@ -76,21 +78,23 @@ func groupMark(rule string, marks []ReportMark, members int, itemMax float64) Gr
 				best = m
 			}
 		}
-		out.Score, out.Max, out.Pct = best.Score, best.Max, best.Pct
+		out.Score, out.Max, out.Pct, out.exact = best.Score, best.Max, best.Pct, best.exact
 	default:
 		var pct float64
 		for _, m := range list {
 			out.Score += m.Score
 			out.Max += m.Max
-			pct += m.Pct
+			pct += m.exact
 		}
 		if rule == RuleTotal {
 			if out.Max > 0 {
-				out.Pct = round(out.Score/out.Max*100, 1)
+				out.exact = out.Score / out.Max * 100
+				out.Pct = round(out.exact, 1)
 			}
 		} else {
 			n := float64(len(list))
-			out.Score, out.Max, out.Pct = out.Score/n, out.Max/n, round(pct/n, 1)
+			out.exact = pct / n
+			out.Score, out.Max, out.Pct = out.Score/n, out.Max/n, round(out.exact, 1)
 		}
 		out.Score, out.Max = round(out.Score, 2), round(out.Max, 2)
 	}
@@ -138,7 +142,7 @@ func (s *Service) loadGroups(ctx context.Context, classroomID string, rep *Class
 		}
 		m := groupMark(it.GroupRule, marks, len(row.Members), it.MaxMarks)
 		if it.Weight > 0 {
-			p := round(m.Pct*it.Weight, 2)
+			p := round(m.exact*it.Weight, 2)
 			m.Points = &p
 			row.Total += p
 		}
@@ -288,10 +292,41 @@ type ReportHeader struct {
 	Logo        string `json:"logo"`        // a data: URL, PNG or JPEG; empty: none (D-143)
 	Accent      string `json:"accent"`      // the reports' colour, #rrggbb
 	ColorMarks  bool   `json:"color_marks"` // tint marks by how high they are
-	// Where the colours change, in percent: this and above is green, down to
-	// BandMiddle amber, below that red (D-144).
-	BandHigh   int `json:"band_high"`
-	BandMiddle int `json:"band_middle"`
+	// The mark colours: highest range first, the last from 0 (D-146).
+	ColorRanges []ColorRange `json:"color_ranges"`
+}
+
+// ColorRange colours marks from this percent up to the next range's start.
+type ColorRange struct {
+	From  int    `json:"from"`
+	Color string `json:"color"`
+}
+
+const maxColorRanges = 6
+
+func defaultColorRanges() []ColorRange {
+	return []ColorRange{{75, "#dcfce7"}, {50, "#fef3c7"}, {0, "#fee2e2"}}
+}
+
+// colorRangesProblem says what's wrong with the ranges, or nothing. It lowers
+// the colours' case in place, as the accent's is.
+func colorRangesProblem(ranges []ColorRange) string {
+	if len(ranges) == 0 || len(ranges) > maxColorRanges {
+		return fmt.Sprintf("use from 1 to %d ranges", maxColorRanges)
+	}
+	for i := range ranges {
+		ranges[i].Color = strings.ToLower(strings.TrimSpace(ranges[i].Color))
+		if !accentPattern.MatchString(ranges[i].Color) {
+			return "choose a colour for each range"
+		}
+		if (i == 0 && ranges[i].From > 100) || (i > 0 && ranges[i].From >= ranges[i-1].From) {
+			return "each range must start below the one above it, within 100%"
+		}
+	}
+	if ranges[len(ranges)-1].From != 0 {
+		return "the lowest range must start from 0%"
+	}
+	return ""
 }
 
 const (
@@ -326,7 +361,7 @@ func decodeLogo(s string) (data []byte, contentType string, problem string) {
 
 // GetReportHeader is the saved header, or the defaults.
 func (s *Service) GetReportHeader(ctx context.Context, teacherID, classroomID string) (ReportHeader, error) {
-	h := ReportHeader{DateMode: "today", ShowTeacher: true, PageNumbers: true, Accent: defaultAccent, ColorMarks: true, BandHigh: 75, BandMiddle: 50}
+	h := ReportHeader{DateMode: "today", ShowTeacher: true, PageNumbers: true, Accent: defaultAccent, ColorMarks: true, ColorRanges: defaultColorRanges()}
 	var err error
 	if h.Classroom, err = s.teaches(ctx, teacherID, classroomID); err != nil {
 		return h, err
@@ -337,9 +372,9 @@ func (s *Service) GetReportHeader(ctx context.Context, teacherID, classroomID st
 	var logo []byte
 	var logoType string
 	err = s.pool.QueryRow(ctx, `SELECT title, subtitle, institution, date_mode, coalesce(to_char(date_value, 'YYYY-MM-DD'), ''), show_teacher, footer, page_numbers,
-			logo, coalesce(logo_type, ''), accent, color_marks, band_high, band_middle
+			logo, coalesce(logo_type, ''), accent, color_marks, color_ranges
 		FROM grading.report_headers WHERE classroom_id = $1`, classroomID).
-		Scan(&h.Title, &h.Subtitle, &h.Institution, &h.DateMode, &h.DateValue, &h.ShowTeacher, &h.Footer, &h.PageNumbers, &logo, &logoType, &h.Accent, &h.ColorMarks, &h.BandHigh, &h.BandMiddle)
+		Scan(&h.Title, &h.Subtitle, &h.Institution, &h.DateMode, &h.DateValue, &h.ShowTeacher, &h.Footer, &h.PageNumbers, &logo, &logoType, &h.Accent, &h.ColorMarks, &h.ColorRanges)
 	if err == pgx.ErrNoRows {
 		return h, nil
 	}
@@ -376,8 +411,8 @@ func (s *Service) SetReportHeader(ctx context.Context, teacherID, classroomID st
 	if !accentPattern.MatchString(in.Accent) {
 		bad["accent"] = "choose a colour"
 	}
-	if in.BandMiddle < 1 || in.BandHigh > 100 || in.BandMiddle >= in.BandHigh {
-		bad["band_high"] = "green must start above amber, between 1% and 100%"
+	if problem := colorRangesProblem(in.ColorRanges); problem != "" {
+		bad["color_ranges"] = problem
 	}
 	var logo []byte
 	var logoType *string
@@ -392,11 +427,11 @@ func (s *Service) SetReportHeader(ctx context.Context, teacherID, classroomID st
 		return in, httpx.Invalid(bad)
 	}
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO grading.report_headers (classroom_id, title, subtitle, institution, date_mode, date_value, show_teacher, footer, page_numbers, updated_by, logo, logo_type, accent, color_marks, band_high, band_middle)
-			VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		if _, err := tx.Exec(ctx, `INSERT INTO grading.report_headers (classroom_id, title, subtitle, institution, date_mode, date_value, show_teacher, footer, page_numbers, updated_by, logo, logo_type, accent, color_marks, color_ranges)
+			VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			ON CONFLICT (classroom_id) DO UPDATE SET title = $2, subtitle = $3, institution = $4, date_mode = $5, date_value = $6::date,
-				show_teacher = $7, footer = $8, page_numbers = $9, updated_by = $10, logo = $11, logo_type = $12, accent = $13, color_marks = $14, band_high = $15, band_middle = $16, updated_at = now()`,
-			classroomID, in.Title, in.Subtitle, in.Institution, in.DateMode, date, in.ShowTeacher, in.Footer, in.PageNumbers, teacherID, logo, logoType, in.Accent, in.ColorMarks, in.BandHigh, in.BandMiddle); err != nil {
+				show_teacher = $7, footer = $8, page_numbers = $9, updated_by = $10, logo = $11, logo_type = $12, accent = $13, color_marks = $14, color_ranges = $15, updated_at = now()`,
+			classroomID, in.Title, in.Subtitle, in.Institution, in.DateMode, date, in.ShowTeacher, in.Footer, in.PageNumbers, teacherID, logo, logoType, in.Accent, in.ColorMarks, in.ColorRanges); err != nil {
 			return err
 		}
 		return audit.Log(ctx, tx, teacherID, "report_header_set", "classroom", classroomID, nil)

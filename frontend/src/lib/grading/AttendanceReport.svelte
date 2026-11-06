@@ -11,7 +11,7 @@
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
 	import { attendanceDetailCSV, attendanceScopes, attendanceSummaryCSV, mergeTutoring, scopedAttendance, scopeFrom, scopeValue, summarise, type Attendance } from './grading';
 	import ReportPdfButton from './ReportPdfButton.svelte';
-	import { DEFAULT_BANDS, toneClass, toneFor, type Bands } from './reportPdf';
+	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
 	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
@@ -112,7 +112,7 @@
 								<td>{r.name}{#if r.number}<br /><span class="small muted">{r.number}</span>{/if}</td>
 								{#each kinds as k (k)}<td class="num tabular">{r.byKind[k].came} / {r.byKind[k].of}</td>{/each}
 								<td class="num tabular">{r.came} / {r.of}</td>
-								<td class="num tabular {toneClass(toneFor(r.rate, bands))}">{r.rate == null ? '–' : r.rate + '%'}</td>
+								<td class="num tabular" use:toned={toneFor(r.rate, bands)}>{r.rate == null ? '–' : r.rate + '%'}</td>
 								<td class="num tabular">{r.minutes}</td>
 							</tr>
 						{:else}

@@ -8,6 +8,7 @@ export type Meeting = {
 	title: string;
 	code: string;
 	classroom_id: string | null;
+	topic_id?: string | null;
 	max_people: number;
 	status: 'open' | 'ended';
 	created_at: string;
