@@ -6,7 +6,7 @@ import { exportPdf } from './reportPdf';
 
 vi.mock('./reportPdf', async (real) => ({ ...(await real<typeof import('./reportPdf')>()), exportPdf: vi.fn(async () => {}) }));
 
-const saved = { classroom: 'Science', teacher: 'Ms P', title: 'Term report', subtitle: '', institution: '', date_mode: 'today', date_value: '', show_teacher: true, footer: '© RUSL', page_numbers: true };
+const saved = { classroom: 'Science', teacher: 'Ms P', title: 'Term report', subtitle: '', institution: '', date_mode: 'today', date_value: '', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true };
 const calls: { method: string; body?: unknown }[] = [];
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -50,9 +50,25 @@ describe('downloading a report (D-141)', () => {
 		done();
 	});
 
+	test('Print opens at once, and writes the report with the saved header', async () => {
+		const doc = { write: vi.fn(), close: vi.fn() };
+		const printed = vi.fn();
+		const open = vi.fn(() => ({ document: { ...doc, querySelector: () => null }, close: vi.fn(), focus: vi.fn(), print: printed }));
+		vi.stubGlobal('open', open);
+		const { target, done } = render();
+		button(target, 'Print').click();
+		expect(open).toHaveBeenCalledOnce(); // in the click, or the browser blocks it
+		await settle();
+		expect(doc.write.mock.calls[0][0]).toContain('© RUSL');
+		expect(doc.write.mock.calls[0][0]).toContain('Amaya');
+		expect(printed).toHaveBeenCalledOnce();
+		done();
+	});
+
 	test('with nothing to download, it stays off', async () => {
 		const { target, done } = render(true);
 		expect(button(target, 'Download PDF').disabled).toBe(true);
+		expect(button(target, 'Print').disabled).toBe(true);
 		expect(button(target, 'Header and footer').disabled).toBe(false); // can still be set up
 		done();
 	});

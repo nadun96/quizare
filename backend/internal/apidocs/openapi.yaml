@@ -3539,6 +3539,9 @@ components:
         show_teacher: { type: boolean }
         footer: { type: string }
         page_numbers: { type: boolean }
+        logo: { type: string, description: 'a data URL, PNG or JPEG, at most 300 KB; empty: none (D-143)' }
+        accent: { type: string, description: "the reports' colour, #rrggbb" }
+        color_marks: { type: boolean, description: 'tint marks by how high they are' }
     GroupRow:
       type: object
       properties:

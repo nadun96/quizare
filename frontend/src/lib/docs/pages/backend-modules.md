@@ -101,7 +101,7 @@ A classroom's gradebook and attendance (D-122). `Gradebook` lists the quizzes ru
 
 `ClassReport` (D-140) is the configurable report: which quizzes and tutorials are in it, each one's weight, a fraction of 1 that the mark's percentage is multiplied by (0 shows it but leaves it out of the total) and whether it uses a student's highest or lowest valid mark; the total is the points over the weights. `ResultAccess` tells `eval` and `tutorial` what a student may see of an item's results (the score only, whether each answer was right, or the correct answers), for how long, with exceptions per student.
 
-Groups (D-141) are for mark sheets: `SetGroups` replaces the class's groups or one item's, and `ClassReport` gives each group's mark by the item's rule (average, total, highest or lowest of its members' marks, a member with no mark counting 0). `GetReportHeader` and `SetReportHeader` keep what every exported report carries; PDFs are built in the browser from pictures of the pages, with an editing lock.
+Groups (D-141) are for mark sheets: `SetGroups` replaces the class's groups or one item's, and `ClassReport` gives each group's mark by the item's rule (average, total, highest or lowest of its members' marks, a member with no mark counting 0). `GetReportHeader` and `SetReportHeader` keep what every exported report carries, with its logo (only real PNG or JPEG, checked by its bytes) and colour; PDFs are built in the browser from pictures of the pages, with an editing lock.
 
 ## loadtest (schema `loadtest`)
 

@@ -148,7 +148,7 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4p
 td.n{text-align:right;font-variant-numeric:tabular-nums}@page{size:landscape;margin:12mm}</style></head><body>
 <h1>${esc(title)}</h1><p>${esc(subtitle)}</p><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>
 ${rows.map((r) => `<tr>${r.map((c) => `<td${typeof c === 'number' ? ' class="n"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('\n')}
-</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`;
+</tbody></table></body></html>`;
 }
 
 export function openPrint(html: string) {
@@ -156,6 +156,9 @@ export function openPrint(html: string) {
 	if (!w) return false;
 	w.document.write(html);
 	w.document.close();
+	// Called from here: the site's content policy stops a script inside the page.
+	w.focus();
+	w.print();
 	return true;
 }
 
