@@ -304,7 +304,7 @@ type Filter struct{ ClassroomID, TopicID string }
 
 // List returns one page of a host's meetings.
 func (s *Service) List(ctx context.Context, hostID string, f Filter, p page.Request) ([]Meeting, int, error) {
-	where := from + ` WHERE m.host_id=$1 AND ($2 = '' OR m.title ILIKE $2 OR m.code ILIKE $2)
+	where := from + ` WHERE m.host_id=$1 AND m.archived_at IS NULL AND ($2 = '' OR m.title ILIKE $2 OR m.code ILIKE $2)
 		AND ($3 = '' OR m.classroom_id::text = $3) AND ($4 = '' OR m.topic_id::text = $4)`
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, hostID, p.Like(), f.ClassroomID, f.TopicID).Scan(&total); err != nil {

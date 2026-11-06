@@ -191,6 +191,10 @@ A student's own progress (D-97), worked out on each request from released, fully
 
 The embedded OpenAPI 3.1 document (`openapi.yaml`) and Swagger UI assets, served at `/api/docs`. See [HTTP API](api.md).
 
+## archive
+
+A teacher's finished activities (D-149): quiz sessions, polls, meetings and live presentations, listed together with search and filters by reading those modules' tables, plus `archived_at` on each. Archiving hides one from the everyday lists and leaves its marks and attendance alone; only what's archived can be deleted, with everything kept with it. Tutoring sessions follow the same rules in the tutoring service (`view=past|archived`, `/archive`, `/restore`, `DELETE`), and the Past sessions page shows both.
+
 ## app
 
 The composition root (`app.go`): builds every service, wires interfaces and hooks, registers River workers, and mounts routes. `app/apptest` is the end-to-end test harness.

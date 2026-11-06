@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LiveSocket } from '../socket';
 import { MeetingCall } from './call.svelte';
-import { applyRoster, fitGrid, gridColumns, initials, polite, sizeHint, sizeOptions, streamKind, type Person } from './mesh';
+import { applyRoster, fitGrid, gridColumns, initials, isDrawing, polite, sizeHint, sizeOptions, streamKind, type Person } from './mesh';
 
 const person = (peer_id: string, more: Partial<Person> = {}): Person => ({ peer_id, user_id: 'u-' + peer_id, name: peer_id, host: false, mic: false, cam: false, screen: false, hand: false, ...more });
 
@@ -267,5 +267,25 @@ describe('MeetingCall', () => {
 		await call.setCam(true);
 		expect(call.cam).toBe(false);
 		expect(told[0]).toMatch(/blocked your camera/);
+	});
+});
+
+describe('the call controls on a touch screen (D-148)', () => {
+	const on = (selector: string) => ({ closest: (q: string) => (q === selector ? {} : null) }) as unknown as Element;
+	const button = on('button');
+	const canvas = on('canvas');
+
+	it('a finger on a control never hides the controls', () => {
+		// A touch counts as a pressed button from its first moment.
+		expect(isDrawing({ type: 'pointerdown', buttons: 1, target: button })).toBe(false);
+		expect(isDrawing({ type: 'pointermove', buttons: 1, target: button })).toBe(false);
+	});
+	it('nor does a tap on the board, until the finger draws', () => {
+		expect(isDrawing({ type: 'pointerdown', buttons: 1, target: canvas })).toBe(false);
+		expect(isDrawing({ type: 'pointermove', buttons: 1, target: canvas })).toBe(true);
+	});
+	it('a pointer just passing over the board isn’t drawing', () => {
+		expect(isDrawing({ type: 'pointermove', buttons: 0, target: canvas })).toBe(false);
+		expect(isDrawing({ type: 'pointermove', buttons: 1, target: null })).toBe(false);
 	});
 });
