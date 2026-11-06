@@ -1,7 +1,10 @@
 package grading
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -282,11 +285,44 @@ type ReportHeader struct {
 	ShowTeacher bool   `json:"show_teacher"`
 	Footer      string `json:"footer"`
 	PageNumbers bool   `json:"page_numbers"`
+	Logo        string `json:"logo"`        // a data: URL, PNG or JPEG; empty: none (D-143)
+	Accent      string `json:"accent"`      // the reports' colour, #rrggbb
+	ColorMarks  bool   `json:"color_marks"` // tint marks by how high they are
+}
+
+const (
+	defaultAccent = "#1e4fa3"
+	maxLogoBytes  = 300 * 1024
+)
+
+var accentPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
+
+// decodeLogo checks a logo is what it says: only PNG and JPEG, by their bytes,
+// so nothing that runs (an SVG, say) is ever stored or shown.
+func decodeLogo(s string) (data []byte, contentType string, problem string) {
+	for _, t := range []struct {
+		contentType string
+		magic       []byte
+	}{{"image/png", []byte("\x89PNG\r\n\x1a\n")}, {"image/jpeg", []byte{0xFF, 0xD8, 0xFF}}} {
+		rest, ok := strings.CutPrefix(s, "data:"+t.contentType+";base64,")
+		if !ok {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(rest)
+		switch {
+		case err != nil || !bytes.HasPrefix(raw, t.magic):
+			return nil, "", "this isn't a picture that can be used"
+		case len(raw) > maxLogoBytes:
+			return nil, "", "a logo can be at most 300 KB"
+		}
+		return raw, t.contentType, ""
+	}
+	return nil, "", "a logo must be a PNG or JPEG picture"
 }
 
 // GetReportHeader is the saved header, or the defaults.
 func (s *Service) GetReportHeader(ctx context.Context, teacherID, classroomID string) (ReportHeader, error) {
-	h := ReportHeader{DateMode: "today", ShowTeacher: true, PageNumbers: true}
+	h := ReportHeader{DateMode: "today", ShowTeacher: true, PageNumbers: true, Accent: defaultAccent, ColorMarks: true}
 	var err error
 	if h.Classroom, err = s.teaches(ctx, teacherID, classroomID); err != nil {
 		return h, err
@@ -294,11 +330,17 @@ func (s *Service) GetReportHeader(ctx context.Context, teacherID, classroomID st
 	if err := s.pool.QueryRow(ctx, `SELECT coalesce(u.name, '') FROM content.classrooms c LEFT JOIN auth.users u ON u.id = c.teacher_id WHERE c.id = $1`, classroomID).Scan(&h.Teacher); err != nil {
 		return h, err
 	}
-	err = s.pool.QueryRow(ctx, `SELECT title, subtitle, institution, date_mode, coalesce(to_char(date_value, 'YYYY-MM-DD'), ''), show_teacher, footer, page_numbers
+	var logo []byte
+	var logoType string
+	err = s.pool.QueryRow(ctx, `SELECT title, subtitle, institution, date_mode, coalesce(to_char(date_value, 'YYYY-MM-DD'), ''), show_teacher, footer, page_numbers,
+			logo, coalesce(logo_type, ''), accent, color_marks
 		FROM grading.report_headers WHERE classroom_id = $1`, classroomID).
-		Scan(&h.Title, &h.Subtitle, &h.Institution, &h.DateMode, &h.DateValue, &h.ShowTeacher, &h.Footer, &h.PageNumbers)
+		Scan(&h.Title, &h.Subtitle, &h.Institution, &h.DateMode, &h.DateValue, &h.ShowTeacher, &h.Footer, &h.PageNumbers, &logo, &logoType, &h.Accent, &h.ColorMarks)
 	if err == pgx.ErrNoRows {
 		return h, nil
+	}
+	if err == nil && len(logo) > 0 {
+		h.Logo = "data:" + logoType + ";base64," + base64.StdEncoding.EncodeToString(logo)
 	}
 	return h, err
 }
@@ -326,15 +368,28 @@ func (s *Service) SetReportHeader(ctx context.Context, teacherID, classroomID st
 	default:
 		bad["date_mode"] = "choose today, a date or none"
 	}
+	in.Accent = strings.ToLower(strings.TrimSpace(in.Accent))
+	if !accentPattern.MatchString(in.Accent) {
+		bad["accent"] = "choose a colour"
+	}
+	var logo []byte
+	var logoType *string
+	if in.Logo != "" {
+		data, contentType, problem := decodeLogo(in.Logo)
+		if problem != "" {
+			bad["logo"] = problem
+		}
+		logo, logoType = data, &contentType
+	}
 	if len(bad) > 0 {
 		return in, httpx.Invalid(bad)
 	}
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO grading.report_headers (classroom_id, title, subtitle, institution, date_mode, date_value, show_teacher, footer, page_numbers, updated_by)
-			VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10)
+		if _, err := tx.Exec(ctx, `INSERT INTO grading.report_headers (classroom_id, title, subtitle, institution, date_mode, date_value, show_teacher, footer, page_numbers, updated_by, logo, logo_type, accent, color_marks)
+			VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10, $11, $12, $13, $14)
 			ON CONFLICT (classroom_id) DO UPDATE SET title = $2, subtitle = $3, institution = $4, date_mode = $5, date_value = $6::date,
-				show_teacher = $7, footer = $8, page_numbers = $9, updated_by = $10, updated_at = now()`,
-			classroomID, in.Title, in.Subtitle, in.Institution, in.DateMode, date, in.ShowTeacher, in.Footer, in.PageNumbers, teacherID); err != nil {
+				show_teacher = $7, footer = $8, page_numbers = $9, updated_by = $10, logo = $11, logo_type = $12, accent = $13, color_marks = $14, updated_at = now()`,
+			classroomID, in.Title, in.Subtitle, in.Institution, in.DateMode, date, in.ShowTeacher, in.Footer, in.PageNumbers, teacherID, logo, logoType, in.Accent, in.ColorMarks); err != nil {
 			return err
 		}
 		return audit.Log(ctx, tx, teacherID, "report_header_set", "classroom", classroomID, nil)

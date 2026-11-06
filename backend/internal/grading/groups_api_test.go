@@ -2,6 +2,7 @@ package grading_test
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 
 	"github.com/nadun96/quizplatform/internal/auth"
@@ -177,4 +178,49 @@ func TestReportHeader(t *testing.T) {
 	h.DateMode, h.DateValue = "someday", ""
 	f.teacher.Call("PUT", url, h, 422, nil)
 	f.e.NewUser(auth.RoleTeacher).Call("GET", url, nil, 404, nil)
+}
+
+// D-143: a logo must be a real PNG or JPEG of a sensible size, and a colour a colour.
+func TestReportLogoAndColour(t *testing.T) {
+	f := newReportFx(t)
+	url := "/api/teacher/classrooms/" + f.class.ID + "/report-header"
+	var h grading.ReportHeader
+	f.teacher.Call("GET", url, nil, 200, &h)
+	if h.Logo != "" || h.Accent != "#1e4fa3" || !h.ColorMarks {
+		t.Fatalf("defaults: %+v", h)
+	}
+	png := "data:image/png;base64," + base64.StdEncoding.EncodeToString(append([]byte("\x89PNG\r\n\x1a\n"), 1, 2, 3))
+	h.Logo, h.Accent, h.ColorMarks = png, "#0F766E", false
+	var got grading.ReportHeader
+	f.teacher.Call("PUT", url, h, 200, &got)
+	if got.Logo != png || got.Accent != "#0f766e" || got.ColorMarks {
+		t.Fatalf("saved: %+v", got)
+	}
+	got = grading.ReportHeader{}
+	f.teacher.Call("GET", url, nil, 200, &got)
+	if got.Logo != png {
+		t.Fatalf("read back: %q", got.Logo)
+	}
+
+	bad := func(logo, accent string) {
+		t.Helper()
+		x := h
+		x.Logo, x.Accent = logo, accent
+		f.teacher.Call("PUT", url, x, 422, nil)
+	}
+	bad("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte("<svg onload=alert(1)>")), "#0f766e")
+	bad("data:image/png;base64,"+base64.StdEncoding.EncodeToString([]byte("<svg onload=alert(1)>")), "#0f766e") // not what it says
+	bad("data:image/png;base64,not base64!", "#0f766e")
+	bad("https://example.com/logo.png", "#0f766e")
+	bad("data:image/jpeg;base64,"+base64.StdEncoding.EncodeToString(append([]byte{0xFF, 0xD8, 0xFF}, make([]byte, 300*1024)...)), "#0f766e") // too big
+	bad("", "red")
+	bad("", "#12345")
+
+	// Taken away again.
+	h.Logo = ""
+	got = grading.ReportHeader{}
+	f.teacher.Call("PUT", url, h, 200, &got)
+	if got.Logo != "" {
+		t.Fatalf("not removed: %q", got.Logo)
+	}
 }

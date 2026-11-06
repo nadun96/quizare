@@ -7,10 +7,10 @@
 	import Skeleton from '../ui/Skeleton.svelte';
 	import { toast } from '../ui/toast.svelte';
 	import { saveFile } from '../tutoring/types';
-	import { openPrint, printHTML } from './grading';
 	import GroupsEditor from './GroupsEditor.svelte';
 	import ReportPdfButton from './ReportPdfButton.svelte';
-	import { classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type Unit } from './classReport';
+	import { toneClass, toneFor } from './reportPdf';
+	import { classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, markTone, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type Unit } from './classReport';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
 	let rep = $state<ClassReport | null>(null);
@@ -62,9 +62,6 @@
 		else saveFile(`${classroomName} class report.csv`, classReportCSV(rep));
 	}
 	const sheets = () => (rep ? (view === 'groups' ? groupSheets(rep) : [individualSheet(rep)]) : []);
-	function print() {
-		for (const t of sheets()) openPrint(printHTML(`${classroomName}: ${t.heading ?? 'class report'}`, `Total out of ${rep?.out_of ?? 0}`, t.head, t.rows));
-	}
 	function addException() {
 		draft?.exceptions.push({ item: '', user_id: '', detail: '', reviewN: null, reviewUnit: 'hours' });
 	}
@@ -82,7 +79,6 @@
 			<p class="m-0 small muted grow">{cols.length} of {rep.items.length} in the report · total out of {rep.out_of}</p>
 			<button class="btn btn-sm" class:btn-primary={!setupOpen} aria-expanded={setupOpen} onclick={() => (setupOpen = !setupOpen)}><Icon name="settings" size={16} />Set up</button>
 			<button class="btn btn-sm" onclick={csv}><Icon name="download" size={16} />CSV</button>
-			<button class="btn btn-sm" onclick={print}><Icon name="table" size={16} />Print</button>
 			<ReportPdfButton {classroomId} title={`${classroomName}: ${view === 'groups' ? 'group marks' : 'class report'}`} fileName={`${classroomName} ${view === 'groups' ? 'group marks' : 'class report'}`} {sheets} disabled={!cols.length || (view === 'groups' && !sheets().length)} />
 		</div>
 
@@ -177,10 +173,10 @@
 										<td class="min-w-40"><span class="font-semibold">{g.name}</span><br /><span class="text-xs muted">{memberNames(rep, g) || 'No students'}</span></td>
 										{#each cols as it (itemKey(it))}
 											{@const m = g.marks[itemKey(it)]}
-											<td class="tabular whitespace-nowrap">{#if m}{groupMarkText(m)}{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}<br /><span class="text-xs muted">{m.marked} of {g.members.length} marked</span>{:else}<span class="muted">—</span>{/if}</td>
+											<td class="tabular whitespace-nowrap {toneClass(markTone(m, 0))}">{#if m}{groupMarkText(m)}{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}<br /><span class="text-xs muted">{m.marked} of {g.members.length} marked</span>{:else}<span class="muted">—</span>{/if}</td>
 										{/each}
 										<td class="tabular whitespace-nowrap font-semibold">{g.total} / {rep.out_of}</td>
-										<td class="tabular font-semibold">{g.final == null ? '—' : `${g.final}%`}</td>
+										<td class="tabular font-semibold {toneClass(toneFor(g.final))}">{g.final == null ? '—' : `${g.final}%`}</td>
 									</tr>
 								{/each}
 							</tbody>
@@ -193,7 +189,7 @@
 					<div class="card card-border bg-base-100 overflow-x-auto">
 						<table class="table table-sm">
 							<thead><tr>{#each sh.head as h (h)}<th>{h}</th>{/each}</tr></thead>
-							<tbody>{#each sh.rows as r, i (i)}<tr>{#each r as c, j (j)}<td class="tabular" class:font-semibold={j === 0}>{c}</td>{/each}</tr>{/each}</tbody>
+							<tbody>{#each sh.rows as r, i (i)}<tr>{#each r as c, j (j)}<td class="tabular {toneClass(sh.tones?.[i]?.[j])}" class:font-semibold={j === 0}>{c}</td>{/each}</tr>{/each}</tbody>
 						</table>
 					</div>
 				{/each}
@@ -218,7 +214,7 @@
 								<td class="whitespace-nowrap"><span class="font-semibold">{s.name}</span>{#if s.student_number}<br /><span class="text-xs muted tabular">{s.student_number}</span>{/if}</td>
 								{#each cols as it (itemKey(it))}
 									{@const m = s.marks[itemKey(it)]}
-									<td class="tabular whitespace-nowrap">
+									<td class="tabular whitespace-nowrap {toneClass(markTone(m, it.weight))}">
 										{#if m}
 											{markText(m)}
 											{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}
@@ -229,7 +225,7 @@
 									</td>
 								{/each}
 								<td class="tabular whitespace-nowrap font-semibold">{s.total} / {rep.out_of}</td>
-								<td class="tabular font-semibold">{s.final == null ? '—' : `${s.final}%`}</td>
+								<td class="tabular font-semibold {toneClass(toneFor(s.final))}">{s.final == null ? '—' : `${s.final}%`}</td>
 							</tr>
 						{:else}
 							<tr><td colspan={cols.length + 3} class="muted">No students are active in this classroom yet.</td></tr>

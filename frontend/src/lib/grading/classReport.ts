@@ -1,7 +1,7 @@
 // The class report (D-140): the setup a teacher edits, and the report built
 // from it, from /api/teacher/classrooms/{id}/class-report.
 import { toCSV } from '../tutoring/types';
-import type { Sheet } from './reportPdf';
+import { toneFor, type Sheet, type Tone } from './reportPdf';
 
 export type Pick = 'high' | 'low';
 export type Detail = '' | 'marks' | 'correctness' | 'answers';
@@ -150,12 +150,18 @@ export function classReportCSV(r: ClassReport): string {
 	return toCSV(rows);
 }
 
+/** A mark's colour: by how high it is, or for one that counts and is missing. */
+export function markTone(m: { pct: number } | undefined, weight: number): Tone | null {
+	return m ? toneFor(m.pct) : weight > 0 ? 'missing' : null;
+}
+
 /** The individual mark sheet, for printing and PDF. */
 export function individualSheet(r: ClassReport): Sheet {
 	const cols = columns(r);
 	const head = ['Student', 'ID', ...cols.map((it) => `${it.title} (${weightText(it)})`), 'Total', 'Final'];
 	const rows = r.students.map((s) => [s.name, s.student_number ?? '', ...cols.map((it) => markText(s.marks[itemKey(it)]) || '—'), `${s.total} / ${r.out_of}`, s.final == null ? '' : `${s.final}%`]);
-	return { heading: 'Individual marks', head, rows, frozen: 2 };
+	const tones = r.students.map((s) => [null, null, ...cols.map((it) => markTone(s.marks[itemKey(it)], it.weight)), null, toneFor(s.final)]);
+	return { heading: 'Individual marks', head, rows, tones, frozen: 2 };
 }
 
 /** Group names and who's in them, in the classroom's order. */
@@ -182,7 +188,8 @@ export function groupSheets(r: ClassReport): Sheet[] {
 	if (r.class_groups.length) {
 		const head = ['Group', 'Members', ...cols.map((it) => `${it.title} (${weightText(it)}, ${ruleText(it).toLowerCase()})`), 'Total', 'Final'];
 		const rows = r.class_groups.map((g) => [g.name, memberNames(r, g), ...cols.map((it) => groupMarkText(g.marks[itemKey(it)]) || '—'), `${g.total} / ${r.out_of}`, g.final == null ? '' : `${g.final}%`]);
-		sheets.push({ heading: 'Marks by class group', head, rows, frozen: 1 });
+		const tones = r.class_groups.map((g) => [null, null, ...cols.map((it) => markTone(g.marks[itemKey(it)], 0)), null, toneFor(g.final)]);
+		sheets.push({ heading: 'Marks by class group', head, rows, tones, frozen: 1 });
 	}
 	for (const own of r.item_groups) {
 		const it = r.items.find((x) => x.kind === own.kind && x.id === own.id);
@@ -192,7 +199,8 @@ export function groupSheets(r: ClassReport): Sheet[] {
 			const m = g.marks[itemKey(it)];
 			return [g.name, memberNames(r, g), groupMarkText(m) || '—', ...(it.weight > 0 ? [m?.points ?? 0] : [])];
 		});
-		sheets.push({ heading: `Marks by ${it.title}’s own groups`, head, rows, frozen: 1 });
+		const tones = own.groups.map((g) => [null, null, markTone(g.marks[itemKey(it)], 0), null]);
+		sheets.push({ heading: `Marks by ${it.title}’s own groups`, head, rows, tones, frozen: 1 });
 	}
 	return sheets;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classReportCSV, draftFrom, draftProblem, draftWeightTotal, finalRange, groupSheets, groupsCSV, groupsProblem, individualSheet, reviewParts, setAllPicks, setupPayload, splitIntoGroups, toMinutes, ungrouped, type ClassReport, type ReportItem } from './classReport';
+import { classReportCSV, markTone, draftFrom, draftProblem, draftWeightTotal, finalRange, groupSheets, groupsCSV, groupsProblem, individualSheet, reviewParts, setAllPicks, setupPayload, splitIntoGroups, toMinutes, ungrouped, type ClassReport, type ReportItem } from './classReport';
 
 const item = (more: Partial<ReportItem>): ReportItem => ({ group_rule: 'average', kind: 'quiz', id: 'q1', title: 'Cells', topic: 'T', module: 'M', included: true, weight: 0.2, pick: 'high', detail: '', review_minutes: 0, taken: 1, avg: 80, high: 80, low: 80, max_marks: 10, ...more });
 const report = (): ClassReport => ({
@@ -115,6 +115,20 @@ describe('groups on mark sheets (D-141)', () => {
 		expect(groupsProblem([{ name: 'A' }, { name: 'B' }])).toBe('');
 		expect(groupsProblem([{ name: ' ' }])).toMatch(/needs a name/);
 		expect(groupsProblem([{ name: 'A' }, { name: ' a ' }])).toMatch(/Two groups/);
+	});
+});
+
+describe('colours on mark sheets (D-143)', () => {
+	it('colours a mark by its height, and a missing one only if it counts', () => {
+		expect(markTone({ pct: 80 }, 0.2)).toBe('high');
+		expect(markTone(undefined, 0.2)).toBe('missing');
+		expect(markTone(undefined, 0)).toBeNull();
+	});
+
+	it('gives the individual sheet a colour for each cell', () => {
+		const t = individualSheet(report());
+		expect(t.tones?.[0]).toEqual([null, null, 'high', 'middle', null, 'high']);
+		expect(t.tones?.[0].length).toBe(t.head.length);
 	});
 });
 
