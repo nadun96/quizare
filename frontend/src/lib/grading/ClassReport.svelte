@@ -122,7 +122,7 @@
 					</table>
 				</div>
 				<p class="m-0 small muted">
-					A weight is between 0 and 1: a mark of 80% with weight 0.4 gives a final mark of 32. Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, so the total is out of <strong class="tabular">{Math.round(draftWeightTotal(draft) * 10000) / 100}</strong>. Weight 0 shows an item but leaves it out of the total. A group’s mark comes from its members’; a member with no mark counts 0.
+					A weight is between 0 and 1, so 0.1 is 10%: a mark of 30 / 40 is 75%, and at weight 0.1 it adds a final mark of 7.5 to the total. Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, so the total is out of <strong class="tabular">{Math.round(draftWeightTotal(draft) * 10000) / 100}</strong>. Weight 0 shows an item but leaves it out of the total. A group’s mark comes from its members’; a member with no mark counts 0.
 					A review time runs from when a student gets their results. When it ends the score stays and the question detail closes; blank means no limit.
 				</p>
 

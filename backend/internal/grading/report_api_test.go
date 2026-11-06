@@ -3,6 +3,7 @@ package grading_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/nadun96/quizplatform/internal/auth"
@@ -37,9 +38,18 @@ func newReportFx(t *testing.T) *reportFx {
 }
 
 func (f *reportFx) quiz(t *testing.T, title string) string {
+	return f.quizOf(t, title, 2, 2)
+}
+
+// quizOf makes a quiz of that many questions, each worth that many marks.
+func (f *reportFx) quizOf(t *testing.T, title string, questions, marks int) string {
+	csv := "question_code,type,question_text,options,correct_answer,marks\n"
+	for i := 1; i <= questions; i++ {
+		csv += fmt.Sprintf("Q%d,SINGLE,Q%d?,A|B,A,%d\n", i, i, marks)
+	}
 	var q quiz.Quiz
 	f.teacher.Call("POST", "/api/teacher/topics/"+f.topic.ID+"/quizzes", map[string]any{"title": title, "settings": map[string]any{"results_release": "immediate", "question_order": "fixed"}}, 201, &q)
-	f.teacher.Raw("POST", "/api/teacher/quizzes/"+q.ID+"/questions/import", "text/csv", []byte(reportCSV))
+	f.teacher.Raw("POST", "/api/teacher/quizzes/"+q.ID+"/questions/import", "text/csv", []byte(csv))
 	f.teacher.Call("POST", "/api/teacher/quizzes/"+q.ID+"/status", map[string]any{"status": "ready"}, 200, nil)
 	return q.ID
 }
@@ -67,6 +77,12 @@ func (f *reportFx) evaluate(t *testing.T) {
 // right of the two; it returns the attempt.
 func (f *reportFx) take(t *testing.T, s *apptest.Client, quizID string, right int) string {
 	t.Helper()
+	return f.takeOf(t, s, quizID, right, 2)
+}
+
+// takeOf is take for a quiz of any number of questions.
+func (f *reportFx) takeOf(t *testing.T, s *apptest.Client, quizID string, right, questions int) string {
+	t.Helper()
 	var sess live.Session
 	f.teacher.Call("POST", "/api/teacher/quizzes/"+quizID+"/sessions", map[string]any{}, 201, &sess)
 	var st live.StudentState
@@ -74,13 +90,13 @@ func (f *reportFx) take(t *testing.T, s *apptest.Client, quizID string, right in
 	f.teacher.Call("POST", "/api/teacher/sessions/"+sess.ID+"/admit", map[string]any{"attempt_ids": []string{st.AttemptID}}, 200, nil)
 	f.teacher.Call("POST", "/api/teacher/sessions/"+sess.ID+"/start", map[string]any{"attempt_ids": []string{st.AttemptID}}, 200, nil)
 	s.Call("POST", "/api/attempts/"+st.AttemptID+"/start", nil, 200, &st)
-	for i := 0; i < 2; i++ {
+	for i := 0; i < questions; i++ {
 		choice := "o2"
 		if i < right {
 			choice = "o1"
 		}
 		s.Call("PUT", "/api/attempts/"+st.AttemptID+"/answers/"+st.Question.ID, map[string]any{"response": quiz.Response{Selected: []string{choice}}, "seq": i + 1}, 200, nil)
-		if i == 0 {
+		if i < questions-1 {
 			s.Call("POST", "/api/attempts/"+st.AttemptID+"/advance", map[string]string{"question_id": st.Question.ID}, 200, &st)
 		}
 	}
@@ -377,5 +393,61 @@ func TestReportWeightIsAFraction(t *testing.T) {
 	}
 	if st.Total != 6.25 || r.OutOf != 12.5 || *st.Final != 50 {
 		t.Fatalf("total %v of %v, final %v", st.Total, r.OutOf, *st.Final)
+	}
+}
+
+// D-145, the product owner's example: 30/40 at 10%, 20/20 at 20% and 75/100 at
+// 10% add 7.5, 20 and 7.5, a total of 35 out of 40.
+func TestReportProductOwnersExample(t *testing.T) {
+	f := newReportFx(t)
+	a1, a2, a3 := f.quizOf(t, "Assignment 1", 4, 10), f.quizOf(t, "Assignment 2", 2, 10), f.quizOf(t, "Assignment 3", 4, 25)
+	s := f.student(t)
+	f.takeOf(t, s, a1, 3, 4)
+	f.takeOf(t, s, a2, 2, 2)
+	f.takeOf(t, s, a3, 3, 4)
+
+	url := "/api/teacher/classrooms/" + f.class.ID + "/class-report"
+	var r grading.ClassReport
+	f.teacher.Call("GET", url, nil, 200, &r)
+	weights := map[string]float64{a1: 0.1, a2: 0.2, a3: 0.1}
+	in := setupFor(r, func(x *grading.ReportItemInput) { x.Included, x.Weight = true, weights[x.ID] })
+	r = grading.ClassReport{}
+	f.teacher.Call("PUT", url, in, 200, &r)
+
+	st := r.Students[0]
+	for id, want := range map[string]struct{ score, max, points float64 }{a1: {30, 40, 7.5}, a2: {20, 20, 20}, a3: {75, 100, 7.5}} {
+		m := st.Marks["quiz:"+id]
+		if m.Score != want.score || m.Max != want.max || m.Points == nil || *m.Points != want.points {
+			t.Fatalf("want %+v, got %+v, points %v", want, m, m.Points)
+		}
+	}
+	if st.Total != 35 || r.OutOf != 40 || *st.Final != 87.5 {
+		t.Fatalf("total %v of %v, final %v", st.Total, r.OutOf, *st.Final)
+	}
+}
+
+// D-145: a final mark comes from the marks themselves, not the percentage
+// rounded for showing: 1/3 at weight 1 is 33.33, not 33.3; the same for groups.
+func TestReportFinalMarkIsExact(t *testing.T) {
+	f := newReportFx(t)
+	q := f.quizOf(t, "Thirds", 3, 1)
+	s := f.student(t)
+	f.takeOf(t, s, q, 1, 3)
+	url := "/api/teacher/classrooms/" + f.class.ID + "/class-report"
+	var r grading.ClassReport
+	f.teacher.Call("GET", url, nil, 200, &r)
+	f.teacher.Call("PUT", "/api/teacher/classrooms/"+f.class.ID+"/report-groups", grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{{Name: "G", Members: []string{s.User.ID}}}}, 200, nil)
+	in := setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 1 })
+	r = grading.ClassReport{}
+	f.teacher.Call("PUT", url, in, 200, &r)
+	m := r.Students[0].Marks["quiz:"+q]
+	if m.Pct != 33.3 || m.Points == nil || *m.Points != 33.33 || r.Students[0].Total != 33.33 {
+		t.Fatalf("mark %+v, points %v", m, m.Points)
+	}
+	if len(r.ClassGroups) != 1 {
+		t.Fatalf("groups: %+v", r.ClassGroups)
+	}
+	if g := r.ClassGroups[0].Marks["quiz:"+q]; g.Points == nil || *g.Points != 33.33 {
+		t.Fatalf("group mark %+v", g)
 	}
 }
