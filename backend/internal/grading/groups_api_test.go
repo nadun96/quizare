@@ -225,26 +225,39 @@ func TestReportLogoAndColour(t *testing.T) {
 	}
 }
 
-// D-144: where a classroom's mark colours change is its teacher's choice.
-func TestReportColourBands(t *testing.T) {
+// D-146: a classroom's mark colours are ranges its teacher sets, each with a colour.
+func TestReportColorRanges(t *testing.T) {
 	f := newReportFx(t)
 	url := "/api/teacher/classrooms/" + f.class.ID + "/report-header"
 	var h grading.ReportHeader
 	f.teacher.Call("GET", url, nil, 200, &h)
-	if h.BandHigh != 75 || h.BandMiddle != 50 {
-		t.Fatalf("defaults: %+v", h)
+	if len(h.ColorRanges) != 3 || h.ColorRanges[0].From != 75 || h.ColorRanges[1].From != 50 || h.ColorRanges[2].From != 0 {
+		t.Fatalf("defaults: %+v", h.ColorRanges)
 	}
-	h.BandHigh, h.BandMiddle = 80, 40
+	h.ColorRanges = []grading.ColorRange{{From: 90, Color: "#CCFBF1"}, {From: 70, Color: "#dbeafe"}, {From: 40, Color: "#ffedd5"}, {From: 0, Color: "#7f1d1d"}}
+	f.teacher.Call("PUT", url, h, 200, nil)
 	var got grading.ReportHeader
-	f.teacher.Call("PUT", url, h, 200, &got)
-	got = grading.ReportHeader{}
 	f.teacher.Call("GET", url, nil, 200, &got)
-	if got.BandHigh != 80 || got.BandMiddle != 40 {
-		t.Fatalf("saved: %+v", got)
+	if len(got.ColorRanges) != 4 || got.ColorRanges[0] != (grading.ColorRange{From: 90, Color: "#ccfbf1"}) || got.ColorRanges[3] != (grading.ColorRange{From: 0, Color: "#7f1d1d"}) {
+		t.Fatalf("saved: %+v", got.ColorRanges)
 	}
-	for _, b := range [][2]int{{50, 50}, {40, 60}, {101, 50}, {75, 0}} {
+	// One range colours every mark alike.
+	h.ColorRanges = []grading.ColorRange{{From: 0, Color: "#dbeafe"}}
+	f.teacher.Call("PUT", url, h, 200, nil)
+
+	c := "#dbeafe"
+	for name, bad := range map[string][]grading.ColorRange{
+		"none":         {},
+		"too many":     {{90, c}, {80, c}, {70, c}, {60, c}, {50, c}, {40, c}, {0, c}},
+		"not from 0":   {{50, c}, {10, c}},
+		"over 100":     {{101, c}, {0, c}},
+		"out of order": {{40, c}, {60, c}, {0, c}},
+		"the same":     {{50, c}, {50, c}, {0, c}},
+		"below 0":      {{50, c}, {-1, c}},
+		"not a colour": {{50, "red;background:url(x)"}, {0, c}},
+	} {
 		x := h
-		x.BandHigh, x.BandMiddle = b[0], b[1]
-		f.teacher.Call("PUT", url, x, 422, nil)
+		x.ColorRanges = bad
+		t.Run(name, func(t *testing.T) { f.teacher.Call("PUT", url, x, 422, nil) })
 	}
 }

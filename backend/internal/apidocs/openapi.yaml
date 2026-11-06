@@ -3542,8 +3542,14 @@ components:
         logo: { type: string, description: 'a data URL, PNG or JPEG, at most 300 KB; empty: none (D-143)' }
         accent: { type: string, description: "the reports' colour, #rrggbb" }
         color_marks: { type: boolean, description: 'tint marks by how high they are' }
-        band_high: { type: integer, description: 'this percent and above is green (D-144)' }
-        band_middle: { type: integer, description: 'this percent and above is amber, below it red (D-144)' }
+        color_ranges:
+          type: array
+          description: 'the mark colours, at most 6, highest first, the last from 0 (D-146)'
+          items:
+            type: object
+            properties:
+              from: { type: integer, description: 'this percent and above, up to the next range' }
+              color: { type: string, description: '#rrggbb' }
     GroupRow:
       type: object
       properties:

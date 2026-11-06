@@ -140,19 +140,19 @@ describe('groups on mark sheets (D-141)', () => {
 
 describe('colours on mark sheets (D-143)', () => {
 	it('colours a mark by its height, and a missing one only if it counts', () => {
-		expect(markTone({ pct: 80 }, 0.2)).toBe('high');
+		expect(markTone({ pct: 80 }, 0.2)).toBe('#dcfce7');
 		expect(markTone(undefined, 0.2)).toBe('missing');
 		expect(markTone(undefined, 0)).toBeNull();
 	});
 
 	it('uses the classroom’s own bands', () => {
-		const t = individualSheet(report(), { high: 90, middle: 60 });
-		expect(t.tones?.[0]).toEqual([null, null, 'middle', 'low', null, 'middle']);
+		const t = individualSheet(report(), [{ from: 90, color: '#111111' }, { from: 60, color: '#222222' }, { from: 0, color: '#333333' }]);
+		expect(t.tones?.[0]).toEqual([null, null, '#222222', '#333333', null, '#222222']);
 	});
 
 	it('gives the individual sheet a colour for each cell', () => {
 		const t = individualSheet(report());
-		expect(t.tones?.[0]).toEqual([null, null, 'high', 'middle', null, 'high']);
+		expect(t.tones?.[0]).toEqual([null, null, '#dcfce7', '#fef3c7', null, '#dcfce7']);
 		expect(t.tones?.[0].length).toBe(t.head.length);
 	});
 });

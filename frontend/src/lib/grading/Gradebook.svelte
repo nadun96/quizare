@@ -12,7 +12,7 @@
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
 	import { classAverage, gradebookCSV, key, marksLine, studentRange, totalAverage, mergeTutoring, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
 	import ReportPdfButton from './ReportPdfButton.svelte';
-	import { DEFAULT_BANDS, toneClass, toneFor, type Bands } from './reportPdf';
+	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
 	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
@@ -182,13 +182,13 @@
 								<td>{s.name}{#if s.student_number}<br /><span class="small muted">{s.student_number}</span>{/if}</td>
 								{#each g.items as it (key(it))}
 									{@const m = s.marks[key(it)]}
-									<td class="num tabular {toneClass(toneFor(m?.pct, bands))}">{#if m}{m.pct}%{#if m.max}<br /><span class="small muted">{m.score} / {m.max}</span>{/if}{#if m.points != null}<br /><span class="small muted">{m.points} pts</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
+									<td class="num tabular" use:toned={toneFor(m?.pct, bands)}>{#if m}{m.pct}%{#if m.max}<br /><span class="small muted">{m.score} / {m.max}</span>{/if}{#if m.points != null}<br /><span class="small muted">{m.points} pts</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
 								{/each}
 								<td class="num tabular">{fmt(s.average, '%')}</td>
 								<td class="num tabular whitespace-nowrap">{marksLine(s)}</td>
 								{#if weighted}
 									<td class="num tabular font-semibold">{fmt(s.total)}{#if s.missing}<br /><span class="small text-warning">{s.missing} missed</span>{/if}</td>
-									<td class="num tabular font-semibold {toneClass(toneFor(s.final, bands))}">{fmt(s.final, '%')}</td>
+									<td class="num tabular font-semibold" use:toned={toneFor(s.final, bands)}>{fmt(s.final, '%')}</td>
 								{/if}
 								{#if attendance}<td class="num tabular">{fmt(attendance.get(s.user_id)?.rate, '%')}</td>{/if}
 							</tr>
