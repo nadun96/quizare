@@ -1597,6 +1597,27 @@ paths:
       description: Replaces the setup. Weight 0 keeps an item in the report but out of the total. Any teacher of the classroom.
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/ClassReportItemSetup' } }, exceptions: { type: array, items: { $ref: '#/components/schemas/ResultException' } } } } } } }
       responses: { '200': { description: 'The report', content: { application/json: { schema: { $ref: '#/components/schemas/ClassReport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/report-groups:
+    put:
+      operationId: putTeacherClassroomReportGroups
+      tags: [classrooms]
+      summary: Replace the class's groups, or one quiz's, tutorial's or poll's own, for mark sheets (D-141)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind], properties: { kind: { type: string, enum: [class, quiz, tutorial, poll] }, id: { type: string }, groups: { type: array, items: { type: object, properties: { name: { type: string, maxLength: 100 }, members: { type: array, items: { type: string } } } } } } } } } }
+      responses: { '200': { description: 'The report', content: { application/json: { schema: { $ref: '#/components/schemas/ClassReport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/report-header:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomReportHeader
+      tags: [classrooms]
+      summary: The header and footer of the classroom's exported reports (D-141)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ReportHeader' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putTeacherClassroomReportHeader
+      tags: [classrooms]
+      summary: Save the header and footer of the classroom's exported reports (D-141)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportHeader' } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ReportHeader' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/classrooms/{id}/attendance:
     get:
       operationId: getTeacherClassroomAttendance
@@ -3505,11 +3526,34 @@ components:
           properties:
             source: { type: string, enum: [console, config, log] }
             config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
+    ReportHeader:
+      type: object
+      properties:
+        classroom: { type: string, readOnly: true }
+        teacher: { type: string, readOnly: true }
+        title: { type: string, description: "blank: the report's own name" }
+        subtitle: { type: string }
+        institution: { type: string }
+        date_mode: { type: string, enum: [today, custom, none] }
+        date_value: { type: string, description: 'YYYY-MM-DD, when custom' }
+        show_teacher: { type: boolean }
+        footer: { type: string }
+        page_numbers: { type: boolean }
+    GroupRow:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        members: { type: array, items: { type: string } }
+        marks: { type: object, additionalProperties: { type: object, properties: { score: { type: number }, max: { type: number }, pct: { type: number }, points: { type: number }, marked: { type: integer } } } }
+        total: { type: number }
+        final: { type: number, nullable: true }
     ClassReportItemSetup:
       type: object
       properties:
-        kind: { type: string, enum: [quiz, tutorial] }
+        kind: { type: string, enum: [quiz, tutorial, poll] }
         id: { type: string }
+        group_rule: { type: string, enum: [average, total, highest, lowest] }
         included: { type: boolean }
         weight: { type: number, minimum: 0, maximum: 1000 }
         pick: { type: string, enum: [high, low] }
@@ -3531,6 +3575,8 @@ components:
         items: { type: array, items: { allOf: [{ $ref: '#/components/schemas/ClassReportItemSetup' }, { type: object, properties: { title: { type: string }, topic: { type: string }, module: { type: string }, taken: { type: integer }, avg: { type: number, nullable: true }, high: { type: number, nullable: true }, low: { type: number, nullable: true }, max_marks: { type: number } } }] } }
         students: { type: array, items: { type: object, properties: { user_id: { type: string }, name: { type: string }, student_number: { type: string }, marks: { type: object, additionalProperties: { type: object, properties: { score: { type: number }, max: { type: number }, pct: { type: number }, points: { type: number }, submissions: { type: integer }, pending: { type: boolean } } } }, total: { type: number }, missing: { type: integer }, final: { type: number, nullable: true } } } }
         exceptions: { type: array, items: { $ref: '#/components/schemas/ResultException' } }
+        class_groups: { type: array, items: { $ref: '#/components/schemas/GroupRow' } }
+        item_groups: { type: array, items: { type: object, properties: { kind: { type: string }, id: { type: string }, groups: { type: array, items: { $ref: '#/components/schemas/GroupRow' } } } } }
     Gradebook:
       type: object
       properties:
