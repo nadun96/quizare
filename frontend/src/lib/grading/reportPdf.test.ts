@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { A4, ACCENTS, contrastText, headerLines, layout, pageLabel, pdfName, printReportHTML, tint, toneFor, wrap, type ReportHeader, type Sheet } from './reportPdf';
+import { A4, ACCENTS, contrastText, headerLines, layout, pageLabel, pdfName, legend, printReportHTML, tint, toneFor, wrap, type ReportHeader, type Sheet } from './reportPdf';
 
 // Each character is 5 points wide.
 const measure = (t: string) => t.length * 5;
 const g = { ...A4, headerHeight: 60 };
-const header: ReportHeader = { classroom: 'Science', teacher: 'Ms P', title: '', subtitle: 'Term 1', institution: 'RUSL', date_mode: 'custom', date_value: '2026-11-06', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true };
+const header: ReportHeader = { classroom: 'Science', teacher: 'Ms P', title: '', subtitle: 'Term 1', institution: 'RUSL', date_mode: 'custom', date_value: '2026-11-06', show_teacher: true, footer: '© RUSL', page_numbers: true, logo: '', accent: '#1e4fa3', color_marks: true, band_high: 75, band_middle: 50 };
 
 describe('locked report PDFs (D-141)', () => {
 	it('wraps words, and breaks one too long to fit', () => {
@@ -108,6 +108,19 @@ describe('logo and colour on reports (D-143)', () => {
 		expect(html).not.toContain('style="background:#dcfce7');
 		expect(html).not.toContain('75% and above');
 		expect(html).not.toContain('<img');
+	});
+});
+
+describe('a classroom’s own colour bands (D-144)', () => {
+	const bands = { high: 80, middle: 40 };
+	it('puts marks in the bands the teacher chose', () => {
+		expect([toneFor(80, bands), toneFor(79.9, bands), toneFor(40, bands), toneFor(39.9, bands)]).toEqual(['high', 'middle', 'middle', 'low']);
+	});
+	it('says so in the key', () => {
+		expect(legend(bands).map((x) => x.label)).toEqual(['80% and above', '40% to under 80%', 'Below 40%']);
+		const html = printReportHTML([{ head: ['A'], rows: [['x']], tones: [['high']] }], { ...header, band_high: 80, band_middle: 40 }, 'Report');
+		expect(html).toContain('80% and above');
+		expect(html).not.toContain('75% and above');
 	});
 });
 

@@ -125,6 +125,11 @@ describe('colours on mark sheets (D-143)', () => {
 		expect(markTone(undefined, 0)).toBeNull();
 	});
 
+	it('uses the classroom’s own bands', () => {
+		const t = individualSheet(report(), { high: 90, middle: 60 });
+		expect(t.tones?.[0]).toEqual([null, null, 'middle', 'low', null, 'middle']);
+	});
+
 	it('gives the individual sheet a colour for each cell', () => {
 		const t = individualSheet(report());
 		expect(t.tones?.[0]).toEqual([null, null, 'high', 'middle', null, 'high']);
