@@ -14,6 +14,7 @@ export const si: Record<Key, string> = {
 	'nav.polls': 'මත විමසුම්',
 	'nav.meetings': 'රැස්වීම්',
 	'nav.tutoring': 'උපකාරක පන්ති',
+	'nav.archive': 'පසුගිය සැසි',
 	'nav.myQuizzes': 'මගේ ප්‍රශ්නාවලි',
 	'nav.join': 'එක්වන්න',
 	'nav.admin': 'පරිපාලන',

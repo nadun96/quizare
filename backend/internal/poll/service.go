@@ -345,7 +345,7 @@ var PollSorts = page.Sorts{"created": "p.created_at", "title": "lower(p.title)",
 // ListPolls returns one page of a teacher's polls, searched by title or join
 // code and filtered by status, and how many there are.
 func (s *Service) ListPolls(ctx context.Context, teacherID string, f PollFilter, pg page.Request) ([]*Poll, int, error) {
-	where := ` FROM poll.polls p WHERE p.teacher_id=$1 AND ($2 = '' OR p.title ILIKE $2 OR p.join_code ILIKE $2) AND ($3 = '' OR p.status = $3)
+	where := ` FROM poll.polls p WHERE p.teacher_id=$1 AND p.archived_at IS NULL AND ($2 = '' OR p.title ILIKE $2 OR p.join_code ILIKE $2) AND ($3 = '' OR p.status = $3)
 		AND ($4 = '' OR p.classroom_id::text = $4) AND ($5 = '' OR p.topic_id::text = $5)`
 	args := []any{teacherID, pg.Like(), f.Status, f.ClassroomID, f.TopicID}
 	var total int
@@ -437,11 +437,21 @@ func (s *Service) DeletePoll(ctx context.Context, teacherID, id string) error {
 	return err
 }
 
+// Forget lets go of a deleted poll's live connections (D-149).
+func (s *Service) Forget(id string) { s.hub.closed(id) }
+
 // SetStatus opens, closes or reopens a poll.
 func (s *Service) SetStatus(ctx context.Context, teacherID, id, status string) (*Poll, error) {
 	p, err := s.ownedPoll(ctx, teacherID, id)
 	if err != nil {
 		return nil, err
+	}
+	var archived bool
+	if err := s.pool.QueryRow(ctx, `SELECT archived_at IS NOT NULL FROM poll.polls WHERE id=$1`, id).Scan(&archived); err != nil {
+		return nil, err
+	}
+	if archived {
+		return nil, httpx.Conflict("this poll is in the archive: restore it first")
 	}
 	switch status {
 	case "open":
