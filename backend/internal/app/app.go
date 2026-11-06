@@ -315,6 +315,8 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	a.Drive = drive.NewService(pool, vault, a.Auth, a.Content, a.Quiz, driveResults{a}, rc, cfg.BaseURL, opt.Google, opt.HTTPClient, log)
 	driveBackup.Service, driveSync.Service = a.Drive, a.Drive
 	a.Tutorial = tutorial.NewService(pool, a.Content, a.Quiz, a.Auth)
+	a.Tutorial.SetResultAccess(a.Grading.ResultAccess) // what students see of their results (D-140)
+	a.Eval.SetResultAccess(a.Grading.ResultAccess)
 	a.Tutorial.SetLLM(a.LLM) // AI marking of written answers (D-75)
 	a.LLM.SetTutorials(a.Tutorial)
 	a.Slides = presentation.NewService(pool, a.Content, a.Auth, cfg.BaseURL)

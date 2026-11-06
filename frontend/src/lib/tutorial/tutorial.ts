@@ -56,6 +56,7 @@ export type PageView = {
 	locked: boolean;
 };
 export type RunView = {
+	review?: { detail?: string; until?: string; closed?: boolean } | null;
 	tutorial: { id: string; title: string; description: string; allow_back: boolean; feedback: FeedbackTiming; due_at?: string; teacher?: string; classroom?: string; topic?: string; published_at?: string };
 	current: number;
 	reached: number;

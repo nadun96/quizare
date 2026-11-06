@@ -3,6 +3,8 @@
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { describeKey, describeResponse } from '$lib/answerText';
+	import { reviewNote, type Review } from '$lib/grading/review';
+	import Icon from '$lib/ui/Icon.svelte';
 	import type { Key, Resource, Response, StudentQuestion } from '$lib/types';
 	import RichText from '$lib/richtext/RichText.svelte';
 	import Celebration from '$lib/progress/Celebration.svelte';
@@ -10,7 +12,7 @@
 
 	type Q = { question: StudentQuestion; response?: Response; correct_answer?: Key; score: number | null; max_score: number; status: string; correct: boolean | null; feedback?: string; ai_feedback?: string; ai_marked: boolean; feedback_resources?: Resource[] };
 	type Team = { name: string; color: number; rank: number; of: number; pct: number; members: number; finished: number; complete: boolean };
-	type Result = { session_title: string; score: number; max_score: number; pct: number; pass_mark_pct: number; passed: boolean; complete: boolean; state: string; questions: Q[]; team?: Team };
+	type Result = { review?: Review; session_title: string; score: number; max_score: number; pct: number; pass_mark_pct: number; passed: boolean; complete: boolean; state: string; questions: Q[]; team?: Team };
 	let res = $state<Result | null>(null);
 	let error = $state('');
 	let celebrate = $state<{ levelUp: boolean; badges: Badge[] } | null>(null);
@@ -50,6 +52,7 @@
 				<div class="text-right"><div class="muted small">Team place</div><strong style="font-size:1.25rem">{res.team.rank} of {res.team.of}</strong><div class="small muted">{res.team.pct}%{res.team.finished < res.team.members || !res.team.complete ? ' so far' : ''}</div></div>
 			</div>
 		{/if}
+		{#if reviewNote(res.review)}<p class="alert alert-soft alert-info m-0" role="status"><Icon name="info" size={18} />{reviewNote(res.review)}</p>{/if}
 		{#each res.questions as q, i (q.question.id)}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 				<div class="row">

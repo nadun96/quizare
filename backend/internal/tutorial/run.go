@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nadun96/quizplatform/internal/eval"
+	"github.com/nadun96/quizplatform/internal/grading"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/quiz"
 	"github.com/nadun96/quizplatform/internal/settings"
@@ -69,6 +70,7 @@ type run struct {
 	effs     map[string]settings.Effective
 	answers  map[string]answer
 	visits   map[string]visit // by page id
+	review   grading.Review   // once finished: what the teacher lets them see (D-140)
 }
 
 // isLocked: the page is locked for leaving the app too often.
@@ -151,6 +153,20 @@ func (s *Service) loadRun(ctx context.Context, t Tutorial, userID string, start 
 	qs, effs, err := s.questions.TutorialQuestions(ctx, t.QuizID)
 	if err != nil {
 		return nil, err
+	}
+	if r.finished != nil && s.access != nil {
+		a, err := s.access(ctx, "tutorial", t.ID, userID)
+		if err != nil {
+			return nil, err
+		}
+		since := r.finished
+		if t.Feedback == FeedbackRelease {
+			since = t.ReleasedAt
+			if since != nil && r.finished.After(*since) {
+				since = r.finished
+			}
+		}
+		r.review = a.At(since, s.now())
 	}
 	r.qs, r.effs = map[string]quiz.Question{}, effs
 	for _, q := range qs {
@@ -308,14 +324,15 @@ type RunView struct {
 		Topic       string     `json:"topic"`
 		PublishedAt *time.Time `json:"published_at,omitempty"`
 	} `json:"tutorial"`
-	Current  int           `json:"current"`
-	Reached  int           `json:"reached"`
-	Finished bool          `json:"finished"`
-	ReadOnly bool          `json:"read_only"`
-	PastDue  bool          `json:"past_due"`
-	Pages    []PageSummary `json:"pages"`
-	Page     *PageView     `json:"page,omitempty"`
-	Score    *Score        `json:"score,omitempty"`
+	Current  int             `json:"current"`
+	Reached  int             `json:"reached"`
+	Finished bool            `json:"finished"`
+	ReadOnly bool            `json:"read_only"`
+	PastDue  bool            `json:"past_due"`
+	Pages    []PageSummary   `json:"pages"`
+	Page     *PageView       `json:"page,omitempty"`
+	Score    *Score          `json:"score,omitempty"`
+	Review   *grading.Review `json:"review,omitempty"` // D-140
 }
 
 func feedbackText(q quiz.Question, a answer) string {
@@ -333,7 +350,7 @@ func (s *Service) pageView(r *run, i int) *PageView {
 	if v.Blocks == nil {
 		v.Blocks = []Block{}
 	}
-	shown := r.feedbackShown()
+	shown := r.feedbackShown() && r.review.Detail != grading.DetailMarks
 	ro := r.readOnly(s.now())
 	for _, qid := range p.QuestionIDs {
 		q, ok := r.qs[qid]
@@ -354,7 +371,7 @@ func (s *Service) pageView(r *run, i int) *PageView {
 					}
 				}
 				// The right answer, once theirs can't change.
-				if (qv.Locked || ro) && q.Type.KeyAllowed() {
+				if (qv.Locked || ro) && q.Type.KeyAllowed() && r.review.Detail != grading.DetailCorrectness {
 					k := q.Key
 					m.Key = &k
 				}
@@ -407,6 +424,10 @@ func (s *Service) view(r *run, page int) RunView {
 			page = r.current
 		}
 		v.Page = s.pageView(r, page)
+	}
+	if r.finished != nil && (r.review.Detail != "" || r.review.Until != nil) {
+		rv := r.review
+		v.Review = &rv
 	}
 	if r.feedbackShown() {
 		sc := &Score{}

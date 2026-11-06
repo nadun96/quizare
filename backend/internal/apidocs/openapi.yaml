@@ -1583,6 +1583,20 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { weights: { type: array, items: { type: object, properties: { kind: { type: string, enum: [quiz, tutorial] }, id: { type: string, format: uuid }, weight: { type: number, minimum: 0, maximum: 100 } } } } } } } } }
       responses: { '200': { description: 'The gradebook', content: { application/json: { schema: { $ref: '#/components/schemas/Gradebook' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/class-report:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomClassReport
+      tags: [classrooms]
+      summary: The class report per student, with its setup and what students see (D-140)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ClassReport' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putTeacherClassroomClassReport
+      tags: [classrooms]
+      summary: Save the report's setup and what students see (D-140)
+      description: Replaces the setup. Weight 0 keeps an item in the report but out of the total. Any teacher of the classroom.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/ClassReportItemSetup' } }, exceptions: { type: array, items: { $ref: '#/components/schemas/ResultException' } } } } } } }
+      responses: { '200': { description: 'The report', content: { application/json: { schema: { $ref: '#/components/schemas/ClassReport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/classrooms/{id}/attendance:
     get:
       operationId: getTeacherClassroomAttendance
@@ -3491,6 +3505,32 @@ components:
           properties:
             source: { type: string, enum: [console, config, log] }
             config: { type: object, properties: { addr: { type: string }, from: { type: string }, user: { type: string } } }
+    ClassReportItemSetup:
+      type: object
+      properties:
+        kind: { type: string, enum: [quiz, tutorial] }
+        id: { type: string }
+        included: { type: boolean }
+        weight: { type: number, minimum: 0, maximum: 1000 }
+        pick: { type: string, enum: [high, low] }
+        detail: { type: string, enum: ['', marks, correctness, answers], description: "empty: the item's own settings" }
+        review_minutes: { type: integer, minimum: 0, description: '0: no limit' }
+    ResultException:
+      type: object
+      properties:
+        kind: { type: string, enum: [quiz, tutorial] }
+        id: { type: string }
+        user_id: { type: string }
+        detail: { type: string, enum: ['', marks, correctness, answers], description: "empty: the item's" }
+        review_minutes: { type: integer, nullable: true, description: "null: the item's; 0: no limit" }
+    ClassReport:
+      type: object
+      properties:
+        classroom: { type: string }
+        weight_total: { type: number }
+        items: { type: array, items: { allOf: [{ $ref: '#/components/schemas/ClassReportItemSetup' }, { type: object, properties: { title: { type: string }, topic: { type: string }, module: { type: string }, taken: { type: integer }, avg: { type: number, nullable: true }, high: { type: number, nullable: true }, low: { type: number, nullable: true }, max_marks: { type: number } } }] } }
+        students: { type: array, items: { type: object, properties: { user_id: { type: string }, name: { type: string }, student_number: { type: string }, marks: { type: object, additionalProperties: { type: object, properties: { score: { type: number }, max: { type: number }, pct: { type: number }, points: { type: number }, submissions: { type: integer }, pending: { type: boolean } } } }, total: { type: number }, missing: { type: integer }, final: { type: number, nullable: true } } } }
+        exceptions: { type: array, items: { $ref: '#/components/schemas/ResultException' } }
     Gradebook:
       type: object
       properties:
