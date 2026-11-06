@@ -26,7 +26,7 @@ const (
 	DetailCorrectness = "correctness" // and whether each answer was right
 	DetailAnswers     = "answers"     // and the correct answers
 
-	maxReportWeight  = 1000
+	maxReportWeight  = 1 // a fraction: 0.4 counts a mark's percentage × 0.4 (D-142)
 	maxReviewMinutes = 366 * 24 * 60
 )
 
@@ -111,7 +111,7 @@ type ReportMark struct {
 	Score       float64  `json:"score"`
 	Max         float64  `json:"max"`
 	Pct         float64  `json:"pct"`
-	Points      *float64 `json:"points,omitempty"` // pct × weight / 100, when it counts
+	Points      *float64 `json:"points,omitempty"` // the final mark: pct × weight, when it counts
 	Submissions int      `json:"submissions"`      // valid ones to choose from
 	Pending     bool     `json:"pending,omitempty"`
 }
@@ -137,9 +137,10 @@ type ResultException struct {
 
 type ClassReport struct {
 	Classroom   string            `json:"classroom"`
-	Items       []ReportItem      `json:"items"`    // every item; those included are the report's columns
-	Students    []ReportStudent   `json:"students"` // marks on included items only
-	WeightTotal float64           `json:"weight_total"`
+	Items       []ReportItem      `json:"items"`        // every item; those included are the report's columns
+	Students    []ReportStudent   `json:"students"`     // marks on included items only
+	WeightTotal float64           `json:"weight_total"` // the weights added up
+	OutOf       float64           `json:"out_of"`       // what the total is out of: 100 × that
 	Exceptions  []ResultException `json:"exceptions"`
 	ClassGroups []GroupRow        `json:"class_groups"` // the whole class's groups (D-141)
 	ItemGroups  []ItemGroups      `json:"item_groups"`  // items with groups of their own
@@ -196,7 +197,7 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 				AND EXISTS (SELECT 1 FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL AND x.points > 0)
 		)
 		SELECT i.kind, i.id::text, i.title, i.topic, i.module, coalesce(ri.included, true),
-			coalesce(ri.weight, w.weight, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average')
+			coalesce(ri.weight, w.weight / 100, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average')
 		FROM items i
 		LEFT JOIN grading.report_items ri ON ri.classroom_id = $1 AND ri.kind = i.kind AND ri.item_id = i.id
 		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = i.kind AND w.item_id = i.id
@@ -303,7 +304,7 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			}
 			m := ReportMark{Score: round(x.score, 2), Max: round(x.max, 2), Pct: pct, Submissions: len(list), Pending: !x.complete}
 			if counted {
-				p := round(pct*it.Weight/100, 2)
+				p := round(pct*it.Weight, 2)
 				m.Points = &p
 				st.Total += p
 			}
@@ -320,12 +321,13 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			it.Avg, it.High, it.Low = &a, &h, &l
 		}
 	}
-	rep.WeightTotal = round(rep.WeightTotal, 2)
+	rep.WeightTotal = round(rep.WeightTotal, 4)
+	rep.OutOf = round(rep.WeightTotal*100, 2)
 	for j := range rep.Students {
 		st := &rep.Students[j]
 		st.Total = round(st.Total, 2)
-		if rep.WeightTotal > 0 {
-			f := round(st.Total/rep.WeightTotal*100, 1)
+		if rep.OutOf > 0 {
+			f := round(st.Total/rep.OutOf*100, 1)
 			st.Final = &f
 		}
 	}
@@ -393,7 +395,7 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 		case seen[k]:
 			bad["items"] = "an item is listed twice"
 		case it.Weight < 0 || it.Weight > maxReportWeight:
-			bad["items"] = fmt.Sprintf("a weight must be between 0 and %d", maxReportWeight)
+			bad["items"] = fmt.Sprintf("a weight must be between 0 and %d, such as 0.4", maxReportWeight)
 		case it.Pick != PickHigh && it.Pick != PickLow:
 			bad["items"] = "choose the highest or the lowest mark"
 		case !validDetail(it.Detail):
@@ -441,7 +443,7 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 				it.GroupRule = RuleAverage
 			}
 			if _, err := tx.Exec(ctx, `INSERT INTO grading.report_items (classroom_id, kind, item_id, included, weight, pick, detail, review_minutes, group_rule, updated_by)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, classroomID, it.Kind, it.ID, it.Included, round(it.Weight, 2), it.Pick, it.Detail, it.ReviewMinutes, it.GroupRule, teacherID); err != nil {
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, classroomID, it.Kind, it.ID, it.Included, round(it.Weight, 4), it.Pick, it.Detail, it.ReviewMinutes, it.GroupRule, teacherID); err != nil {
 				return err
 			}
 		}

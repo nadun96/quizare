@@ -10,12 +10,14 @@
 	import { toast } from '../ui/toast.svelte';
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
-	import { classAverage, gradebookCSV, key, marksLine, studentRange, totalAverage, mergeTutoring, openPrint, printHTML, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
+	import { classAverage, gradebookCSV, key, marksLine, studentRange, totalAverage, mergeTutoring, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
 	import ReportPdfButton from './ReportPdfButton.svelte';
+	import { DEFAULT_BANDS, toneClass, toneFor, type Bands } from './reportPdf';
 	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
 	let g = $state<Gradebook | null>(null);
+	let bands = $state<Bands>(DEFAULT_BANDS);
 	let error = $state('');
 	let editing = $state(false);
 	let draft = $state<Record<string, number | null>>({});
@@ -100,14 +102,17 @@
 			...(weighted ? [`${s.total} / ${g!.weight_total}`, s.final == null ? '–' : s.final + '%'] : []),
 			...(attendance ? [attendance.get(s.user_id)?.rate != null ? attendance.get(s.user_id)!.rate + '%' : '–'] : [])
 		]);
-		return { head, rows };
-	}
-	function print() {
-		const g = shown;
-		if (!g) return;
-		const { head, rows } = table(g);
-		const ok = openPrint(printHTML(`Results · ${g.classroom}${scoped ? ' · ' + scopeName : ''}`, weighted ? `Weighted items count for ${g.weight_total}% of the final result; a mark shows as percent · points.` : 'Each student’s best mark on each quiz and tutorial.', head, rows));
-		if (!ok) toast('Allow pop-ups for this site to print', 'error');
+		const tones = g.students.map((s) => [
+			null,
+			null,
+			...g.items.map((it) => toneFor(s.marks[key(it)]?.pct, bands) ?? (it.weight ? ('missing' as const) : null)),
+			toneFor(s.average, bands),
+			null,
+			...(weighted ? [null, toneFor(s.final, bands)] : []),
+			...(attendance ? [toneFor(attendance.get(s.user_id)?.rate, bands)] : [])
+		]);
+		const heading = weighted ? `Weighted items count for ${g.weight_total}% of the final result; a mark shows as percent · points.` : 'Each student’s best mark on each quiz and tutorial.';
+		return { heading, head, rows, tones };
 	}
 </script>
 
@@ -124,8 +129,7 @@
 			<span class="grow"></span>
 			{#if !editing && !scoped}<button class="btn btn-sm" onclick={startEditing} disabled={!g.items.length}><Icon name="sliders" size={15} />Weights</button>{/if}
 			<button class="btn btn-sm" onclick={download} disabled={!g.students.length}><Icon name="download" size={15} />CSV</button>
-			<button class="btn btn-sm" onclick={print} disabled={!g.students.length}><Icon name="table" size={15} />Print</button>
-			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => (shown ? [{ ...table(shown), frozen: 2 }] : [])} disabled={!g.students.length} />
+			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => (shown ? [{ ...table(shown), frozen: 2 }] : [])} disabled={!g.students.length} onbands={(b) => (bands = b)} />
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<p class="small muted m-0 grow">
@@ -178,13 +182,13 @@
 								<td>{s.name}{#if s.student_number}<br /><span class="small muted">{s.student_number}</span>{/if}</td>
 								{#each g.items as it (key(it))}
 									{@const m = s.marks[key(it)]}
-									<td class="num tabular">{#if m}{m.pct}%{#if m.max}<br /><span class="small muted">{m.score} / {m.max}</span>{/if}{#if m.points != null}<br /><span class="small muted">{m.points} pts</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
+									<td class="num tabular {toneClass(toneFor(m?.pct, bands))}">{#if m}{m.pct}%{#if m.max}<br /><span class="small muted">{m.score} / {m.max}</span>{/if}{#if m.points != null}<br /><span class="small muted">{m.points} pts</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
 								{/each}
 								<td class="num tabular">{fmt(s.average, '%')}</td>
 								<td class="num tabular whitespace-nowrap">{marksLine(s)}</td>
 								{#if weighted}
 									<td class="num tabular font-semibold">{fmt(s.total)}{#if s.missing}<br /><span class="small text-warning">{s.missing} missed</span>{/if}</td>
-									<td class="num tabular font-semibold">{fmt(s.final, '%')}</td>
+									<td class="num tabular font-semibold {toneClass(toneFor(s.final, bands))}">{fmt(s.final, '%')}</td>
 								{/if}
 								{#if attendance}<td class="num tabular">{fmt(attendance.get(s.user_id)?.rate, '%')}</td>{/if}
 							</tr>
