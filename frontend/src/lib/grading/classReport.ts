@@ -1,7 +1,7 @@
 // The class report (D-140): the setup a teacher edits, and the report built
 // from it, from /api/teacher/classrooms/{id}/class-report.
 import { toCSV } from '../tutoring/types';
-import type { Sheet } from './reportPdf';
+import { DEFAULT_BANDS, toneFor, type Bands, type Sheet, type Tone } from './reportPdf';
 
 export type Pick = 'high' | 'low';
 export type Detail = '' | 'marks' | 'correctness' | 'answers';
@@ -15,7 +15,7 @@ export type ResultException = { kind: string; id: string; user_id: string; detai
 export type GroupMark = { score: number; max: number; pct: number; points?: number; marked: number };
 export type GroupRow = { id: string; name: string; members: string[]; marks: Record<string, GroupMark>; total: number; final: number | null };
 export type ItemGroups = { kind: string; id: string; groups: GroupRow[] };
-export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; exceptions: ResultException[]; class_groups: GroupRow[]; item_groups: ItemGroups[] };
+export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; out_of: number; exceptions: ResultException[]; class_groups: GroupRow[]; item_groups: ItemGroups[] };
 
 export type DraftItem = { groupRule: GroupRule; included: boolean; weight: number | null; pick: Pick; detail: Detail; reviewN: number | null; reviewUnit: Unit };
 export type DraftException = { item: string; user_id: string; detail: Detail; reviewN: number | null; reviewUnit: Unit };
@@ -71,7 +71,7 @@ export function setAllPicks(d: Draft, pick: Pick) {
 /** What's counted in the total: the weights of the items in the report. */
 export function draftWeightTotal(d: Draft): number {
 	const sum = Object.values(d.items).reduce((a, it) => a + (it.included && it.weight && it.weight > 0 ? it.weight : 0), 0);
-	return Math.round(sum * 100) / 100;
+	return Math.round(sum * 10000) / 10000;
 }
 
 const splitKey = (k: string) => {
@@ -82,7 +82,7 @@ const splitKey = (k: string) => {
 /** What's wrong with the setup, or empty. */
 export function draftProblem(d: Draft): string {
 	for (const it of Object.values(d.items)) {
-		if (it.weight != null && (it.weight < 0 || it.weight > 1000)) return 'A weight must be between 0 and 1000.';
+		if (it.weight != null && (it.weight < 0 || it.weight > 1)) return 'A weight must be between 0 and 1, such as 0.4.';
 		if (it.reviewN != null && it.reviewN < 0) return 'A review time can’t be negative.';
 	}
 	const seen = new Set<string>();
@@ -125,7 +125,7 @@ export function classReportCSV(r: ClassReport): string {
 	const head = ['Student', 'Student ID'];
 	for (const it of cols) {
 		head.push(`${it.title} (marks)`, `${it.title} (out of)`, `${it.title} (%)`);
-		if (it.weight > 0) head.push(`${it.title} (points of ${it.weight})`);
+		if (it.weight > 0) head.push(`${it.title} (final mark, % × ${it.weight})`);
 	}
 	head.push('Total', 'Out of', 'Final (%)', 'Counted items missed');
 	const rows: (string | number)[][] = [head];
@@ -136,7 +136,7 @@ export function classReportCSV(r: ClassReport): string {
 			row.push(m?.score ?? '', m?.max ?? '', m?.pct ?? '');
 			if (it.weight > 0) row.push(m?.points ?? 0);
 		}
-		row.push(s.total, r.weight_total, s.final ?? '', s.missing);
+		row.push(s.total, r.out_of, s.final ?? '', s.missing);
 		rows.push(row);
 	}
 	const per = (f: (it: ReportItem) => string | number) => cols.flatMap((it) => ['', '', f(it), ...(it.weight > 0 ? [''] : [])]);
@@ -150,12 +150,18 @@ export function classReportCSV(r: ClassReport): string {
 	return toCSV(rows);
 }
 
+/** A mark's colour: by how high it is, or for one that counts and is missing. */
+export function markTone(m: { pct: number } | undefined, weight: number, bands: Bands = DEFAULT_BANDS): Tone | null {
+	return m ? toneFor(m.pct, bands) : weight > 0 ? 'missing' : null;
+}
+
 /** The individual mark sheet, for printing and PDF. */
-export function individualSheet(r: ClassReport): Sheet {
+export function individualSheet(r: ClassReport, bands: Bands = DEFAULT_BANDS): Sheet {
 	const cols = columns(r);
 	const head = ['Student', 'ID', ...cols.map((it) => `${it.title} (${weightText(it)})`), 'Total', 'Final'];
-	const rows = r.students.map((s) => [s.name, s.student_number ?? '', ...cols.map((it) => markText(s.marks[itemKey(it)]) || '—'), `${s.total} / ${r.weight_total}`, s.final == null ? '' : `${s.final}%`]);
-	return { heading: 'Individual marks', head, rows, frozen: 2 };
+	const rows = r.students.map((s) => [s.name, s.student_number ?? '', ...cols.map((it) => markText(s.marks[itemKey(it)]) || '—'), `${s.total} / ${r.out_of}`, s.final == null ? '' : `${s.final}%`]);
+	const tones = r.students.map((s) => [null, null, ...cols.map((it) => markTone(s.marks[itemKey(it)], it.weight, bands)), null, toneFor(s.final, bands)]);
+	return { heading: 'Individual marks', head, rows, tones, frozen: 2 };
 }
 
 /** Group names and who's in them, in the classroom's order. */
@@ -176,23 +182,25 @@ export function ungrouped(r: ClassReport): string[] {
 }
 
 /** The group mark sheets: the class's, then each item's own groups. */
-export function groupSheets(r: ClassReport): Sheet[] {
+export function groupSheets(r: ClassReport, bands: Bands = DEFAULT_BANDS): Sheet[] {
 	const cols = columns(r);
 	const sheets: Sheet[] = [];
 	if (r.class_groups.length) {
 		const head = ['Group', 'Members', ...cols.map((it) => `${it.title} (${weightText(it)}, ${ruleText(it).toLowerCase()})`), 'Total', 'Final'];
-		const rows = r.class_groups.map((g) => [g.name, memberNames(r, g), ...cols.map((it) => groupMarkText(g.marks[itemKey(it)]) || '—'), `${g.total} / ${r.weight_total}`, g.final == null ? '' : `${g.final}%`]);
-		sheets.push({ heading: 'Marks by class group', head, rows, frozen: 1 });
+		const rows = r.class_groups.map((g) => [g.name, memberNames(r, g), ...cols.map((it) => groupMarkText(g.marks[itemKey(it)]) || '—'), `${g.total} / ${r.out_of}`, g.final == null ? '' : `${g.final}%`]);
+		const tones = r.class_groups.map((g) => [null, null, ...cols.map((it) => markTone(g.marks[itemKey(it)], 0, bands)), null, toneFor(g.final, bands)]);
+		sheets.push({ heading: 'Marks by class group', head, rows, tones, frozen: 1 });
 	}
 	for (const own of r.item_groups) {
 		const it = r.items.find((x) => x.kind === own.kind && x.id === own.id);
 		if (!it?.included) continue;
-		const head = ['Group', 'Members', `${it.title} (${ruleText(it).toLowerCase()})`, ...(it.weight > 0 ? [`Points of ${it.weight}`] : [])];
+		const head = ['Group', 'Members', `${it.title} (${ruleText(it).toLowerCase()})`, ...(it.weight > 0 ? [`Final mark (% × ${it.weight})`] : [])];
 		const rows = own.groups.map((g) => {
 			const m = g.marks[itemKey(it)];
 			return [g.name, memberNames(r, g), groupMarkText(m) || '—', ...(it.weight > 0 ? [m?.points ?? 0] : [])];
 		});
-		sheets.push({ heading: `Marks by ${it.title}’s own groups`, head, rows, frozen: 1 });
+		const tones = own.groups.map((g) => [null, null, markTone(g.marks[itemKey(it)], 0, bands), null]);
+		sheets.push({ heading: `Marks by ${it.title}’s own groups`, head, rows, tones, frozen: 1 });
 	}
 	return sheets;
 }

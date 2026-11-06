@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { classReportCSV, draftFrom, draftProblem, draftWeightTotal, finalRange, groupSheets, groupsCSV, groupsProblem, individualSheet, reviewParts, setAllPicks, setupPayload, splitIntoGroups, toMinutes, ungrouped, type ClassReport, type ReportItem } from './classReport';
+import { classReportCSV, markTone, draftFrom, draftProblem, draftWeightTotal, finalRange, groupSheets, groupsCSV, groupsProblem, individualSheet, reviewParts, setAllPicks, setupPayload, splitIntoGroups, toMinutes, ungrouped, type ClassReport, type ReportItem } from './classReport';
 
-const item = (more: Partial<ReportItem>): ReportItem => ({ group_rule: 'average', kind: 'quiz', id: 'q1', title: 'Cells', topic: 'T', module: 'M', included: true, weight: 20, pick: 'high', detail: '', review_minutes: 0, taken: 1, avg: 80, high: 80, low: 80, max_marks: 10, ...more });
+const item = (more: Partial<ReportItem>): ReportItem => ({ group_rule: 'average', kind: 'quiz', id: 'q1', title: 'Cells', topic: 'T', module: 'M', included: true, weight: 0.2, pick: 'high', detail: '', review_minutes: 0, taken: 1, avg: 80, high: 80, low: 80, max_marks: 10, ...more });
 const report = (): ClassReport => ({
 	classroom: 'Science',
-	weight_total: 20,
+	weight_total: 0.2,
+	out_of: 20,
 	items: [item({}), item({ kind: 'tutorial', id: 't1', title: 'Atoms', weight: 0, review_minutes: 2880, detail: 'marks' }), item({ id: 'q2', title: 'Left out', included: false })],
 	students: [{ user_id: 'u1', name: 'Amaya', student_number: 'S1', marks: { 'quiz:q1': { score: 8, max: 10, pct: 80, points: 16, submissions: 2 }, 'tutorial:t1': { score: 1, max: 2, pct: 50, submissions: 1 } }, total: 16, missing: 0, final: 80 }],
 	exceptions: [{ kind: 'quiz', id: 'q1', user_id: 'u1', detail: '', review_minutes: 90 }],
@@ -41,15 +42,17 @@ describe('the class report (D-140)', () => {
 	});
 
 	it('totals only the weights of items in the report', () => {
-		expect(draftWeightTotal(draftFrom(report()))).toBe(20);
+		expect(draftWeightTotal(draftFrom(report()))).toBe(0.2);
 	});
 
 	it('catches a setup the server would refuse', () => {
 		const d = draftFrom(report());
 		expect(draftProblem(d)).toBe('');
 		d.items['quiz:q1'].weight = -1;
-		expect(draftProblem(d)).toMatch(/between 0 and 1000/);
-		d.items['quiz:q1'].weight = 5;
+		expect(draftProblem(d)).toMatch(/between 0 and 1,/);
+		d.items['quiz:q1'].weight = 1.5;
+		expect(draftProblem(d)).toMatch(/between 0 and 1,/);
+		d.items['quiz:q1'].weight = 0.5;
 		d.exceptions.push({ ...d.exceptions[0] });
 		expect(draftProblem(d)).toMatch(/two exceptions/);
 		d.exceptions.pop();
@@ -59,9 +62,9 @@ describe('the class report (D-140)', () => {
 
 	it('reports only what is included, with a weight 0 item shown but not given points', () => {
 		const csv = classReportCSV(report());
-		expect(csv).toContain('Cells (points of 20)');
+		expect(csv).toContain('Cells (final mark, % × 0.2)');
 		expect(csv).toContain('Atoms (%)');
-		expect(csv).not.toContain('Atoms (points');
+		expect(csv).not.toContain('Atoms (final mark');
 		expect(csv).not.toContain('Left out');
 		const t = individualSheet(report());
 		expect(t.head).toContain('Atoms (Not in the total)');
@@ -112,6 +115,25 @@ describe('groups on mark sheets (D-141)', () => {
 		expect(groupsProblem([{ name: 'A' }, { name: 'B' }])).toBe('');
 		expect(groupsProblem([{ name: ' ' }])).toMatch(/needs a name/);
 		expect(groupsProblem([{ name: 'A' }, { name: ' a ' }])).toMatch(/Two groups/);
+	});
+});
+
+describe('colours on mark sheets (D-143)', () => {
+	it('colours a mark by its height, and a missing one only if it counts', () => {
+		expect(markTone({ pct: 80 }, 0.2)).toBe('high');
+		expect(markTone(undefined, 0.2)).toBe('missing');
+		expect(markTone(undefined, 0)).toBeNull();
+	});
+
+	it('uses the classroom’s own bands', () => {
+		const t = individualSheet(report(), { high: 90, middle: 60 });
+		expect(t.tones?.[0]).toEqual([null, null, 'middle', 'low', null, 'middle']);
+	});
+
+	it('gives the individual sheet a colour for each cell', () => {
+		const t = individualSheet(report());
+		expect(t.tones?.[0]).toEqual([null, null, 'high', 'middle', null, 'high']);
+		expect(t.tones?.[0].length).toBe(t.head.length);
 	});
 });
 

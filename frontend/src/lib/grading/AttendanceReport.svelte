@@ -9,11 +9,13 @@
 	import { toast } from '../ui/toast.svelte';
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
-	import { attendanceDetailCSV, attendanceScopes, attendanceSummaryCSV, mergeTutoring, openPrint, printHTML, scopedAttendance, scopeFrom, scopeValue, summarise, type Attendance } from './grading';
+	import { attendanceDetailCSV, attendanceScopes, attendanceSummaryCSV, mergeTutoring, scopedAttendance, scopeFrom, scopeValue, summarise, type Attendance } from './grading';
 	import ReportPdfButton from './ReportPdfButton.svelte';
+	import { DEFAULT_BANDS, toneClass, toneFor, type Bands } from './reportPdf';
 	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
+	let bands = $state<Bands>(DEFAULT_BANDS);
 	const day = (d: Date) => d.toISOString().slice(0, 10);
 	let from = $state(day(new Date(Date.now() - 90 * 864e5)));
 	let to = $state(day(new Date()));
@@ -74,12 +76,8 @@
 	function table() {
 		const head = ['Student', 'ID', ...kinds.map((k) => LABEL[k]), 'Attended', 'Rate', 'Minutes'];
 		const body = rows.map((r) => [r.name, r.number, ...kinds.map((k) => `${r.byKind[k].came}/${r.byKind[k].of}`), `${r.came}/${r.of}`, r.rate == null ? '–' : r.rate + '%', r.minutes]);
-		return { head, rows: body };
-	}
-	function print() {
-		if (!data) return;
-		const { head, rows: body } = table();
-		if (!openPrint(printHTML(`Attendance · ${data.classroom}${scope.kind !== 'all' ? ' · ' + scopeName : ''}`, `${from} to ${to} · ${data.events.length} sessions`, head, body))) toast('Allow pop-ups for this site to print', 'error');
+		const tones = rows.map((r) => [null, null, ...kinds.map(() => null), null, toneFor(r.rate, bands), null]);
+		return { head, rows: body, tones };
 	}
 </script>
 
@@ -93,8 +91,7 @@
 		{#if data}
 			<button class="btn btn-sm" onclick={() => saveFile(file('attendance') + '.csv', attendanceSummaryCSV(data!))} disabled={!rows.length}><Icon name="download" size={15} />Summary CSV</button>
 			<button class="btn btn-sm" onclick={() => saveFile(file('attendance-by-session') + '.csv', attendanceDetailCSV(data!))} disabled={!data.events.length}><Icon name="download" size={15} />By session CSV</button>
-			<button class="btn btn-sm" onclick={print} disabled={!rows.length}><Icon name="table" size={15} />Print</button>
-			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => [{ heading: `${from} to ${to}`, ...table(), frozen: 2 }]} disabled={!rows.length} />
+			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => [{ heading: `${from} to ${to} · ${data?.events.length ?? 0} sessions`, ...table(), frozen: 2 }]} disabled={!rows.length} onbands={(b) => (bands = b)} />
 		{/if}
 	</div>
 	{#if error}<p class="alert alert-soft alert-error m-0">{error}</p>{/if}
@@ -115,7 +112,7 @@
 								<td>{r.name}{#if r.number}<br /><span class="small muted">{r.number}</span>{/if}</td>
 								{#each kinds as k (k)}<td class="num tabular">{r.byKind[k].came} / {r.byKind[k].of}</td>{/each}
 								<td class="num tabular">{r.came} / {r.of}</td>
-								<td class="num tabular" class:text-warning={r.rate !== null && r.rate < 50}>{r.rate == null ? '–' : r.rate + '%'}</td>
+								<td class="num tabular {toneClass(toneFor(r.rate, bands))}">{r.rate == null ? '–' : r.rate + '%'}</td>
 								<td class="num tabular">{r.minutes}</td>
 							</tr>
 						{:else}

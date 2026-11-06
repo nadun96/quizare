@@ -3539,6 +3539,11 @@ components:
         show_teacher: { type: boolean }
         footer: { type: string }
         page_numbers: { type: boolean }
+        logo: { type: string, description: 'a data URL, PNG or JPEG, at most 300 KB; empty: none (D-143)' }
+        accent: { type: string, description: "the reports' colour, #rrggbb" }
+        color_marks: { type: boolean, description: 'tint marks by how high they are' }
+        band_high: { type: integer, description: 'this percent and above is green (D-144)' }
+        band_middle: { type: integer, description: 'this percent and above is amber, below it red (D-144)' }
     GroupRow:
       type: object
       properties:
@@ -3555,7 +3560,7 @@ components:
         id: { type: string }
         group_rule: { type: string, enum: [average, total, highest, lowest] }
         included: { type: boolean }
-        weight: { type: number, minimum: 0, maximum: 1000 }
+        weight: { type: number, minimum: 0, maximum: 1, description: "a fraction: the final mark is the mark's percentage × this; 0 leaves it out of the total" }
         pick: { type: string, enum: [high, low] }
         detail: { type: string, enum: ['', marks, correctness, answers], description: "empty: the item's own settings" }
         review_minutes: { type: integer, minimum: 0, description: '0: no limit' }
@@ -3571,7 +3576,8 @@ components:
       type: object
       properties:
         classroom: { type: string }
-        weight_total: { type: number }
+        weight_total: { type: number, description: 'the weights added up' }
+        out_of: { type: number, description: 'what a total is out of: 100 × the weights added up' }
         items: { type: array, items: { allOf: [{ $ref: '#/components/schemas/ClassReportItemSetup' }, { type: object, properties: { title: { type: string }, topic: { type: string }, module: { type: string }, taken: { type: integer }, avg: { type: number, nullable: true }, high: { type: number, nullable: true }, low: { type: number, nullable: true }, max_marks: { type: number } } }] } }
         students: { type: array, items: { type: object, properties: { user_id: { type: string }, name: { type: string }, student_number: { type: string }, marks: { type: object, additionalProperties: { type: object, properties: { score: { type: number }, max: { type: number }, pct: { type: number }, points: { type: number }, submissions: { type: integer }, pending: { type: boolean } } } }, total: { type: number }, missing: { type: integer }, final: { type: number, nullable: true } } } }
         exceptions: { type: array, items: { $ref: '#/components/schemas/ResultException' } }
