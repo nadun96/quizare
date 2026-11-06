@@ -12,6 +12,7 @@
 	import Pager from '$lib/ui/Pager.svelte';
 	import SortHeader from '$lib/ui/SortHeader.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
+	import ClassActivities from '$lib/classroom/ClassActivities.svelte';
 	import type { Presentation } from '$lib/presentation/presentation';
 	import type { Tutorial } from '$lib/tutorial/tutorial';
 
@@ -140,6 +141,7 @@
 			<input class="input w-full" style="flex:1" bind:value={presentationTitle} placeholder="New presentation title" required maxlength="200" aria-label="Presentation title" />
 			<button class="btn btn-primary">Create presentation</button>
 		</form>
+		<ClassActivities classroomId={topic.classroom_id} topicId={topic.id} />
 		<details class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
 			<summary><strong>Topic settings</strong></summary>
 			<div style="margin-top:1rem"><SettingsEditor level="topic" value={topic.settings} onsave={saveSettings} {errors} /></div>

@@ -201,8 +201,9 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 			WHERE m.classroom_id = $1 AND t.status = 'published' AND EXISTS (SELECT 1 FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)
 			UNION ALL
-			SELECT 'poll', p.id, p.title, '', '', coalesce(p.opened_at, p.created_at)
+			SELECT 'poll', p.id, p.title, coalesce(ptp.name, ''), coalesce(pm.name, ''), coalesce(p.opened_at, p.created_at)
 			FROM poll.polls p
+			LEFT JOIN content.topics ptp ON ptp.id = p.topic_id LEFT JOIN content.modules pm ON pm.id = ptp.module_id
 			WHERE p.classroom_id = $1 AND p.scoring AND p.identity <> 'anonymous' AND p.status <> 'draft'
 				AND EXISTS (SELECT 1 FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL AND x.points > 0)
 		)

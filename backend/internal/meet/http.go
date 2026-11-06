@@ -27,7 +27,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	}))
 	r.Method("GET", "/meetings", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		p := page.Parse(r, Sorts, "created", true)
-		list, total, err := s.List(r.Context(), auth.MustUser(r.Context()).ID, p)
+		list, total, err := s.List(r.Context(), auth.MustUser(r.Context()).ID, Filter{ClassroomID: r.URL.Query().Get("classroom_id"), TopicID: r.URL.Query().Get("topic_id")}, p)
 		if err != nil {
 			return err
 		}

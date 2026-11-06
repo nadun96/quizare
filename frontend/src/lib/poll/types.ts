@@ -120,6 +120,7 @@ export type Poll = PollSettings & {
 	id: string;
 	teacher_id: string;
 	classroom_id: string | null;
+	topic_id: string | null;
 	title: string;
 	join_code: string;
 	join_url: string;

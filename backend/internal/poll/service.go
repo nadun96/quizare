@@ -27,6 +27,7 @@ type Classrooms interface {
 	GetClassroom(ctx context.Context, teacherID, id string) (content.Classroom, error)
 	GetEnrolment(ctx context.Context, classroomID, userID string) (content.Enrolment, bool, error)
 	ListCategories(ctx context.Context, teacherID, classroomID string) ([]content.Category, error)
+	TopicContext(ctx context.Context, teacherID, topicID string) (content.TopicContext, error)
 	CategoryMembers(ctx context.Context, teacherID, classroomID string) ([]content.CategoryMember, error)
 }
 
@@ -104,6 +105,7 @@ type Poll struct {
 	ID          string  `json:"id"`
 	TeacherID   string  `json:"teacher_id"`
 	ClassroomID *string `json:"classroom_id"`
+	TopicID     *string `json:"topic_id"` // under this topic of the classroom (D-147)
 	Title       string  `json:"title"`
 	JoinCode    string  `json:"join_code"`
 	JoinURL     string  `json:"join_url"`
@@ -124,10 +126,14 @@ type Poll struct {
 type PollInput struct {
 	Title       *string   `json:"title"`
 	ClassroomID *string   `json:"classroom_id"`
+	TopicID     *string   `json:"topic_id"` // sets the classroom too; "" takes it out of a topic
 	Settings    *Settings `json:"settings"`
 }
 
-const pollCols = `p.id, p.teacher_id, p.classroom_id, p.title, p.join_code, p.identity, p.audience, p.pacing, p.show_results,
+// PollFilter narrows a teacher's list of polls.
+type PollFilter struct{ Status, ClassroomID, TopicID string }
+
+const pollCols = `p.id, p.teacher_id, p.classroom_id, p.topic_id, p.title, p.join_code, p.identity, p.audience, p.pacing, p.show_results,
 	p.allow_edit, p.status, p.current_index, p.revealed, p.created_at, p.opened_at, p.closed_at,
 	(SELECT count(*) FROM poll.participants x WHERE x.poll_id = p.id),
 	p.scoring, p.speed_bonus, p.leaderboard, p.show_answers, p.names, p.answers_revealed, p.question_started_at,
@@ -135,7 +141,7 @@ const pollCols = `p.id, p.teacher_id, p.classroom_id, p.title, p.join_code, p.id
 
 func (s *Service) scanPoll(row pgx.Row) (*Poll, error) {
 	var p Poll
-	err := row.Scan(&p.ID, &p.TeacherID, &p.ClassroomID, &p.Title, &p.JoinCode, &p.Identity, &p.Audience, &p.Pacing,
+	err := row.Scan(&p.ID, &p.TeacherID, &p.ClassroomID, &p.TopicID, &p.Title, &p.JoinCode, &p.Identity, &p.Audience, &p.Pacing,
 		&p.ShowResults, &p.AllowEdit, &p.Status, &p.CurrentIndex, &p.Revealed, &p.CreatedAt, &p.OpenedAt, &p.ClosedAt, &p.Participants,
 		&p.Scoring, &p.SpeedBonus, &p.Leaderboard, &p.ShowAnswers, &p.Names, &p.AnswersRevealed, &p.QuestionStartedAt,
 		&p.Groups, &p.GroupAcceptance, &p.GroupCalc, &p.BoardOpen)
@@ -249,6 +255,25 @@ func (s *Service) checkClassroom(ctx context.Context, teacherID string, id *stri
 	return err
 }
 
+// bindTopic gives the topic and classroom a poll ends up with: a topic brings
+// its classroom, and can't be in another one than the poll's.
+func (s *Service) bindTopic(ctx context.Context, teacherID string, topic, classroom *string) (*string, *string, error) {
+	if topic == nil || *topic == "" {
+		return nil, classroom, nil
+	}
+	tc, err := s.classes.TopicContext(ctx, teacherID, *topic)
+	if errors.Is(err, httpx.ErrNotFound) {
+		return nil, nil, httpx.Invalid(map[string]string{"topic_id": "choose a topic in one of your classrooms"})
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if classroom != nil && *classroom != "" && *classroom != tc.ClassroomID {
+		return nil, nil, httpx.Invalid(map[string]string{"topic_id": "that topic is in another classroom"})
+	}
+	return &tc.TopicID, &tc.ClassroomID, nil
+}
+
 func (s *Service) CreatePoll(ctx context.Context, teacherID string, in PollInput) (*Poll, error) {
 	st := DefaultSettings()
 	if in.Settings != nil {
@@ -269,15 +294,20 @@ func (s *Service) CreatePoll(ctx context.Context, teacherID string, in PollInput
 	if in.ClassroomID != nil && *in.ClassroomID == "" {
 		in.ClassroomID = nil
 	}
+	topic, classroom, err := s.bindTopic(ctx, teacherID, in.TopicID, in.ClassroomID)
+	if err != nil {
+		return nil, err
+	}
+	in.ClassroomID = classroom
 	if err := s.checkClassroom(ctx, teacherID, in.ClassroomID, st); err != nil {
 		return nil, err
 	}
 	for attempt := 0; ; attempt++ {
 		var id string
-		err := s.pool.QueryRow(ctx, `INSERT INTO poll.polls (teacher_id, classroom_id, title, join_code, identity, audience, pacing, show_results, allow_edit,
+		err := s.pool.QueryRow(ctx, `INSERT INTO poll.polls (teacher_id, classroom_id, topic_id, title, join_code, identity, audience, pacing, show_results, allow_edit,
 			scoring, speed_bonus, leaderboard, show_answers, names, groups, group_acceptance, group_calc)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
-			teacherID, in.ClassroomID, title, "P"+newCode(5), st.Identity, st.Audience, st.Pacing, st.ShowResults, st.AllowEdit,
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+			teacherID, in.ClassroomID, topic, title, "P"+newCode(5), st.Identity, st.Audience, st.Pacing, st.ShowResults, st.AllowEdit,
 			st.Scoring, st.SpeedBonus, st.Leaderboard, st.ShowAnswers, st.Names, st.Groups, st.GroupAcceptance, st.GroupCalc).Scan(&id)
 		if err != nil && strings.Contains(err.Error(), "join_code") && attempt < 5 {
 			continue // code collision
@@ -314,9 +344,10 @@ var PollSorts = page.Sorts{"created": "p.created_at", "title": "lower(p.title)",
 
 // ListPolls returns one page of a teacher's polls, searched by title or join
 // code and filtered by status, and how many there are.
-func (s *Service) ListPolls(ctx context.Context, teacherID, status string, pg page.Request) ([]*Poll, int, error) {
-	where := ` FROM poll.polls p WHERE p.teacher_id=$1 AND ($2 = '' OR p.title ILIKE $2 OR p.join_code ILIKE $2) AND ($3 = '' OR p.status = $3)`
-	args := []any{teacherID, pg.Like(), status}
+func (s *Service) ListPolls(ctx context.Context, teacherID string, f PollFilter, pg page.Request) ([]*Poll, int, error) {
+	where := ` FROM poll.polls p WHERE p.teacher_id=$1 AND ($2 = '' OR p.title ILIKE $2 OR p.join_code ILIKE $2) AND ($3 = '' OR p.status = $3)
+		AND ($4 = '' OR p.classroom_id::text = $4) AND ($5 = '' OR p.topic_id::text = $5)`
+	args := []any{teacherID, pg.Like(), f.Status, f.ClassroomID, f.TopicID}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -349,11 +380,18 @@ func (s *Service) UpdatePoll(ctx context.Context, teacherID, id string, in PollI
 	if in.Settings != nil {
 		st = *in.Settings
 	}
+	topic := p.TopicID
 	if in.ClassroomID != nil {
 		classroom = in.ClassroomID
 		if *classroom == "" {
 			classroom = nil
 		}
+		if classroom == nil || p.ClassroomID == nil || *classroom != *p.ClassroomID {
+			topic = nil // the old topic stayed behind in the old classroom
+		}
+	}
+	if in.TopicID != nil {
+		topic = in.TopicID
 	}
 	fillDefaults(&st)
 	f := validSettings(st)
@@ -367,14 +405,17 @@ func (s *Service) UpdatePoll(ctx context.Context, teacherID, id string, in PollI
 	if len(f) > 0 {
 		return nil, httpx.Invalid(f)
 	}
+	if topic, classroom, err = s.bindTopic(ctx, teacherID, topic, classroom); err != nil {
+		return nil, err
+	}
 	if err := s.checkClassroom(ctx, teacherID, classroom, st); err != nil {
 		return nil, err
 	}
-	_, err = s.pool.Exec(ctx, `UPDATE poll.polls SET title=$2, classroom_id=$3, identity=$4, audience=$5, pacing=$6, show_results=$7,
+	_, err = s.pool.Exec(ctx, `UPDATE poll.polls SET title=$2, classroom_id=$3, topic_id=$17, identity=$4, audience=$5, pacing=$6, show_results=$7,
 		allow_edit=$8, scoring=$9, speed_bonus=$10, leaderboard=$11, show_answers=$12, names=$13,
 		groups=$14, group_acceptance=$15, group_calc=$16, updated_at=now() WHERE id=$1`,
 		id, title, classroom, st.Identity, st.Audience, st.Pacing, st.ShowResults, st.AllowEdit,
-		st.Scoring, st.SpeedBonus, st.Leaderboard, st.ShowAnswers, st.Names, st.Groups, st.GroupAcceptance, st.GroupCalc)
+		st.Scoring, st.SpeedBonus, st.Leaderboard, st.ShowAnswers, st.Names, st.Groups, st.GroupAcceptance, st.GroupCalc, topic)
 	if err != nil {
 		return nil, err
 	}

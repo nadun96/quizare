@@ -25,6 +25,7 @@
 	let title = $state('');
 	let settings = $state<PollSettings>({ ...DEFAULT_SETTINGS });
 	let classroomId = $state<string | null>(null);
+	let topicId = $state<string | null>(null);
 	let error = $state('');
 	let busy = $state(false);
 
@@ -39,7 +40,7 @@
 		busy = true;
 		error = '';
 		try {
-			const p = await api.post<Poll>('/api/teacher/polls', { title, settings, classroom_id: classroomId });
+			const p = await api.post<Poll>('/api/teacher/polls', { title, settings, classroom_id: classroomId, topic_id: classroomId ? topicId : null });
 			goto('/t/polls/' + p.id);
 		} catch (err) {
 			error = err instanceof ApiError ? Object.values(err.fields)[0] ?? err.message : 'Could not create the poll';
@@ -61,7 +62,7 @@
 	{#if creating}
 		<form class="card card-border vstack bg-base-100 p-4 shadow-sm sm:p-6" onsubmit={create} in:flyIn>
 			<div><label for="np-title">Title</label><input id="np-title" class="input w-full" bind:value={title} required maxlength="200" placeholder="e.g. Lesson 4 check-in" /></div>
-			<PollSettingsForm bind:settings bind:classroomId {classrooms} />
+			<PollSettingsForm bind:settings bind:classroomId bind:topicId {classrooms} />
 			{#if error}<p class="field-error" role="alert">{error}</p>{/if}
 			<div class="flex gap-2">
 				<button class="btn btn-primary" disabled={busy}>Create and add questions</button>

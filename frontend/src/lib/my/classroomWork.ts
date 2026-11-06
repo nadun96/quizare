@@ -24,6 +24,7 @@ export const KIND: Record<string, { label: string; icon: IconName }> = {
 	tutorial: { label: 'Tutorial', icon: 'book' },
 	presentation: { label: 'Presentation', icon: 'monitor' },
 	meeting: { label: 'Meeting', icon: 'video' },
+	poll: { label: 'Poll', icon: 'chart' },
 	tutoring: { label: 'Tutoring', icon: 'users' }
 };
 export const kindOf = (k: string) => KIND[k] ?? { label: k, icon: 'list' as IconName };
