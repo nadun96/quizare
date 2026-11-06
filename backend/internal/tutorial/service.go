@@ -14,6 +14,7 @@ import (
 
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
+	"github.com/nadun96/quizplatform/internal/grading"
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/quiz"
@@ -46,11 +47,17 @@ type Service struct {
 	questions Questions
 	users     Users
 	llm       LLMQueue
+	access    func(ctx context.Context, kind, itemID, userID string) (grading.Access, error)
 	now       func() time.Time
 }
 
 func NewService(pool *pgxpool.Pool, topics Topics, questions Questions, users Users) *Service {
 	return &Service{pool: pool, topics: topics, questions: questions, users: users, now: time.Now}
+}
+
+// SetResultAccess gives the service what the teacher lets students see (D-140).
+func (s *Service) SetResultAccess(f func(ctx context.Context, kind, itemID, userID string) (grading.Access, error)) {
+	s.access = f
 }
 
 var (

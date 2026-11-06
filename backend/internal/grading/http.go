@@ -36,6 +36,26 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		httpx.JSON(w, http.StatusOK, g)
 		return nil
 	}))
+	r.Method("GET", "/classrooms/{id}/class-report", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		rep, err := s.ClassReport(r.Context(), uid(r), chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, rep)
+		return nil
+	}))
+	r.Method("PUT", "/classrooms/{id}/class-report", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in ReportSetup
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		rep, err := s.SetClassReport(r.Context(), uid(r), chi.URLParam(r, "id"), in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, rep)
+		return nil
+	}))
 	r.Method("GET", "/classrooms/{id}/attendance", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		day := func(k string, def time.Time) (time.Time, bool) {
 			v := r.URL.Query().Get(k)
