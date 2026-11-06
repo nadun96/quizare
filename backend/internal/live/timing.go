@@ -62,11 +62,36 @@ func advance(a *Attempt, now time.Time, total int, nextLimitSec func(index int) 
 	return true
 }
 
+// submit hands the attempt in. The time left stays on the attempt in case the
+// teacher reopens it (D-139); a paused attempt already holds its own.
 func submit(a *Attempt, now time.Time) {
 	a.State = StateSubmitted
 	a.SubmittedAt = ptrTime(now)
-	a.CountdownDeadline, a.QuizDeadline, a.QuestionDeadline = nil, nil, nil
-	a.QuizRemainingMs, a.QuestionRemainingMs, a.PausedAt = nil, nil, nil
+	if a.QuizDeadline != nil {
+		a.QuizRemainingMs = ptrInt64(max(0, a.QuizDeadline.Sub(now).Milliseconds()))
+	}
+	if a.QuestionDeadline != nil {
+		a.QuestionRemainingMs = ptrInt64(max(0, a.QuestionDeadline.Sub(now).Milliseconds()))
+	}
+	a.CountdownDeadline, a.QuizDeadline, a.QuestionDeadline, a.PausedAt = nil, nil, nil, nil
+}
+
+// ReopenMinTime is the least a reopened attempt gets on any running timer, so
+// one handed in at the last second can still be used (D-139).
+const ReopenMinTime = time.Minute
+
+// reopen puts a handed-in attempt back in progress with the time it had left.
+func reopen(a *Attempt, now time.Time) {
+	a.State = StateInProgress
+	a.SubmittedAt = nil
+	left := func(ms *int64) *time.Time {
+		if ms == nil {
+			return nil
+		}
+		return ptrTime(now.Add(max(time.Duration(*ms)*time.Millisecond, ReopenMinTime)))
+	}
+	a.QuizDeadline, a.QuestionDeadline = left(a.QuizRemainingMs), left(a.QuestionRemainingMs)
+	a.QuizRemainingMs, a.QuestionRemainingMs = nil, nil
 }
 
 // pause stores remaining time instead of deadlines so that paused time never

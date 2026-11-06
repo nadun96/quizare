@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
+	"github.com/nadun96/quizplatform/internal/grading"
 	"github.com/nadun96/quizplatform/internal/live"
 	"github.com/nadun96/quizplatform/internal/platform/audit"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
@@ -70,6 +71,7 @@ type Service struct {
 	jobs      jobs.Inserter
 	llm       LLMQueue
 	onResults Hook
+	access    func(ctx context.Context, kind, itemID, userID string) (grading.Access, error)
 	now       func() time.Time
 }
 
@@ -79,6 +81,11 @@ func NewService(pool *pgxpool.Pool, attempts Attempts, inserter jobs.Inserter) *
 
 func (s *Service) SetLLM(q LLMQueue)     { s.llm = q }
 func (s *Service) SetResultsHook(h Hook) { s.onResults = h }
+
+// SetResultAccess gives the service what the teacher lets students see (D-140).
+func (s *Service) SetResultAccess(f func(ctx context.Context, kind, itemID, userID string) (grading.Access, error)) {
+	s.access = f
+}
 
 // ---------- jobs ----------
 
@@ -105,6 +112,22 @@ func (w *EvaluateWorker) Work(ctx context.Context, job *river.Job[EvaluateAttemp
 func (s *Service) OnAttemptFinished(ctx context.Context, tx pgx.Tx, _ string, attemptID string) error {
 	_, err := s.jobs.InsertTx(ctx, tx, EvaluateAttemptArgs{AttemptID: attemptID}, nil)
 	return err
+}
+
+// OnAttemptReopened forgets the marks of an attempt put back in progress
+// (D-139): its answers can change, so handing in again marks it afresh. An AI
+// mark still on its way finds no row and is dropped.
+func (s *Service) OnAttemptReopened(ctx context.Context, tx pgx.Tx, sessionID, attemptID string) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM eval.marks WHERE attempt_id=$1`, attemptID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM eval.results WHERE attempt_id=$1`, attemptID); err != nil {
+		return err
+	}
+	if s.onResults != nil {
+		return s.onResults(ctx, tx, sessionID)
+	}
+	return nil
 }
 
 // OnSessionEnded queues marking for invalidated attempts so the teacher can
@@ -575,6 +598,7 @@ type StudentResult struct {
 	Passed        bool              `json:"passed"`
 	Complete      bool              `json:"complete"` // false: "marking in progress" badge (ADR-15)
 	Questions     []StudentQuestion `json:"questions"`
+	Review        grading.Review    `json:"review"`         // what the teacher lets them see, and until when (D-140)
 	Team          *StudentTeam      `json:"team,omitempty"` // D-44
 }
 
@@ -607,8 +631,18 @@ func (s *Service) StudentResult(ctx context.Context, userID, attemptID string) (
 	eff := d.Session
 	out := StudentResult{AttemptID: d.AttemptID, SessionTitle: d.SessionTitle, QuizTitle: d.QuizTitle, State: d.State,
 		StudentNumber: d.StudentNumber, Score: full.Score, MaxScore: full.MaxScore, Pct: full.Pct, PassMarkPct: full.PassMarkPct,
-		Passed: full.Passed, Complete: full.Complete}
+		Passed: full.Passed, Complete: full.Complete, Questions: []StudentQuestion{}}
+	if s.access != nil {
+		a, err := s.access(ctx, "quiz", d.QuizID, userID)
+		if err != nil {
+			return out, err
+		}
+		out.Review = a.At(d.ReleasedSince, s.now())
+	}
 	for i, m := range full.Marks {
+		if out.Review.Detail == grading.DetailMarks {
+			break // the score only: no question detail at all
+		}
 		q := d.Items[i].Question
 		sq := StudentQuestion{Question: q.StudentView(), MaxScore: m.MaxScore, Status: m.Status, AIMarked: m.AIMarked}
 		if m.Status == StatusMarked || m.Status == StatusOverridden {
@@ -617,7 +651,11 @@ func (s *Service) StudentResult(ctx context.Context, userID, attemptID string) (
 		if eff.ResultsShowAnswers {
 			sq.Response = m.Response
 		}
-		if eff.ResultsShowCorrect {
+		showKey := eff.ResultsShowCorrect
+		if out.Review.Detail != "" {
+			showKey = out.Review.Detail == grading.DetailAnswers
+		}
+		if showKey {
 			k := q.Key
 			k.Rubric = "" // the rubric is the teacher's marking guide, not an answer
 			sq.Key = &k

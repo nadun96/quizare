@@ -8,6 +8,7 @@
 	import { page as appPage } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { describeKey } from '$lib/answerText';
+	import { reviewNote } from '$lib/grading/review';
 	import QuestionView from '$lib/QuestionView.svelte';
 	import { auth, loginUrl } from '$lib/session.svelte';
 	import Blocks from '$lib/tutorial/Blocks.svelte';
@@ -163,6 +164,7 @@
 				{/each}
 			</nav>
 			{#if v.past_due && !v.finished}<p class="alert alert-soft alert-warning m-0">{t('read.pastDue')}</p>{/if}
+			{#if v.finished && reviewNote(v.review)}<p class="alert alert-soft alert-info m-0" role="status"><Icon name="info" size={18} />{reviewNote(v.review)}</p>{/if}
 			{#if v.finished}
 				<p class="alert alert-soft alert-success m-0"><Icon name="check-circle" size={18} />
 					{v.score ? `Finished. Your score: ${v.score.score} out of ${v.score.max}.` : v.tutorial.feedback === 'release' ? 'Finished. Your teacher will release your marks.' : 'Finished.'}

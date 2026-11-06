@@ -198,6 +198,20 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		w.WriteHeader(204)
 		return nil
 	}))
+	r.Method("POST", "/attempts/{id}/reopen", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Reason string `json:"reason"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		a, err := s.Reopen(r.Context(), uid(r), pid(r), in.Reason)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, 200, a)
+		return nil
+	}))
 	r.Method("POST", "/attempts/{id}/reinstate", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in struct {
 			Reason string `json:"reason"`
