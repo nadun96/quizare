@@ -63,7 +63,7 @@
 	}
 	const sheets = () => (rep ? (view === 'groups' ? groupSheets(rep) : [individualSheet(rep)]) : []);
 	function print() {
-		for (const t of sheets()) openPrint(printHTML(`${classroomName}: ${t.heading ?? 'class report'}`, `Total out of ${rep?.weight_total ?? 0}`, t.head, t.rows));
+		for (const t of sheets()) openPrint(printHTML(`${classroomName}: ${t.heading ?? 'class report'}`, `Total out of ${rep?.out_of ?? 0}`, t.head, t.rows));
 	}
 	function addException() {
 		draft?.exceptions.push({ item: '', user_id: '', detail: '', reviewN: null, reviewUnit: 'hours' });
@@ -79,7 +79,7 @@
 {:else}
 	<div class="vstack">
 		<div class="flex flex-wrap items-center gap-2">
-			<p class="m-0 small muted grow">{cols.length} of {rep.items.length} in the report · total out of {rep.weight_total}</p>
+			<p class="m-0 small muted grow">{cols.length} of {rep.items.length} in the report · total out of {rep.out_of}</p>
 			<button class="btn btn-sm" class:btn-primary={!setupOpen} aria-expanded={setupOpen} onclick={() => (setupOpen = !setupOpen)}><Icon name="settings" size={16} />Set up</button>
 			<button class="btn btn-sm" onclick={csv}><Icon name="download" size={16} />CSV</button>
 			<button class="btn btn-sm" onclick={print}><Icon name="table" size={16} />Print</button>
@@ -108,7 +108,7 @@
 											<select class="select select-sm w-28" bind:value={d.pick} aria-label={'Mark used for ' + it.title}><option value="high">Highest</option><option value="low">Lowest</option></select>
 										{:else}<span class="small muted">One submission</span>{/if}
 									</td>
-									<td><input class="input input-sm w-20 tabular" type="number" min="0" max="1000" step="any" bind:value={d.weight} aria-label={'Weight of ' + it.title} /></td>
+									<td><input class="input input-sm w-20 tabular" type="number" min="0" max="1" step="any" placeholder="0.4" bind:value={d.weight} aria-label={'Weight of ' + it.title} /></td>
 									<td><select class="select select-sm w-28" bind:value={d.groupRule} aria-label={'Group mark for ' + it.title}>{#each GROUP_RULES as o (o.v)}<option value={o.v}>{o.label}</option>{/each}</select></td>
 									{#if it.kind === 'poll'}
 										<td colspan="2"><span class="small muted">The poll’s own settings</span></td>
@@ -125,7 +125,7 @@
 					</table>
 				</div>
 				<p class="m-0 small muted">
-					Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, which is what the total is out of. Weight 0 shows an item but leaves it out of the total. A group’s mark comes from its members’; a member with no mark counts 0.
+					A weight is between 0 and 1: a mark of 80% with weight 0.4 gives a final mark of 32. Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, so the total is out of <strong class="tabular">{Math.round(draftWeightTotal(draft) * 10000) / 100}</strong>. Weight 0 shows an item but leaves it out of the total. A group’s mark comes from its members’; a member with no mark counts 0.
 					A review time runs from when a student gets their results. When it ends the score stays and the question detail closes; blank means no limit.
 				</p>
 
@@ -177,9 +177,9 @@
 										<td class="min-w-40"><span class="font-semibold">{g.name}</span><br /><span class="text-xs muted">{memberNames(rep, g) || 'No students'}</span></td>
 										{#each cols as it (itemKey(it))}
 											{@const m = g.marks[itemKey(it)]}
-											<td class="tabular whitespace-nowrap">{#if m}{groupMarkText(m)}{#if m.points != null}<br /><span class="text-xs muted">{m.points} points</span>{/if}<br /><span class="text-xs muted">{m.marked} of {g.members.length} marked</span>{:else}<span class="muted">—</span>{/if}</td>
+											<td class="tabular whitespace-nowrap">{#if m}{groupMarkText(m)}{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}<br /><span class="text-xs muted">{m.marked} of {g.members.length} marked</span>{:else}<span class="muted">—</span>{/if}</td>
 										{/each}
-										<td class="tabular whitespace-nowrap font-semibold">{g.total} / {rep.weight_total}</td>
+										<td class="tabular whitespace-nowrap font-semibold">{g.total} / {rep.out_of}</td>
 										<td class="tabular font-semibold">{g.final == null ? '—' : `${g.final}%`}</td>
 									</tr>
 								{/each}
@@ -221,14 +221,14 @@
 									<td class="tabular whitespace-nowrap">
 										{#if m}
 											{markText(m)}
-											{#if m.points != null}<br /><span class="text-xs muted">{m.points} points</span>{/if}
+											{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}
 											{#if m.submissions > 1}<br /><span class="text-xs muted">of {m.submissions} submissions</span>{/if}
 											{#if m.pending}<br /><span class="text-xs text-warning">still being marked</span>{/if}
 										{:else if it.weight > 0}<span class="text-xs text-warning">Missing: counts 0</span>
 										{:else}<span class="muted">—</span>{/if}
 									</td>
 								{/each}
-								<td class="tabular whitespace-nowrap font-semibold">{s.total} / {rep.weight_total}</td>
+								<td class="tabular whitespace-nowrap font-semibold">{s.total} / {rep.out_of}</td>
 								<td class="tabular font-semibold">{s.final == null ? '—' : `${s.final}%`}</td>
 							</tr>
 						{:else}

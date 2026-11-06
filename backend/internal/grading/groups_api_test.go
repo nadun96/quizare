@@ -31,7 +31,7 @@ func TestReportGroups(t *testing.T) {
 
 	var r grading.ClassReport
 	f.teacher.Call("GET", url, nil, 200, &r)
-	f.teacher.Call("PUT", url, setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 50 }), 200, nil)
+	f.teacher.Call("PUT", url, setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 0.5 }), 200, nil)
 	put := func(rule string) grading.ClassReport {
 		t.Helper()
 		var cur, out grading.ClassReport
@@ -147,10 +147,10 @@ func TestPollInClassReport(t *testing.T) {
 		t.Fatalf("mark: %+v", m)
 	}
 	// It takes a weight, and counts in the total; what students see is the poll's own.
-	in := setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 10 })
+	in := setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 0.1 })
 	r = grading.ClassReport{}
 	f.teacher.Call("PUT", url, in, 200, &r)
-	if r.Students[0].Total != 5 || r.WeightTotal != 10 {
+	if r.Students[0].Total != 5 || r.OutOf != 10 {
 		t.Fatalf("total: %+v", r.Students[0])
 	}
 	bad := setupFor(r, func(x *grading.ReportItemInput) { x.Detail = grading.DetailMarks })
