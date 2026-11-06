@@ -8,7 +8,9 @@
 	import { toast } from '../ui/toast.svelte';
 	import { saveFile } from '../tutoring/types';
 	import { openPrint, printHTML } from './grading';
-	import { classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, itemKey, markText, printTable, setAllPicks, setupPayload, weightText, type ClassReport, type Draft, type Unit } from './classReport';
+	import GroupsEditor from './GroupsEditor.svelte';
+	import ReportPdfButton from './ReportPdfButton.svelte';
+	import { classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type Unit } from './classReport';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
 	let rep = $state<ClassReport | null>(null);
@@ -16,6 +18,8 @@
 	let error = $state('');
 	let saving = $state(false);
 	let setupOpen = $state(false);
+	let view = $state<'individual' | 'groups'>('individual');
+	let managing = $state(false);
 	const url = $derived(`/api/teacher/classrooms/${classroomId}/class-report`);
 	const cols = $derived(rep ? columns(rep) : []);
 	const range = $derived(rep ? finalRange(rep) : null);
@@ -53,12 +57,13 @@
 		}
 	}
 	function csv() {
-		if (rep) saveFile(`${classroomName} class report.csv`, classReportCSV(rep));
-	}
-	function print() {
 		if (!rep) return;
-		const t = printTable(rep);
-		openPrint(printHTML(`${classroomName}: class report`, `Total out of ${rep.weight_total}`, t.head, t.rows));
+		if (view === 'groups') saveFile(`${classroomName} group marks.csv`, groupsCSV(rep));
+		else saveFile(`${classroomName} class report.csv`, classReportCSV(rep));
+	}
+	const sheets = () => (rep ? (view === 'groups' ? groupSheets(rep) : [individualSheet(rep)]) : []);
+	function print() {
+		for (const t of sheets()) openPrint(printHTML(`${classroomName}: ${t.heading ?? 'class report'}`, `Total out of ${rep?.weight_total ?? 0}`, t.head, t.rows));
 	}
 	function addException() {
 		draft?.exceptions.push({ item: '', user_id: '', detail: '', reviewN: null, reviewUnit: 'hours' });
@@ -78,6 +83,7 @@
 			<button class="btn btn-sm" class:btn-primary={!setupOpen} aria-expanded={setupOpen} onclick={() => (setupOpen = !setupOpen)}><Icon name="settings" size={16} />Set up</button>
 			<button class="btn btn-sm" onclick={csv}><Icon name="download" size={16} />CSV</button>
 			<button class="btn btn-sm" onclick={print}><Icon name="table" size={16} />Print</button>
+			<ReportPdfButton {classroomId} title={`${classroomName}: ${view === 'groups' ? 'group marks' : 'class report'}`} fileName={`${classroomName} ${view === 'groups' ? 'group marks' : 'class report'}`} {sheets} disabled={!cols.length || (view === 'groups' && !sheets().length)} />
 		</div>
 
 		{#if setupOpen}
@@ -90,31 +96,36 @@
 				</div>
 				<div class="overflow-x-auto">
 					<table class="table table-sm">
-						<thead><tr><th>In report</th><th>Quiz or tutorial</th><th>Mark used</th><th>Weight</th><th>Students see</th><th>Review time</th></tr></thead>
+						<thead><tr><th>In report</th><th>Quiz, tutorial or poll</th><th>Mark used</th><th>Weight</th><th>Group mark</th><th>Students see</th><th>Review time</th></tr></thead>
 						<tbody>
 							{#each rep.items as it (itemKey(it))}
 								{@const d = draft.items[itemKey(it)]}
 								<tr>
 									<td><input class="checkbox checkbox-sm" type="checkbox" bind:checked={d.included} aria-label={'Include ' + it.title} /></td>
-									<td class="min-w-48"><span class="font-semibold">{it.title}</span><br /><span class="text-xs muted">{it.kind === 'quiz' ? 'Quiz' : 'Tutorial'}{#if it.topic}{' · '}{it.topic}{/if}</span></td>
+									<td class="min-w-48"><span class="font-semibold">{it.title}</span><br /><span class="text-xs muted">{KIND_LABEL[it.kind]}{#if it.topic}{' · '}{it.topic}{/if}</span></td>
 									<td>
 										{#if it.kind === 'quiz'}
 											<select class="select select-sm w-28" bind:value={d.pick} aria-label={'Mark used for ' + it.title}><option value="high">Highest</option><option value="low">Lowest</option></select>
 										{:else}<span class="small muted">One submission</span>{/if}
 									</td>
 									<td><input class="input input-sm w-20 tabular" type="number" min="0" max="1000" step="any" bind:value={d.weight} aria-label={'Weight of ' + it.title} /></td>
-									<td><select class="select select-sm w-52" bind:value={d.detail} aria-label={'What students see of ' + it.title}>{#each DETAIL as o (o.v)}<option value={o.v} title={o.hint}>{o.label}</option>{/each}</select></td>
-									<td class="whitespace-nowrap">
-										<input class="input input-sm w-20 tabular" type="number" min="0" step="any" placeholder="None" bind:value={d.reviewN} aria-label={'Review time for ' + it.title} />
-										<select class="select select-sm w-24" bind:value={d.reviewUnit} aria-label={'Review time unit for ' + it.title}>{#each units as u (u.v)}<option value={u.v}>{u.label}</option>{/each}</select>
-									</td>
+									<td><select class="select select-sm w-28" bind:value={d.groupRule} aria-label={'Group mark for ' + it.title}>{#each GROUP_RULES as o (o.v)}<option value={o.v}>{o.label}</option>{/each}</select></td>
+									{#if it.kind === 'poll'}
+										<td colspan="2"><span class="small muted">The poll’s own settings</span></td>
+									{:else}
+										<td><select class="select select-sm w-52" bind:value={d.detail} aria-label={'What students see of ' + it.title}>{#each DETAIL as o (o.v)}<option value={o.v} title={o.hint}>{o.label}</option>{/each}</select></td>
+										<td class="whitespace-nowrap">
+											<input class="input input-sm w-20 tabular" type="number" min="0" step="any" placeholder="None" bind:value={d.reviewN} aria-label={'Review time for ' + it.title} />
+											<select class="select select-sm w-24" bind:value={d.reviewUnit} aria-label={'Review time unit for ' + it.title}>{#each units as u (u.v)}<option value={u.v}>{u.label}</option>{/each}</select>
+										</td>
+									{/if}
 								</tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
 				<p class="m-0 small muted">
-					Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, which is what the total is out of. Weight 0 shows an item but leaves it out of the total.
+					Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, which is what the total is out of. Weight 0 shows an item but leaves it out of the total. A group’s mark comes from its members’; a member with no mark counts 0.
 					A review time runs from when a student gets their results. When it ends the score stays and the question detail closes; blank means no limit.
 				</p>
 
@@ -124,7 +135,7 @@
 						{#each draft.exceptions as x, i (i)}
 							<li class="flex flex-wrap items-center gap-2">
 								<select class="select select-sm w-48" bind:value={x.user_id} aria-label="Student"><option value="">Student…</option>{#each rep.students as s (s.user_id)}<option value={s.user_id}>{s.name}</option>{/each}</select>
-								<select class="select select-sm w-48" bind:value={x.item} aria-label="Quiz or tutorial"><option value="">Quiz or tutorial…</option>{#each rep.items as it (itemKey(it))}<option value={itemKey(it)}>{it.title}</option>{/each}</select>
+								<select class="select select-sm w-48" bind:value={x.item} aria-label="Quiz or tutorial"><option value="">Quiz or tutorial…</option>{#each rep.items.filter((x) => x.kind !== 'poll') as it (itemKey(it))}<option value={itemKey(it)}>{it.title}</option>{/each}</select>
 								<select class="select select-sm w-52" bind:value={x.detail} aria-label="What this student sees"><option value="">Same as the class</option>{#each DETAIL.slice(1) as o (o.v)}<option value={o.v}>{o.label}</option>{/each}</select>
 								<input class="input input-sm w-20 tabular" type="number" min="0" step="any" placeholder="Same" bind:value={x.reviewN} aria-label="This student's review time; 0 is no limit" title="Blank: same as the class. 0: no limit." />
 								<select class="select select-sm w-24" bind:value={x.reviewUnit} aria-label="Review time unit">{#each units as u (u.v)}<option value={u.v}>{u.label}</option>{/each}</select>
@@ -143,7 +154,53 @@
 			</section>
 		{/if}
 
-		{#if cols.length}
+		<div class="flex flex-wrap items-center gap-2">
+			<div class="join" role="group" aria-label="Mark sheet">
+				<button class="btn btn-sm join-item" class:btn-primary={view === 'individual'} aria-pressed={view === 'individual'} onclick={() => (view = 'individual')}>Individual</button>
+				<button class="btn btn-sm join-item" class:btn-primary={view === 'groups'} aria-pressed={view === 'groups'} onclick={() => (view = 'groups')}>Groups</button>
+			</div>
+			{#if view === 'groups'}<button class="btn btn-sm" aria-expanded={managing} onclick={() => (managing = !managing)}><Icon name="users" size={16} />Manage groups</button>{/if}
+		</div>
+
+		{#if view === 'groups'}
+			{#if managing}<GroupsEditor {classroomId} report={rep} onsaved={(r) => { rep = r; draft = draftFrom(r); }} />{/if}
+			{@const list = groupSheets(rep)}
+			{#if list.length}
+				{#if rep.class_groups.length}
+					<h2 class="m-0 text-base">By class group</h2>
+					<div class="card card-border bg-base-100 overflow-x-auto">
+						<table class="table table-sm">
+							<thead><tr><th>Group</th>{#each cols as it (itemKey(it))}<th class="min-w-32">{it.title}<br /><span class="font-normal text-xs muted normal-case">{weightText(it)} · {it.group_rule}</span></th>{/each}<th>Total</th><th>Final</th></tr></thead>
+							<tbody>
+								{#each rep.class_groups as g (g.id)}
+									<tr>
+										<td class="min-w-40"><span class="font-semibold">{g.name}</span><br /><span class="text-xs muted">{memberNames(rep, g) || 'No students'}</span></td>
+										{#each cols as it (itemKey(it))}
+											{@const m = g.marks[itemKey(it)]}
+											<td class="tabular whitespace-nowrap">{#if m}{groupMarkText(m)}{#if m.points != null}<br /><span class="text-xs muted">{m.points} points</span>{/if}<br /><span class="text-xs muted">{m.marked} of {g.members.length} marked</span>{:else}<span class="muted">—</span>{/if}</td>
+										{/each}
+										<td class="tabular whitespace-nowrap font-semibold">{g.total} / {rep.weight_total}</td>
+										<td class="tabular font-semibold">{g.final == null ? '—' : `${g.final}%`}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					{#if ungrouped(rep).length}<p class="m-0 small text-warning">Not in a group: {ungrouped(rep).join(', ')}</p>{/if}
+				{/if}
+				{#each list.filter((s) => s.heading !== 'Marks by class group') as sh (sh.heading)}
+					<h2 class="m-0 text-base">{sh.heading}</h2>
+					<div class="card card-border bg-base-100 overflow-x-auto">
+						<table class="table table-sm">
+							<thead><tr>{#each sh.head as h (h)}<th>{h}</th>{/each}</tr></thead>
+							<tbody>{#each sh.rows as r, i (i)}<tr>{#each r as c, j (j)}<td class="tabular" class:font-semibold={j === 0}>{c}</td>{/each}</tr>{/each}</tbody>
+						</table>
+					</div>
+				{/each}
+			{:else}
+				<p class="muted">No groups yet. Use Manage groups to split the class into groups.</p>
+			{/if}
+		{:else if cols.length}
 			<div class="card card-border bg-base-100 overflow-x-auto">
 				<table class="table table-sm">
 					<thead>

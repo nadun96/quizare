@@ -1,18 +1,23 @@
 // The class report (D-140): the setup a teacher edits, and the report built
 // from it, from /api/teacher/classrooms/{id}/class-report.
 import { toCSV } from '../tutoring/types';
+import type { Sheet } from './reportPdf';
 
 export type Pick = 'high' | 'low';
 export type Detail = '' | 'marks' | 'correctness' | 'answers';
 export type Unit = 'minutes' | 'hours' | 'days';
+export type GroupRule = 'average' | 'total' | 'highest' | 'lowest';
 
-export type ReportItem = { kind: 'quiz' | 'tutorial'; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number };
+export type ReportItem = { kind: 'quiz' | 'tutorial' | 'poll'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number };
 export type ReportMark = { score: number; max: number; pct: number; points?: number; submissions: number; pending?: boolean };
 export type ReportStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, ReportMark>; total: number; missing: number; final: number | null };
 export type ResultException = { kind: string; id: string; user_id: string; detail: Detail; review_minutes: number | null };
-export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; exceptions: ResultException[] };
+export type GroupMark = { score: number; max: number; pct: number; points?: number; marked: number };
+export type GroupRow = { id: string; name: string; members: string[]; marks: Record<string, GroupMark>; total: number; final: number | null };
+export type ItemGroups = { kind: string; id: string; groups: GroupRow[] };
+export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; exceptions: ResultException[]; class_groups: GroupRow[]; item_groups: ItemGroups[] };
 
-export type DraftItem = { included: boolean; weight: number | null; pick: Pick; detail: Detail; reviewN: number | null; reviewUnit: Unit };
+export type DraftItem = { groupRule: GroupRule; included: boolean; weight: number | null; pick: Pick; detail: Detail; reviewN: number | null; reviewUnit: Unit };
 export type DraftException = { item: string; user_id: string; detail: Detail; reviewN: number | null; reviewUnit: Unit };
 export type Draft = { items: Record<string, DraftItem>; exceptions: DraftException[] };
 
@@ -24,6 +29,15 @@ export const DETAIL: { v: Detail; label: string; hint: string }[] = [
 	{ v: 'correctness', label: 'Marks and correctness', hint: 'Each question right or wrong, without the correct answer' },
 	{ v: 'answers', label: 'Marks and correct answers', hint: 'Each question with its correct answer' }
 ];
+
+export const GROUP_RULES: { v: GroupRule; label: string }[] = [
+	{ v: 'average', label: 'Average' },
+	{ v: 'total', label: 'Total' },
+	{ v: 'highest', label: 'Highest' },
+	{ v: 'lowest', label: 'Lowest' }
+];
+
+export const KIND_LABEL: Record<string, string> = { quiz: 'Quiz', tutorial: 'Tutorial', poll: 'Poll' };
 
 /** The largest unit that says a number of minutes exactly: 2880 is 2 days. */
 export function reviewParts(minutes: number | null | undefined): { n: number | null; unit: Unit } {
@@ -40,7 +54,7 @@ export function draftFrom(r: ClassReport): Draft {
 	const items: Record<string, DraftItem> = {};
 	for (const it of r.items) {
 		const p = reviewParts(it.review_minutes || null);
-		items[itemKey(it)] = { included: it.included, weight: it.weight, pick: it.pick, detail: it.detail, reviewN: p.n, reviewUnit: p.unit };
+		items[itemKey(it)] = { groupRule: it.group_rule, included: it.included, weight: it.weight, pick: it.pick, detail: it.detail, reviewN: p.n, reviewUnit: p.unit };
 	}
 	const exceptions = r.exceptions.map((x): DraftException => {
 		const p = reviewParts(x.review_minutes);
@@ -84,7 +98,7 @@ export function draftProblem(d: Draft): string {
 
 export function setupPayload(d: Draft) {
 	return {
-		items: Object.entries(d.items).map(([k, it]) => ({ ...splitKey(k), included: it.included, weight: it.weight ?? 0, pick: it.pick, detail: it.detail, review_minutes: it.reviewN ? toMinutes(it.reviewN, it.reviewUnit) : 0 })),
+		items: Object.entries(d.items).map(([k, it]) => ({ ...splitKey(k), group_rule: it.groupRule, included: it.included, weight: it.weight ?? 0, pick: it.pick, detail: it.detail, review_minutes: it.reviewN ? toMinutes(it.reviewN, it.reviewUnit) : 0 })),
 		exceptions: d.exceptions.map((x) => ({ ...splitKey(x.item), user_id: x.user_id, detail: x.detail, review_minutes: x.reviewN == null ? null : toMinutes(x.reviewN, x.reviewUnit) }))
 	};
 }
@@ -136,10 +150,86 @@ export function classReportCSV(r: ClassReport): string {
 	return toCSV(rows);
 }
 
-/** The report as one table to print. */
-export function printTable(r: ClassReport): { head: string[]; rows: (string | number)[][] } {
+/** The individual mark sheet, for printing and PDF. */
+export function individualSheet(r: ClassReport): Sheet {
 	const cols = columns(r);
-	const head = ['Student', 'ID', ...cols.map((it) => `${it.title} · ${weightText(it)}`), 'Total', 'Final'];
+	const head = ['Student', 'ID', ...cols.map((it) => `${it.title} (${weightText(it)})`), 'Total', 'Final'];
 	const rows = r.students.map((s) => [s.name, s.student_number ?? '', ...cols.map((it) => markText(s.marks[itemKey(it)]) || '—'), `${s.total} / ${r.weight_total}`, s.final == null ? '' : `${s.final}%`]);
-	return { head, rows };
+	return { heading: 'Individual marks', head, rows, frozen: 2 };
+}
+
+/** Group names and who's in them, in the classroom's order. */
+export const memberNames = (r: ClassReport, g: GroupRow) => {
+	const names = new Map(r.students.map((s) => [s.user_id, s.name]));
+	return g.members.map((u) => names.get(u) ?? '').filter(Boolean).join(', ');
+};
+
+/** "8 / 10 (80%)", for a group. */
+export const groupMarkText = (m: GroupMark | undefined) => (m ? `${m.score} / ${m.max} (${m.pct}%)` : '');
+
+const ruleText = (it: ReportItem) => GROUP_RULES.find((x) => x.v === it.group_rule)?.label ?? 'Average';
+
+/** The students in no group of the class. */
+export function ungrouped(r: ClassReport): string[] {
+	const placed = new Set(r.class_groups.flatMap((g) => g.members));
+	return r.students.filter((s) => !placed.has(s.user_id)).map((s) => s.name);
+}
+
+/** The group mark sheets: the class's, then each item's own groups. */
+export function groupSheets(r: ClassReport): Sheet[] {
+	const cols = columns(r);
+	const sheets: Sheet[] = [];
+	if (r.class_groups.length) {
+		const head = ['Group', 'Members', ...cols.map((it) => `${it.title} (${weightText(it)}, ${ruleText(it).toLowerCase()})`), 'Total', 'Final'];
+		const rows = r.class_groups.map((g) => [g.name, memberNames(r, g), ...cols.map((it) => groupMarkText(g.marks[itemKey(it)]) || '—'), `${g.total} / ${r.weight_total}`, g.final == null ? '' : `${g.final}%`]);
+		sheets.push({ heading: 'Marks by class group', head, rows, frozen: 1 });
+	}
+	for (const own of r.item_groups) {
+		const it = r.items.find((x) => x.kind === own.kind && x.id === own.id);
+		if (!it?.included) continue;
+		const head = ['Group', 'Members', `${it.title} (${ruleText(it).toLowerCase()})`, ...(it.weight > 0 ? [`Points of ${it.weight}`] : [])];
+		const rows = own.groups.map((g) => {
+			const m = g.marks[itemKey(it)];
+			return [g.name, memberNames(r, g), groupMarkText(m) || '—', ...(it.weight > 0 ? [m?.points ?? 0] : [])];
+		});
+		sheets.push({ heading: `Marks by ${it.title}’s own groups`, head, rows, frozen: 1 });
+	}
+	return sheets;
+}
+
+/** Group sheets as CSV, one after another. */
+export function groupsCSV(r: ClassReport): string {
+	const rows: (string | number)[][] = [];
+	for (const sh of groupSheets(r)) {
+		if (rows.length) rows.push([]);
+		rows.push([sh.heading ?? '']);
+		rows.push(sh.head);
+		rows.push(...sh.rows);
+	}
+	return toCSV(rows);
+}
+
+/** Shares students out at random and evenly: sizes differ by at most one. */
+export function splitIntoGroups(userIds: string[], count: number, random: () => number = Math.random): { name: string; members: string[] }[] {
+	const n = Math.max(1, Math.floor(count));
+	const shuffled = [...userIds];
+	for (let i = shuffled.length - 1; i > 0; i--) {
+		const j = Math.floor(random() * (i + 1));
+		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+	}
+	const groups = Array.from({ length: n }, (_, i) => ({ name: `Group ${i + 1}`, members: [] as string[] }));
+	shuffled.forEach((u, i) => groups[i % n].members.push(u));
+	return groups;
+}
+
+/** What's wrong with groups being edited, or empty. */
+export function groupsProblem(groups: { name: string }[]): string {
+	const seen = new Set<string>();
+	for (const g of groups) {
+		const name = g.name.trim().toLowerCase();
+		if (!name) return 'Each group needs a name.';
+		if (seen.has(name)) return `Two groups are called ${g.name.trim()}.`;
+		seen.add(name);
+	}
+	return '';
 }

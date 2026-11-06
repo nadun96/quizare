@@ -98,6 +98,7 @@ type ReportItem struct {
 	Pick          string   `json:"pick"`
 	Detail        string   `json:"detail"`
 	ReviewMinutes int      `json:"review_minutes"`
+	GroupRule     string   `json:"group_rule"` // how a group's mark comes from its members' (D-141)
 	Taken         int      `json:"taken"`
 	Avg           *float64 `json:"avg"`
 	High          *float64 `json:"high"`
@@ -140,6 +141,8 @@ type ClassReport struct {
 	Students    []ReportStudent   `json:"students"` // marks on included items only
 	WeightTotal float64           `json:"weight_total"`
 	Exceptions  []ResultException `json:"exceptions"`
+	ClassGroups []GroupRow        `json:"class_groups"` // the whole class's groups (D-141)
+	ItemGroups  []ItemGroups      `json:"item_groups"`  // items with groups of their own
 }
 
 // submission is one valid mark a student has on an item.
@@ -186,9 +189,14 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			SELECT 'tutorial', t.id, t.title, tp.name, m.name, coalesce(t.published_at, t.created_at)
 			FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 			WHERE m.classroom_id = $1 AND t.status = 'published' AND EXISTS (SELECT 1 FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)
+			UNION ALL
+			SELECT 'poll', p.id, p.title, '', '', coalesce(p.opened_at, p.created_at)
+			FROM poll.polls p
+			WHERE p.classroom_id = $1 AND p.scoring AND p.identity <> 'anonymous' AND p.status <> 'draft'
+				AND EXISTS (SELECT 1 FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL AND x.points > 0)
 		)
 		SELECT i.kind, i.id::text, i.title, i.topic, i.module, coalesce(ri.included, true),
-			coalesce(ri.weight, w.weight, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0)
+			coalesce(ri.weight, w.weight, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average')
 		FROM items i
 		LEFT JOIN grading.report_items ri ON ri.classroom_id = $1 AND ri.kind = i.kind AND ri.item_id = i.id
 		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = i.kind AND w.item_id = i.id
@@ -198,12 +206,13 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 	}
 	if rep.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (ReportItem, error) {
 		var it ReportItem
-		return it, r.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Module, &it.Included, &it.Weight, &it.Pick, &it.Detail, &it.ReviewMinutes)
+		return it, r.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Module, &it.Included, &it.Weight, &it.Pick, &it.Detail, &it.ReviewMinutes, &it.GroupRule)
 	}); err != nil {
 		return rep, err
 	}
 
-	// Every valid submission: all tries of all sessions, and finished tutorials.
+	// Every valid submission: all tries of all sessions, finished tutorials, and
+	// what a signed-in student scored on a poll.
 	subs := map[string]map[string][]submission{}
 	rows, err = s.pool.Query(ctx, `
 		SELECT r.user_id::text, 'quiz:' || se.quiz_id::text, r.score::float8, r.max_score::float8, r.pct::float8, r.complete
@@ -217,7 +226,16 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 		FROM tutorial.runs ru JOIN tutorial.tutorials t ON t.id = ru.tutorial_id
 		JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 		CROSS JOIN LATERAL (SELECT sum(x.marks) AS marks FROM quiz.questions x WHERE x.quiz_id = t.quiz_id) mx
-		WHERE m.classroom_id = $1 AND ru.finished_at IS NOT NULL AND mx.marks > 0`, classroomID)
+		WHERE m.classroom_id = $1 AND ru.finished_at IS NOT NULL AND mx.marks > 0
+		UNION ALL
+		SELECT pa.user_id::text, 'poll:' || p.id::text, coalesce(sum(r.score) FILTER (WHERE NOT r.hidden), 0)::float8, mx.points::float8,
+			100 * coalesce(sum(r.score) FILTER (WHERE NOT r.hidden), 0)::float8 / mx.points::float8, true
+		FROM poll.polls p
+		JOIN poll.participants pa ON pa.poll_id = p.id AND pa.user_id IS NOT NULL
+		JOIN poll.responses r ON r.participant_id = pa.id
+		CROSS JOIN LATERAL (SELECT sum(x.points) AS points FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL) mx
+		WHERE p.classroom_id = $1 AND p.scoring AND p.identity <> 'anonymous' AND p.status <> 'draft' AND mx.points > 0
+		GROUP BY pa.user_id, p.id, mx.points`, classroomID)
 	if err != nil {
 		return rep, err
 	}
@@ -323,7 +341,10 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 		var x ResultException
 		return x, r.Scan(&x.Kind, &x.ID, &x.UserID, &x.Detail, &x.ReviewMinutes)
 	})
-	return rep, err
+	if err != nil {
+		return rep, err
+	}
+	return rep, s.loadGroups(ctx, classroomID, &rep)
 }
 
 // ReportItemInput is one item's setup.
@@ -335,6 +356,7 @@ type ReportItemInput struct {
 	Pick          string  `json:"pick"`
 	Detail        string  `json:"detail"`
 	ReviewMinutes int     `json:"review_minutes"`
+	GroupRule     string  `json:"group_rule"`
 }
 
 // ReportSetup is the whole setup; it replaces what was saved.
@@ -378,6 +400,10 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 			bad["items"] = "choose what students see"
 		case it.ReviewMinutes < 0 || it.ReviewMinutes > maxReviewMinutes:
 			bad["items"] = "a review time can be up to a year"
+		case it.Kind == "poll" && (it.Detail != "" || it.ReviewMinutes != 0):
+			bad["items"] = "what students see of a poll follows the poll's own settings"
+		case it.GroupRule != "" && it.GroupRule != RuleAverage && it.GroupRule != RuleTotal && it.GroupRule != RuleHighest && it.GroupRule != RuleLowest:
+			bad["items"] = "choose how a group's mark is worked out"
 		}
 		seen[k] = true
 	}
@@ -385,7 +411,7 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 	for _, x := range in.Exceptions {
 		k := Key(x.Kind, x.ID) + ":" + x.UserID
 		switch {
-		case !known[Key(x.Kind, x.ID)]:
+		case !known[Key(x.Kind, x.ID)] || x.Kind == "poll":
 			bad["exceptions"] = "one of these isn't a quiz or tutorial of this classroom"
 		case !students[x.UserID]:
 			bad["exceptions"] = "one of these students isn't in this classroom"
@@ -411,8 +437,11 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 			return err
 		}
 		for _, it := range in.Items {
-			if _, err := tx.Exec(ctx, `INSERT INTO grading.report_items (classroom_id, kind, item_id, included, weight, pick, detail, review_minutes, updated_by)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, classroomID, it.Kind, it.ID, it.Included, round(it.Weight, 2), it.Pick, it.Detail, it.ReviewMinutes, teacherID); err != nil {
+			if it.GroupRule == "" {
+				it.GroupRule = RuleAverage
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO grading.report_items (classroom_id, kind, item_id, included, weight, pick, detail, review_minutes, group_rule, updated_by)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, classroomID, it.Kind, it.ID, it.Included, round(it.Weight, 2), it.Pick, it.Detail, it.ReviewMinutes, it.GroupRule, teacherID); err != nil {
 				return err
 			}
 		}

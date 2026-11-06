@@ -10,6 +10,7 @@
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
 	import { attendanceDetailCSV, attendanceScopes, attendanceSummaryCSV, mergeTutoring, openPrint, printHTML, scopedAttendance, scopeFrom, scopeValue, summarise, type Attendance } from './grading';
+	import ReportPdfButton from './ReportPdfButton.svelte';
 	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
@@ -69,10 +70,15 @@
 	const LABEL = { quiz: 'Quiz sessions', meeting: 'Meetings', tutoring: 'Tutoring' } as const;
 	const file = (what: string) => `${what}-${classroomName}${scope.kind !== 'all' ? '-' + scopeName : ''}-${from}-to-${to}`.replace(/[\\/:*?"<>|]+/g, '-');
 
-	function print() {
-		if (!data) return;
+	const pdfTitle = $derived(`Attendance · ${classroomName}${scope.kind !== 'all' ? ' · ' + scopeName : ''}`);
+	function table() {
 		const head = ['Student', 'ID', ...kinds.map((k) => LABEL[k]), 'Attended', 'Rate', 'Minutes'];
 		const body = rows.map((r) => [r.name, r.number, ...kinds.map((k) => `${r.byKind[k].came}/${r.byKind[k].of}`), `${r.came}/${r.of}`, r.rate == null ? '–' : r.rate + '%', r.minutes]);
+		return { head, rows: body };
+	}
+	function print() {
+		if (!data) return;
+		const { head, rows: body } = table();
 		if (!openPrint(printHTML(`Attendance · ${data.classroom}${scope.kind !== 'all' ? ' · ' + scopeName : ''}`, `${from} to ${to} · ${data.events.length} sessions`, head, body))) toast('Allow pop-ups for this site to print', 'error');
 	}
 </script>
@@ -87,7 +93,8 @@
 		{#if data}
 			<button class="btn btn-sm" onclick={() => saveFile(file('attendance') + '.csv', attendanceSummaryCSV(data!))} disabled={!rows.length}><Icon name="download" size={15} />Summary CSV</button>
 			<button class="btn btn-sm" onclick={() => saveFile(file('attendance-by-session') + '.csv', attendanceDetailCSV(data!))} disabled={!data.events.length}><Icon name="download" size={15} />By session CSV</button>
-			<button class="btn btn-sm" onclick={print} disabled={!rows.length}><Icon name="table" size={15} />Print / PDF</button>
+			<button class="btn btn-sm" onclick={print} disabled={!rows.length}><Icon name="table" size={15} />Print</button>
+			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => [{ heading: `${from} to ${to}`, ...table(), frozen: 2 }]} disabled={!rows.length} />
 		{/if}
 	</div>
 	{#if error}<p class="alert alert-soft alert-error m-0">{error}</p>{/if}

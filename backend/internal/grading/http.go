@@ -56,6 +56,38 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		httpx.JSON(w, http.StatusOK, rep)
 		return nil
 	}))
+	r.Method("PUT", "/classrooms/{id}/report-groups", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in GroupsInput
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		rep, err := s.SetGroups(r.Context(), uid(r), chi.URLParam(r, "id"), in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, rep)
+		return nil
+	}))
+	r.Method("GET", "/classrooms/{id}/report-header", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		h, err := s.GetReportHeader(r.Context(), uid(r), chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, h)
+		return nil
+	}))
+	r.Method("PUT", "/classrooms/{id}/report-header", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in ReportHeader
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		h, err := s.SetReportHeader(r.Context(), uid(r), chi.URLParam(r, "id"), in)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, h)
+		return nil
+	}))
 	r.Method("GET", "/classrooms/{id}/attendance", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		day := func(k string, def time.Time) (time.Time, bool) {
 			v := r.URL.Query().Get(k)

@@ -11,6 +11,7 @@
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
 	import { classAverage, gradebookCSV, key, marksLine, studentRange, totalAverage, mergeTutoring, openPrint, printHTML, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
+	import ReportPdfButton from './ReportPdfButton.svelte';
 	import ScopePicker from './ScopePicker.svelte';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
@@ -83,9 +84,8 @@
 	function download() {
 		if (shown) saveFile(file(scoped ? `results-${scopeName}` : 'results') + '.csv', gradebookCSV(shown, scoped ? undefined : (attendanceAll ?? undefined)));
 	}
-	function print() {
-		const g = shown;
-		if (!g) return;
+	const pdfTitle = $derived(`Results · ${classroomName}${scoped ? ' · ' + scopeName : ''}`);
+	function table(g: Gradebook) {
 		const attendance = scoped ? null : attendanceAll;
 		const head = ['Student', 'ID', ...g.items.map((it) => it.title + (it.weight ? ` (${it.weight}%)` : '')), 'Average', 'Total marks', ...(weighted ? ['Points', 'Final'] : []), ...(attendance ? ['Attendance'] : [])];
 		const rows = g.students.map((s) => [
@@ -100,6 +100,12 @@
 			...(weighted ? [`${s.total} / ${g!.weight_total}`, s.final == null ? '–' : s.final + '%'] : []),
 			...(attendance ? [attendance.get(s.user_id)?.rate != null ? attendance.get(s.user_id)!.rate + '%' : '–'] : [])
 		]);
+		return { head, rows };
+	}
+	function print() {
+		const g = shown;
+		if (!g) return;
+		const { head, rows } = table(g);
 		const ok = openPrint(printHTML(`Results · ${g.classroom}${scoped ? ' · ' + scopeName : ''}`, weighted ? `Weighted items count for ${g.weight_total}% of the final result; a mark shows as percent · points.` : 'Each student’s best mark on each quiz and tutorial.', head, rows));
 		if (!ok) toast('Allow pop-ups for this site to print', 'error');
 	}
@@ -118,7 +124,8 @@
 			<span class="grow"></span>
 			{#if !editing && !scoped}<button class="btn btn-sm" onclick={startEditing} disabled={!g.items.length}><Icon name="sliders" size={15} />Weights</button>{/if}
 			<button class="btn btn-sm" onclick={download} disabled={!g.students.length}><Icon name="download" size={15} />CSV</button>
-			<button class="btn btn-sm" onclick={print} disabled={!g.students.length}><Icon name="table" size={15} />Print / PDF</button>
+			<button class="btn btn-sm" onclick={print} disabled={!g.students.length}><Icon name="table" size={15} />Print</button>
+			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => (shown ? [{ ...table(shown), frozen: 2 }] : [])} disabled={!g.students.length} />
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<p class="small muted m-0 grow">
