@@ -27,6 +27,9 @@ func (s *Service) Routes(keys authn.Keys) func(chi.Router) {
 			r.Method("POST", "/media-token", h(s.hMediaToken))
 			r.Method("POST", "/start", h(s.hStart))
 			r.Method("POST", "/end", h(s.simple(s.End)))
+			r.Method("POST", "/archive", h(s.simple(s.ArchiveSession)))
+			r.Method("POST", "/restore", h(s.simple(s.RestoreSession)))
+			r.Method("DELETE", "/", h(s.simple(s.DeleteSession)))
 			r.Method("PUT", "/settings", h(s.hSettings))
 			r.Method("POST", "/admit", h(s.hAdmit))
 			r.Method("PUT", "/permissions", h(s.hPermissions))
@@ -144,7 +147,20 @@ func (s *Service) hCreate(w http.ResponseWriter, r *http.Request) error {
 func (s *Service) hList(w http.ResponseWriter, r *http.Request) error {
 	pg := ParsePage(r, sessionSorts, "created", true)
 	q := r.URL.Query()
-	list, total, err := s.List(r.Context(), me(r), q.Get("classroom_id"), q.Get("topic_id"), q.Get("status"), pg)
+	f := SessionFilter{ClassroomID: q.Get("classroom_id"), TopicID: q.Get("topic_id"), Status: q.Get("status"), View: q.Get("view")}
+	for name, into := range map[string]**time.Time{"from": &f.From, "to": &f.To} {
+		if v := q.Get(name); v != "" {
+			d, err := time.Parse("2006-01-02", v)
+			if err != nil {
+				return web.Invalid(map[string]string{name: "choose a date"})
+			}
+			if name == "to" {
+				d = d.AddDate(0, 0, 1)
+			}
+			*into = &d
+		}
+	}
+	list, total, err := s.List(r.Context(), me(r), f, pg)
 	if err != nil {
 		return err
 	}

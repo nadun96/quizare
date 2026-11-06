@@ -10,7 +10,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { auth, loginUrl } from '$lib/session.svelte';
 	import { MeetingCall } from '$lib/meet/call.svelte';
-	import { ENDINGS, fitGrid, type MeetingAccess } from '$lib/meet/mesh';
+	import { ENDINGS, fitGrid, type MeetingAccess, isDrawing } from '$lib/meet/mesh';
 	import Tile from '$lib/meet/Tile.svelte';
 	import Whiteboard from '$lib/board/Whiteboard.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -120,8 +120,9 @@
 	let barsHaveFocus = $state(false);
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
 	function wake(e?: PointerEvent) {
-		if (e && e.buttons) {
-			idle = !pinned; // drawing: get out of the way
+		if (e && isDrawing(e)) {
+			idle = !pinned; // get out of the way
+			barsHaveFocus = false; // a finger on the board doesn't take focus from the last button pressed
 			return;
 		}
 		idle = false;
@@ -198,7 +199,7 @@
 		</div>
 	</div>
 {:else}
-	<div class="call" class:away class:with-strip={stage !== 'people' && stripOpen} onpointermove={wake} onpointerdown={wake} role="application" aria-label="Meeting: {access.meeting.title}">
+	<div class="call" class:away class:with-strip={stage !== 'people' && stripOpen} onpointermove={wake} onpointerdown={wake} onpointerup={wake} role="application" aria-label="Meeting: {access.meeting.title}">
 		<main class="stage">
 			<!-- The box inside the stage's padding: what the tiles must fit. -->
 			<div class="fitbox" bind:clientWidth={stageW} bind:clientHeight={stageH}>
@@ -310,11 +311,13 @@
 	.call.away .bar.top { translate: 0 -0.5rem; }
 	.call.away .bar.bottom { translate: 0 0.5rem; }
 	.sm-only { display: none; }
+	/* A message mustn't sit on the controls it's about. */
+	:global(body:has(.call) .toast) { bottom: 4.5rem; }
 
 	@media (max-width: 760px), (max-aspect-ratio: 4/5) {
 		/* Phones: the people row sits along the bottom, above the controls. */
 		.call.with-strip { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-		.stage { padding-bottom: 0.5rem; }
+		.call.with-strip .stage { padding-bottom: 0.5rem; }
 		.strip { padding: 0 0.5rem 4.25rem; }
 		.strip-tiles { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
 		.strip-tiles .cell { flex: 0 0 8rem; }

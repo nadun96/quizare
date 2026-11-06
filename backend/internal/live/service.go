@@ -279,6 +279,13 @@ func (s *Service) ownedSession(ctx context.Context, teacherID, id string) (*Sess
 	return sess, nil
 }
 
+// Forget drops a deleted session from memory (D-149).
+func (s *Service) Forget(id string) {
+	s.mu.Lock()
+	delete(s.sessions, id)
+	s.mu.Unlock()
+}
+
 // Teaches reports whether userID owns or co-teaches the classroom (D-121).
 func (s *Service) Teaches(ctx context.Context, classroomID, userID string) (bool, error) {
 	return s.classrooms.Teaches(ctx, classroomID, userID)
@@ -290,7 +297,7 @@ var SessionSorts = page.Sorts{"created": "created_at", "title": "lower(title)", 
 // ListSessions returns one page of a quiz's sessions, searched by title or
 // join code, and how many there are.
 func (s *Service) ListSessions(ctx context.Context, teacherID, quizID string, p page.Request) ([]Session, int, error) {
-	where := ` FROM live.sessions WHERE quiz_id=$1 AND content.teaches(classroom_id, $2) AND ($3 = '' OR title ILIKE $3 OR join_code ILIKE $3)`
+	where := ` FROM live.sessions WHERE quiz_id=$1 AND archived_at IS NULL AND content.teaches(classroom_id, $2) AND ($3 = '' OR title ILIKE $3 OR join_code ILIKE $3)`
 	args := []any{quizID, teacherID, p.Like()}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {

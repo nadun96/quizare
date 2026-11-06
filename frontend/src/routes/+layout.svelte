@@ -67,7 +67,8 @@
 					{ href: '#activities', label: t('nav.groupActivities'), icon: 'chart', children: [
 						{ href: '/t/polls', label: t('nav.polls'), icon: 'chart' },
 						{ href: '/t/meetings', label: t('nav.meetings'), icon: 'video' },
-						...(tutoring ? [{ href: '/t/tutoring', label: t('nav.tutoring'), icon: 'monitor' as const }] : [])
+						...(tutoring ? [{ href: '/t/tutoring', label: t('nav.tutoring'), icon: 'monitor' as const }] : []),
+						{ href: '/t/archive', label: t('nav.archive'), icon: 'archive' }
 					] },
 				]
 			: auth.user?.role === 'student'

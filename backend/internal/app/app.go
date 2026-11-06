@@ -23,6 +23,7 @@ import (
 	"github.com/nadun96/quizplatform/internal/admin"
 	"github.com/nadun96/quizplatform/internal/analytics"
 	"github.com/nadun96/quizplatform/internal/apidocs"
+	"github.com/nadun96/quizplatform/internal/archive"
 	"github.com/nadun96/quizplatform/internal/auth"
 	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/dashboard"
@@ -76,6 +77,7 @@ type App struct {
 	Analytics *analytics.Service
 	Insight   *insight.Service
 	Grading   *grading.Service
+	Archive   *archive.Service
 	LoadTest  *loadtest.Service // the admin's capacity test (D-125)
 	Admin     *admin.Service
 	Poll      *poll.Service
@@ -273,10 +275,13 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 	rollupWorker.Service = a.Analytics
 	a.Insight = insight.NewService(pool)
 	a.Grading = grading.NewService(pool)
+	a.Archive = archive.NewService(pool)
+	a.Archive.OnDelete(archive.KindQuiz, a.Live.Forget)
 	a.LoadTest = loadtest.NewService(pool, a.Auth, selfURL(cfg), cfg.BaseURL, log)
 	insightWorker.Service = a.Insight
 	a.Admin = admin.NewService(pool, a.Auth)
 	a.Poll = poll.NewService(pool, a.Content, a.Auth, cfg.BaseURL, log)
+	a.Archive.OnDelete(archive.KindPoll, a.Poll.Forget)
 	a.Storage = storage.NewService(pool, a.Auth, log, cfg.BackupDir, cfg.NightlyBackupDir, opt.KEK)
 	snapshotWorker.Service = a.Storage
 	// Tutoring's reminders and notices go out as the platform's email jobs (D-84).
@@ -427,6 +432,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			a.Analytics.TeacherRoutes(t)
 			a.Analytics.TrendRoutes(t) // long-term trends (D-119)
 			a.Grading.TeacherRoutes(t) // gradebook, weights and attendance (D-122)
+			a.Archive.TeacherRoutes(t) // finished activities (D-149)
 			a.Poll.TeacherRoutes(t)
 			a.Meet.TeacherRoutes(t)
 			a.Drive.TeacherRoutes(t)

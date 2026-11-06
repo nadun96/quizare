@@ -77,20 +77,21 @@ func New(pool *pgxpool.Pool, p Platform, m Media, mediaURL string, log *slog.Log
 // ---------- model ----------
 
 type Session struct {
-	ID            string  `json:"id"`
-	TeacherID     string  `json:"teacher_id"`
-	TeacherName   string  `json:"teacher_name"`
-	ClassroomID   string  `json:"classroom_id"`
-	ClassroomName string  `json:"classroom_name"`
-	TopicID       *string `json:"topic_id"` // under this topic of the classroom (D-147)
-	Title         string  `json:"title"`
-	JoinCode      string  `json:"join_code"`
-	Status        string  `json:"status"` // open, live, ended
-	AdmitMode     string  `json:"admit_mode"`
-	Locked        bool    `json:"locked"`
-	ChatMode      string  `json:"chat_mode"`
-	SlowSeconds   int     `json:"slow_seconds"`
-	PinnedID      *int64  `json:"pinned_id,omitempty"`
+	ID            string     `json:"id"`
+	TeacherID     string     `json:"teacher_id"`
+	TeacherName   string     `json:"teacher_name"`
+	ClassroomID   string     `json:"classroom_id"`
+	ClassroomName string     `json:"classroom_name"`
+	TopicID       *string    `json:"topic_id"`    // under this topic of the classroom (D-147)
+	ArchivedAt    *time.Time `json:"archived_at"` // in the archive (D-149)
+	Title         string     `json:"title"`
+	JoinCode      string     `json:"join_code"`
+	Status        string     `json:"status"` // open, live, ended
+	AdmitMode     string     `json:"admit_mode"`
+	Locked        bool       `json:"locked"`
+	ChatMode      string     `json:"chat_mode"`
+	SlowSeconds   int        `json:"slow_seconds"`
+	PinnedID      *int64     `json:"pinned_id,omitempty"`
 	// BroadcasterID is who broadcasts when it isn't the lead teacher
 	// (TS-FR-17); BroadcastOffer is someone asked who hasn't answered.
 	BroadcasterID  *string `json:"broadcaster_id,omitempty"`
@@ -140,7 +141,7 @@ const sessionCols = `id, teacher_id, teacher_name, classroom_id, classroom_name,
 	slow_seconds, pinned_id, broadcaster_id, broadcast_offer, layout, groups_open, groups_close_at, groups_choose, group_chat,
 	group_mic, group_camera, group_screen, scheduled_at, created_at, started_at, ended_at, plan, auto_off,
 	series_id, duration_min, time_zone, open_early_min, reminders, cancelled_at,
-	board_open, board_mode, board_users::text[], board_cleared, poll_id::text, poll_code, poll_title, topic_id::text`
+	board_open, board_mode, board_users::text[], board_cleared, poll_id::text, poll_code, poll_title, topic_id::text, archived_at`
 
 func scanSession(row pgx.Row) (Session, error) { return scanSessionWith(row) }
 
@@ -152,7 +153,7 @@ func scanSessionWith(row pgx.Row, extra ...any) (Session, error) {
 		&s.Locked, &s.ChatMode, &s.SlowSeconds, &s.PinnedID, &s.BroadcasterID, &s.BroadcastOffer, &s.Layout,
 		&s.GroupsOpen, &s.GroupsCloseAt, &s.GroupsChoose, &s.GroupChat, &s.GroupMic, &s.GroupCamera, &s.GroupScreen, &s.ScheduledAt, &s.CreatedAt, &s.StartedAt, &s.EndedAt,
 		&plan, &s.AutoOff, &s.SeriesID, &s.DurationMin, &s.TimeZone, &s.OpenEarlyMin, &s.Reminders, &s.CancelledAt,
-		&s.BoardOpen, &s.BoardMode, &s.BoardUsers, &s.boardCleared, &s.PollID, &s.PollCode, &s.PollTitle, &s.TopicID}, extra...)
+		&s.BoardOpen, &s.BoardMode, &s.BoardUsers, &s.boardCleared, &s.PollID, &s.PollCode, &s.PollTitle, &s.TopicID, &s.ArchivedAt}, extra...)
 	err := row.Scan(dest...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s, web.ErrNotFound
@@ -327,11 +328,22 @@ func (s *Service) Create(ctx context.Context, p authn.Person, in CreateInput) (S
 // SessionSorts are the columns the teacher's list sorts by.
 var sessionSorts = map[string]string{"created": "created_at", "title": "lower(title)", "scheduled": "scheduled_at"}
 
+// SessionFilter narrows a teacher's sessions. To is the moment after the last day.
+type SessionFilter struct {
+	ClassroomID, TopicID, Status, View string
+	From, To                           *time.Time
+}
+
 // List returns one page of a teacher's sessions (TS-FR-90, TS-FR-91).
-func (s *Service) List(ctx context.Context, p authn.Person, classroomID, topicID, status string, pg Page) ([]Session, int, error) {
+func (s *Service) List(ctx context.Context, p authn.Person, f SessionFilter, pg Page) ([]Session, int, error) {
 	where := ` FROM tutoring.sessions WHERE (teacher_id=$1 OR id IN (SELECT session_id FROM tutoring.coteachers WHERE user_id=$1))
-		AND ($2 = '' OR classroom_id::text = $2) AND ($3 = '' OR status = $3) AND ($4 = '' OR title ILIKE $4) AND ($5 = '' OR topic_id::text = $5)`
-	args := []any{p.ID, classroomID, status, pg.Like(), topicID}
+		AND ($2 = '' OR classroom_id::text = $2) AND ($3 = '' OR status = $3) AND ($4 = '' OR title ILIKE $4) AND ($5 = '' OR topic_id::text = $5)
+		AND CASE $6::text WHEN 'archived' THEN archived_at IS NOT NULL
+			WHEN 'past' THEN archived_at IS NULL AND status IN ('ended', 'cancelled')
+			ELSE archived_at IS NULL END
+		AND ($7::timestamptz IS NULL OR coalesce(started_at, scheduled_at, created_at) >= $7)
+		AND ($8::timestamptz IS NULL OR coalesce(started_at, scheduled_at, created_at) < $8)`
+	args := []any{p.ID, f.ClassroomID, f.Status, pg.Like(), f.TopicID, f.View, f.From, f.To}
 	var total int
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
