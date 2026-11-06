@@ -126,3 +126,12 @@ export function sizeHint(n: number): string {
 	if (n > 0 && n <= 8) return 'Everyone needs a good connection.';
 	return 'Everyone sends video to everyone: past 8 people, most should keep their camera off.';
 }
+
+/**
+ * Whether a pointer is drawing on the board, when the controls get out of the
+ * way. A touch has buttons set from the moment it lands, so that alone would
+ * hide the controls under the finger pressing them (D-148).
+ */
+export function isDrawing(e: { type: string; buttons: number; target: EventTarget | null }): boolean {
+	return e.type === 'pointermove' && e.buttons > 0 && !!(e.target as Element | null)?.closest?.('canvas');
+}
