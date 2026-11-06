@@ -20,3 +20,8 @@ export function submitWarning(answered: boolean[] | null | undefined, flagged: b
 	if (marked) parts.push(n(marked, 'is', 'are') + ' flagged for review.');
 	return [...parts, "You can't change your answers afterwards."].join(' ');
 }
+
+/** The question asked before handing in, from either button (D-139). */
+export function submitDialog(answered: boolean[] | null | undefined, flagged: boolean[] | null | undefined) {
+	return { title: 'Submit your answers?', body: submitWarning(answered, flagged), confirm: 'Submit quiz', cancel: 'Keep working' };
+}

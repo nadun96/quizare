@@ -223,7 +223,7 @@
 			<div class="row">
 				<ListSearch list={events} placeholder="Search events" label="Search the integrity log" />
 				<select class="select select-sm w-auto" bind:value={kind} onchange={() => events.refilter()} aria-label="Event kind">
-					<option value="">All events</option><option value="violation">Violations</option><option value="admitted">Admitted</option><option value="started">Started</option><option value="submitted">Submitted</option><option value="reinstated">Reinstated</option>
+					<option value="">All events</option><option value="violation">Violations</option><option value="admitted">Admitted</option><option value="started">Started</option><option value="submitted">Submitted</option><option value="reinstated">Reinstated</option><option value="reopened">Reopened</option>
 				</select>
 			</div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">

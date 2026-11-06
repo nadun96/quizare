@@ -15,6 +15,7 @@ stateDiagram-v2
   paused --> submitted: end
   in_progress --> invalidated: violation
   invalidated --> in_progress: reinstate
+  submitted --> in_progress: reopen
   waiting --> not_started: end
   admitted --> not_started: end
   submitted --> [*]
@@ -30,9 +31,10 @@ stateDiagram-v2
 | finish | Last question answered, quiz time up, student submits, or the session ends |
 | violation | A detected signal under `invalidate` (or once warnings run out under `warn_then_invalidate`) |
 | reinstate | Teacher, with a logged reason, before the session ends |
+| reopen | Teacher, with a logged reason, before the session ends; not in team quizzes (D-139) |
 | end | The session ends before the student started (or while paused, which submits) |
 
-`submitted`, `invalidated` (unless reinstated before the session ends) and `not_started` are final. Session status moves `open` → `live` (on the first admission) → `ended`. The QR link works while the session is open or live (BR-04).
+`submitted` (unless reopened before the session ends), `invalidated` (unless reinstated before the session ends) and `not_started` are final. Session status moves `open` → `live` (on the first admission) → `ended`. The QR link works while the session is open or live (BR-04).
 
 ## The happy path
 

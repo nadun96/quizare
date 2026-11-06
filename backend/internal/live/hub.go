@@ -398,10 +398,14 @@ func (s *Service) dashboard(ctx context.Context, sessionID string) (Dashboard, e
 	for _, p := range list {
 		a := p.a
 		d.Counts[a.State]++
+		remaining := a.QuizRemainingMs
+		if a.State == StateSubmitted {
+			remaining = nil // kept only in case the attempt is reopened (D-139)
+		}
 		d.Rows = append(d.Rows, DashboardRow{
 			AttemptID: a.ID, UserID: a.UserID, Name: users[a.UserID].Name, Avatar: users[a.UserID].Avatar, StudentNumber: a.StudentNumber, State: a.State,
 			Index: a.Current, Total: len(a.Order), Answered: p.answered, Warnings: a.Warnings, Violations: a.Violations,
-			ExtensionSec: a.ExtensionSec, QuizDeadline: ms(a.QuizDeadline), RemainingMs: a.QuizRemainingMs, CountdownDeadline: ms(a.CountdownDeadline),
+			ExtensionSec: a.ExtensionSec, QuizDeadline: ms(a.QuizDeadline), RemainingMs: remaining, CountdownDeadline: ms(a.CountdownDeadline),
 			Connected: s.hub.isConnected(a.ID), InvalidReason: a.InvalidReason, TeamID: a.TeamID, Captain: a.Captain, Try: a.Try,
 		})
 	}

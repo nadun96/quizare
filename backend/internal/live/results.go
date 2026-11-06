@@ -44,7 +44,29 @@ type MarkingData struct {
 	Try           int                // which try this is (D-131)
 	Session       settings.Effective // session-level effective settings for this student
 	Released      bool               // results visible to the student (BR-12)
-	Items         []MarkingItem      // in the order the student saw them
+	ReleasedSince *time.Time         // since when: starts a review time limit (D-140)
+	QuizID        string
+	Items         []MarkingItem // in the order the student saw them
+}
+
+// releasedSince is when the results reached the student: they had to be both
+// handed in and released, so the later of the two.
+func releasedSince(sess Session, a *Attempt, eff settings.Effective) *time.Time {
+	if !released(sess, a, eff) {
+		return nil
+	}
+	at := a.SubmittedAt
+	if at == nil {
+		at = a.InvalidatedAt
+	}
+	later := sess.ReleasedAt
+	if later == nil && eff.ResultsRelease == "on_session_end" {
+		later = sess.EndedAt
+	}
+	if at == nil || (later != nil && later.After(*at)) {
+		return later
+	}
+	return at
 }
 
 // released applies results_release (BA §7): immediate, on_session_end or manual.
@@ -98,7 +120,7 @@ func (s *Service) markingData(ctx context.Context, sess Session, a *Attempt) (*M
 		AttemptID: a.ID, SessionID: sess.ID, SessionTitle: sess.Title, QuizTitle: sess.Snapshot.QuizTitle,
 		TeacherID: sess.TeacherID, ClassroomID: sess.ClassroomID, UserID: a.UserID, StudentNumber: a.StudentNumber, State: a.State,
 		StartedAt: a.StartedAt, SubmittedAt: a.SubmittedAt, ExtensionSec: a.ExtensionSec, Warnings: a.Warnings, Violations: a.Violations,
-		Try: a.Try, Session: eff, Released: released(sess, a, eff),
+		Try: a.Try, Session: eff, Released: released(sess, a, eff), ReleasedSince: releasedSince(sess, a, eff), QuizID: sess.QuizID,
 	}
 	for i := range a.Order {
 		q := sess.question(a, i)
