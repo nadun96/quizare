@@ -38,6 +38,7 @@ type GroupMark struct {
 	Pct    float64  `json:"pct"`
 	Points *float64 `json:"points,omitempty"`
 	Marked int      `json:"marked"` // members with a mark
+	exact  float64  // the percentage before rounding for showing: final marks use this
 }
 
 // GroupRow is a group with its marks.
@@ -76,21 +77,23 @@ func groupMark(rule string, marks []ReportMark, members int, itemMax float64) Gr
 				best = m
 			}
 		}
-		out.Score, out.Max, out.Pct = best.Score, best.Max, best.Pct
+		out.Score, out.Max, out.Pct, out.exact = best.Score, best.Max, best.Pct, best.exact
 	default:
 		var pct float64
 		for _, m := range list {
 			out.Score += m.Score
 			out.Max += m.Max
-			pct += m.Pct
+			pct += m.exact
 		}
 		if rule == RuleTotal {
 			if out.Max > 0 {
-				out.Pct = round(out.Score/out.Max*100, 1)
+				out.exact = out.Score / out.Max * 100
+				out.Pct = round(out.exact, 1)
 			}
 		} else {
 			n := float64(len(list))
-			out.Score, out.Max, out.Pct = out.Score/n, out.Max/n, round(pct/n, 1)
+			out.exact = pct / n
+			out.Score, out.Max, out.Pct = out.Score/n, out.Max/n, round(out.exact, 1)
 		}
 		out.Score, out.Max = round(out.Score, 2), round(out.Max, 2)
 	}
@@ -138,7 +141,7 @@ func (s *Service) loadGroups(ctx context.Context, classroomID string, rep *Class
 		}
 		m := groupMark(it.GroupRule, marks, len(row.Members), it.MaxMarks)
 		if it.Weight > 0 {
-			p := round(m.Pct*it.Weight, 2)
+			p := round(m.exact*it.Weight, 2)
 			m.Points = &p
 			row.Total += p
 		}

@@ -111,8 +111,9 @@ type ReportMark struct {
 	Score       float64  `json:"score"`
 	Max         float64  `json:"max"`
 	Pct         float64  `json:"pct"`
-	Points      *float64 `json:"points,omitempty"` // the final mark: pct × weight, when it counts
-	Submissions int      `json:"submissions"`      // valid ones to choose from
+	Points      *float64 `json:"points,omitempty"` // the final mark: marks ÷ out of × 100 × weight, when it counts
+	exact       float64  // the percentage before rounding for showing: final marks use this
+	Submissions int      `json:"submissions"` // valid ones to choose from
 	Pending     bool     `json:"pending,omitempty"`
 }
 
@@ -150,6 +151,15 @@ type ClassReport struct {
 type submission struct {
 	score, max, pct float64
 	complete        bool
+}
+
+// exactPct is the mark as a percentage from its marks, within 0 to 100.
+func (x submission) exactPct() float64 {
+	p := x.pct
+	if x.max > 0 {
+		p = x.score / x.max * 100
+	}
+	return min(100, max(0, p))
 }
 
 // pickMark chooses the submission the report uses. One still being marked is
@@ -302,9 +312,9 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			if !it.Included {
 				continue
 			}
-			m := ReportMark{Score: round(x.score, 2), Max: round(x.max, 2), Pct: pct, Submissions: len(list), Pending: !x.complete}
+			m := ReportMark{Score: round(x.score, 2), Max: round(x.max, 2), Pct: pct, Submissions: len(list), Pending: !x.complete, exact: x.exactPct()}
 			if counted {
-				p := round(pct*it.Weight, 2)
+				p := round(m.exact*it.Weight, 2)
 				m.Points = &p
 				st.Total += p
 			}
