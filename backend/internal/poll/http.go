@@ -149,7 +149,7 @@ func caller(r *http.Request) Caller {
 
 func (s *Service) hList(w http.ResponseWriter, r *http.Request) error {
 	pg := page.Parse(r, PollSorts, "created", true)
-	l, total, err := s.ListPolls(r.Context(), teacherID(r), r.URL.Query().Get("status"), pg)
+	l, total, err := s.ListPolls(r.Context(), teacherID(r), PollFilter{Status: r.URL.Query().Get("status"), ClassroomID: r.URL.Query().Get("classroom_id"), TopicID: r.URL.Query().Get("topic_id")}, pg)
 	if err != nil {
 		return err
 	}

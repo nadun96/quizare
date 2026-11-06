@@ -227,7 +227,7 @@ func (s *Service) student(ctx context.Context, uid, classroom string, out map[st
 		return err
 	}
 
-	// Presentations being presented, and meetings open, for their classrooms.
+	// Presentations being presented, and meetings and polls open, for their classrooms.
 	rows, err = s.pool.Query(ctx, `SELECT 'presentation', p.id, p.title, c.name, l.started_at, ''
 		FROM presentation.lives l JOIN presentation.presentations p ON p.id = l.presentation_id
 		JOIN content.topics tp ON tp.id = p.topic_id JOIN content.modules m ON m.id = tp.module_id
@@ -239,6 +239,11 @@ func (s *Service) student(ctx context.Context, uid, classroom string, out map[st
 		FROM meet.meetings mt JOIN content.classrooms c ON c.id = mt.classroom_id AND c.archived_at IS NULL
 		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
 		WHERE mt.status = 'open' AND ($2 = '' OR c.id::text = $2)
+		UNION ALL
+		SELECT 'poll', pl.id, pl.title, c.name, coalesce(pl.opened_at, pl.created_at), pl.join_code
+		FROM poll.polls pl JOIN content.classrooms c ON c.id = pl.classroom_id AND c.archived_at IS NULL
+		JOIN content.enrolments e ON e.classroom_id = c.id AND e.user_id = $1 AND e.status = 'active'
+		WHERE pl.status = 'open' AND (pl.audience = 'classroom' OR pl.topic_id IS NOT NULL) AND ($2 = '' OR c.id::text = $2)
 		LIMIT 200`, uid, classroom)
 	if err != nil {
 		return err
@@ -251,9 +256,12 @@ func (s *Service) student(ctx context.Context, uid, classroom string, out map[st
 			return err
 		}
 		it.Status, it.At = "live", &at
-		if it.Kind == "meeting" {
+		switch it.Kind {
+		case "meeting":
 			it.Href, it.Detail = "/m/"+code, "Meeting open now"
-		} else {
+		case "poll":
+			it.Href, it.Detail = "/p/"+code, "Poll open now"
+		default:
 			it.Href, it.Detail = "/slides/"+it.ID+"/live", "Being presented now"
 		}
 		out[ListLive] = append(out[ListLive], it)

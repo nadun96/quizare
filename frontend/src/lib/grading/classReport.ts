@@ -110,8 +110,15 @@ export function markText(m: ReportMark | undefined): string {
 	return m ? `${m.score} / ${m.max} (${m.pct}%)` : '';
 }
 
+/** A mark and, when it counts, what it adds to the total: for paper. */
+export function markCell(m: ReportMark | GroupMark | undefined): string {
+	if (!m) return '';
+	const text = `${m.score} / ${m.max} (${m.pct}%)`;
+	return m.points == null ? text : `${text}, final mark ${m.points}`;
+}
+
 /** What a column's weight means for the total. */
-export const weightText = (it: { weight: number }) => (it.weight > 0 ? `Weight ${it.weight}` : 'Not in the total');
+export const weightText = (it: { weight: number }) => (it.weight > 0 ? `Weight ${it.weight}, ${Math.round(it.weight * 10000) / 100}%` : 'Not in the total');
 
 /** The final percentages' class average, highest and lowest. */
 export function finalRange(r: ClassReport): { avg: number | null; high: number | null; low: number | null } {
@@ -159,7 +166,7 @@ export function markTone(m: { pct: number } | undefined, weight: number, bands: 
 export function individualSheet(r: ClassReport, bands: Bands = DEFAULT_BANDS): Sheet {
 	const cols = columns(r);
 	const head = ['Student', 'ID', ...cols.map((it) => `${it.title} (${weightText(it)})`), 'Total', 'Final'];
-	const rows = r.students.map((s) => [s.name, s.student_number ?? '', ...cols.map((it) => markText(s.marks[itemKey(it)]) || '—'), `${s.total} / ${r.out_of}`, s.final == null ? '' : `${s.final}%`]);
+	const rows = r.students.map((s) => [s.name, s.student_number ?? '', ...cols.map((it) => markCell(s.marks[itemKey(it)]) || '—'), `${s.total} / ${r.out_of}`, s.final == null ? '' : `${s.final}%`]);
 	const tones = r.students.map((s) => [null, null, ...cols.map((it) => markTone(s.marks[itemKey(it)], it.weight, bands)), null, toneFor(s.final, bands)]);
 	return { heading: 'Individual marks', head, rows, tones, frozen: 2 };
 }
@@ -187,7 +194,7 @@ export function groupSheets(r: ClassReport, bands: Bands = DEFAULT_BANDS): Sheet
 	const sheets: Sheet[] = [];
 	if (r.class_groups.length) {
 		const head = ['Group', 'Members', ...cols.map((it) => `${it.title} (${weightText(it)}, ${ruleText(it).toLowerCase()})`), 'Total', 'Final'];
-		const rows = r.class_groups.map((g) => [g.name, memberNames(r, g), ...cols.map((it) => groupMarkText(g.marks[itemKey(it)]) || '—'), `${g.total} / ${r.out_of}`, g.final == null ? '' : `${g.final}%`]);
+		const rows = r.class_groups.map((g) => [g.name, memberNames(r, g), ...cols.map((it) => markCell(g.marks[itemKey(it)]) || '—'), `${g.total} / ${r.out_of}`, g.final == null ? '' : `${g.final}%`]);
 		const tones = r.class_groups.map((g) => [null, null, ...cols.map((it) => markTone(g.marks[itemKey(it)], 0, bands)), null, toneFor(g.final, bands)]);
 		sheets.push({ heading: 'Marks by class group', head, rows, tones, frozen: 1 });
 	}

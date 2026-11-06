@@ -3,11 +3,12 @@
 	// participants see (D-40). One row per setting: icon-and-label choices,
 	// with only the selected choice explained (D-63).
 	import Icon from '../ui/Icon.svelte';
+	import TopicSelect from '../classroom/TopicSelect.svelte';
 	import OptionGroup, { type Choice } from '../ui/OptionGroup.svelte';
 	import type { Classroom } from '../types';
 	import type { PollSettings } from './types';
 
-	let { settings = $bindable(), classroomId = $bindable(null), classrooms = [], locked = false }: { settings: PollSettings; classroomId?: string | null; classrooms?: Classroom[]; locked?: boolean } = $props();
+	let { settings = $bindable(), classroomId = $bindable(null), topicId = $bindable(null), classrooms = [], locked = false }: { settings: PollSettings; classroomId?: string | null; topicId?: string | null; classrooms?: Classroom[]; locked?: boolean } = $props();
 
 	$effect(() => {
 		if (settings.audience === 'classroom' && settings.identity !== 'identified') settings.audience = 'anyone';
@@ -107,6 +108,7 @@
 					<option value="">{settings.audience === 'classroom' ? 'Choose a classroom' : 'No classroom'}</option>
 					{#each classrooms as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 				</select>
+				{#if classroomId}<TopicSelect {classroomId} bind:value={topicId} compact />{/if}
 			{/if}
 		{/snippet}
 		{@render row('Who can answer', settings.audience === 'classroom' ? '' : 'A classroom here is only for your own organising.', audienceC)}

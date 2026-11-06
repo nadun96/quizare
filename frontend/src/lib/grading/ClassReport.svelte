@@ -9,7 +9,7 @@
 	import { saveFile } from '../tutoring/types';
 	import GroupsEditor from './GroupsEditor.svelte';
 	import ReportPdfButton from './ReportPdfButton.svelte';
-	import { DEFAULT_BANDS, toneClass, toneFor, type Bands } from './reportPdf';
+	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
 	import { classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, markTone, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type Unit } from './classReport';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
@@ -122,7 +122,7 @@
 					</table>
 				</div>
 				<p class="m-0 small muted">
-					A weight is between 0 and 1: a mark of 80% with weight 0.4 gives a final mark of 32. Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, so the total is out of <strong class="tabular">{Math.round(draftWeightTotal(draft) * 10000) / 100}</strong>. Weight 0 shows an item but leaves it out of the total. A group’s mark comes from its members’; a member with no mark counts 0.
+					A weight is between 0 and 1, so 0.1 is 10%: a mark of 30 / 40 is 75%, and at weight 0.1 it adds a final mark of 7.5 to the total. Weights add up to <strong class="tabular">{draftWeightTotal(draft)}</strong>, so the total is out of <strong class="tabular">{Math.round(draftWeightTotal(draft) * 10000) / 100}</strong>. Weight 0 shows an item but leaves it out of the total. A group’s mark comes from its members’; a member with no mark counts 0.
 					A review time runs from when a student gets their results. When it ends the score stays and the question detail closes; blank means no limit.
 				</p>
 
@@ -174,10 +174,10 @@
 										<td class="min-w-40"><span class="font-semibold">{g.name}</span><br /><span class="text-xs muted">{memberNames(rep, g) || 'No students'}</span></td>
 										{#each cols as it (itemKey(it))}
 											{@const m = g.marks[itemKey(it)]}
-											<td class="tabular whitespace-nowrap {toneClass(markTone(m, 0, bands))}">{#if m}{groupMarkText(m)}{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}<br /><span class="text-xs muted">{m.marked} of {g.members.length} marked</span>{:else}<span class="muted">—</span>{/if}</td>
+											<td class="tabular whitespace-nowrap" use:toned={markTone(m, 0, bands)}>{#if m}{groupMarkText(m)}{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}<br /><span class="text-xs muted">{m.marked} of {g.members.length} marked</span>{:else}<span class="muted">—</span>{/if}</td>
 										{/each}
 										<td class="tabular whitespace-nowrap font-semibold">{g.total} / {rep.out_of}</td>
-										<td class="tabular font-semibold {toneClass(toneFor(g.final, bands))}">{g.final == null ? '—' : `${g.final}%`}</td>
+										<td class="tabular font-semibold" use:toned={toneFor(g.final, bands)}>{g.final == null ? '—' : `${g.final}%`}</td>
 									</tr>
 								{/each}
 							</tbody>
@@ -190,7 +190,7 @@
 					<div class="card card-border bg-base-100 overflow-x-auto">
 						<table class="table table-sm">
 							<thead><tr>{#each sh.head as h (h)}<th>{h}</th>{/each}</tr></thead>
-							<tbody>{#each sh.rows as r, i (i)}<tr>{#each r as c, j (j)}<td class="tabular {toneClass(sh.tones?.[i]?.[j])}" class:font-semibold={j === 0}>{c}</td>{/each}</tr>{/each}</tbody>
+							<tbody>{#each sh.rows as r, i (i)}<tr>{#each r as c, j (j)}<td class="tabular" use:toned={sh.tones?.[i]?.[j]} class:font-semibold={j === 0}>{c}</td>{/each}</tr>{/each}</tbody>
 						</table>
 					</div>
 				{/each}
@@ -215,7 +215,7 @@
 								<td class="whitespace-nowrap"><span class="font-semibold">{s.name}</span>{#if s.student_number}<br /><span class="text-xs muted tabular">{s.student_number}</span>{/if}</td>
 								{#each cols as it (itemKey(it))}
 									{@const m = s.marks[itemKey(it)]}
-									<td class="tabular whitespace-nowrap {toneClass(markTone(m, it.weight, bands))}">
+									<td class="tabular whitespace-nowrap" use:toned={markTone(m, it.weight, bands)}>
 										{#if m}
 											{markText(m)}
 											{#if m.points != null}<br /><span class="text-xs muted">final mark {m.points}</span>{/if}
@@ -226,7 +226,7 @@
 									</td>
 								{/each}
 								<td class="tabular whitespace-nowrap font-semibold">{s.total} / {rep.out_of}</td>
-								<td class="tabular font-semibold {toneClass(toneFor(s.final, bands))}">{s.final == null ? '—' : `${s.final}%`}</td>
+								<td class="tabular font-semibold" use:toned={toneFor(s.final, bands)}>{s.final == null ? '—' : `${s.final}%`}</td>
 							</tr>
 						{:else}
 							<tr><td colspan={cols.length + 3} class="muted">No students are active in this classroom yet.</td></tr>

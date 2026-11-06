@@ -6,6 +6,7 @@ export type TutoringSession = {
 	teacher_name: string;
 	classroom_id: string;
 	classroom_name: string;
+	topic_id?: string | null;
 	title: string;
 	join_code: string;
 	status: 'open' | 'live' | 'ended' | 'cancelled';

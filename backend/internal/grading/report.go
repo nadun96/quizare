@@ -111,8 +111,9 @@ type ReportMark struct {
 	Score       float64  `json:"score"`
 	Max         float64  `json:"max"`
 	Pct         float64  `json:"pct"`
-	Points      *float64 `json:"points,omitempty"` // the final mark: pct × weight, when it counts
-	Submissions int      `json:"submissions"`      // valid ones to choose from
+	Points      *float64 `json:"points,omitempty"` // the final mark: marks ÷ out of × 100 × weight, when it counts
+	exact       float64  // the percentage before rounding for showing: final marks use this
+	Submissions int      `json:"submissions"` // valid ones to choose from
 	Pending     bool     `json:"pending,omitempty"`
 }
 
@@ -150,6 +151,15 @@ type ClassReport struct {
 type submission struct {
 	score, max, pct float64
 	complete        bool
+}
+
+// exactPct is the mark as a percentage from its marks, within 0 to 100.
+func (x submission) exactPct() float64 {
+	p := x.pct
+	if x.max > 0 {
+		p = x.score / x.max * 100
+	}
+	return min(100, max(0, p))
 }
 
 // pickMark chooses the submission the report uses. One still being marked is
@@ -191,8 +201,9 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 			WHERE m.classroom_id = $1 AND t.status = 'published' AND EXISTS (SELECT 1 FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)
 			UNION ALL
-			SELECT 'poll', p.id, p.title, '', '', coalesce(p.opened_at, p.created_at)
+			SELECT 'poll', p.id, p.title, coalesce(ptp.name, ''), coalesce(pm.name, ''), coalesce(p.opened_at, p.created_at)
 			FROM poll.polls p
+			LEFT JOIN content.topics ptp ON ptp.id = p.topic_id LEFT JOIN content.modules pm ON pm.id = ptp.module_id
 			WHERE p.classroom_id = $1 AND p.scoring AND p.identity <> 'anonymous' AND p.status <> 'draft'
 				AND EXISTS (SELECT 1 FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL AND x.points > 0)
 		)
@@ -302,9 +313,9 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			if !it.Included {
 				continue
 			}
-			m := ReportMark{Score: round(x.score, 2), Max: round(x.max, 2), Pct: pct, Submissions: len(list), Pending: !x.complete}
+			m := ReportMark{Score: round(x.score, 2), Max: round(x.max, 2), Pct: pct, Submissions: len(list), Pending: !x.complete, exact: x.exactPct()}
 			if counted {
-				p := round(pct*it.Weight, 2)
+				p := round(m.exact*it.Weight, 2)
 				m.Points = &p
 				st.Total += p
 			}

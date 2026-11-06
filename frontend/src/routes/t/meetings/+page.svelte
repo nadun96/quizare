@@ -6,6 +6,7 @@
 	import { requireRole } from '$lib/guard.svelte';
 	import { sizeHint, sizeOptions, type Attendance, type Meeting, type MeetingLimits } from '$lib/meet/mesh';
 	import type { Classroom } from '$lib/types';
+	import TopicSelect from '$lib/classroom/TopicSelect.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
 	import IconBtn from '$lib/ui/IconBtn.svelte';
@@ -27,6 +28,7 @@
 	let title = $state('');
 	let who = $state<'anyone' | 'classroom'>('anyone');
 	let classroomId = $state('');
+	let topicId = $state<string | null>(null);
 	let size = $state('6');
 	// What the admin allows (D-72; 0 is unlimited).
 	let limits = $state<MeetingLimits>({ max_people: 8, max_open: 0 });
@@ -50,7 +52,7 @@
 		busy = true;
 		error = '';
 		try {
-			const m = await api.post<Meeting>('/api/teacher/meetings', { title, classroom_id: who === 'classroom' && classroomId ? classroomId : null, max_people: Number(size) });
+			const m = await api.post<Meeting>('/api/teacher/meetings', { title, classroom_id: who === 'classroom' && classroomId ? classroomId : null, topic_id: who === 'classroom' && classroomId ? topicId : null, max_people: Number(size) });
 			goto('/m/' + m.code);
 		} catch (err) {
 			error = err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Could not open the meeting';
@@ -114,6 +116,7 @@
 						<option value="" disabled>Choose a classroom</option>
 						{#each classrooms as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 					</select>
+					{#if classroomId}<TopicSelect {classroomId} bind:value={topicId} />{/if}
 				{/if}
 			</div>
 			<div class="vstack gap-1">

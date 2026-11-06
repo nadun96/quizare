@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ClassPool from '$lib/pools/ClassPool.svelte';
+	import ClassActivities from '$lib/classroom/ClassActivities.svelte';
 	import TeachersPanel from '$lib/classroom/TeachersPanel.svelte';
 	import ClassroomTrends from '$lib/trends/ClassroomTrends.svelte';
 	import RowMenu from '$lib/ui/RowMenu.svelte';
@@ -142,6 +143,7 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 				<input class="input w-full" style="flex:1" placeholder="New module (e.g. Term 1)" bind:value={newModule} required aria-label="New module name" />
 				<button class="btn btn-primary">Add module</button>
 			</form>
+			<ClassActivities classroomId={id} />
 		{:else if tab === 'pool'}
 			<ClassPool classroomId={id} classroomName={c.name} />
 		{:else if tab === 'students'}
