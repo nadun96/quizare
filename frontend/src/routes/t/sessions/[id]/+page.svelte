@@ -8,6 +8,7 @@
 	import { formatDuration } from '$lib/clock';
 	import { requireRole } from '$lib/guard.svelte';
 	import QrCode from '$lib/QrCode.svelte';
+	import { findRows, hiddenSelected, ROW_SHOW, type RowShow } from '$lib/live/findRows';
 	import SessionTeams from '$lib/SessionTeams.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import LiveLinks from '$lib/LiveLinks.svelte';
@@ -77,6 +78,13 @@
 
 	const rows = $derived(d?.rows ?? []);
 	const ended = $derived(d?.session.status === 'ended');
+	// Finding students (D-155). Results keep arriving; the search stays.
+	let rowSearch = $state('');
+	let rowShow = $state<RowShow>('');
+	const teamName = (r: { team_id?: string }) => d?.teams?.find((t) => t.id === r.team_id)?.name ?? '';
+	const shownRows = $derived(findRows(rows, rowSearch, rowShow, teamName));
+	const searching = $derived(!!rowSearch.trim() || !!rowShow);
+	const selectedHidden = $derived(hiddenSelected(selected, shownRows));
 	function toggle(id: string) {
 		const s = new Set(selected);
 		if (s.has(id)) s.delete(id);
@@ -84,7 +92,8 @@
 		selected = s;
 	}
 	function selectState(state: string) {
-		selected = new Set(rows.filter((r) => r.state === state).map((r) => r.attempt_id));
+		// Only those on the list: nobody the search is hiding gets picked unseen.
+		selected = new Set(shownRows.filter((r) => r.state === state).map((r) => r.attempt_id));
 	}
 	async function cmd(action: string, all: boolean, extra: Record<string, unknown> = {}) {
 		notice = '';
@@ -272,12 +281,24 @@
 					</div>
 				{/if}
 				{#if notice}<p class="alert alert-soft alert-warning small">{notice}</p>{/if}
-					{#if selected.size}<p class="small m-0" in:fadeIn><strong>{selected.size}</strong> selected · commands apply to them</p>{/if}
+					{#if selected.size}<p class="small m-0" in:fadeIn><strong>{selected.size}</strong> selected · commands apply to them{#if selectedHidden}, including {selectedHidden} the search is hiding{/if}</p>{/if}
+					{#if rows.length}
+						<div class="flex flex-wrap items-end gap-2" role="search" aria-label="Find students">
+							<label class="vstack gap-1 small">Search<input class="input input-sm w-56" type="search" bind:value={rowSearch} placeholder="Name, ID or team" /></label>
+							<label class="vstack gap-1 small">Show
+								<select class="select select-sm w-auto" bind:value={rowShow}>
+									{#each ROW_SHOW as o (o.v)}<option value={o.v}>{o.label}</option>{/each}
+								</select>
+							</label>
+							{#if searching}<button type="button" class="btn btn-ghost btn-sm" onclick={() => ((rowSearch = ''), (rowShow = ''))}>Clear</button>{/if}
+							<span class="small muted pb-1 ms-auto" role="status">{searching ? `Showing ${shownRows.length} of ${rows.length} students` : `${rows.length} ${rows.length === 1 ? 'student' : 'students'}`}</span>
+						</div>
+					{/if}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
 						<thead><tr>{#if !ended}<th><span class="sr-only">Select</span></th>{/if}<th>Student</th>{#if teamsOn}<th>Team</th>{/if}<th>Status</th><th>Progress</th><th>Time left</th><th>Flags</th><th></th></tr></thead>
 						<tbody>
-							{#each rows as r (r.attempt_id)}
+							{#each shownRows as r (r.attempt_id)}
 									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
 									{#if !ended}<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>{/if}
 									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}{#if (r.try ?? 1) > 1}{' '}<span class="badge badge-soft badge-info badge-xs" title="Which try this is">try {r.try}</span>{/if}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
@@ -291,10 +312,10 @@
 										{#if r.state === 'in_progress'}<span class="muted">on Q{r.index + 1}</span>{/if}
 									</td>
 									<td class="small tabular" class:text-error={(left(r) ?? Infinity) < 60_000 && r.state === 'in_progress'}>{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">+{Math.round(r.extension_sec / 60)} min extra</span>{/if}</td>
-									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1"><Icon name="flag" size={12} />{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
+									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1 whitespace-nowrap"><Icon name="flag" size={12} />{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
 									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{:else if r.state === 'submitted' && !ended && !teamsOn}<button class="btn btn-sm" onclick={() => reopen(r.attempt_id)} title="For a student who handed in by mistake: they carry on with their answers">Reopen</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="8"><div class="muted py-6 text-center">{#if ended}Nobody joined this session.{:else}<span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…{/if}</div></td></tr>{/each}
+							{:else}<tr><td colspan="8"><div class="muted py-6 text-center">{#if rows.length}No student matches. Clear the search to see everyone.{:else if ended}Nobody joined this session.{:else}<span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…{/if}</div></td></tr>{/each}
 						</tbody>
 					</table>
 				</div>
