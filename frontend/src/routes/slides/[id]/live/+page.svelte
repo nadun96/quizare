@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A student in a live presentation (D-77, PR-FR-11): the teacher's slide,
 	// and, when the teacher allows, looking back on one's own with a button to
 	// follow again. The page tells the server which slide is on screen and
@@ -69,7 +70,7 @@
 				};
 				socket.open();
 			},
-			(e) => (problem = e instanceof ApiError ? (e.code === 'not_live' ? 'This presentation isn’t being presented now.' : e.message) : 'Could not join')
+			(e) => (problem = e instanceof ApiError ? (e.code === 'not_live' ? tr("This presentation isn’t being presented now.") : e.message) : tr("Could not join"))
 		);
 	});
 	// Tell the server whenever the slide or following changes, and every 15 s.
@@ -111,49 +112,48 @@
 	}
 </script>
 
-<svelte:head><title>{v?.presentation.title ?? 'Live presentation'}</title></svelte:head>
+<svelte:head><title>{v?.presentation.title ?? tr("Live presentation")}</title></svelte:head>
 <svelte:window onkeydown={key} />
 <svelte:document onfullscreenchange={() => (full = !!document.fullscreenElement)} />
 
 <div class="page-container viewer">
 	{#if problem}
 		<div class="card card-border bg-base-100 shadow-sm p-6 text-center vstack" role="alert">
-			<h1 class="m-0">Can’t join</h1>
+			<h1 class="m-0">{tr("Can’t join")}</h1>
 			<p class="muted m-0">{problem}</p>
-			<a class="btn mx-auto" href="/my">Back to my page</a>
+			<a class="btn mx-auto" href="/my">{tr("Back to my page")}</a>
 		</div>
 	{:else if ended}
 		<div class="card card-border bg-base-100 shadow-sm p-6 text-center vstack" role="status">
-			<h1 class="m-0">The presentation has ended</h1>
-			{#if v?.presentation.published}<p class="muted m-0">You can go through the slides again at your own pace.</p>
-				<a class="btn btn-primary mx-auto" href={'/slides/' + id}>See the slides</a>
-			{:else}<a class="btn mx-auto" href="/my">Back to my page</a>{/if}
+			<h1 class="m-0">{tr("The presentation has ended")}</h1>
+			{#if v?.presentation.published}<p class="muted m-0">{tr("You can go through the slides again at your own pace.")}</p>
+				<a class="btn btn-primary mx-auto" href={'/slides/' + id}>{tr("See the slides")}</a>
+			{:else}<a class="btn mx-auto" href="/my">{tr("Back to my page")}</a>{/if}
 		</div>
 	{:else if !v || !live || !slide}
 		<Skeleton lines={8} />
 	{:else}
 		<header class="flex flex-wrap items-center gap-3">
 			<h1 class="m-0">{v.presentation.title}</h1>
-			<span class="badge badge-error badge-soft">Live</span>
-			{#if !connected}<span class="badge badge-warning badge-sm">Reconnecting…</span>{/if}
+			<span class="badge badge-error badge-soft">{tr("Live")}</span>
+			{#if !connected}<span class="badge badge-warning badge-sm">{tr("Reconnecting…")}</span>{/if}
 		</header>
-		<section class="stage" class:full bind:this={stage} aria-label="Slides">
+		<section class="stage" class:full bind:this={stage} aria-label={tr("Slides")}>
 			<img src={`/api/presentations/${id}/slides/${n}?v=${v.presentation.version}`} alt={slideAlt(slide, total)} width={slide.width} height={slide.height} />
 			<div class="controls">
 				{#if live.allow_browse}
-					<button class="btn" disabled={n <= 1} onclick={() => go(n - 1)} aria-label="Previous slide"><Icon name="arrow-left" size={16} /></button>
+					<button class="btn" disabled={n <= 1} onclick={() => go(n - 1)} aria-label={tr("Previous slide")}><Icon name="arrow-left" size={16} /></button>
 				{/if}
 				<span class="tabular small" aria-live="polite">{n} / {total}</span>
 				{#if live.allow_browse && !following}
-					{#if n < live.max_shown}<button class="btn" onclick={() => go(n + 1)} aria-label="Next slide"><Icon name="arrow-right" size={16} /></button>{/if}
-					<button class="btn btn-primary" onclick={follow}><Icon name="skip-forward" size={16} />Back to the teacher’s slide</button>
+					{#if n < live.max_shown}<button class="btn" onclick={() => go(n + 1)} aria-label={tr("Next slide")}><Icon name="arrow-right" size={16} /></button>{/if}
+					<button class="btn btn-primary" onclick={follow}><Icon name="skip-forward" size={16} />{tr("Back to the teacher’s slide")}</button>
 				{/if}
-				<button class="btn btn-ghost" onclick={fullscreen} aria-label={full ? 'Leave full screen' : 'Full screen'}><Icon name={full ? 'minimize' : 'maximize'} size={16} /></button>
+				<button class="btn btn-ghost" onclick={fullscreen} aria-label={full ? tr("Leave full screen") : tr("Full screen")}><Icon name={full ? 'minimize' : 'maximize'} size={16} /></button>
 			</div>
 		</section>
 		<p class="small muted m-0">
-			{following ? 'Following your teacher’s slides.' : `You’re looking back; your teacher is on slide ${live.slide}.`}
-			Your teacher sees which slide you’re on and for how long.
+			{tr("{0} Your teacher sees which slide you’re on and for how long.", [following ? tr("Following your teacher’s slides.") : tr("You’re looking back; your teacher is on slide {0}.", [live.slide])])}
 		</p>
 	{/if}
 </div>

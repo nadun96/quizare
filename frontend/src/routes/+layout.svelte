@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -140,7 +141,7 @@
 		<div class="page-container flex items-center gap-2 py-2">
 			<a class="brand flex shrink-0 items-center gap-2 whitespace-nowrap text-base font-bold no-underline sm:text-lg" href={auth.user ? auth.home() : '/'}>
 				<img class="brand-mark size-8" src="/favicon-64.png" width="32" height="32" alt="" aria-hidden="true" />
-				<span class="brand-name">Classroom Quiz</span>
+				<span class="brand-name">{tr("Classroom Quiz")}</span>
 			</a>
 			{#if links.length}
 				<nav class="pill ml-4 hidden min-w-0 sm:flex" aria-label={t('nav.main')} bind:this={pill}>
@@ -149,15 +150,15 @@
 						{#if l.children}
 							<details class="dropdown pill-group" bind:this={menus[3 + gi]} ontoggle={closeOthers}>
 								<summary class="pill-link" class:on={on(l)} data-on={on(l) || undefined}>
-									<Icon name={l.icon} size={16} /><span class="pill-label">{l.children.find((c) => current(c.href))?.label ?? l.label}</span><Icon name="chevron-down" size={14} class="chev" />
+									<Icon name={l.icon} size={16} /><span class="pill-label">{l.children.find((c) => current(c.href))?.label ?? tr(l.label)}</span><Icon name="chevron-down" size={14} class="chev" />
 								</summary>
 								<ul class="menu dropdown-content z-40 mt-2 w-56 border border-base-300 bg-base-100 p-1 shadow-lg">
-									{#each l.children as c (c.href)}<li><a href={c.href} aria-current={current(c.href) ? 'page' : undefined} class:menu-active={current(c.href)}><Icon name={c.icon} size={16} />{c.label}</a></li>{/each}
+									{#each l.children as c (c.href)}<li><a href={c.href} aria-current={current(c.href) ? 'page' : undefined} class:menu-active={current(c.href)}><Icon name={c.icon} size={16} />{tr(c.label)}</a></li>{/each}
 								</ul>
 							</details>
 						{:else}
 							<a class="pill-link" class:on={current(l.href)} data-on={current(l.href) || undefined} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-								<Icon name={l.icon} size={16} /><span class="pill-label">{l.label}</span>{#if l.count}<span class="count" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}
+								<Icon name={l.icon} size={16} /><span class="pill-label">{tr(l.label)}</span>{#if l.count}<span class="count" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}
 							</a>
 						{/if}
 					{/each}
@@ -206,14 +207,14 @@
 			{#each tabs as l, gi (l.href)}
 				{#if l.children}
 					<details class="dropdown dropdown-top dropdown-end tab-more" bind:this={menus[10 + gi]} ontoggle={closeOthers}>
-						<summary class="tab-link" class:on={on(l)}><span class="tab-icon"><Icon name={l.icon} size={20} /></span><span class="tab-label">{l.label}</span></summary>
+						<summary class="tab-link" class:on={on(l)}><span class="tab-icon"><Icon name={l.icon} size={20} /></span><span class="tab-label">{tr(l.label)}</span></summary>
 						<ul class="menu dropdown-content z-40 mb-2 w-56 border border-base-300 bg-base-100 p-2 shadow-lg">
-							{#each l.children as c (c.href)}<li><a href={c.href} aria-current={current(c.href) ? 'page' : undefined} class:menu-active={current(c.href)}><Icon name={c.icon} size={16} />{c.label}</a></li>{/each}
+							{#each l.children as c (c.href)}<li><a href={c.href} aria-current={current(c.href) ? 'page' : undefined} class:menu-active={current(c.href)}><Icon name={c.icon} size={16} />{tr(c.label)}</a></li>{/each}
 						</ul>
 					</details>
 				{:else}
 					<a class="tab-link" class:on={current(l.href)} aria-current={current(l.href) ? 'page' : undefined} href={l.href}>
-						<span class="tab-icon"><Icon name={l.icon} size={20} />{#if l.count}<span class="count dot" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}</span><span class="tab-label">{l.label}</span>
+						<span class="tab-icon"><Icon name={l.icon} size={20} />{#if l.count}<span class="count dot" aria-label={t('nav.unread', { n: l.count })}>{badge(l.count)}</span>{/if}</span><span class="tab-label">{tr(l.label)}</span>
 					</a>
 				{/if}
 			{/each}
@@ -221,7 +222,7 @@
 				<details class="dropdown dropdown-top dropdown-end tab-more" bind:this={menus[0]} ontoggle={closeOthers}>
 					<summary class="tab-link" class:on={more.some((l) => current(l.href))}><span class="tab-icon"><Icon name="more" size={20} /></span><span class="tab-label">{t('nav.more')}</span></summary>
 					<ul class="menu dropdown-content z-40 mb-2 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
-						{#each more as l (l.href)}<li><a href={l.href} aria-current={current(l.href) ? 'page' : undefined} class:menu-active={current(l.href)}><Icon name={l.icon} size={16} />{l.label}</a></li>{/each}
+						{#each more as l (l.href)}<li><a href={l.href} aria-current={current(l.href) ? 'page' : undefined} class:menu-active={current(l.href)}><Icon name={l.icon} size={16} />{tr(l.label)}</a></li>{/each}
 					</ul>
 				</details>
 			{/if}

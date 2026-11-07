@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Public live leaderboard links (V2-08, D-45): anyone with the link sees
 	// the rankings update, without logging in. Names never appear.
 	import { api, ApiError } from './api';
@@ -41,30 +42,30 @@
 			label = '';
 			await load();
 		} catch (err) {
-			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Could not create the link', 'error');
+			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("Could not create the link"), 'error');
 		} finally {
 			busy = false;
 		}
 	}
 	async function revoke(l: Link) {
-		if (!(await confirmDialog({ title: 'Turn off this link?', body: 'Anyone who has it will see "This link is no longer available".', confirm: 'Turn off', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Turn off this link?"), body: tr("Anyone who has it will see \"This link is no longer available\"."), confirm: tr("Turn off"), danger: true }))) return;
 		await api.del('/api/teacher/share-links/' + l.id);
 		if (fresh?.id === l.id) fresh = null;
-		toast('Link turned off');
+		toast(tr("Link turned off"));
 		await load();
 	}
 	async function regenerate(l: Link) {
 		const n = await api.post<Link>('/api/teacher/share-links/' + l.id + '/regenerate');
 		fresh = { id: n.id, url: urlFor(n.token!) };
-		toast('New link made; the old one stopped working');
+		toast(tr("New link made; the old one stopped working"));
 		await load();
 	}
 	async function copy(url: string) {
 		try {
 			await navigator.clipboard.writeText(url);
-			toast('Link copied');
+			toast(tr("Link copied"));
 		} catch {
-			toast('Copy failed; select the link instead', 'warning');
+			toast(tr("Copy failed; select the link instead"), 'warning');
 		}
 	}
 	const shows = (l: Link) => [l.views.includes('leaderboard') ? 'leaderboard' : '', l.views.includes('teams') ? 'teams' : ''].filter(Boolean).join(' + ');
@@ -73,31 +74,31 @@
 
 <section class="vstack" aria-labelledby="ll-h">
 	<div>
-		<h2 id="ll-h" class="m-0 flex items-center gap-2 text-lg"><Icon name="share" size={18} />Live leaderboard link</h2>
-		<p class="small muted m-0">Anyone with the link sees the rankings update live, without logging in. Names and emails never appear. Search engines are asked not to index it.</p>
+		<h2 id="ll-h" class="m-0 flex items-center gap-2 text-lg"><Icon name="share" size={18} />{tr("Live leaderboard link")}</h2>
+		<p class="small muted m-0">{tr("Anyone with the link sees the rankings update live, without logging in. Names and emails never appear. Search engines are asked not to index it.")}</p>
 	</div>
 	<form class="vstack" onsubmit={create}>
 		<div class="flex flex-wrap gap-x-5 gap-y-2">
-			<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={people} />{poll ? 'Participants' : 'Students'}</label>
-			{#if teams}<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={withTeams} />{poll ? 'Groups' : 'Teams'}</label>{/if}
+			<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={people} />{poll ? tr("Participants") : tr("Students")}</label>
+			{#if teams}<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={withTeams} />{poll ? tr("Groups") : tr("Teams")}</label>{/if}
 		</div>
 		{#if people}
 			<fieldset class="m-0 border-0 p-0">
-				<legend class="small font-semibold mb-1">Show {poll ? 'participants' : 'students'} as</legend>
+				<legend class="small font-semibold mb-1">{tr("Show {0} as", [poll ? 'participants' : 'students'])}</legend>
 				<div class="flex flex-wrap gap-x-5 gap-y-1">
 					{#if poll}
-						<label class="m-0 flex items-center gap-2 font-normal"><input type="radio" class="radio radio-sm" name="ll-id" value="nickname" bind:group={identify} />Their nicknames</label>
+						<label class="m-0 flex items-center gap-2 font-normal"><input type="radio" class="radio radio-sm" name="ll-id" value="nickname" bind:group={identify} />{tr("Their nicknames")}</label>
 					{:else}
-						<label class="m-0 flex items-center gap-2 font-normal"><input type="radio" class="radio radio-sm" name="ll-id" value="student_id" bind:group={identify} />Classroom student IDs</label>
+						<label class="m-0 flex items-center gap-2 font-normal"><input type="radio" class="radio radio-sm" name="ll-id" value="student_id" bind:group={identify} />{tr("Classroom student IDs")}</label>
 					{/if}
-					<label class="m-0 flex items-center gap-2 font-normal"><input type="radio" class="radio radio-sm" name="ll-id" value="anonymous" bind:group={identify} />{poll ? '"Participant 1, 2…"' : '"Student 1, 2…"'}</label>
+					<label class="m-0 flex items-center gap-2 font-normal"><input type="radio" class="radio radio-sm" name="ll-id" value="anonymous" bind:group={identify} />{poll ? tr("\"Participant 1, 2…\"") : tr("\"Student 1, 2…\"")}</label>
 				</div>
 			</fieldset>
 		{/if}
 		<div class="flex flex-wrap items-end gap-2">
-			<div class="min-w-48 flex-1"><label for="ll-label">Caption (optional)</label><input id="ll-label" class="input input-sm w-full" maxlength="80" bind:value={label} placeholder="e.g. Year 9 science fair" /></div>
-			<div><label for="ll-exp">Expires (optional)</label><input id="ll-exp" class="input input-sm" type="datetime-local" bind:value={expires} /></div>
-			<button class="btn btn-sm btn-primary" disabled={busy || (!people && !(withTeams && teams))}>Create link</button>
+			<div class="min-w-48 flex-1"><label for="ll-label">{tr("Caption (optional)")}</label><input id="ll-label" class="input input-sm w-full" maxlength="80" bind:value={label} placeholder={tr("e.g. Year 9 science fair")} /></div>
+			<div><label for="ll-exp">{tr("Expires (optional)")}</label><input id="ll-exp" class="input input-sm" type="datetime-local" bind:value={expires} /></div>
+			<button class="btn btn-sm btn-primary" disabled={busy || (!people && !(withTeams && teams))}>{tr("Create link")}</button>
 		</div>
 	</form>
 
@@ -105,12 +106,12 @@
 		<div class="fresh" in:flyIn>
 			<div class="qr"><QrCode text={fresh.url} size={132} /></div>
 			<div class="vstack min-w-0 flex-1">
-				<p class="small m-0"><strong>Copy it now:</strong> for safety the full link is only shown once.</p>
+				<p class="small m-0"><strong>{tr("Copy it now:")}</strong> {tr("for safety the full link is only shown once.")}</p>
 				<div class="join w-full">
-					<input class="input input-sm join-item w-full" readonly value={fresh.url} aria-label="Live link" onfocus={(e) => e.currentTarget.select()} />
-					<button class="btn btn-sm join-item" onclick={() => copy(fresh!.url)}>Copy</button>
+					<input class="input input-sm join-item w-full" readonly value={fresh.url} aria-label={tr("Live link")} onfocus={(e) => e.currentTarget.select()} />
+					<button class="btn btn-sm join-item" onclick={() => copy(fresh!.url)}>{tr("Copy")}</button>
 				</div>
-				<a class="btn btn-sm w-fit" href={fresh.url} target="_blank" rel="noopener"><Icon name="monitor" size={14} />Open</a>
+				<a class="btn btn-sm w-fit" href={fresh.url} target="_blank" rel="noopener"><Icon name="monitor" size={14} />{tr("Open")}</a>
 			</div>
 		</div>
 	{/if}
@@ -121,15 +122,15 @@
 				<li class="link" class:off={!!l.revoked_at}>
 					<span class="min-w-0 flex-1">
 						<span class="block truncate font-semibold">{l.label || shows(l)}</span>
-						<span class="small muted">{shows(l)} · {who(l)} · {l.expires_at ? 'until ' + new Date(l.expires_at).toLocaleString() : 'no expiry'}</span>
+						<span class="small muted">{shows(l)} · {who(l)} · {l.expires_at ? tr("until {0}", [new Date(l.expires_at).toLocaleString(localeTag())]) : tr("no expiry")}</span>
 					</span>
-					{#if l.revoked_at}<span class="badge badge-soft badge-sm">off</span>{:else}<span class="badge badge-soft badge-success badge-sm">on</span>{/if}
-					{#if !l.revoked_at}<button class="btn btn-ghost btn-xs" onclick={() => revoke(l)}>Turn off</button>{/if}
-					<button class="btn btn-ghost btn-xs" onclick={() => regenerate(l)}>New link</button>
+					{#if l.revoked_at}<span class="badge badge-soft badge-sm">{tr("off")}</span>{:else}<span class="badge badge-soft badge-success badge-sm">{tr("on")}</span>{/if}
+					{#if !l.revoked_at}<button class="btn btn-ghost btn-xs" onclick={() => revoke(l)}>{tr("Turn off")}</button>{/if}
+					<button class="btn btn-ghost btn-xs" onclick={() => regenerate(l)}>{tr("New link")}</button>
 				</li>
 			{/each}
 		</ul>
-		<Pager list={links} label="Live links" />
+		<Pager list={links} label={tr("Live links")} />
 	{/if}
 </section>
 

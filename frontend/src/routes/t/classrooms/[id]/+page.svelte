@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import ClassPool from '$lib/pools/ClassPool.svelte';
 	import ClassActivities from '$lib/classroom/ClassActivities.svelte';
 	import TeachersPanel from '$lib/classroom/TeachersPanel.svelte';
@@ -58,7 +59,7 @@
 		modules.goTo(modules.pages); // the new module is last
 	}
 	async function rename(kind: 'modules' | 'topics', itemId: string, current: string) {
-		const name = await promptDialog({ title: kind === 'modules' ? 'Rename module' : 'Rename topic', label: 'Name', value: current, maxlength: 200 });
+		const name = await promptDialog({ title: kind === 'modules' ? tr("Rename module") : tr("Rename topic"), label: tr("Name"), value: current, maxlength: 200 });
 		if (name && name !== current) {
 			await api.patch('/api/teacher/' + kind + '/' + itemId, { name });
 			modules.load();
@@ -68,14 +69,14 @@
 		try {
 			if (await deleteWithContents(kind === 'modules' ? 'module' : 'topic', itemId)) modules.load();
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Delete failed';
+			notice = e instanceof ApiError ? e.message : tr("Delete failed");
 		}
 	}
 	async function setEnrolment(en: Enrolment, status: string) {
 		await api.patch('/api/teacher/enrolments/' + en.id, { status });
 	}
 	async function editNumber(en: Enrolment) {
-		const v = await promptDialog({ title: 'Student ID', body: `For ${en.student_name}. It is attached to their answers.`, label: 'Student ID', value: en.student_number ?? '', allowEmpty: true, maxlength: 64 });
+		const v = await promptDialog({ title: tr("Student ID"), body: tr("For {0}. It is attached to their answers.", [en.student_name]), label: tr("Student ID"), value: en.student_number ?? '', allowEmpty: true, maxlength: 64 });
 		if (v === null) return;
 		try {
 			await api.patch('/api/teacher/enrolments/' + en.id, { student_number: v });
@@ -93,7 +94,7 @@
 		}
 	}
 	async function newCode() {
-if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old code and QR code stop working straight away.', confirm: 'New code', danger: true }))) return;
+if (!(await confirmDialog({ title: tr("Generate a new join code?"), body: tr("The old code and QR code stop working straight away."), confirm: tr("New code"), danger: true }))) return;
 		await api.post('/api/teacher/classrooms/' + id + '/join-code');
 		load();
 	}
@@ -105,7 +106,7 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 		try {
 			if (await deleteWithContents('classroom', id)) goto('/t');
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Delete failed';
+			notice = e instanceof ApiError ? e.message : tr("Delete failed");
 		}
 	}
 	const joinUrl = $derived(c ? location.origin + '/c/' + c.join_code : '');
@@ -113,12 +114,12 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 
 <div class="page-container vstack">
 	{#if c}
-		<div class="row"><a href="/t">← Classrooms</a></div>
-		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">archived</span>{/if}{#if !owner}<span class="badge badge-soft" title="You co-teach this classroom">Co-teacher · owned by {c.owner_name}</span>{/if}<span class="spacer"></span>
-			{#if !c.archived}<a class="btn btn-sm" href="/inbox?tab=announcements&classroom={c.id}&new=1"><Icon name="mail" size={16} />Announce</a>{/if}</div>
+		<div class="row"><a href="/t">{tr("← Classrooms")}</a></div>
+		<div class="row"><h1 style="margin:0">{c.name}</h1>{#if c.archived}<span class="badge badge-soft">{tr("archived")}</span>{/if}{#if !owner}<span class="badge badge-soft" title={tr("You co-teach this classroom")}>{tr("Co-teacher · owned by {0}", [c.owner_name])}</span>{/if}<span class="spacer"></span>
+			{#if !c.archived}<a class="btn btn-sm" href="/inbox?tab=announcements&classroom={c.id}&new=1"><Icon name="mail" size={16} />{tr("Announce")}</a>{/if}</div>
 		{#if propsLine(c.props) || term(c.props) || c.props?.tags?.length}
 			{@const t = term(c.props)}
-			<p class="m-0 small muted flex flex-wrap items-center gap-x-2 gap-y-1">{propsLine(c.props)}{#if t}<span>{propsLine(c.props) ? '· ' : ''}{t.range} · {t.label}</span>{/if}{#each c.props.tags as tag (tag)}<span class="badge badge-ghost badge-sm">{tag}</span>{/each}</p>
+			<p class="m-0 small muted flex flex-wrap items-center gap-x-2 gap-y-1">{propsLine(c.props)}{#if t}<span>{propsLine(c.props) ? '· ' : ''}{t.range} · {tr(t.label)}</span>{/if}{#each c.props.tags as tag (tag)}<span class="badge badge-ghost badge-sm">{tag}</span>{/each}</p>
 		{/if}
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
@@ -131,17 +132,17 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 			{#each modules.rows as m (m.id)}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 					<div class="row"><h3 style="margin:0">{m.name}</h3><span class="spacer"></span>
-						<RowMenu hint="More actions for {m.name}" actions={[
+						<RowMenu hint={tr("More actions for {0}", [m.name])} actions={[
 							{ label: 'Rename', icon: 'pencil', onclick: () => rename('modules', m.id, m.name) },
 							{ label: 'Delete module', icon: 'trash', danger: true, onclick: () => remove('modules', m.id) }
 						]} /></div>
 					<TopicList moduleId={m.id} />
 				</div>
 			{/each}
-			<Pager list={modules} label="Modules" />
+			<Pager list={modules} label={tr("Modules")} />
 			<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={addModule}>
-				<input class="input w-full" style="flex:1" placeholder="New module (e.g. Term 1)" bind:value={newModule} required aria-label="New module name" />
-				<button class="btn btn-primary">Add module</button>
+				<input class="input w-full" style="flex:1" placeholder={tr("New module (e.g. Term 1)")} bind:value={newModule} required aria-label={tr("New module name")} />
+				<button class="btn btn-primary">{tr("Add module")}</button>
 			</form>
 			<ClassActivities classroomId={id} />
 		{:else if tab === 'pool'}
@@ -164,16 +165,16 @@ if (!(await confirmDialog({ title: 'Generate a new join code?', body: 'The old c
 			<ClassroomDetails classroom={c} onsaved={(x) => (c = { ...c!, ...x })} />
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="classroom" value={c.settings} effective={c.effective} onsave={saveSettings} {errors} /></div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">
-				<button class="btn" onclick={() => archive(!c!.archived)}>{c.archived ? 'Unarchive' : 'Archive'} classroom</button>
-				<button class="btn btn-error btn-outline" onclick={del}>Delete classroom</button>
+				<button class="btn" onclick={() => archive(!c!.archived)}>{tr("{0} classroom", [c.archived ? tr("Unarchive") : tr("Archive")])}</button>
+				<button class="btn btn-error btn-outline" onclick={del}>{tr("Delete classroom")}</button>
 			</div>
 		{:else}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" style="text-align:center">
-				<p>Students enrol with this code, link or QR.</p>
+				<p>{tr("Students enrol with this code, link or QR.")}</p>
 				<p style="font-size:2rem;font-weight:700;letter-spacing:0.1em">{c.join_code}</p>
 				<QrCode text={joinUrl} size={260} />
 				<p class="small"><a href={joinUrl}>{joinUrl}</a></p>
-				{#if owner}<div><button class="btn" onclick={newCode}>Generate a new code</button></div>{/if}
+				{#if owner}<div><button class="btn" onclick={newCode}>{tr("Generate a new code")}</button></div>{/if}
 			</div>
 		{/if}
 	{/if}

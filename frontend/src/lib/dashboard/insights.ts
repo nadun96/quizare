@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // The dashboard's charts (D-105): the data from /api/my/dashboard/insights
 // and the small pieces of arithmetic the charts share.
 import { i18n, t } from '../i18n/i18n.svelte';
@@ -24,7 +25,7 @@ export function delta(k: KPI | undefined): number | null {
 /** "+6 pts", "−2", "no change": signed, with a real minus sign. */
 export function deltaText(d: number, unit = ''): string {
 	if (d === 0) return t('ins.noChange');
-	const n = Math.abs(d).toLocaleString(undefined, { maximumFractionDigits: 1 });
+	const n = Math.abs(d).toLocaleString(localeTag(), { maximumFractionDigits: 1 });
 	return (d > 0 ? '+' : '−') + n + unit;
 }
 

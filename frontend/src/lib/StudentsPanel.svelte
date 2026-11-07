@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A classroom's students with categories (V2-03, D-41): filter by category,
 	// search, select several and add them to (or remove them from) a category.
 	// Students come one page at a time from the server, which filters,
@@ -86,10 +87,10 @@
 		try {
 			const c = await api.post<Category>('/api/teacher/classrooms/' + classroomId + '/categories', { name: newName });
 			newName = '';
-			toast(`Category “${c.name}” created`);
+			toast(tr("Category “{0}” created", [c.name]));
 			await loadCategories();
 		} catch (err) {
-			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Could not create', 'error');
+			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("Could not create"), 'error');
 		}
 	}
 	async function saveEdit(e: SubmitEvent) {
@@ -100,11 +101,11 @@
 			editing = null;
 			await loadCategories();
 		} catch (err) {
-			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Could not save', 'error');
+			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("Could not save"), 'error');
 		}
 	}
 	async function remove(c: Category) {
-		if (!(await confirmDialog({ title: `Delete “${c.name}”?`, body: 'Students stay in the classroom; only the label is removed.', confirm: 'Delete category', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete “{0}”?", [c.name]), body: tr("Students stay in the classroom; only the label is removed."), confirm: tr("Delete category"), danger: true }))) return;
 		await api.del('/api/teacher/categories/' + c.id);
 		editing = null;
 		await loadCategories();
@@ -115,7 +116,7 @@
 		const c = byId[target];
 		if (!c || !selected.size) return;
 		const r = await api.post<{ affected: number }>('/api/teacher/categories/' + c.id + '/members', { enrolment_ids: [...selected], assigned });
-		toast(assigned ? `Added ${r.affected} to “${c.name}”` : `Removed ${r.affected} from “${c.name}”`, r.affected ? 'success' : 'info');
+		toast(assigned ? tr("Added {0} to “{1}”", [r.affected, c.name]) : tr("Removed {0} from “{1}”", [r.affected, c.name]), r.affected ? 'success' : 'info');
 		await loadCategories();
 		await reload();
 	}
@@ -138,95 +139,95 @@
 	<!-- Categories: filter chips, create, edit -->
 	<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-5">
 		<div class="flex flex-wrap items-center gap-2">
-			<span class="small font-semibold mr-1">Categories</span>
-			<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === null} class:btn-soft={filter === null} aria-pressed={filter === null} onclick={() => setFilter(null)}>All <span class="muted tabular">{count}</span></button>
+			<span class="small font-semibold mr-1">{tr("Categories")}</span>
+			<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === null} class:btn-soft={filter === null} aria-pressed={filter === null} onclick={() => setFilter(null)}>{tr("All")} <span class="muted tabular">{count}</span></button>
 			{#each categories as c (c.id)}
 				<span class="chip-wrap" animate:flip={{ duration: flipMs() }}>
 					<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === c.id} class:btn-soft={filter === c.id} aria-pressed={filter === c.id} onclick={() => setFilter(filter === c.id ? null : c.id)}>
 						<span class="dot" style:background="var(--cat-{c.color})" aria-hidden="true"></span>{c.name} <span class="muted tabular">{c.members}</span>
 					</button>
-					<IconBtn icon="pencil" label="Edit" hint="Edit {c.name}" class="btn-ghost btn-xs" size={13} onclick={() => (editing = { ...c })} />
+					<IconBtn icon="pencil" label={tr("Edit")} hint={tr("Edit {0}", [c.name])} class="btn-ghost btn-xs" size={13} onclick={() => (editing = { ...c })} />
 				</span>
 			{/each}
 			<form class="flex items-center gap-1" onsubmit={create}>
-				<input class="input input-sm w-40" bind:value={newName} maxlength="60" placeholder="New category" aria-label="New category name" />
-				<button class="btn btn-sm" disabled={!newName.trim()}><Icon name="plus" size={14} />Add</button>
+				<input class="input input-sm w-40" bind:value={newName} maxlength="60" placeholder={tr("New category")} aria-label={tr("New category name")} />
+				<button class="btn btn-sm" disabled={!newName.trim()}><Icon name="plus" size={14} />{tr("Add")}</button>
 			</form>
 		</div>
 		{#if editing}
 			<form class="edit mt-3 flex flex-wrap items-center gap-2" onsubmit={saveEdit} in:fadeIn>
-				<input class="input input-sm w-48" bind:value={editing.name} maxlength="60" aria-label="Category name" />
-				<div class="flex gap-1" role="radiogroup" aria-label="Colour">
+				<input class="input input-sm w-48" bind:value={editing.name} maxlength="60" aria-label={tr("Category name")} />
+				<div class="flex gap-1" role="radiogroup" aria-label={tr("Colour")}>
 					{#each [1, 2, 3, 4, 5, 6, 7, 8] as n (n)}
-						<button type="button" role="radio" aria-checked={editing.color === n} aria-label="Colour {n}" class="swatch" class:on={editing.color === n} style:background="var(--cat-{n})" onclick={() => (editing!.color = n)}></button>
+						<button type="button" role="radio" aria-checked={editing.color === n} aria-label={tr("Colour {0}", [n])} class="swatch" class:on={editing.color === n} style:background="var(--cat-{n})" onclick={() => (editing!.color = n)}></button>
 					{/each}
 				</div>
-				<button class="btn btn-primary btn-sm">Save</button>
-				<button type="button" class="btn btn-ghost btn-sm" onclick={() => (editing = null)}>Cancel</button>
+				<button class="btn btn-primary btn-sm">{tr("Save")}</button>
+				<button type="button" class="btn btn-ghost btn-sm" onclick={() => (editing = null)}>{tr("Cancel")}</button>
 				<span class="spacer"></span>
-				<button type="button" class="btn btn-ghost btn-sm text-error" onclick={() => remove(editing!)}>Delete</button>
+				<button type="button" class="btn btn-ghost btn-sm text-error" onclick={() => remove(editing!)}>{tr("Delete")}</button>
 			</form>
 		{/if}
 	</div>
 
 	<!-- Search and bulk actions -->
 	<div class="flex flex-wrap items-center gap-2">
-		<ListSearch {list} placeholder="Search name, email or student ID" label="Search students" />
+		<ListSearch {list} placeholder={tr("Search name, email or student ID")} label={tr("Search students")} />
 		<span class="spacer"></span>
 		{#if selected.size}
-			<span class="small" in:fadeIn><strong>{selected.size}</strong> selected</span>
-			<select class="select select-sm w-auto" bind:value={target} aria-label="Category">
-				<option value="">Category…</option>
+			<span class="small" in:fadeIn><strong>{selected.size}</strong> {tr("selected")}</span>
+			<select class="select select-sm w-auto" bind:value={target} aria-label={tr("Category")}>
+				<option value="">{tr("Category…")}</option>
 				{#each categories as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 			</select>
-			<button class="btn btn-sm btn-primary" disabled={!target} onclick={() => assign(true)}>Add to</button>
-			<button class="btn btn-sm" disabled={!target} onclick={() => assign(false)}>Remove from</button>
-			<button class="btn btn-sm btn-ghost" onclick={() => (selected = new Set())}>Clear</button>
+			<button class="btn btn-sm btn-primary" disabled={!target} onclick={() => assign(true)}>{tr("Add to")}</button>
+			<button class="btn btn-sm" disabled={!target} onclick={() => assign(false)}>{tr("Remove from")}</button>
+			<button class="btn btn-sm btn-ghost" onclick={() => (selected = new Set())}>{tr("Clear")}</button>
 		{/if}
 	</div>
 
 	<div class="card card-border bg-base-100 p-0 shadow-sm table-wrap">
 		{#if list.loaded && count === 0 && !filter && !list.q}
-			<EmptyState icon="users" title="No students yet">Share the join code from the Join code tab.</EmptyState>
+			<EmptyState icon="users" title={tr("No students yet")}>{tr("Share the join code from the Join code tab.")}</EmptyState>
 		{:else}
 			<table class="table">
 				<thead>
 					<tr>
-						<th class="w-10"><input type="checkbox" class="checkbox checkbox-sm" checked={allShownSelected} onchange={toggleAll} aria-label="Select all on this page" /></th>
-						<th><SortHeader {list} key="name" label="Name" /></th><th><SortHeader {list} key="number" label="Student ID" /></th><th>Categories</th><th><SortHeader {list} key="status" label="Status" /></th><th><span class="sr-only">Actions</span></th>
+						<th class="w-10"><input type="checkbox" class="checkbox checkbox-sm" checked={allShownSelected} onchange={toggleAll} aria-label={tr("Select all on this page")} /></th>
+						<th><SortHeader {list} key="name" label={tr("Name")} /></th><th><SortHeader {list} key="number" label={tr("Student ID")} /></th><th>{tr("Categories")}</th><th><SortHeader {list} key="status" label={tr("Status")} /></th><th><span class="sr-only">{tr("Actions")}</span></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each shown as en (en.id)}
 						<tr class:sel={selected.has(en.id)}>
-							<td><input type="checkbox" class="checkbox checkbox-sm" checked={selected.has(en.id)} onchange={() => toggle(en.id)} aria-label="Select {en.student_name}" /></td>
+							<td><input type="checkbox" class="checkbox checkbox-sm" checked={selected.has(en.id)} onchange={() => toggle(en.id)} aria-label={tr("Select {0}", [en.student_name])} /></td>
 							<td><span class="flex items-center gap-2"><Avatar id={en.user_id ?? ''} name={en.student_name} avatar={en.student_avatar} size={30} /><span class="min-w-0">{en.student_name}<br /><span class="small muted">{en.student_email}</span></span></span></td>
-							<td class="whitespace-nowrap">{en.student_number ?? '—'} <button class="btn btn-ghost btn-xs" onclick={() => editNumber(en)}>Edit</button></td>
+							<td class="whitespace-nowrap">{en.student_number ?? '—'} <button class="btn btn-ghost btn-xs" onclick={() => editNumber(en)}>{tr("Edit")}</button></td>
 							<td>
 								<div class="flex flex-wrap gap-1">
 									{#each en.categories ?? [] as cid (cid)}
 										{@const c = byId[cid]}
 										{#if c}
-											<span class="badge badge-soft gap-1 pr-0.5"><span class="dot" style:background="var(--cat-{c.color})" aria-hidden="true"></span>{c.name}<button class="btn btn-ghost btn-xs btn-circle" aria-label="Remove {en.student_name} from {c.name}" onclick={() => untag(en, c)}><Icon name="x" size={11} /></button></span>
+											<span class="badge badge-soft gap-1 pr-0.5"><span class="dot" style:background="var(--cat-{c.color})" aria-hidden="true"></span>{c.name}<button class="btn btn-ghost btn-xs btn-circle" aria-label={tr("Remove {0} from {1}", [en.student_name, c.name])} onclick={() => untag(en, c)}><Icon name="x" size={11} /></button></span>
 										{/if}
 									{/each}
 								</div>
 							</td>
 							<td><span class="badge badge-soft {en.status === 'active' ? 'ok' : en.status === 'pending' ? 'warn' : ''}">{en.status}</span></td>
 							<td class="whitespace-nowrap">
-								{#if en.status !== 'active'}<button class="btn btn-sm" onclick={() => setStatus(en, 'active')}>Approve</button>{/if}
-								{#if en.status === 'pending'}<button class="btn btn-sm" onclick={() => setStatus(en, 'rejected')}>Reject</button>{/if}
-								{#if en.status === 'active' && canRemove}<button class="btn btn-sm btn-error btn-outline" onclick={() => setStatus(en, 'removed')}>Remove</button>{/if}
+								{#if en.status !== 'active'}<button class="btn btn-sm" onclick={() => setStatus(en, 'active')}>{tr("Approve")}</button>{/if}
+								{#if en.status === 'pending'}<button class="btn btn-sm" onclick={() => setStatus(en, 'rejected')}>{tr("Reject")}</button>{/if}
+								{#if en.status === 'active' && canRemove}<button class="btn btn-sm btn-error btn-outline" onclick={() => setStatus(en, 'removed')}>{tr("Remove")}</button>{/if}
 							</td>
 						</tr>
 					{:else}
-						<tr><td colspan="6" class="muted">{list.loaded ? 'No students match.' : 'Loading…'}</td></tr>
+						<tr><td colspan="6" class="muted">{list.loaded ? tr("No students match.") : tr("Loading…")}</td></tr>
 					{/each}
 				</tbody>
 			</table>
 		{/if}
 	</div>
-	<Pager {list} label="Students" />
+	<Pager {list} label={tr("Students")} />
 </div>
 
 <style>

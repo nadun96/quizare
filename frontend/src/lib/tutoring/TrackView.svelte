@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// One video track, labelled, with full screen (TS-FR-14). Screens fit
 	// whole ("contain"), so text is never cut off; cameras fill their tile.
 	// A shared screen can be zoomed: the buttons, Ctrl + wheel, a pinch or a
@@ -98,22 +99,22 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="tile" class:big class:screen class:zoomed={z.scale > 1} bind:this={box}
-	tabindex={screen ? 0 : undefined} role={screen ? 'group' : undefined} aria-label={screen ? `${tile.label} from ${tile.name}: + and − zoom, 0 resets` : undefined}
+	tabindex={screen ? 0 : undefined} role={screen ? 'group' : undefined} aria-label={screen ? tr("{0} from {1}: + and − zoom, 0 resets", [tr(tile.label), tile.name]) : undefined}
 	onwheel={wheel} ondblclick={dblclick} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onkeydown={key}>
 	<div class="pan" style:transform={z.scale > 1 ? `translate(${z.x}px, ${z.y}px) scale(${z.scale})` : undefined}>
 		<!-- svelte-ignore a11y_media_has_caption -->
-		<video bind:this={video} autoplay playsinline muted={tile.local} aria-label="{tile.label} from {tile.name}"></video>
+		<video bind:this={video} autoplay playsinline muted={tile.local} aria-label={tr("{0} from {1}", [tr(tile.label), tile.name])}></video>
 	</div>
 	<div class="cap small">
-		<span class="truncate">{tile.label} · {tile.local ? 'you' : tile.name}</span>
+		<span class="truncate">{tr(tile.label)} · {tile.local ? 'you' : tile.name}</span>
 		<span class="spacer"></span>
-		{#if tile.local && onstop}<button class="btn btn-xs" onclick={onstop}>Stop</button>{/if}
+		{#if tile.local && onstop}<button class="btn btn-xs" onclick={onstop}>{tr("Stop")}</button>{/if}
 		{#if screen && !tile.local}
-			<IconBtn icon="minus" label="Zoom out" class="btn-xs btn-ghost" disabled={z.scale <= 1} onclick={() => zoomBy(0.8)} />
-			<button class="btn btn-xs btn-ghost zoom-level" onclick={() => (z = NONE)} title="Back to the whole screen" aria-label="Zoom {percent(z)}: back to the whole screen">{percent(z)}</button>
-			<IconBtn icon="plus" label="Zoom in" class="btn-xs btn-ghost" onclick={() => zoomBy(1.25)} />
+			<IconBtn icon="minus" label={tr("Zoom out")} class="btn-xs btn-ghost" disabled={z.scale <= 1} onclick={() => zoomBy(0.8)} />
+			<button class="btn btn-xs btn-ghost zoom-level" onclick={() => (z = NONE)} title={tr("Back to the whole screen")} aria-label={tr("Zoom {0}: back to the whole screen", [percent(z)])}>{percent(z)}</button>
+			<IconBtn icon="plus" label={tr("Zoom in")} class="btn-xs btn-ghost" onclick={() => zoomBy(1.25)} />
 		{/if}
-		<IconBtn icon="maximize" label="Full screen" class="btn-xs btn-ghost" onclick={fullscreen} />
+		<IconBtn icon="maximize" label={tr("Full screen")} class="btn-xs btn-ghost" onclick={fullscreen} />
 	</div>
 </div>
 

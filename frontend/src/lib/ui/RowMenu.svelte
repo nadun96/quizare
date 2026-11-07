@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A row's secondary actions (rename, duplicate, delete…) behind one "More"
 	// button, so a list shows its content first rather than a column of
 	// buttons, and destructive actions aren't one stray tap away. A native
@@ -42,13 +43,13 @@
 
 <details class="dropdown dropdown-end" class:dropdown-top={up} bind:this={el} ontoggle={toggled}>
 	<summary class="btn btn-sm btn-ghost gap-1" class:btn-square={prefs.labels !== 'always'} aria-label={name} title={name}>
-		<Icon name="more" size={18} />{#if prefs.labels === 'always'}<span>More</span>{/if}
+		<Icon name="more" size={18} />{#if prefs.labels === 'always'}<span>{tr("More")}</span>{/if}
 	</summary>
 	<ul class="menu dropdown-content z-30 w-48 rounded-box border border-base-300 bg-base-100 p-1 shadow-md">
 		{#each actions as a (a.label)}
 			<li>
 				<button type="button" class:text-error={a.danger} disabled={a.disabled} onclick={() => pick(a)}>
-					{#if a.icon}<Icon name={a.icon} size={15} />{/if}{a.label}
+					{#if a.icon}<Icon name={a.icon} size={15} />{/if}{tr(a.label)}
 				</button>
 			</li>
 		{/each}

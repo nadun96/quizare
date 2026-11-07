@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Classroom enrolment by join code, link or QR (FR-CLS-03, FR-CLS-05).
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -20,7 +21,7 @@
 		}
 		api.get<Preview>('/api/join/classrooms/' + encodeURIComponent(code))
 			.then((x) => (p = x))
-			.catch((e) => (error = e instanceof ApiError && e.status === 404 ? 'No classroom has this code.' : String(e.message ?? e)));
+			.catch((e) => (error = e instanceof ApiError && e.status === 404 ? tr("No classroom has this code.") : String(e.message ?? e)));
 	});
 
 	async function enrol(e: SubmitEvent) {
@@ -30,7 +31,7 @@
 			const en = await api.post<{ status: string }>('/api/enrolments', { join_code: code, student_number: studentNumber });
 			done = en.status === 'pending' ? 'Request sent. Your teacher will approve your enrolment.' : 'You are enrolled.';
 		} catch (err) {
-			error = err instanceof ApiError ? (err.fields.student_number ?? err.message) : 'Could not enrol';
+			error = err instanceof ApiError ? (err.fields.student_number ?? err.message) : tr("Could not enrol");
 		}
 	}
 </script>
@@ -41,15 +42,15 @@
 			<h1>{p.name}</h1>
 			{#if done}
 				<p class="alert alert-soft alert-success">{done}</p>
-				<a href="/my">Go to my quizzes</a>
+				<a href="/my">{tr("Go to my quizzes")}</a>
 			{:else if p.enrolment && p.enrolment.status !== 'removed'}
-				<p class="alert alert-soft alert-success">You are {p.enrolment.status === 'pending' ? 'waiting for approval in' : 'enrolled in'} this classroom.</p>
+				<p class="alert alert-soft alert-success">{tr("You are {0} this classroom.", [p.enrolment.status === 'pending' ? tr("waiting for approval in") : tr("enrolled in")])}</p>
 			{:else}
 				<form class="vstack" onsubmit={enrol}>
 					{#if p.student_id_required}
-						<div><label for="sid">Your student ID for this class</label><input class="input w-full" id="sid" bind:value={studentNumber} required /></div>
+						<div><label for="sid">{tr("Your student ID for this class")}</label><input class="input w-full" id="sid" bind:value={studentNumber} required /></div>
 					{/if}
-					<button class="btn btn-primary">Enrol</button>
+					<button class="btn btn-primary">{tr("Enrol")}</button>
 				</form>
 			{/if}
 		{/if}

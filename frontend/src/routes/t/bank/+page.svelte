@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Question pools (D-123): the teacher's own question bank (D-66) and the
 	// pool of every classroom they teach, each by category. Files imported
 	// here go where their names say ("Classroom__Category.csv").
@@ -30,12 +31,12 @@
 	const currentPool = $derived(pools?.find((p) => p.quiz_id === current));
 </script>
 
-<svelte:head><title>Question pools · Classroom Quiz</title></svelte:head>
+<svelte:head><title>{tr("Question pools · Classroom Quiz")}</title></svelte:head>
 
 <div class="page-container vstack gap-4">
 	<div>
-		<h1 class="m-0">Question pools</h1>
-		<p class="m-0 muted">Your own bank, and a pool for each classroom you teach, by category. Quizzes draw so many questions from each category.</p>
+		<h1 class="m-0">{tr("Question pools")}</h1>
+		<p class="m-0 muted">{tr("Your own bank, and a pool for each classroom you teach, by category. Quizzes draw so many questions from each category.")}</p>
 	</div>
 	{#if !pools}
 		<Skeleton lines={5} />
@@ -48,11 +49,11 @@
 					<span class="flex items-center gap-2">
 						<Icon name={p.kind === 'bank' ? 'user' : 'book'} size={16} />
 						<strong class="truncate">{name(p)}</strong>
-						{#if p.role === 'coteacher'}<span class="badge badge-soft badge-xs">co-teacher</span>{/if}
+						{#if p.role === 'coteacher'}<span class="badge badge-soft badge-xs">{tr("co-teacher")}</span>{/if}
 					</span>
 					<span class="small muted">{p.questions} {p.questions === 1 ? 'question' : 'questions'}{p.categories.length ? ` · ${p.categories.length} ${p.categories.length === 1 ? 'category' : 'categories'}` : ''}</span>
 					{#if p.categories.length}
-						<span class="cats">{#each p.categories.slice(0, 6) as c (c.category)}<span class="badge badge-soft badge-sm">{c.category || 'No category'} · {c.count}</span>{/each}{#if p.categories.length > 6}<span class="small muted">+{p.categories.length - 6}</span>{/if}</span>
+						<span class="cats">{#each p.categories.slice(0, 6) as c (c.category)}<span class="badge badge-soft badge-sm">{c.category || tr("No category")} · {c.count}</span>{/each}{#if p.categories.length > 6}<span class="small muted">+{p.categories.length - 6}</span>{/if}</span>
 					{/if}
 				</button>
 			{/each}

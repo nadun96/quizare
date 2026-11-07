@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	import { SETTINGS } from '$lib/settingsMeta';
 	import OptionGroup from '$lib/ui/OptionGroup.svelte';
 	import { count } from '$lib/words';
@@ -100,10 +101,10 @@
 		try {
 			const r = await api.post<{ affected: number }>('/api/teacher/sessions/' + id + '/' + action, { all, attempt_ids: all ? [] : [...selected], ...extra });
 			const verb: Record<string, string> = { admit: 'Admitted', pause: 'Paused', resume: 'Resumed', extend: 'Extended time for', start: 'Started', retry: 'Started a new try for' };
-			toast(`${verb[action] ?? action} ${r.affected} student${r.affected === 1 ? '' : 's'}`, r.affected ? 'success' : 'info');
+			toast(tr("{0} {1} student{2}", [verb[action] ?? action, r.affected, r.affected === 1 ? '' : 's']), r.affected ? 'success' : 'info');
 			if (!all) selected = new Set();
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Command failed', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Command failed"), 'error');
 		}
 	}
 	// Let students who finished take the quiz again from the start (D-131).
@@ -112,37 +113,37 @@
 	async function letRetry(all: boolean) {
 		const n = all ? finishedCount : selectedFinished;
 		const ok = await confirmDialog({
-			title: `Let ${n} ${n === 1 ? 'student' : 'students'} retry?`,
-			body: 'They start again from the first question, with the questions drawn and ordered afresh. Their earlier try is kept, and the best try counts.',
-			confirm: 'Let them retry'
+			title: tr("Let {0} {1} retry?", [n, n === 1 ? 'student' : 'students']),
+			body: tr("They start again from the first question, with the questions drawn and ordered afresh. Their earlier try is kept, and the best try counts."),
+			confirm: tr("Let them retry")
 		});
 		if (ok) cmd('retry', all);
 	}
 	async function end() {
-		const ok = await confirmDialog({ title: 'End the session now?', body: 'Running attempts are submitted as they are, and nobody else can join.', confirm: 'End session', danger: true });
+		const ok = await confirmDialog({ title: tr("End the session now?"), body: tr("Running attempts are submitted as they are, and nobody else can join."), confirm: tr("End session"), danger: true });
 		if (!ok) return;
 		await api.post('/api/teacher/sessions/' + id + '/end');
-		toast('Session ended');
+		toast(tr("Session ended"));
 	}
 	async function reinstate(attemptId: string) {
-		const reason = await promptDialog({ title: 'Reinstate this attempt?', body: 'The student can carry on. Your reason is logged with the attempt.', label: 'Reason', confirm: 'Reinstate', multiline: true, maxlength: 500 });
+		const reason = await promptDialog({ title: tr("Reinstate this attempt?"), body: tr("The student can carry on. Your reason is logged with the attempt."), label: tr("Reason"), confirm: tr("Reinstate"), multiline: true, maxlength: 500 });
 		if (!reason) return;
 		try {
 			await api.post('/api/teacher/attempts/' + attemptId + '/reinstate', { reason });
-			toast('Attempt reinstated');
+			toast(tr("Attempt reinstated"));
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not reinstate', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not reinstate"), 'error');
 		}
 	}
 	// A student who handed in by mistake carries on where they were (D-139).
 	async function reopen(attemptId: string) {
-		const reason = await promptDialog({ title: 'Reopen this attempt?', body: 'The student carries on with their answers and the time they had left, which starts running now. Any marks are cleared and given again when they hand in. If results were already showing, they may have seen them. Your reason is logged with the attempt.', label: 'Reason', confirm: 'Reopen', multiline: true, maxlength: 500 });
+		const reason = await promptDialog({ title: tr("Reopen this attempt?"), body: tr("The student carries on with their answers and the time they had left, which starts running now. Any marks are cleared and given again when they hand in. If results were already showing, they may have seen them. Your reason is logged with the attempt."), label: tr("Reason"), confirm: tr("Reopen"), multiline: true, maxlength: 500 });
 		if (!reason) return;
 		try {
 			await api.post('/api/teacher/attempts/' + attemptId + '/reopen', { reason });
-			toast('Attempt reopened');
+			toast(tr("Attempt reopened"));
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not reopen', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not reopen"), 'error');
 		}
 	}
 	async function saveSessionSettings() {
@@ -158,7 +159,7 @@
 			else delete o[k];
 		}
 		await api.put('/api/teacher/sessions/' + id + '/settings', o);
-		toast('Session settings saved');
+		toast(tr("Session settings saved"));
 	}
 	const teamsOn = $derived(!!d?.team_mode && d.team_mode !== 'off');
 	// Admitted students either wait for the teacher (no countdown, D-53) or count down.
@@ -181,23 +182,23 @@
 
 <div class="page-container vstack" style="max-width:1300px">
 	{#if d}
-		<p class="small"><a href={'/t/quizzes/' + d.session.quiz_id}>← Quiz</a></p>
+		<p class="small"><a href={'/t/quizzes/' + d.session.quiz_id}>{tr("← Quiz")}</a></p>
 			<div class="row">
 				<h1 class="m-0">{d.session.title}</h1>
-				<span class="badge badge-soft gap-1 {d.session.status === 'live' ? 'ok' : ''}">{#if d.session.status === 'live'}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{d.session.status === 'live' ? 'Live' : d.session.status === 'ended' ? 'Ended' : d.session.status}</span>
-				{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={13} />reconnecting…</span>{/if}
+				<span class="badge badge-soft gap-1 {d.session.status === 'live' ? 'ok' : ''}">{#if d.session.status === 'live'}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{d.session.status === 'live' ? tr("Live") : d.session.status === 'ended' ? tr("Ended") : d.session.status}</span>
+				{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={13} />{tr("reconnecting…")}</span>{/if}
 				<span class="spacer"></span>
-				{#if !ended}<a class="btn" href={'/t/sessions/' + id + '/projector'} target="_blank"><Icon name="qr" size={16} />Show QR full screen</a>{/if}
-				<a class="btn" class:btn-primary={ended} href={'/t/sessions/' + id + '/results'}><Icon name="chart" size={16} />Results</a>
-				{#if !ended}<button class="btn btn-error btn-outline" onclick={end}>End session</button>{/if}
+				{#if !ended}<a class="btn" href={'/t/sessions/' + id + '/projector'} target="_blank"><Icon name="qr" size={16} />{tr("Show QR full screen")}</a>{/if}
+				<a class="btn" class:btn-primary={ended} href={'/t/sessions/' + id + '/results'}><Icon name="chart" size={16} />{tr("Results")}</a>
+				{#if !ended}<button class="btn btn-error btn-outline" onclick={end}>{tr("End session")}</button>{/if}
 			</div>
 
-			<div class="stats-grid" role="list" aria-label="Session counts">
-				<StatCounter label="Joined" value={total} icon="users" />
-				<StatCounter label="Waiting" value={d.counts.waiting ?? 0} icon="clock" tone={d.counts.waiting ? 'warning' : ''} />
-				<StatCounter label="In progress" value={(d.counts.in_progress ?? 0) + (d.counts.admitted ?? 0)} icon="play" tone="primary" />
-				<StatCounter label="Finished" value={finished} icon="check-circle" tone="success" sub={total ? `${Math.round((finished / total) * 100)}%` : ''} />
-				<StatCounter label="Flagged" value={flagged} icon="flag" tone={flagged ? 'error' : ''} />
+			<div class="stats-grid" role="list" aria-label={tr("Session counts")}>
+				<StatCounter label={tr("Joined")} value={total} icon="users" />
+				<StatCounter label={tr("Waiting")} value={d.counts.waiting ?? 0} icon="clock" tone={d.counts.waiting ? 'warning' : ''} />
+				<StatCounter label={tr("In progress")} value={(d.counts.in_progress ?? 0) + (d.counts.admitted ?? 0)} icon="play" tone="primary" />
+				<StatCounter label={tr("Finished")} value={finished} icon="check-circle" tone="success" sub={total ? `${Math.round((finished / total) * 100)}%` : ''} />
+				<StatCounter label={tr("Flagged")} value={flagged} icon="flag" tone={flagged ? 'error' : ''} />
 			</div>
 
 		<div class="layout">
@@ -205,9 +206,9 @@
 				{#if ended}
 					<!-- After the end the QR code would only invite students to a closed session. -->
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-						<strong class="flex items-center gap-2"><Icon name="check-circle" size={16} />Session ended</strong>
-						<p class="small muted m-0">Joining is closed. {finished} of {count(total, 'student')} finished.</p>
-						<a class="btn btn-primary btn-sm" href={'/t/sessions/' + id + '/results'}>Mark and release results</a>
+						<strong class="flex items-center gap-2"><Icon name="check-circle" size={16} />{tr("Session ended")}</strong>
+						<p class="small muted m-0">{tr("Joining is closed. {0} of {1} finished.", [finished, count(total, 'student')])}</p>
+						<a class="btn btn-primary btn-sm" href={'/t/sessions/' + id + '/results'}>{tr("Mark and release results")}</a>
 					</div>
 				{:else}
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" style="text-align:center">
@@ -218,13 +219,13 @@
 				{/if}
 				{#if !ended}
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-						<strong>Session settings</strong>
-						<div><label for="cd">Countdown before the first question</label><label class="input input-sm w-36"><input id="cd" type="number" min="0" bind:value={countdown} placeholder="Default" /><span class="muted">s</span></label></div>
+						<strong>{tr("Session settings")}</strong>
+						<div><label for="cd">{tr("Countdown before the first question")}</label><label class="input input-sm w-36"><input id="cd" type="number" min="0" bind:value={countdown} placeholder={tr("Default")} /><span class="muted">s</span></label></div>
 						{#snippet pick(key: string, label: string, val: string, setv: (v: string) => void, fallback?: string)}
 							<div class="grid gap-1">
 								<span class="small font-semibold">{label}</span>
 								<OptionGroup {label} options={SETTINGS.find((m) => m.key === key)?.options ?? []} value={val || undefined} {fallback} onchange={setv} />
-								{#if val}<button type="button" class="link link-hover small justify-self-start" onclick={() => setv('')}>Use the default</button>{/if}
+								{#if val}<button type="button" class="link link-hover small justify-self-start" onclick={() => setv('')}>{tr("Use the default")}</button>{/if}
 							</div>
 						{/snippet}
 						{@render pick('admission_mode', 'Letting students in', admission, (v) => (admission = v))}
@@ -236,86 +237,86 @@
 								{@render pick('team_calc', 'Combine marks by', teamCalc, (v) => (teamCalc = v))}
 							{/if}
 						{/if}
-						<button class="btn btn-sm" onclick={saveSessionSettings}>Save</button>
+						<button class="btn btn-sm" onclick={saveSessionSettings}>{tr("Save")}</button>
 					</div>
 				{/if}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-						<strong class="flex items-center gap-2"><Icon name="flag" size={16} />Integrity alerts</strong>
+						<strong class="flex items-center gap-2"><Icon name="flag" size={16} />{tr("Integrity alerts")}</strong>
 						{#each alerts as a (a.at + a.attempt_id)}
 							<div class="small alert alert-soft {a.action === 'invalidated' ? 'danger' : ''}" in:flyIn>
 							<strong>{a.student_name}</strong>{a.student_number ? ` (${a.student_number})` : ''}: {a.kind.replace('_', ' ')} → {a.action}
-							<br /><span class="muted">{new Date(a.at).toLocaleTimeString()}</span>
+							<br /><span class="muted">{new Date(a.at).toLocaleTimeString(localeTag())}</span>
 						</div>
-					{:else}<p class="small muted m-0">{flagged ? `${count(flagged, 'student')} flagged. The Flags column shows what happened.` : ended ? 'No violations in this session.' : 'No violations so far.'}</p>{/each}
+					{:else}<p class="small muted m-0">{flagged ? tr("{0} flagged. The Flags column shows what happened.", [count(flagged, 'student')]) : ended ? tr("No violations in this session.") : tr("No violations so far.")}</p>{/each}
 				</div>
 			</aside>
 
 			<section class="vstack">
 				{#if !ended}
 						<div class="card card-border command-bar bg-base-100 shadow-sm p-3 sm:p-4 row">
-						<button class="btn btn-primary" onclick={() => cmd('admit', true)} disabled={!d.counts.waiting}>Admit all waiting ({d.counts.waiting ?? 0})</button>
-						<button class="btn" onclick={() => cmd('admit', false)} disabled={!selected.size}>Admit selected</button>
+						<button class="btn btn-primary" onclick={() => cmd('admit', true)} disabled={!d.counts.waiting}>{tr("Admit all waiting ({0})", [d.counts.waiting ?? 0])}</button>
+						<button class="btn" onclick={() => cmd('admit', false)} disabled={!selected.size}>{tr("Admit selected")}</button>
 						{#if d.start_mode === 'teacher' || readyCount}
-							<button class="btn btn-success" onclick={() => cmd('start', true)} disabled={!readyCount} title="Starts the countdown for every admitted student; students admitted later count down by themselves">
-								<Icon name="play" size={16} />Start quiz{readyCount ? ` (${readyCount} ready)` : ''}</button>
+							<button class="btn btn-success" onclick={() => cmd('start', true)} disabled={!readyCount} title={tr("Starts the countdown for every admitted student; students admitted later count down by themselves")}>
+								<Icon name="play" size={16} />{tr("Start quiz{0}", [readyCount ? tr(" ({0} ready)", [readyCount]) : ''])}</button>
 						{/if}
-						{#if selectedReady}<button class="btn" onclick={() => cmd('start', false)}><Icon name="play" size={16} />Start selected</button>{/if}
+						{#if selectedReady}<button class="btn" onclick={() => cmd('start', false)}><Icon name="play" size={16} />{tr("Start selected")}</button>{/if}
 						{#if counting || readyCount}
-							<button class="btn" onclick={() => cmd('start', selected.size === 0, { now: true })} title="Skips the rest of the countdown"><Icon name="skip-forward" size={16} />Start now{selected.size ? ' (selected)' : ''}</button>
+							<button class="btn" onclick={() => cmd('start', selected.size === 0, { now: true })} title={tr("Skips the rest of the countdown")}><Icon name="skip-forward" size={16} />{tr("Start now{0}", [selected.size ? tr(" (selected)") : ''])}</button>
 						{/if}
-						<button class="btn" onclick={() => cmd('pause', selected.size === 0)}>Pause {selected.size ? 'selected' : 'all'}</button>
-						<button class="btn" onclick={() => cmd('resume', selected.size === 0)}>Resume {selected.size ? 'selected' : 'all'}</button>
-						<span class="row"><input class="input w-full" type="number" min="1" style="width:5rem" bind:value={extendMin} aria-label="Minutes" />
-							<button class="btn" onclick={() => cmd('extend', selected.size === 0, { seconds: extendMin * 60 })}>+ min {selected.size ? 'selected' : 'everyone'}</button></span>
+						<button class="btn" onclick={() => cmd('pause', selected.size === 0)}>{tr("Pause {0}", [selected.size ? 'selected' : 'all'])}</button>
+						<button class="btn" onclick={() => cmd('resume', selected.size === 0)}>{tr("Resume {0}", [selected.size ? 'selected' : 'all'])}</button>
+						<span class="row"><input class="input w-full" type="number" min="1" style="width:5rem" bind:value={extendMin} aria-label={tr("Minutes")} />
+							<button class="btn" onclick={() => cmd('extend', selected.size === 0, { seconds: extendMin * 60 })}>{tr("+ min {0}", [selected.size ? 'selected' : 'everyone'])}</button></span>
 						{#if selected.size ? selectedFinished : finishedCount}
-							<button class="btn" onclick={() => letRetry(selected.size === 0)} title="They start again from the first question; the best try counts"><Icon name="undo" size={16} />Let {selected.size ? `${selectedFinished} selected` : `all ${finishedCount} finished`} retry</button>
+							<button class="btn" onclick={() => letRetry(selected.size === 0)} title={tr("They start again from the first question; the best try counts")}><Icon name="undo" size={16} />{tr("Let {0} retry", [selected.size ? tr("{0} selected", [selectedFinished]) : tr("all {0} finished", [finishedCount])])}</button>
 						{/if}
 					</div>
 						<div class="row small">
-							<span class="muted">Select:</span> <button class="btn btn-sm" onclick={() => selectState('waiting')}>waiting</button>
-						<button class="btn btn-sm" onclick={() => selectState('admitted')}>admitted</button>
-						<button class="btn btn-sm" onclick={() => selectState('in_progress')}>in progress</button>
-						<button class="btn btn-sm" onclick={() => selectState('paused')}>paused</button>
-						<button class="btn btn-sm" onclick={() => selectState('submitted')}>finished</button>
-						<button class="btn btn-sm" onclick={() => (selected = new Set())}>none</button>
+							<span class="muted">{tr("Select:")}</span> <button class="btn btn-sm" onclick={() => selectState('waiting')}>{tr("waiting")}</button>
+						<button class="btn btn-sm" onclick={() => selectState('admitted')}>{tr("admitted")}</button>
+						<button class="btn btn-sm" onclick={() => selectState('in_progress')}>{tr("in progress")}</button>
+						<button class="btn btn-sm" onclick={() => selectState('paused')}>{tr("paused")}</button>
+						<button class="btn btn-sm" onclick={() => selectState('submitted')}>{tr("finished")}</button>
+						<button class="btn btn-sm" onclick={() => (selected = new Set())}>{tr("none")}</button>
 					</div>
 				{/if}
 				{#if notice}<p class="alert alert-soft alert-warning small">{notice}</p>{/if}
-					{#if selected.size}<p class="small m-0" in:fadeIn><strong>{selected.size}</strong> selected · commands apply to them{#if selectedHidden}, including {selectedHidden} the search is hiding{/if}</p>{/if}
+					{#if selected.size}<p class="small m-0" in:fadeIn><strong>{selected.size}</strong> {tr("selected · commands apply to them")}{#if selectedHidden}{tr(", including {0} the search is hiding", [selectedHidden])}{/if}</p>{/if}
 					{#if rows.length}
-						<div class="flex flex-wrap items-end gap-2" role="search" aria-label="Find students">
-							<label class="vstack gap-1 small">Search<input class="input input-sm w-56" type="search" bind:value={rowSearch} placeholder="Name, ID or team" /></label>
-							<label class="vstack gap-1 small">Show
+						<div class="flex flex-wrap items-end gap-2" role="search" aria-label={tr("Find students")}>
+							<label class="vstack gap-1 small">{tr("Search")}<input class="input input-sm w-56" type="search" bind:value={rowSearch} placeholder={tr("Name, ID or team")} /></label>
+							<label class="vstack gap-1 small">{tr("Show")}
 								<select class="select select-sm w-auto" bind:value={rowShow}>
-									{#each ROW_SHOW as o (o.v)}<option value={o.v}>{o.label}</option>{/each}
+									{#each ROW_SHOW as o (o.v)}<option value={o.v}>{tr(o.label)}</option>{/each}
 								</select>
 							</label>
-							{#if searching}<button type="button" class="btn btn-ghost btn-sm" onclick={() => ((rowSearch = ''), (rowShow = ''))}>Clear</button>{/if}
-							<span class="small muted pb-1 ms-auto" role="status">{searching ? `Showing ${shownRows.length} of ${rows.length} students` : `${rows.length} ${rows.length === 1 ? 'student' : 'students'}`}</span>
+							{#if searching}<button type="button" class="btn btn-ghost btn-sm" onclick={() => ((rowSearch = ''), (rowShow = ''))}>{tr("Clear")}</button>{/if}
+							<span class="small muted pb-1 ms-auto" role="status">{searching ? tr("Showing {0} of {1} students", [shownRows.length, rows.length]) : `${rows.length} ${rows.length === 1 ? 'student' : 'students'}`}</span>
 						</div>
 					{/if}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
-						<thead><tr>{#if !ended}<th><span class="sr-only">Select</span></th>{/if}<th>Student</th>{#if teamsOn}<th>Team</th>{/if}<th>Status</th><th>Progress</th><th>Time left</th><th>Flags</th><th></th></tr></thead>
+						<thead><tr>{#if !ended}<th><span class="sr-only">{tr("Select")}</span></th>{/if}<th>{tr("Student")}</th>{#if teamsOn}<th>{tr("Team")}</th>{/if}<th>{tr("Status")}</th><th>{tr("Progress")}</th><th>{tr("Time left")}</th><th>{tr("Flags")}</th><th></th></tr></thead>
 						<tbody>
 							{#each shownRows as r (r.attempt_id)}
 									<tr class:sel={selected.has(r.attempt_id)} in:fadeIn>
-									{#if !ended}<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={'Select ' + r.name} /></td>{/if}
-									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}{#if (r.try ?? 1) > 1}{' '}<span class="badge badge-soft badge-info badge-xs" title="Which try this is">try {r.try}</span>{/if}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
+									{#if !ended}<td><input class="checkbox" type="checkbox" checked={selected.has(r.attempt_id)} onchange={() => toggle(r.attempt_id)} aria-label={tr("Select {0}", [r.name])} /></td>{/if}
+									<td><span class="flex items-center gap-2"><Avatar id={r.user_id} name={r.name} avatar={r.avatar} size={30} /><span class="min-w-0">{r.name}{#if (r.try ?? 1) > 1}{' '}<span class="badge badge-soft badge-info badge-xs" title={tr("Which try this is")}>{tr("try {0}", [r.try])}</span>{/if}<br /><span class="small muted">{r.student_number ?? ''}</span></span></span></td>
 									{#if teamsOn}
 										{@const team = d.teams?.find((t) => t.id === r.team_id)}
-										<td class="small">{#if team}<span class="inline-flex items-center gap-1"><span class="tdot" style:background="var(--cat-{team.color})" aria-hidden="true"></span>{team.name}{#if r.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>{:else}<span class="muted">—</span>{/if}</td>
+										<td class="small">{#if team}<span class="inline-flex items-center gap-1"><span class="tdot" style:background="var(--cat-{team.color})" aria-hidden="true"></span>{team.name}{#if r.captain}<Icon name="star" size={12} /><span class="sr-only">{tr("(captain)")}</span>{/if}</span>{:else}<span class="muted">—</span>{/if}</td>
 									{/if}
-									<td><span class="badge badge-soft {STATE_BADGE[r.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[r.state] ?? ''}</span> {r.state === 'admitted' ? (r.countdown_deadline == null ? 'Ready' : `Starting in ${formatDuration(countdownLeft(r))}`) : STATE_LABEL[r.state]}</span>{#if !r.connected && (r.state === 'in_progress' || r.state === 'waiting')}<br /><span class="small muted">offline</span>{/if}</td>
+									<td><span class="badge badge-soft {STATE_BADGE[r.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[r.state] ?? ''}</span> {r.state === 'admitted' ? (r.countdown_deadline == null ? tr("Ready") : tr("Starting in {0}", [formatDuration(countdownLeft(r))])) : STATE_LABEL[r.state]}</span>{#if !r.connected && (r.state === 'in_progress' || r.state === 'waiting')}<br /><span class="small muted">{tr("offline")}</span>{/if}</td>
 									<td class="small min-w-32">
 										<div class="flex items-center gap-2"><progress class="progress progress-primary w-20" value={r.answered} max={r.total || 1} aria-hidden="true"></progress><span class="tabular">{r.answered}/{r.total}</span></div>
-										{#if r.state === 'in_progress'}<span class="muted">on Q{r.index + 1}</span>{/if}
+										{#if r.state === 'in_progress'}<span class="muted">{tr("on Q{0}", [r.index + 1])}</span>{/if}
 									</td>
-									<td class="small tabular" class:text-error={(left(r) ?? Infinity) < 60_000 && r.state === 'in_progress'}>{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">+{Math.round(r.extension_sec / 60)} min extra</span>{/if}</td>
-									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1 whitespace-nowrap"><Icon name="flag" size={12} />{r.violations} violation{r.violations > 1 ? 's' : ''}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
-									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>Reinstate</button>{:else if r.state === 'submitted' && !ended && !teamsOn}<button class="btn btn-sm" onclick={() => reopen(r.attempt_id)} title="For a student who handed in by mistake: they carry on with their answers">Reopen</button>{/if}</td>
+									<td class="small tabular" class:text-error={(left(r) ?? Infinity) < 60_000 && r.state === 'in_progress'}>{formatDuration(left(r))}{#if r.extension_sec}<br /><span class="muted">{tr("+{0} min extra", [Math.round(r.extension_sec / 60)])}</span>{/if}</td>
+									<td class="small">{#if r.violations}<span class="badge badge-soft badge-error gap-1 whitespace-nowrap"><Icon name="flag" size={12} />{tr("{0} violation{1}", [r.violations, r.violations > 1 ? 's' : ''])}</span>{/if}{#if r.invalid_reason}<br />{r.invalid_reason}{/if}</td>
+									<td>{#if r.state === 'invalidated' && !ended}<button class="btn btn-sm" onclick={() => reinstate(r.attempt_id)}>{tr("Reinstate")}</button>{:else if r.state === 'submitted' && !ended && !teamsOn}<button class="btn btn-sm" onclick={() => reopen(r.attempt_id)} title={tr("For a student who handed in by mistake: they carry on with their answers")}>{tr("Reopen")}</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="8"><div class="muted py-6 text-center">{#if rows.length}No student matches. Clear the search to see everyone.{:else if ended}Nobody joined this session.{:else}<span class="loading loading-dots loading-md text-primary"></span><br />Waiting for students to scan the QR code…{/if}</div></td></tr>{/each}
+							{:else}<tr><td colspan="8"><div class="muted py-6 text-center">{#if rows.length}{tr("No student matches. Clear the search to see everyone.")}{:else if ended}{tr("Nobody joined this session.")}{:else}<span class="loading loading-dots loading-md text-primary"></span><br />{tr("Waiting for students to scan the QR code…")}{/if}</div></td></tr>{/each}
 						</tbody>
 					</table>
 				</div>

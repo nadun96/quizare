@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Renders one question of any of the seven types (FR-QZ-03) and reports
 	// every change, so answers save as they are given (NFR-11).
 	import { onMount } from 'svelte';
@@ -128,7 +129,7 @@
 	{/each}
 
 	{#if question.type === 'SINGLE' || question.type === 'MULTI'}
-		<p class="muted small">{question.type === 'SINGLE' ? 'Choose one answer.' : 'Choose all that apply.'}</p>
+		<p class="muted small">{question.type === 'SINGLE' ? tr("Choose one answer.") : tr("Choose all that apply.")}</p>
 		<div class="choices" role={question.type === 'SINGLE' ? 'radiogroup' : 'group'}>
 			{#each opts as o, i (o.id)}
 				<label class="choice" class:on={r.selected?.includes(o.id)}>
@@ -147,32 +148,32 @@
 			{/each}
 		</div>
 	{:else if question.type === 'MATCH'}
-		<p class="muted small">Match each item on the left with one on the right.</p>
+		<p class="muted small">{tr("Match each item on the left with one on the right.")}</p>
 		{#if rightMath}
-			<ol class="lettered" aria-label="Choices">{#each question.body.right ?? [] as rt, i (rt.id)}<li><b>{String.fromCharCode(65 + i)}</b><MathText text={rt.text} /></li>{/each}</ol>
+			<ol class="lettered" aria-label={tr("Choices")}>{#each question.body.right ?? [] as rt, i (rt.id)}<li><b>{String.fromCharCode(65 + i)}</b><MathText text={rt.text} /></li>{/each}</ol>
 		{/if}
 		{#each question.body.left ?? [] as l (l.id)}
 			<div class="match">
 				<span><MathText text={l.text} /></span>
-				<select class="select w-full" aria-label={'Match for ' + optionLabel(l.text, 0, false)} value={r.pairs?.[l.id] ?? ''} {disabled} onchange={(e) => setPair(l.id, e.currentTarget.value)}>
-					<option value="">Choose…</option>
+				<select class="select w-full" aria-label={tr("Match for {0}", [optionLabel(l.text, 0, false)])} value={r.pairs?.[l.id] ?? ''} {disabled} onchange={(e) => setPair(l.id, e.currentTarget.value)}>
+					<option value="">{tr("Choose…")}</option>
 					{#each question.body.right ?? [] as rt, i (rt.id)}<option value={rt.id}>{optionLabel(rt.text, i, rightMath)}</option>{/each}
 				</select>
 			</div>
 		{/each}
 	{:else if isBlank}
 		{#if question.type === 'BLANK_OPT' && optsMath}
-			<ol class="lettered" aria-label="Choices">{#each opts as o, i (o.id)}<li><b>{String.fromCharCode(65 + i)}</b><MathText text={o.text} /></li>{/each}</ol>
+			<ol class="lettered" aria-label={tr("Choices")}>{#each opts as o, i (o.id)}<li><b>{String.fromCharCode(65 + i)}</b><MathText text={o.text} /></li>{/each}</ol>
 		{/if}
 		<RichText class="qtext blanks" text={question.text} format={question.body.format}>
 			{#snippet blank(b)}
 				{#if question.type === 'BLANK_OPT'}
-					<select class="select" aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled} onchange={(e) => setBlank(b, e.currentTarget.value)}>
+					<select class="select" aria-label={tr("Blank {0}", [b])} value={r.blanks?.[b] ?? ''} {disabled} onchange={(e) => setBlank(b, e.currentTarget.value)}>
 						<option value="">…</option>
 						{#each opts as o, i (o.id)}<option value={o.id}>{optionLabel(o.text, i, optsMath)}</option>{/each}
 					</select>
 				{:else}
-					<input class="blank" aria-label={'Blank ' + b} value={r.blanks?.[b] ?? ''} {disabled}
+					<input class="blank" aria-label={tr("Blank {0}", [b])} value={r.blanks?.[b] ?? ''} {disabled}
 						autocomplete="off" autocapitalize="off" spellcheck="false"
 						oninput={(e) => setBlank(b, e.currentTarget.value)} />
 				{/if}
@@ -180,12 +181,12 @@
 		</RichText>
 	{:else if question.type === 'DRAG'}
 		{#if !question.body.zones?.length}
-			<p class="muted small">Drag the items into the right order.</p>
+			<p class="muted small">{tr("Drag the items into the right order.")}</p>
 			<ol class="drag-list" bind:this={orderList}>
 				{#each r.order ?? [] as id (id)}<li class="drag-item" data-id={id}>☰ <MathText text={optText[id]} /></li>{/each}
 			</ol>
 		{:else}
-			<p class="muted small">Drag each item into the right box.</p>
+			<p class="muted small">{tr("Drag each item into the right box.")}</p>
 			<div class="drag-pool" bind:this={poolEl} data-zone="">
 				{#each unplaced as o (o.id)}<div class="drag-item" data-id={o.id}>☰ <MathText text={o.text} /></div>{/each}
 			</div>
@@ -201,14 +202,14 @@
 			</div>
 		{/if}
 	{:else if question.type === 'ESSAY'}
-		<textarea class="textarea w-full essay" aria-label="Your answer" value={r.text ?? ''} {disabled} oninput={(e) => setText(e.currentTarget.value)} onblur={emit} rows="8"></textarea>
+		<textarea class="textarea w-full essay" aria-label={tr("Your answer")} value={r.text ?? ''} {disabled} oninput={(e) => setText(e.currentTarget.value)} onblur={emit} rows="8"></textarea>
 		{#if r.text && textHasMath(r.text)}
-			<div class="math-preview small" aria-live="polite"><span class="muted">How your formulas read:</span> <MathText text={r.text} /></div>
+			<div class="math-preview small" aria-live="polite"><span class="muted">{tr("How your formulas read:")}</span> <MathText text={r.text} /></div>
 		{:else}
-			<p class="small muted m-0">Formulas: write them between dollar signs, like $x^2 + 1$.</p>
+			<p class="small muted m-0">{tr("Formulas: write them between dollar signs, like $x^2 + 1$.")}</p>
 		{/if}
 		<div class="flex items-center gap-3 small muted" class:over={!!question.body.word_limit && words > question.body.word_limit}>
-			<span class="tabular" aria-live="polite">{words} word{words === 1 ? '' : 's'}{question.body.word_limit ? ` of ${question.body.word_limit}` : ''}</span>
+			<span class="tabular" aria-live="polite">{tr("{0} word{1}{2}", [words, words === 1 ? '' : 's', question.body.word_limit ? tr(" of {0}", [question.body.word_limit]) : ''])}</span>
 			{#if question.body.word_limit}<progress class="progress flex-1" class:progress-error={words > question.body.word_limit} class:progress-primary={words <= question.body.word_limit} value={Math.min(words, question.body.word_limit)} max={question.body.word_limit} aria-hidden="true"></progress>{/if}
 		</div>
 	{/if}

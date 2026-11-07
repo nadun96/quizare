@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // The inbox (D-103): unread announcements and messages for the bar's badge,
 // refreshed after each navigation (at most every 30 seconds) and every
 // minute while the page is visible.
@@ -68,10 +69,10 @@ export function when(iso: string, now = new Date()): string {
 	const s = (now.getTime() - d.getTime()) / 1000;
 	if (s < 60) return 'now';
 	if (s < 3600) return `${Math.floor(s / 60)} min`;
-	if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-	if (s < 6 * 86400) return d.toLocaleDateString(undefined, { weekday: 'short' });
-	if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-	return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+	if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(localeTag(), { hour: 'numeric', minute: '2-digit' });
+	if (s < 6 * 86400) return d.toLocaleDateString(localeTag(), { weekday: 'short' });
+	if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'short' });
+	return d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** "9+" past nine, so the badge stays small. */

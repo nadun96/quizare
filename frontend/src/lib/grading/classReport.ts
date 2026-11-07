@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // The class report (D-140): the setup a teacher edits, and the report built
 // from it, from /api/teacher/classrooms/{id}/class-report.
 import { toCSV } from '../tutoring/types';
@@ -135,7 +136,7 @@ export function finalRange(r: ClassReport): { avg: number | null; high: number |
 }
 
 /** An item's date, for its column. */
-export const dateText = (it: { date?: string }) => (it.date ? new Date(it.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+export const dateText = (it: { date?: string }) => (it.date ? new Date(it.date).toLocaleDateString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 export const violationsText = (n: number) => `${n} ${n === 1 ? 'violation' : 'violations'}`;
 

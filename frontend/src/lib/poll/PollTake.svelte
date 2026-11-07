@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Taking part in a poll (D-40). No login unless the poll asks for one; the
 	// join screen says plainly whether answers are anonymous or named. Used by
 	// the poll's own page (/p/CODE) and, compact, beside a tutoring session's
@@ -182,7 +183,7 @@
 			saving[q.id] = 'saved';
 		} catch (e) {
 			saving[q.id] = 'error';
-			toast(e instanceof ApiError ? (e.fields.value ?? e.message) : 'Could not save', 'error');
+			toast(e instanceof ApiError ? (e.fields.value ?? e.message) : tr("Could not save"), 'error');
 			if (e instanceof ApiError && (e.code === 'group_answered' || e.code === 'captain_only')) {
 				delete answers[q.id];
 				scoresSoon(0);
@@ -195,7 +196,7 @@
 			const r = await pollClient.upload(code, q.id, file, name, onProgress);
 			answers[q.id] = r.value;
 			saving[q.id] = 'saved';
-			toast('Uploaded');
+			toast(tr("Uploaded"));
 		} catch (e) {
 			saving[q.id] = 'error';
 			throw e;
@@ -215,16 +216,16 @@
 	const myPoints = $derived(Object.values({ ...(v?.scores ?? {}), ...ownScores }).reduce((s, x) => s + x.points, 0));
 </script>
 
-<svelte:head>{#if !compact}<title>{v ? v.title : 'Poll'} · Classroom Quiz</title>{/if}</svelte:head>
+<svelte:head>{#if !compact}<title>{tr("{0} · Classroom Quiz", [v ? v.title : tr("Poll")])}</title>{/if}</svelte:head>
 
 <div class="poll-page" class:compact class:toon={!compact} data-theme={compact ? undefined : 'quiz'} style={compact ? undefined : toonVars}>
 	{#if notFound}
-		<div class="narrow"><div class="card card-border bg-base-100"><EmptyState icon="alert" title="No poll with that code">Check the code with your presenter, or <a href="/join">enter it again</a>.</EmptyState></div></div>
+		<div class="narrow"><div class="card card-border bg-base-100"><EmptyState icon="alert" title={tr("No poll with that code")}>{tr("Check the code with your presenter, or")} <a href="/join">{tr("enter it again")}</a>.</EmptyState></div></div>
 	{:else if notOpen}
 		<div class="narrow center" in:flyIn>
 			<div class="pulse-dot mx-auto mb-4" aria-hidden="true"><span></span></div>
-			<h1>Not started yet</h1>
-			<p class="muted">This page updates by itself when the presenter opens the poll.</p>
+			<h1>{tr("Not started yet")}</h1>
+			<p class="muted">{tr("This page updates by itself when the presenter opens the poll.")}</p>
 		</div>
 	{:else if !v}
 		<div class="page-container"><Skeleton lines={4} /></div>
@@ -234,18 +235,18 @@
 				<span class="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary" aria-hidden="true"><Icon name="chart" size={28} /></span>
 				<h1 class="center">{v.title}</h1>
 				{#if v.scoring && v.status !== 'closed'}
-					<div class="privacy"><Icon name="trophy" size={20} /><span><strong>Answers score points.</strong> {v.leaderboard_mode === 'everyone' ? 'Everyone sees a live leaderboard.' : v.leaderboard_mode === 'presenter' ? 'The presenter shows the leaderboard.' : 'Only the presenter sees the scores.'}</span></div>
+					<div class="privacy"><Icon name="trophy" size={20} /><span><strong>{tr("Answers score points.")}</strong> {v.leaderboard_mode === 'everyone' ? tr("Everyone sees a live leaderboard.") : v.leaderboard_mode === 'presenter' ? tr("The presenter shows the leaderboard.") : tr("Only the presenter sees the scores.")}</span></div>
 					{#if v.leaderboard_mode !== 'off'}
 						<div>
-							<label for="nick">Nickname for the leaderboard <span class="muted font-normal">(optional)</span></label>
-							<input id="nick" class="input w-full" maxlength="30" autocomplete="nickname" bind:value={nickname} placeholder="e.g. Quiz Whiz" />
-							<p class="small muted m-0 mt-1">Keep it friendly; the presenter can change it.</p>
+							<label for="nick">{tr("Nickname for the leaderboard")} <span class="muted font-normal">{tr("(optional)")}</span></label>
+							<input id="nick" class="input w-full" maxlength="30" autocomplete="nickname" bind:value={nickname} placeholder={tr("e.g. Quiz Whiz")} />
+							<p class="small muted m-0 mt-1">{tr("Keep it friendly; the presenter can change it.")}</p>
 						</div>
 					{/if}
 				{/if}
 				{#if v.group_mode === 'self' && v.groups?.length && v.status !== 'closed'}
 					<fieldset class="m-0 border-0 p-0">
-						<legend class="font-semibold mb-1">Choose your group</legend>
+						<legend class="font-semibold mb-1">{tr("Choose your group")}</legend>
 						<div class="group-pick">
 							{#each v.groups as g (g.id)}
 								<label class="gopt" class:on={chosenGroup === g.id}>
@@ -258,24 +259,24 @@
 					</fieldset>
 				{/if}
 				{#if v.status === 'closed'}
-					<p class="alert alert-soft alert-warning m-0"><Icon name="info" />This poll has closed.</p>
+					<p class="alert alert-soft alert-warning m-0"><Icon name="info" />{tr("This poll has closed.")}</p>
 				{:else if v.identity === 'anonymous'}
-					<div class="privacy"><Icon name="eye-off" size={20} /><span><strong>Anonymous.</strong> Nobody, including the presenter, can see who gave which answer.</span></div>
-					<button class="btn btn-primary btn-lg w-full" disabled={joining || needGroup} onclick={() => join(false)}>Join the poll<Icon name="arrow-right" size={18} /></button>
+					<div class="privacy"><Icon name="eye-off" size={20} /><span><strong>{tr("Anonymous.")}</strong> {tr("Nobody, including the presenter, can see who gave which answer.")}</span></div>
+					<button class="btn btn-primary btn-lg w-full" disabled={joining || needGroup} onclick={() => join(false)}>{tr("Join the poll")}<Icon name="arrow-right" size={18} /></button>
 				{:else if v.identity === 'identified'}
-					<div class="privacy"><Icon name="user" size={20} /><span><strong>Your name is shown to the presenter</strong> next to your answers. Other participants never see it.{v.audience === 'classroom' ? ' Only students of the class can join.' : ''}</span></div>
+					<div class="privacy"><Icon name="user" size={20} /><span><strong>{tr("Your name is shown to the presenter")}</strong> {tr("next to your answers. Other participants never see it.{0}", [v.audience === 'classroom' ? tr(" Only students of the class can join.") : ''])}</span></div>
 					{#if auth.user}
-						<button class="btn btn-primary btn-lg w-full" disabled={joining || needGroup} onclick={() => join(true)}>Join as {auth.user.name}</button>
+						<button class="btn btn-primary btn-lg w-full" disabled={joining || needGroup} onclick={() => join(true)}>{tr("Join as {0}", [auth.user.name])}</button>
 					{:else}
-						<a class="btn btn-primary btn-lg w-full" href={loginUrl('/p/' + code)}>Log in to join</a>
+						<a class="btn btn-primary btn-lg w-full" href={loginUrl('/p/' + code)}>{tr("Log in to join")}</a>
 					{/if}
 				{:else}
-					<div class="privacy"><Icon name="users" size={20} /><span><strong>Your choice.</strong> Join anonymously, or put your name to your answers for the presenter.</span></div>
-					<button class="btn btn-primary btn-lg w-full" disabled={joining || needGroup} onclick={() => join(false)}>Join anonymously</button>
+					<div class="privacy"><Icon name="users" size={20} /><span><strong>{tr("Your choice.")}</strong> {tr("Join anonymously, or put your name to your answers for the presenter.")}</span></div>
+					<button class="btn btn-primary btn-lg w-full" disabled={joining || needGroup} onclick={() => join(false)}>{tr("Join anonymously")}</button>
 					{#if auth.user}
-						<button class="btn btn-lg w-full" disabled={joining || needGroup} onclick={() => join(true)}>Join as {auth.user.name}</button>
+						<button class="btn btn-lg w-full" disabled={joining || needGroup} onclick={() => join(true)}>{tr("Join as {0}", [auth.user.name])}</button>
 					{:else}
-						<p class="small muted center m-0">Want your name on your answers? <a href={loginUrl('/p/' + code)}>Log in first</a>.</p>
+						<p class="small muted center m-0">{tr("Want your name on your answers?")} <a href={loginUrl('/p/' + code)}>{tr("Log in first")}</a>.</p>
 					{/if}
 				{/if}
 				{#if joinError}<p class="alert alert-soft alert-error m-0" role="alert"><Icon name="alert" />{joinError}</p>{/if}
@@ -286,29 +287,29 @@
 			<div class="poll-bar-inner">
 				<strong class="truncate">{v.title}</strong>
 				{#if v.scoring && (v.me || myPoints > 0)}
-					<span class="badge badge-soft badge-primary gap-1 tabular" aria-live="polite"><Icon name="trophy" size={13} />{fmtPoints(v.me?.score ?? myPoints)} pts{#if v.me}{' · '}{ordinal(v.me.rank)}{/if}</span>
+					<span class="badge badge-soft badge-primary gap-1 tabular" aria-live="polite"><Icon name="trophy" size={13} />{tr("{0} pts", [fmtPoints(v.me?.score ?? myPoints)])}{#if v.me}{' · '}{ordinal(v.me.rank)}{/if}</span>
 				{/if}
 				{#if myGroup}
-					<span class="badge badge-soft gap-1 max-w-40"><span class="gdot sm" style:background="var(--cat-{myGroup.color})" aria-hidden="true"></span><span class="truncate">{myGroup.name}</span>{#if v.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span>
+					<span class="badge badge-soft gap-1 max-w-40"><span class="gdot sm" style:background="var(--cat-{myGroup.color})" aria-hidden="true"></span><span class="truncate">{myGroup.name}</span>{#if v.captain}<Icon name="star" size={12} /><span class="sr-only">{tr("(captain)")}</span>{/if}</span>
 				{/if}
-				<span class="badge badge-soft gap-1" title={v.identified ? 'Named' : 'Anonymous'}>{#if v.identified}<Icon name="user" size={13} /><span class="bar-label">Named</span>{:else}<Icon name="eye-off" size={13} /><span class="bar-label">Anonymous</span>{/if}</span>
+				<span class="badge badge-soft gap-1" title={v.identified ? tr("Named") : tr("Anonymous")}>{#if v.identified}<Icon name="user" size={13} /><span class="bar-label">{tr("Named")}</span>{:else}<Icon name="eye-off" size={13} /><span class="bar-label">{tr("Anonymous")}</span>{/if}</span>
 				{#if v.pacing === 'self' && v.total > 0}<span class="badge badge-soft tabular">{answeredCount} / {v.total}</span>{/if}
 			</div>
-			{#if v.pacing === 'self' && v.total > 0}<progress class="progress progress-primary bar-progress" value={answeredCount} max={v.total} aria-label="{answeredCount} of {v.total} answered"></progress>{/if}
+			{#if v.pacing === 'self' && v.total > 0}<progress class="progress progress-primary bar-progress" value={answeredCount} max={v.total} aria-label={tr("{0} of {1} answered", [answeredCount, v.total])}></progress>{/if}
 		</header>
 
 		<main class="content">
 			{#if v.status === 'closed'}
-				<div class="alert alert-soft alert-info" in:flyIn><Icon name="info" /><span>This poll has closed. Thanks for taking part!</span></div>
+				<div class="alert alert-soft alert-info" in:flyIn><Icon name="info" /><span>{tr("This poll has closed. Thanks for taking part!")}</span></div>
 			{/if}
 			{#if v.board_open && wbLoaded}
 				<section class="card card-border bg-base-100 p-3 shadow-sm sm:p-4" aria-labelledby="wb-h" in:flyIn>
-					<h2 id="wb-h" class="m-0 mb-2 flex items-center gap-2 text-base"><Icon name="brush" size={16} />Whiteboard{#if wb.canDraw}<span class="badge badge-soft badge-success badge-sm">you can draw</span>{/if}</h2>
-					<Whiteboard board={wb} client={wbClient} title={v.title + ' whiteboard'} />
+					<h2 id="wb-h" class="m-0 mb-2 flex items-center gap-2 text-base"><Icon name="brush" size={16} />{tr("Whiteboard")}{#if wb.canDraw}<span class="badge badge-soft badge-success badge-sm">{tr("you can draw")}</span>{/if}</h2>
+					<Whiteboard board={wb} client={wbClient} title={tr("{0} whiteboard", [v.title])} />
 				</section>
 			{/if}
 			{#if v.pacing === 'presenter' && v.status === 'open'}
-				<p class="small muted center m-0">Question {v.current_index + 1} of {v.total} · the presenter moves everyone on</p>
+				<p class="small muted center m-0">{tr("Question {0} of {1} · the presenter moves everyone on", [v.current_index + 1, v.total])}</p>
 			{/if}
 			{#each v.questions as q, i (q.id)}
 				{@const result = visibleResult(q)}
@@ -319,31 +320,31 @@
 				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6" in:flyIn={{ x: v.pacing === 'presenter' ? 30 : 0, y: v.pacing === 'presenter' ? 0 : 8, duration: 240 }}>
 					<div class="mb-2 flex items-center gap-2 small">
 						{#if v.pacing === 'self'}<span class="q-num">{i + 1}</span>{/if}
-						{#if q.required}<span class="badge badge-soft badge-sm">required</span>{/if}
-						{#if v.scoring && q.points && !k}<span class="badge badge-soft badge-sm tabular">{fmtPoints(q.points)} pts</span>{/if}
-						{#if secs !== null && !k}<span class="timer tabular" class:low={secs <= 5} role="timer" aria-live={secs <= 5 ? 'assertive' : 'off'}><Icon name="clock" size={14} />{secs === 0 ? "Time's up" : secs + 's'}</span>{/if}
+						{#if q.required}<span class="badge badge-soft badge-sm">{tr("required")}</span>{/if}
+						{#if v.scoring && q.points && !k}<span class="badge badge-soft badge-sm tabular">{tr("{0} pts", [fmtPoints(q.points)])}</span>{/if}
+						{#if secs !== null && !k}<span class="timer tabular" class:low={secs <= 5} role="timer" aria-live={secs <= 5 ? 'assertive' : 'off'}><Icon name="clock" size={14} />{secs === 0 ? tr("Time's up") : secs + 's'}</span>{/if}
 						<span class="spacer"></span>
-						{#if saving[q.id] === 'saving'}<span class="muted flex items-center gap-1"><span class="loading loading-spinner loading-xs"></span>Saving…</span>
-						{:else if saving[q.id] === 'error'}<span class="text-error flex items-center gap-1"><Icon name="alert" size={14} />Not saved</span>
-						{:else if hasAnswer(q, answers[q.id])}<span class="text-success flex items-center gap-1" in:scaleIn><Icon name="check" size={14} />Saved</span>{/if}
+						{#if saving[q.id] === 'saving'}<span class="muted flex items-center gap-1"><span class="loading loading-spinner loading-xs"></span>{tr("Saving…")}</span>
+						{:else if saving[q.id] === 'error'}<span class="text-error flex items-center gap-1"><Icon name="alert" size={14} />{tr("Not saved")}</span>
+						{:else if hasAnswer(q, answers[q.id])}<span class="text-success flex items-center gap-1" in:scaleIn><Icon name="check" size={14} />{tr("Saved")}</span>{/if}
 					</div>
-					{#if ta}<p class="team-note small m-0 mb-2"><Icon name="users" size={14} /><span><strong>{ta.by || 'A teammate'}</strong> answered for your group.</span></p>
-					{:else if teamPlay && v.group_acceptance === 'captain' && !v.captain && v.status === 'open'}<p class="team-note small m-0 mb-2"><Icon name="star" size={14} /><span>Your captain answers for the group. Talk it through together!</span></p>{/if}
+					{#if ta}<p class="team-note small m-0 mb-2"><Icon name="users" size={14} /><span><strong>{ta.by || tr("A teammate")}</strong> {tr("answered for your group.")}</span></p>
+					{:else if teamPlay && v.group_acceptance === 'captain' && !v.captain && v.status === 'open'}<p class="team-note small m-0 mb-2"><Icon name="star" size={14} /><span>{tr("Your captain answers for the group. Talk it through together!")}</span></p>{/if}
 					<PollInput question={q} value={answers[q.id] ?? ta?.value} disabled={!canEdit(q)} onchange={(a) => save(q, a)} upload={(f, n, p) => upload(q, f, n, p)} />
-					{#if !v.allow_edit && hasAnswer(q, v.answers?.[q.id]) && v.status === 'open'}<p class="small muted m-0 mt-2">Answers can't be changed in this poll.</p>{/if}
+					{#if !v.allow_edit && hasAnswer(q, v.answers?.[q.id]) && v.status === 'open'}<p class="small muted m-0 mt-2">{tr("Answers can't be changed in this poll.")}</p>{/if}
 					{#if k}
 						<div class="feedback" class:right={sc?.correct} class:wrong={sc && !sc.correct} in:scaleIn>
 							{#if sc}
 								<Icon name={sc.correct ? 'check-circle' : 'alert'} size={18} />
-								<span><strong>{sc.correct ? 'Correct!' : sc.points > 0 ? 'Partly right' : 'Not quite'}</strong> +{fmtPoints(sc.points)} points{#if !sc.correct}<span class="block small">Answer: {describeKey(q, k)}</span>{/if}</span>
+								<span><strong>{sc.correct ? tr("Correct!") : sc.points > 0 ? tr("Partly right") : tr("Not quite")}</strong> {tr("+{0} points", [fmtPoints(sc.points)])}{#if !sc.correct}<span class="block small">{tr("Answer: {0}", [describeKey(q, k)])}</span>{/if}</span>
 							{:else}
-								<Icon name="info" size={18} /><span><strong>Answer:</strong> {describeKey(q, k)}</span>
+								<Icon name="info" size={18} /><span><strong>{tr("Answer:")}</strong> {describeKey(q, k)}</span>
 							{/if}
 						</div>
 					{/if}
 					{#if result}
 						<div class="results-box" in:flyIn>
-							<p class="small font-semibold m-0 mb-2 flex items-center gap-1"><Icon name="chart" size={14} />Results so far</p>
+							<p class="small font-semibold m-0 mb-2 flex items-center gap-1"><Icon name="chart" size={14} />{tr("Results so far")}</p>
 							<PollResults question={q} {result} toon={!compact} />
 						</div>
 					{/if}
@@ -351,25 +352,25 @@
 			{:else}
 				<div class="center py-10" in:flyIn>
 					<div class="pulse-dot mx-auto mb-4" aria-hidden="true"><span></span></div>
-					<p class="muted">Waiting for the presenter…</p>
+					<p class="muted">{tr("Waiting for the presenter…")}</p>
 				</div>
 			{/each}
 			{#if v.scoring && v.leaderboard_mode === 'everyone' && (v.leaderboard?.length || v.group_leaderboard?.length)}
 				{@const groupsOn = !!v.group_leaderboard?.length}
 				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6" aria-labelledby="lb-h">
 					<div class="mb-3 flex flex-wrap items-center gap-2">
-						<h2 id="lb-h" class="m-0 flex items-center gap-2 text-lg"><Icon name="trophy" size={18} />Leaderboard</h2>
+						<h2 id="lb-h" class="m-0 flex items-center gap-2 text-lg"><Icon name="trophy" size={18} />{tr("Leaderboard")}</h2>
 						<span class="spacer"></span>
 						{#if groupsOn}
-							<div class="join" role="group" aria-label="Show">
-								<button class="btn btn-xs join-item" class:btn-primary={board === 'groups'} aria-pressed={board === 'groups'} onclick={() => (board = 'groups')}>Groups</button>
-								<button class="btn btn-xs join-item" class:btn-primary={board === 'people'} aria-pressed={board === 'people'} onclick={() => (board = 'people')}>Individuals</button>
+							<div class="join" role="group" aria-label={tr("Show")}>
+								<button class="btn btn-xs join-item" class:btn-primary={board === 'groups'} aria-pressed={board === 'groups'} onclick={() => (board = 'groups')}>{tr("Groups")}</button>
+								<button class="btn btn-xs join-item" class:btn-primary={board === 'people'} aria-pressed={board === 'people'} onclick={() => (board = 'people')}>{tr("Individuals")}</button>
 							</div>
 						{/if}
 					</div>
 					{#if groupsOn && board === 'groups'}
 						<Leaderboard ranks={groupRanks(v.group_leaderboard)} meKey={v.my_group ?? ''} />
-						{#if myGroupRank}<p class="small muted m-0 mt-2">Your group is {ordinal(myGroupRank.rank)} of {v.group_leaderboard?.length}.</p>{/if}
+						{#if myGroupRank}<p class="small muted m-0 mt-2">{tr("Your group is {0} of {1}.", [ordinal(myGroupRank.rank), v.group_leaderboard?.length])}</p>{/if}
 					{:else}
 						<Leaderboard ranks={v.leaderboard ?? []} me={v.me ?? null} meKey={v.me_key ?? ''} />
 					{/if}
@@ -377,7 +378,7 @@
 			{/if}
 			{#if v.pacing === 'self' && v.total > 0 && v.status === 'open'}
 				<p class="small center m-0" class:text-success={!requiredLeft} class:muted={!!requiredLeft}>
-					{#if requiredLeft}{requiredLeft} required question{requiredLeft === 1 ? '' : 's'} left · answers save as you go{:else}<Icon name="check-circle" size={14} /> Your answers are saved. You can close this page.{/if}
+					{#if requiredLeft}{tr("{0} required question{1} left · answers save as you go", [requiredLeft, requiredLeft === 1 ? '' : 's'])}{:else}<Icon name="check-circle" size={14} /> {tr("Your answers are saved. You can close this page.")}{/if}
 				</p>
 			{/if}
 		</main>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// The email queue (D-104): every email the platform sent this week, as
 	// waiting, sent (the mail server took it), retrying or failed with the
 	// server's words, and sending failed ones again. Never the text: it holds
@@ -42,30 +43,30 @@
 	async function retry(id?: number) {
 		try {
 			const r = await api.post<{ retried: number }>('/api/admin/email/queue/retry', id ? { id } : { send_id: send || undefined });
-			toast(r.retried ? `Sending ${r.retried} again` : 'Nothing to send again');
+			toast(r.retried ? tr("Sending {0} again", [r.retried]) : tr("Nothing to send again"));
 			list.load();
 		} catch {
-			toast('Could not send it again', 'error');
+			toast(tr("Could not send it again"), 'error');
 		}
 	}
-	const date = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+	const date = (iso: string) => new Date(iso).toLocaleString(localeTag(), { dateStyle: 'medium', timeStyle: 'short' });
 </script>
 
 <div class="vstack">
 	{#if label}<p class="m-0 font-semibold">{label}</p>{/if}
-	<div class="flex flex-wrap gap-2" role="group" aria-label="Show">
+	<div class="flex flex-wrap gap-2" role="group" aria-label={tr("Show")}>
 		{#each STATUS as s (s.id)}
 			<button class="btn btn-sm {status === s.id ? 'btn-active' : ''}" aria-pressed={status === s.id} onclick={() => show(s.id)}>
-				<span class="badge badge-sm {s.badge}">{counts[s.id] ?? 0}</span>{s.label}
+				<span class="badge badge-sm {s.badge}">{counts[s.id] ?? 0}</span>{tr(s.label)}
 			</button>
 		{/each}
 		<span class="spacer"></span>
-		{#if (counts.failed ?? 0) > 0}<button class="btn btn-sm" onclick={() => retry()}><Icon name="undo" size={14} />Send failed ones again</button>{/if}
+		{#if (counts.failed ?? 0) > 0}<button class="btn btn-sm" onclick={() => retry()}><Icon name="undo" size={14} />{tr("Send failed ones again")}</button>{/if}
 	</div>
-	{#if !send}<ListSearch {list} placeholder="Search address or subject" label="Search emails" />{/if}
+	{#if !send}<ListSearch {list} placeholder={tr("Search address or subject")} label={tr("Search emails")} />{/if}
 	<div class="table-wrap">
 		<table class="table table-sm">
-			<thead><tr><th>To</th><th>Subject</th><th>Status</th><th>Queued</th><th><span class="sr-only">Actions</span></th></tr></thead>
+			<thead><tr><th>{tr("To")}</th><th>{tr("Subject")}</th><th>{tr("Status")}</th><th>{tr("Queued")}</th><th><span class="sr-only">{tr("Actions")}</span></th></tr></thead>
 			<tbody>
 				{#each list.rows as d (d.id)}
 					{@const s = STATUS.find((x) => x.id === d.status)}
@@ -74,18 +75,18 @@
 						<td>{d.subject}</td>
 						<td>
 							<span class="badge badge-sm {s?.badge}">{s?.word ?? d.status}</span>
-							{#if d.status === 'retrying'}<span class="small muted"> try {d.attempts + 1} of {d.max_attempts}{#if d.at}, {new Date(d.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}{/if}</span>{/if}
+							{#if d.status === 'retrying'}<span class="small muted"> {tr("try {0} of {1}", [d.attempts + 1, d.max_attempts])}{#if d.at}, {new Date(d.at).toLocaleTimeString(localeTag(), { hour: 'numeric', minute: '2-digit' })}{/if}</span>{/if}
 							{#if d.error && d.status !== 'sent'}<p class="m-0 mt-1 small text-error break-words max-w-md">{d.error}</p>{/if}
 						</td>
 						<td class="small tabular whitespace-nowrap">{date(d.created_at)}</td>
-						<td class="text-right">{#if d.status === 'failed'}<button class="btn btn-xs" onclick={() => retry(d.id)}>Send again</button>{/if}</td>
+						<td class="text-right">{#if d.status === 'failed'}<button class="btn btn-xs" onclick={() => retry(d.id)}>{tr("Send again")}</button>{/if}</td>
 					</tr>
 				{:else}
-					<tr><td colspan="5" class="muted">{list.loaded ? (status || list.q ? 'No emails match.' : 'No emails this week.') : 'Loading…'}</td></tr>
+					<tr><td colspan="5" class="muted">{list.loaded ? (status || list.q ? tr("No emails match.") : tr("No emails this week.")) : tr("Loading…")}</td></tr>
 				{/each}
 			</tbody>
 		</table>
 	</div>
-	<Pager {list} label="Emails" />
-	<p class="m-0 small muted">"Sent" means the mail server took it. A provider refusing it later (a bounce) shows in the server's mail log. Emails are kept here for a week.</p>
+	<Pager {list} label={tr("Emails")} />
+	<p class="m-0 small muted">{tr("\"Sent\" means the mail server took it. A provider refusing it later (a bounce) shows in the server's mail log. Emails are kept here for a week.")}</p>
 </div>

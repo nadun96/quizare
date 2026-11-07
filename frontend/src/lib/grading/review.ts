@@ -1,7 +1,8 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // What the teacher lets a student see of their results, and until when (D-140).
 export type Review = { detail?: string; until?: string; closed?: boolean };
 
-const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+const when = (iso: string) => new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
 /** The line above a student's results: why questions are missing, or when they will go. */
 export function reviewNote(r: Review | null | undefined): string {

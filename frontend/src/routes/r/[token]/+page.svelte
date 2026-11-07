@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Public, read-only results page (FR-RS-01/02, BR-13). Rendered from JSON.
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
@@ -17,34 +18,34 @@
 	$effect(() => {
 		api.get<View>('/api/public/results/' + page.params.token)
 			.then((x) => (v = x))
-			.catch((e) => (error = e instanceof ApiError && e.status === 410 ? 'This link has expired or been turned off.' : 'This link is not valid.'));
+			.catch((e) => (error = e instanceof ApiError && e.status === 410 ? tr("This link has expired or been turned off.") : tr("This link is not valid.")));
 	});
 </script>
 
 <svelte:head><meta name="robots" content="noindex, nofollow" /></svelte:head>
 
 <div class="page-container vstack" style="max-width:860px">
-	{#if error}<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><h1>Results</h1><p>{error}</p></div>{/if}
+	{#if error}<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><h1>{tr("Results")}</h1><p>{error}</p></div>{/if}
 	{#if v}
 		<h1>{v.title}</h1>
 		{#if v.pass_rate}
 			<div class="auto-grid">
-				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">Pass rate</div><div style="font-size:2rem;font-weight:700">{v.pass_rate.pass_rate}%</div><div class="small muted">pass mark {v.pass_rate.pass_mark_pct}%</div></div>
-				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">Average score</div><div style="font-size:2rem;font-weight:700">{v.pass_rate.mean_pct}%</div></div>
-				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">Students</div><div style="font-size:2rem;font-weight:700">{v.pass_rate.finished}</div></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">{tr("Pass rate")}</div><div style="font-size:2rem;font-weight:700">{v.pass_rate.pass_rate}%</div><div class="small muted">{tr("pass mark {0}%", [v.pass_rate.pass_mark_pct])}</div></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">{tr("Average score")}</div><div style="font-size:2rem;font-weight:700">{v.pass_rate.mean_pct}%</div></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">{tr("Students")}</div><div style="font-size:2rem;font-weight:700">{v.pass_rate.finished}</div></div>
 			</div>
 		{/if}
 		{#if v.questions}
-			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><h2 style="margin-top:0">Question-wise correct</h2>
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><h2 style="margin-top:0">{tr("Question-wise correct")}</h2>
 				{#each v.questions as q (q.code)}
 					<div class="qrow"><span><strong>{q.code}</strong> {toPlain(q.text, q.format).slice(0, 80)}</span><div class="pbar"><div style="width:{q.pct_correct}%"></div></div><strong>{q.pct_correct}%</strong></div>
 				{/each}
 			</div>
 		{/if}
 		{#if v.students}
-			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap"><h2 style="margin-top:0">Results</h2>
-				<table class="table"><thead><tr><th>Student</th><th>Score</th><th>Result</th></tr></thead><tbody>
-					{#each v.students as s, i (i)}<tr><td>{s.label}</td><td>{s.score}/{s.max_score} ({s.pct}%)</td><td><span class="badge badge-soft {s.passed ? 'ok' : 'danger'}">{s.passed ? 'pass' : 'fail'}</span></td></tr>{/each}
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap"><h2 style="margin-top:0">{tr("Results")}</h2>
+				<table class="table"><thead><tr><th>{tr("Student")}</th><th>{tr("Score")}</th><th>{tr("Result")}</th></tr></thead><tbody>
+					{#each v.students as s, i (i)}<tr><td>{tr(s.label)}</td><td>{s.score}/{s.max_score} ({s.pct}%)</td><td><span class="badge badge-soft {s.passed ? 'ok' : 'danger'}">{s.passed ? 'pass' : 'fail'}</span></td></tr>{/each}
 				</tbody></table>
 			</div>
 		{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Each person's dashboard (D-99): their profile at a glance, their classes,
 	// and what's live, coming up, overdue or missed, and waiting, each list a
 	// page at a time. Tutoring sessions come from the tutoring service.
@@ -53,18 +54,18 @@
 			await api.post('/api/auth/me/email/verify');
 			toast(t('dash.linkSent'));
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'Could not send the link', 'error');
+			toast(err instanceof ApiError ? err.message : tr("Could not send the link"), 'error');
 		}
 	}
 </script>
 
-<svelte:head><title>Dashboard</title></svelte:head>
+<svelte:head><title>{tr("Dashboard")}</title></svelte:head>
 
 {#if auth.user}
 	<div class="page-container vstack">
 		<header class="hello">
 			{#if !teacher && progress.current}
-				<a href="/my" class="no-underline" aria-label="Your progress: level {progress.current.level}">
+				<a href="/my" class="no-underline" aria-label={tr("Your progress: level {0}", [progress.current.level])}>
 					<LevelRing fraction={levelFraction(progress.current)} level={progress.current.level} size={64} stroke={4}>
 						<Avatar id={auth.user.id} name={auth.user.name} avatar={auth.user.avatar} size={54} />
 					</LevelRing>
@@ -123,7 +124,7 @@
 						</li>
 					{/each}
 				</ul>
-				<Pager list={classes} label="Classes" />
+				<Pager list={classes} label={tr("Classes")} />
 			{/if}
 		</section>
 	</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A presentation's page for its teacher (D-76): its slides and file, its
 	// settings, and who saw which slides for how long.
 	import { goto } from '$app/navigation';
@@ -61,8 +62,8 @@
 		input.value = '';
 		if (!file) return;
 		const kind = fileKind(file.name);
-		if (!kind) return toast('Choose a PDF, or a PowerPoint (.pptx, .ppt), OpenDocument or Keynote file', 'error');
-		if (kind === 'deck' && !drive) return toast('PowerPoint files go through Google Drive: connect it in Settings, or save the file as a PDF and upload that', 'error');
+		if (!kind) return toast(tr("Choose a PDF, or a PowerPoint (.pptx, .ppt), OpenDocument or Keynote file"), 'error');
+		if (kind === 'deck' && !drive) return toast(tr("PowerPoint files go through Google Drive: connect it in Settings, or save the file as a PDF and upload that"), 'error');
 		await convert(() => (kind === 'deck' ? deckToPdf(file) : Promise.resolve(file)));
 	}
 	async function fromDrive() {
@@ -87,19 +88,19 @@
 	}
 	async function use(file: File) {
 		if (!p) return;
-		if (file.size > MAX_PDF_BYTES) return toast('A PDF of at most 50 MB, please', 'error');
+		if (file.size > MAX_PDF_BYTES) return toast(tr("A PDF of at most 50 MB, please"), 'error');
 		try {
 			if (p.slide_count) {
 				const n = await countPages(file);
 				const body = n === p.slide_count
 					? 'Students see the new slides once the upload finishes. Their viewing records stay.'
 					: `The new file has ${count(n, 'slide')}; this one has ${p.slide_count}. Viewing records stay with their slide numbers, so they may no longer match the same content.`;
-				if (!(await confirmDialog({ title: `Replace “${p.file_name}”?`, body, confirm: 'Replace' }))) return;
+				if (!(await confirmDialog({ title: tr("Replace “{0}”?", [p.file_name]), body, confirm: tr("Replace") }))) return;
 			}
 			uploading = { done: 0, total: 0 };
 			p = await uploadPdf(id, file, (done, total) => (uploading = { done, total }));
 			await load();
-			toast(`${count(p.slide_count, 'slide')} ready`);
+			toast(tr("{0} ready", [count(p.slide_count, 'slide')]));
 		} catch (err) {
 			fail(err, 'Could not read that PDF');
 		} finally {
@@ -121,7 +122,7 @@
 				title: form.title, description: form.description, allow_jump: form.allow_jump, allow_download: form.allow_download,
 				clear_dates: true, opens_at: fromLocalInput(form.opens), due_at: fromLocalInput(form.due)
 			});
-			toast('Settings saved');
+			toast(tr("Settings saved"));
 		} catch (err) {
 			fail(err, 'Could not save');
 		}
@@ -129,14 +130,14 @@
 	async function setStatus(status: 'draft' | 'published') {
 		try {
 			p = await api.post<Presentation>(`/api/teacher/presentations/${id}/status`, { status });
-			toast(status === 'published' ? 'Published: the classroom’s students can open it' : 'Back to a draft: students can’t open it');
+			toast(status === 'published' ? tr("Published: the classroom’s students can open it") : tr("Back to a draft: students can’t open it"));
 		} catch (e) {
 			fail(e, 'Could not change it');
 		}
 	}
 	async function remove() {
 		if (!p) return;
-		if (!(await confirmDialog({ title: 'Delete this presentation?', body: 'Its file, slides and the record of who saw them are deleted.', confirm: 'Delete', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete this presentation?"), body: tr("Its file, slides and the record of who saw them are deleted."), confirm: tr("Delete"), danger: true }))) return;
 		await api.del('/api/teacher/presentations/' + id);
 		goto('/t/topics/' + p.topic_id);
 	}
@@ -154,20 +155,20 @@
 	const thumb = (n: number) => `/api/teacher/presentations/${id}/slides/${n}?v=${p?.version}`;
 </script>
 
-<svelte:head><title>{p?.title ?? 'Presentation'}</title></svelte:head>
+<svelte:head><title>{p?.title ?? tr("Presentation")}</title></svelte:head>
 
 <div class="page-container vstack">
 	{#if !p}
 		<Skeleton lines={6} />
 	{:else}
-		<p class="small m-0"><a href={'/t/topics/' + p.topic_id}>← Back to the topic</a></p>
+		<p class="small m-0"><a href={'/t/topics/' + p.topic_id}>{tr("← Back to the topic")}</a></p>
 		<div class="flex flex-wrap items-center gap-3">
 			<h1 class="m-0">{p.title}</h1>
-			<span class="badge badge-soft" class:ok={p.status === 'published'}>{p.status === 'published' ? 'Published' : 'Draft'}</span>
+			<span class="badge badge-soft" class:ok={p.status === 'published'}>{p.status === 'published' ? tr("Published") : tr("Draft")}</span>
 			<span class="spacer"></span>
-			{#if p.slide_count}<a class="btn" class:btn-error={liveNow} href={`/t/presentations/${id}/present`}><Icon name="play" size={16} />{liveNow ? 'Live now: back to presenting' : 'Present live'}</a>{/if}
-			{#if p.status === 'published'}<button class="btn" onclick={() => setStatus('draft')}>Unpublish</button>
-			{:else}<button class="btn btn-primary" disabled={!p.slide_count} onclick={() => setStatus('published')}><Icon name="check" size={16} />Publish to the class</button>{/if}
+			{#if p.slide_count}<a class="btn" class:btn-error={liveNow} href={`/t/presentations/${id}/present`}><Icon name="play" size={16} />{liveNow ? tr("Live now: back to presenting") : tr("Present live")}</a>{/if}
+			{#if p.status === 'published'}<button class="btn" onclick={() => setStatus('draft')}>{tr("Unpublish")}</button>
+			{:else}<button class="btn btn-primary" disabled={!p.slide_count} onclick={() => setStatus('published')}><Icon name="check" size={16} />{tr("Publish to the class")}</button>{/if}
 		</div>
 		<div class="tabs tabs-border" role="tablist">
 			{#each [['slides', p.slide_count ? `Slides (${p.slide_count})` : 'Slides'], ['settings', 'Settings'], ['students', 'Students'], ['analysis', 'Against marks']] as [k, l] (k)}
@@ -178,32 +179,32 @@
 		{#if tab === 'slides'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack gap-3">
 				{#if converting}
-					<p class="m-0 font-semibold"><span class="loading loading-spinner loading-xs"></span> Converting it in your Google Drive…</p>
-					<p class="small muted m-0">Google turns it into a PDF; the copy made in your Drive is deleted afterwards.</p>
+					<p class="m-0 font-semibold"><span class="loading loading-spinner loading-xs"></span> {tr("Converting it in your Google Drive…")}</p>
+					<p class="small muted m-0">{tr("Google turns it into a PDF; the copy made in your Drive is deleted afterwards.")}</p>
 				{:else if uploading}
-					<p class="m-0 font-semibold">{uploading.total ? `Preparing slide ${Math.min(uploading.done + 1, uploading.total)} of ${uploading.total}…` : 'Reading the PDF…'}</p>
-					<progress class="progress progress-primary w-full" value={uploading.done} max={uploading.total || 1} aria-label="Upload progress"></progress>
-					<p class="small muted m-0">Keep this page open until it finishes. Students keep the current slides until then.</p>
+					<p class="m-0 font-semibold">{uploading.total ? tr("Preparing slide {0} of {1}…", [Math.min(uploading.done + 1, uploading.total), uploading.total]) : tr("Reading the PDF…")}</p>
+					<progress class="progress progress-primary w-full" value={uploading.done} max={uploading.total || 1} aria-label={tr("Upload progress")}></progress>
+					<p class="small muted m-0">{tr("Keep this page open until it finishes. Students keep the current slides until then.")}</p>
 				{:else}
 					<div class="flex flex-wrap items-center gap-3">
 						{#if p.slide_count}
 							<span class="flex-1 min-w-0"><Icon name="book" size={16} /> <strong>{p.file_name}</strong> <span class="small muted">· {count(p.slide_count, 'slide')} · {fmtBytes(p.file_bytes)}</span></span>
-							<a class="btn btn-sm btn-ghost" href={`/api/teacher/presentations/${id}/pdf`} download><Icon name="download" size={14} />PDF</a>
+							<a class="btn btn-sm btn-ghost" href={`/api/teacher/presentations/${id}/pdf`} download><Icon name="download" size={14} />{tr("PDF")}</a>
 						{:else}
-							<span class="flex-1">Upload a PDF{drive ? ' or PowerPoint file, or choose one in Google Drive' : ''}. Each page becomes a slide.</span>
+							<span class="flex-1">{tr("Upload a PDF{0}. Each page becomes a slide.", [drive ? tr(" or PowerPoint file, or choose one in Google Drive") : ''])}</span>
 						{/if}
-						<label class="btn btn-sm" class:btn-primary={!p.slide_count}><Icon name="upload" size={14} />{p.slide_count ? 'Replace' : 'Upload'}
-							<input class="sr-only" type="file" accept={drive ? ACCEPT : '.pdf,application/pdf'} onchange={choose} aria-label="Choose a presentation file" /></label>
-						{#if drive}<button class="btn btn-sm" onclick={fromDrive}><Icon name="cloud" size={14} />From Drive</button>{/if}
+						<label class="btn btn-sm" class:btn-primary={!p.slide_count}><Icon name="upload" size={14} />{p.slide_count ? tr("Replace") : tr("Upload")}
+							<input class="sr-only" type="file" accept={drive ? ACCEPT : '.pdf,application/pdf'} onchange={choose} aria-label={tr("Choose a presentation file")} /></label>
+						{#if drive}<button class="btn btn-sm" onclick={fromDrive}><Icon name="cloud" size={14} />{tr("From Drive")}</button>{/if}
 					</div>
 					<p class="small muted m-0">
-						PDF up to 50 MB and 300 pages; your browser turns the pages into pictures, so big files take a moment.
-						{#if drive}PowerPoint, OpenDocument, Keynote and Google Slides are converted in your Google Drive first.{:else}For PowerPoint or Google Slides, <a href="/t/settings">connect Google Drive</a>, or save the file as a PDF.{/if}
+						{tr("PDF up to 50 MB and 300 pages; your browser turns the pages into pictures, so big files take a moment.")}
+						{#if drive}{tr("PowerPoint, OpenDocument, Keynote and Google Slides are converted in your Google Drive first.")}{:else}{tr("For PowerPoint or Google Slides,")} <a href="/t/settings">{tr("connect Google Drive")}</a>{tr(", or save the file as a PDF.")}{/if}
 					</p>
 				{/if}
 			</div>
 			{#if slides.length}
-				<ol class="thumbs" aria-label="Slides">
+				<ol class="thumbs" aria-label={tr("Slides")}>
 					{#each slides as s (s.n)}
 						<li>
 							<img src={thumb(s.n)} alt={slideAlt(s, slides.length)} width={s.width} height={s.height} loading="lazy" />
@@ -214,28 +215,28 @@
 			{/if}
 		{:else if tab === 'settings' && form}
 			<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={saveSettings}>
-				<div><label for="pt">Title</label><input id="pt" class="input w-full" class:input-error={errors.title} bind:value={form.title} maxlength="200" required /></div>
-				<div><label for="pd">Description <span class="muted">(shown above the slides)</span></label><textarea id="pd" class="textarea w-full" rows="2" bind:value={form.description}></textarea></div>
+				<div><label for="pt">{tr("Title")}</label><input id="pt" class="input w-full" class:input-error={errors.title} bind:value={form.title} maxlength="200" required /></div>
+				<div><label for="pd">{tr("Description")} <span class="muted">{tr("(shown above the slides)")}</span></label><textarea id="pd" class="textarea w-full" rows="2" bind:value={form.description}></textarea></div>
 				<div class="vstack gap-1">
-					<span class="font-semibold">Moving through it</span>
-					<OptionGroup label="Moving through it" value={String(form.allow_jump)} onchange={(v) => form && (form.allow_jump = v === 'true')} options={[
+					<span class="font-semibold">{tr("Moving through it")}</span>
+					<OptionGroup label={tr("Moving through it")} value={String(form.allow_jump)} onchange={(v) => form && (form.allow_jump = v === 'true')} options={[
 						{ v: 'true', label: 'Any slide', icon: 'arrow-up-down', hint: 'Students can go to any slide, for example to look something up again.' },
 						{ v: 'false', label: 'In order', icon: 'arrow-right', hint: 'Students see each slide before the next; they can always go back.' }
 					]} />
 				</div>
 				<div class="vstack gap-1">
-					<span class="font-semibold">Downloading the PDF</span>
-					<OptionGroup label="Downloading the PDF" value={String(form.allow_download)} onchange={(v) => form && (form.allow_download = v === 'true')} options={[
+					<span class="font-semibold">{tr("Downloading the PDF")}</span>
+					<OptionGroup label={tr("Downloading the PDF")} value={String(form.allow_download)} onchange={(v) => form && (form.allow_download = v === 'true')} options={[
 						{ v: 'false', label: 'Not allowed', icon: 'eye', hint: 'Students see the slides here only.' },
 						{ v: 'true', label: 'Allowed', icon: 'download', hint: 'Students can download the PDF, for example to print it.' }
 					]} />
 				</div>
 				<div class="flex flex-wrap gap-4">
-					<div><label for="po">Opens <span class="muted">(optional)</span></label><input id="po" class="input" type="datetime-local" bind:value={form.opens} /></div>
-					<div><label for="pdue">See by <span class="muted">(optional)</span></label><input id="pdue" class="input" class:input-error={errors.due_at} type="datetime-local" bind:value={form.due} />{#if errors.due_at}<p class="field-error m-0">{errors.due_at}</p>{/if}</div>
+					<div><label for="po">{tr("Opens")} <span class="muted">{tr("(optional)")}</span></label><input id="po" class="input" type="datetime-local" bind:value={form.opens} /></div>
+					<div><label for="pdue">{tr("See by")} <span class="muted">{tr("(optional)")}</span></label><input id="pdue" class="input" class:input-error={errors.due_at} type="datetime-local" bind:value={form.due} />{#if errors.due_at}<p class="field-error m-0">{errors.due_at}</p>{/if}</div>
 				</div>
-				<p class="small muted m-0">Students are told that you see which slides they view and for how long.</p>
-				<div class="flex flex-wrap gap-2"><button class="btn btn-primary">Save settings</button><span class="spacer"></span><button type="button" class="btn btn-error btn-outline" onclick={remove}>Delete presentation</button></div>
+				<p class="small muted m-0">{tr("Students are told that you see which slides they view and for how long.")}</p>
+				<div class="flex flex-wrap gap-2"><button class="btn btn-primary">{tr("Save settings")}</button><span class="spacer"></span><button type="button" class="btn btn-error btn-outline" onclick={remove}>{tr("Delete presentation")}</button></div>
 			</form>
 		{:else if tab === 'analysis'}
 			<PresentationAnalysis {id} />
@@ -244,31 +245,31 @@
 			{:else}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table">
-						<thead><tr><th>Student</th><th>Progress</th><th class="text-right">Slides seen</th><th class="text-right">Own pace</th><th class="text-right">Live</th><th><span class="sr-only">Actions</span></th></tr></thead>
+						<thead><tr><th>{tr("Student")}</th><th>{tr("Progress")}</th><th class="text-right">{tr("Slides seen")}</th><th class="text-right">{tr("Own pace")}</th><th class="text-right">{tr("Live")}</th><th><span class="sr-only">{tr("Actions")}</span></th></tr></thead>
 						<tbody>
 							{#each report.students as s (s.user_id)}
 								<tr>
 									<td>{s.name}{#if s.student_number}<span class="small muted">{' · '}{s.student_number}</span>{/if}</td>
 									<td><span class="badge badge-soft" class:ok={s.finished}>{progress(s)}</span></td>
-									<td class="text-right tabular">{s.started ? `${s.seen} of ${p.slide_count}` : '—'}</td>
+									<td class="text-right tabular">{s.started ? tr("{0} of {1}", [s.seen, p.slide_count]) : '—'}</td>
 									<td class="text-right tabular">{s.started ? duration(s.seconds) : '—'}</td>
 									<td class="text-right tabular">{s.live_seconds ? duration(s.live_seconds) : '—'}</td>
-									<td>{#if s.viewer_id}<button class="btn btn-sm" onclick={() => openDetail(s)}>By slide</button>{/if}</td>
+									<td>{#if s.viewer_id}<button class="btn btn-sm" onclick={() => openDetail(s)}>{tr("By slide")}</button>{/if}</td>
 								</tr>
-							{:else}<tr><td colspan="6" class="muted">No students in this classroom yet.</td></tr>{/each}
+							{:else}<tr><td colspan="6" class="muted">{tr("No students in this classroom yet.")}</td></tr>{/each}
 						</tbody>
 					</table>
 				</div>
 				{#if detail}
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-						<div class="flex items-center gap-2"><h3 class="m-0">{detail.name}, slide by slide</h3><span class="spacer"></span><IconBtn icon="x" label="Close" hint="Close the slide times" onclick={() => (detail = null)} /></div>
+						<div class="flex items-center gap-2"><h3 class="m-0">{tr("{0}, slide by slide", [detail.name])}</h3><span class="spacer"></span><IconBtn icon="x" label={tr("Close")} hint={tr("Close the slide times")} onclick={() => (detail = null)} /></div>
 						<div class="table-wrap">
 							<table class="table table-sm">
-								<thead><tr><th>Slide</th><th class="text-right">Own pace</th><th class="text-right">Live</th><th class="text-right">First seen</th></tr></thead>
+								<thead><tr><th>{tr("Slide")}</th><th class="text-right">{tr("Own pace")}</th><th class="text-right">{tr("Live")}</th><th class="text-right">{tr("First seen")}</th></tr></thead>
 								<tbody>
 									{#each detail.slides as st (st.n)}
 										<tr class:muted={!st.first_at}><td>{st.n}</td><td class="text-right tabular">{st.first_at ? duration(st.seconds) : '—'}</td><td class="text-right tabular">{st.live_seconds ? duration(st.live_seconds) : '—'}</td>
-											<td class="text-right small tabular">{st.first_at ? new Date(st.first_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not seen'}</td></tr>
+											<td class="text-right small tabular">{st.first_at ? new Date(st.first_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : tr("Not seen")}</td></tr>
 									{/each}
 								</tbody>
 							</table>
@@ -277,8 +278,8 @@
 				{/if}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 					<table class="table table-sm">
-						<caption class="text-left font-semibold pb-2">Each slide</caption>
-						<thead><tr><th>Slide</th><th class="text-right">Students</th><th class="text-right">Median time</th><th class="text-right">Live: students</th><th class="text-right">Live: median</th></tr></thead>
+						<caption class="text-left font-semibold pb-2">{tr("Each slide")}</caption>
+						<thead><tr><th>{tr("Slide")}</th><th class="text-right">{tr("Students")}</th><th class="text-right">{tr("Median time")}</th><th class="text-right">{tr("Live: students")}</th><th class="text-right">{tr("Live: median")}</th></tr></thead>
 						<tbody>
 							{#each report.slides as sv (sv.n)}
 								<tr><td>{sv.n}{#if sv.text}<span class="small muted">{' · '}{sv.text.slice(0, 60)}</span>{/if}</td><td class="text-right tabular">{sv.viewers}</td><td class="text-right tabular">{sv.viewers ? duration(sv.median_seconds) : '—'}</td><td class="text-right tabular">{sv.live_viewers}</td><td class="text-right tabular">{sv.live_viewers ? duration(sv.live_median_seconds) : '—'}</td></tr>

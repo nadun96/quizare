@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // A classroom's reports for paper: locked PDFs (D-141) and the print page, both
 // with the classroom's header, footer, logo and colour (D-143). A PDF's pages
 // are pictures the browser draws, so Sinhala and Tamil names show correctly and
@@ -231,7 +232,7 @@ export function headerLines(h: ReportHeader, fallbackTitle: string, today: Date)
 	return { institution: h.institution, title: h.title || fallbackTitle, subtitle: h.subtitle, meta };
 }
 
-const shortDate = (d: Date) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+const shortDate = (d: Date) => d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'long', year: 'numeric' });
 
 export const pageLabel = (i: number, n: number) => `Page ${i + 1} of ${n}`;
 

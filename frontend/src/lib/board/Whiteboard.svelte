@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Real-time whiteboard (V2-09, D-47, D-52). Pen lines are sent in pieces
 	// every 200 ms while drawing, so viewers see them grow; shapes and text are
 	// sent when finished. Pieces go out one request at a time, in order, and
@@ -118,7 +119,7 @@
 	const queue = new StrokeQueue(
 		(s) => client.add(s),
 		(saved) => board.apply({ type: 'board', op: 'add', strokes: saved }),
-		(e) => toast(e instanceof Error ? e.message : 'Could not draw', 'error')
+		(e) => toast(e instanceof Error ? e.message : tr("Could not draw"), 'error')
 	);
 	const send = (s: NewStroke) => queue.push(s);
 
@@ -209,7 +210,7 @@
 			const gone = await client.erase(ids);
 			board.apply({ type: 'board', op: 'remove', ids: gone });
 		} catch {
-			toast('Could not erase', 'error');
+			toast(tr("Could not erase"), 'error');
 		} finally {
 			hidden = new Set([...hidden].filter((id) => !ids.includes(id)));
 		}
@@ -217,19 +218,19 @@
 
 	async function undo() {
 		const g = mine.pop();
-		if (!g) return toast('Nothing of yours to undo', 'info');
+		if (!g) return toast(tr("Nothing of yours to undo"), 'info');
 		try {
 			// Pieces of the line may still be on their way: undo them too.
 			await queue.idle();
 			const gone = await client.erase([], g);
 			board.apply({ type: 'board', op: 'remove', ids: gone });
 		} catch {
-			toast('Could not undo', 'error');
+			toast(tr("Could not undo"), 'error');
 		}
 	}
 	async function clearAll() {
 		if (!client.clear) return;
-		if (!(await confirmDialog({ title: 'Clear the whole board?', body: 'Every mark disappears for everyone. This cannot be undone.', confirm: 'Clear board', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Clear the whole board?"), body: tr("Every mark disappears for everyone. This cannot be undone."), confirm: tr("Clear board"), danger: true }))) return;
 		await client.clear();
 		board.apply({ type: 'board', op: 'clear' });
 	}
@@ -292,7 +293,7 @@
 	});
 	async function exportPNG() {
 		const blob = await toPNG(board.strokes);
-		if (!blob) return toast('Export is not supported in this browser', 'warning');
+		if (!blob) return toast(tr("Export is not supported in this browser"), 'warning');
 		const a = document.createElement('a');
 		a.href = URL.createObjectURL(blob);
 		a.download = `${title.replace(/[^\w-]+/g, '-').slice(0, 60) || 'whiteboard'}.png`;
@@ -319,36 +320,36 @@
 <svelte:window onkeydown={keys} />
 <svelte:document onfullscreenchange={fullscreenChange} />
 
-<div class="wb" class:full class:fit role="group" aria-label="Whiteboard" bind:this={root} style:--tb-h="{toolbarH}px">
+<div class="wb" class:full class:fit role="group" aria-label={tr("Whiteboard")} bind:this={root} style:--tb-h="{toolbarH}px">
 	{#if fit && toolsHidden}
-		<button type="button" class="btn btn-sm show-tools" onclick={() => (toolsHidden = false)}><Icon name="pencil" size={15} />{board.canDraw ? 'Tools' : 'View only'}</button>
+		<button type="button" class="btn btn-sm show-tools" onclick={() => (toolsHidden = false)}><Icon name="pencil" size={15} />{board.canDraw ? tr("Tools") : tr("View only")}</button>
 	{:else}
-	<div class="toolbar" role="toolbar" aria-label="Whiteboard tools" bind:this={toolbarEl}>
+	<div class="toolbar" role="toolbar" aria-label={tr("Whiteboard tools")} bind:this={toolbarEl}>
 		{#if board.canDraw}
 			<div class="grp">
 				{#each TOOLS as [t, icon, name] (t)}
 					<IconBtn {icon} label={name} class="btn-sm {tool === t ? 'btn-primary' : ''}" aria-pressed={tool === t} tip="bottom" onclick={() => (tool = t)} />
 				{/each}
 			</div>
-			<div class="grp" aria-label="Colour">
+			<div class="grp" aria-label={tr("Colour")}>
 				{#each INKS as [c, name] (c)}
 					<span class="tooltip tooltip-bottom" data-tip={name}><button type="button" class="swatch" class:on={color === c} style:background={c} aria-label={name} aria-pressed={color === c} onclick={() => (color = c)}></button></span>
 				{/each}
 			</div>
-			<div class="grp" aria-label="Size">
+			<div class="grp" aria-label={tr("Size")}>
 				{#each SIZES as [n, name] (n)}
-					<span class="tooltip tooltip-bottom" data-tip="{name} line"><button type="button" class="btn btn-sm btn-square" class:btn-primary={size === n} aria-pressed={size === n} aria-label="{name} line" onclick={() => (size = n)}><span class="dot" style:width="{4 + n}px" style:height="{4 + n}px"></span></button></span>
+					<span class="tooltip tooltip-bottom" data-tip={tr("{0} line", [name])}><button type="button" class="btn btn-sm btn-square" class:btn-primary={size === n} aria-pressed={size === n} aria-label={tr("{0} line", [name])} onclick={() => (size = n)}><span class="dot" style:width="{4 + n}px" style:height="{4 + n}px"></span></button></span>
 				{/each}
 			</div>
-			<span class="tooltip tooltip-bottom" data-tip="Undo your last mark (Ctrl+Z)"><button type="button" class="btn btn-sm" onclick={undo}><Icon name="undo" size={16} />Undo</button></span>
-			{#if teacher && client.clear}<button type="button" class="btn btn-sm btn-ghost text-error" onclick={clearAll}><Icon name="x" size={16} />Clear</button>{/if}
+			<span class="tooltip tooltip-bottom" data-tip={tr("Undo your last mark (Ctrl+Z)")}><button type="button" class="btn btn-sm" onclick={undo}><Icon name="undo" size={16} />{tr("Undo")}</button></span>
+			{#if teacher && client.clear}<button type="button" class="btn btn-sm btn-ghost text-error" onclick={clearAll}><Icon name="x" size={16} />{tr("Clear")}</button>{/if}
 		{:else}
-			<span class="small muted flex items-center gap-1"><Icon name="eye" size={14} />View only</span>
+			<span class="small muted flex items-center gap-1"><Icon name="eye" size={14} />{tr("View only")}</span>
 		{/if}
 		<span class="spacer"></span>
-		{#if !fit}<IconBtn icon={full ? 'minimize' : 'maximize'} label={full ? 'Exit full screen' : 'Full screen'} hint={full ? 'Exit full screen (Esc)' : 'Full screen'} class="btn-sm btn-ghost" tip="left" aria-pressed={full} onclick={toggleFull} />{/if}
-		<span class="tooltip tooltip-left" data-tip="Download the board as a PNG image"><button type="button" class="btn btn-sm btn-ghost" onclick={exportPNG}><Icon name="download" size={16} />PNG</button></span>
-		{#if fit}<IconBtn icon="eye-off" label="Hide tools" hint="Hide the tools" class="btn-sm btn-ghost" tip="left" onclick={() => (toolsHidden = true)} />{/if}
+		{#if !fit}<IconBtn icon={full ? 'minimize' : 'maximize'} label={full ? tr("Exit full screen") : tr("Full screen")} hint={full ? tr("Exit full screen (Esc)") : tr("Full screen")} class="btn-sm btn-ghost" tip="left" aria-pressed={full} onclick={toggleFull} />{/if}
+		<span class="tooltip tooltip-left" data-tip={tr("Download the board as a PNG image")}><button type="button" class="btn btn-sm btn-ghost" onclick={exportPNG}><Icon name="download" size={16} />{tr("PNG")}</button></span>
+		{#if fit}<IconBtn icon="eye-off" label={tr("Hide tools")} hint={tr("Hide the tools")} class="btn-sm btn-ghost" tip="left" onclick={() => (toolsHidden = true)} />{/if}
 	</div>
 	{/if}
 	<div class="surface" bind:this={wrap} role="img" aria-label={label}>
@@ -357,7 +358,7 @@
 			aria-hidden="true" onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}></canvas>
 		{#if textAt}
 			<input class="text-in" style:left="{(textAt.x / BOARD_W) * 100}%" style:top="{(textAt.y / BOARD_H) * 100}%" style:color={color}
-				maxlength="200" aria-label="Text to add" bind:this={textInput} bind:value={textAt.value}
+				maxlength="200" aria-label={tr("Text to add")} bind:this={textInput} bind:value={textAt.value}
 				onkeydown={(e) => { if (e.key === 'Enter') commitText(); else if (e.key === 'Escape') textAt = null; }} onblur={commitText} />
 		{/if}
 	</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The projector's view of a live presentation (D-77): only the current
 	// slide, filling the window, following the presenter. Arrow keys move it
 	// too, for a teacher at that computer. Press F or double-click for full screen.
@@ -58,16 +59,16 @@
 	}
 </script>
 
-<svelte:head><title>{p?.title ?? 'Presentation'}</title></svelte:head>
+<svelte:head><title>{p?.title ?? tr("Presentation")}</title></svelte:head>
 <svelte:window onkeydown={key} />
 
 <div class="screen" role="presentation" ondblclick={full}>
 	{#if ended}
-		<p class="msg">The presentation has ended.</p>
+		<p class="msg">{tr("The presentation has ended.")}</p>
 	{:else if cur && p}
 		<img src={`/api/teacher/presentations/${id}/slides/${cur.n}?v=${p.version}`} alt={slideAlt(cur, slides.length)} />
 	{:else}
-		<p class="msg">Waiting for the presentation…</p>
+		<p class="msg">{tr("Waiting for the presentation…")}</p>
 	{/if}
 </div>
 

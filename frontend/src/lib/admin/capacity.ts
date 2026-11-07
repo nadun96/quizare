@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // The capacity test (D-125): its plan, report and the sums the admin's page
 // shows. The server measures; this turns the numbers into sentences.
 
@@ -36,7 +37,7 @@ export function parseSteps(text: string, most = 2000, maxSteps = 6): number[] | 
 	const parts = text.split(/[\s,;]+/).filter(Boolean);
 	if (!parts.length) return 'Enter how many students, for example 100, 250, 500';
 	const steps = parts.map((p) => Number(p.replace(/[^\d]/g, '')));
-	if (steps.some((n) => !Number.isInteger(n) || n < 1 || n > most)) return `Each step is 1 to ${most.toLocaleString()} students`;
+	if (steps.some((n) => !Number.isInteger(n) || n < 1 || n > most)) return `Each step is 1 to ${most.toLocaleString(localeTag())} students`;
 	if (steps.length > maxSteps) return `At most ${maxSteps} steps`;
 	if (steps.some((n, i) => i > 0 && n <= steps[i - 1])) return 'Each step needs more students than the one before';
 	return steps;
@@ -70,7 +71,7 @@ export function verdict(r: Run): string {
 	if (r.status === 'running') return 'The test is running.';
 	if (!rep || (!rep.steps?.length && rep.error)) return rep?.error ? `The test didn’t run: ${rep.error}` : 'The test didn’t run.';
 	const last = rep.steps[rep.steps.length - 1];
-	const n = (x: number) => x.toLocaleString();
+	const n = (x: number) => x.toLocaleString(localeTag());
 	if (r.status === 'passed') return `This server handled every step, up to ${n(rep.max)} students taking a quiz at once.`;
 	if (r.status === 'failed') {
 		const why = last.reasons?.[0] ? `: ${last.reasons[0]}` : '';
@@ -90,16 +91,16 @@ export function advice(r: Run): string[] {
 	const si = rep.sign_in ?? { network_burst: 300, network_per_sec: 5, workers: 2 };
 	if (limited)
 		out.push(r.plan.one_network
-			? `${limited.toLocaleString()} sign-ins were held back by the per-network limit (${si.network_burst.toLocaleString()} at once, then ${si.network_per_sec} a second from one internet address) and tried again. Raise it under Platform settings → Sign-in limits, or have students sign in a few minutes early.`
-			: `${limited.toLocaleString()} sign-ins were refused for trying too often: students who kept retrying while the server was busy reached the per-account limit (10 tries, then one every 30 s).`);
+			? `${limited.toLocaleString(localeTag())} sign-ins were held back by the per-network limit (${si.network_burst.toLocaleString(localeTag())} at once, then ${si.network_per_sec} a second from one internet address) and tried again. Raise it under Platform settings → Sign-in limits, or have students sign in a few minutes early.`
+			: `${limited.toLocaleString(localeTag())} sign-ins were refused for trying too often: students who kept retrying while the server was busy reached the per-account limit (10 tries, then one every 30 s).`);
 	const busy = rep.steps.reduce((n, s) => n + (s.errors?.login_busy ?? 0), 0);
-	if (busy) out.push(`The server asked ${busy.toLocaleString()} sign-ins to wait while it checked passwords (${si.workers} at a time). Signing in early spreads this out; on a server with spare cores, more checks at a time (Platform settings → Sign-in limits) help too.`);
+	if (busy) out.push(`The server asked ${busy.toLocaleString(localeTag())} sign-ins to wait while it checked passwords (${si.workers} at a time). Signing in early spreads this out; on a server with spare cores, more checks at a time (Platform settings → Sign-in limits) help too.`);
 	const top = rep.steps[rep.steps.length - 1];
-	if (top.cpu_peak >= 85) out.push(`The processor reached ${Math.round(top.cpu_peak)} % with ${top.students.toLocaleString()} students: that’s the limit here. More cores would raise it.`);
-	if (top.db_waits > 100) out.push(`Requests waited for a database connection ${top.db_waits.toLocaleString()} times at ${top.students.toLocaleString()} students (the server uses ${rep.db_max}).`);
+	if (top.cpu_peak >= 85) out.push(`The processor reached ${Math.round(top.cpu_peak)} % with ${top.students.toLocaleString(localeTag())} students: that’s the limit here. More cores would raise it.`);
+	if (top.db_waits > 100) out.push(`Requests waited for a database connection ${top.db_waits.toLocaleString(localeTag())} times at ${top.students.toLocaleString(localeTag())} students (the server uses ${rep.db_max}).`);
 	if (rep.page_kb && r.plan.link_mbps) {
 		const s = firstLoadSeconds(rep.max || rep.steps[0].students, rep.page_kb, r.plan.link_mbps);
-		if (s > 30) out.push(`If ${(rep.max || rep.steps[0].students).toLocaleString()} students open the app for the first time at the same moment, the download takes about ${fmtSecs(s)} at ${r.plan.link_mbps} Mbit/s. After that their browsers keep it.`);
+		if (s > 30) out.push(`If ${(rep.max || rep.steps[0].students).toLocaleString(localeTag())} students open the app for the first time at the same moment, the download takes about ${fmtSecs(s)} at ${r.plan.link_mbps} Mbit/s. After that their browsers keep it.`);
 	}
 	return out;
 }

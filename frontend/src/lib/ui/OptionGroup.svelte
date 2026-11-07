@@ -13,6 +13,7 @@
 </script>
 
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// One choice out of a few: icon plus a short label per option, and only the
 	// selected option's explanation below (D-63), so the form reads as a row
 	// of choices, not paragraphs. A radio group: arrow keys move, Home/End jump.
@@ -66,11 +67,11 @@
 				onclick={() => onchange(o.v)}
 				onkeydown={(e) => key(e, i)}
 			>
-				{#if o.icon}<Icon name={o.icon} size={size === 'md' ? 17 : 15} />{/if}<span>{o.label}</span>{#if on && value === undefined}<span class="dft">default</span>{/if}
+				{#if o.icon}<Icon name={o.icon} size={size === 'md' ? 17 : 15} />{/if}<span>{tr(o.label)}</span>{#if on && value === undefined}<span class="dft">{tr("default")}</span>{/if}
 			</button>
 		{/each}
 	</div>
-	{#if current?.hint}<p class="og-hint" id="{id}-hint">{current.hint}</p>{/if}
+	{#if current?.hint}<p class="og-hint" id="{id}-hint">{tr(current.hint)}</p>{/if}
 </div>
 
 <style>

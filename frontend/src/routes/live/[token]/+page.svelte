@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Public live leaderboard (V2-08, D-45). No login: the page polls the
 	// link's view at the interval the server suggests, pauses while the tab
 	// is hidden, and says plainly when the link has been turned off.
@@ -61,7 +62,7 @@
 </script>
 
 <svelte:head>
-	<title>{v ? v.title + ' · Live leaderboard' : 'Live leaderboard'}</title>
+	<title>{v ? tr("{0} · Live leaderboard", [v.title]) : tr("Live leaderboard")}</title>
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 <svelte:document onvisibilitychange={visibility} />
@@ -70,7 +71,7 @@
 	{#if gone}
 		<div class="center-box">
 			<span class="icon-box" aria-hidden="true"><Icon name="eye-off" size={28} /></span>
-			<h1 class="m-0">Leaderboard unavailable</h1>
+			<h1 class="m-0">{tr("Leaderboard unavailable")}</h1>
 			<p class="muted m-0">{gone}</p>
 		</div>
 	{:else if !v}
@@ -85,38 +86,38 @@
 			<span class="badge badge-soft badge-lg gap-1" class:badge-success={isLive} role="status">
 				{#if isLive}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{STATUS[v.status] ?? v.status}
 			</span>
-			<span class="badge badge-soft badge-lg gap-1 tabular" title={v.kind === 'session' ? 'Finished / joined' : 'Taking part'}>
+			<span class="badge badge-soft badge-lg gap-1 tabular" title={v.kind === 'session' ? tr("Finished / joined") : tr("Taking part")}>
 				<Icon name="users" size={16} />{v.finished !== undefined ? `${v.finished}/${v.joined}` : v.joined}
 			</span>
-			{#if stale}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={14} />Reconnecting</span>{/if}
+			{#if stale}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={14} />{tr("Reconnecting")}</span>{/if}
 		</header>
 
 		<main class="main" aria-live="polite" aria-busy={false}>
 			{#if !v.scoring}
-				<p class="muted center text-xl">This poll isn't scored, so there's no leaderboard.</p>
+				<p class="muted center text-xl">{tr("This poll isn't scored, so there's no leaderboard.")}</p>
 			{:else if !people.length && !teams.length}
 				<div class="center-box">
 					<span class="loading loading-dots loading-lg text-primary"></span>
-					<p class="muted m-0 text-xl">{v.kind === 'session' ? 'Results appear as students finish.' : 'Waiting for the first answers…'}</p>
+					<p class="muted m-0 text-xl">{v.kind === 'session' ? tr("Results appear as students finish.") : tr("Waiting for the first answers…")}</p>
 				</div>
 			{:else}
 				<div class="boards" class:two={both}>
 					{#if teams.length}
 						<section aria-labelledby="h-teams">
-							<h2 id="h-teams" class="board-h"><Icon name="users" size={22} />{v.kind === 'poll' ? 'Groups' : 'Teams'}</h2>
+							<h2 id="h-teams" class="board-h"><Icon name="users" size={22} />{v.kind === 'poll' ? tr("Groups") : tr("Teams")}</h2>
 							<Leaderboard ranks={teams} big unit={v.unit} limit={50} />
 						</section>
 					{/if}
 					{#if people.length}
 						<section aria-labelledby="h-people">
-							<h2 id="h-people" class="board-h"><Icon name="trophy" size={22} />{v.kind === 'poll' ? 'Participants' : 'Students'}</h2>
+							<h2 id="h-people" class="board-h"><Icon name="trophy" size={22} />{v.kind === 'poll' ? tr("Participants") : tr("Students")}</h2>
 							<Leaderboard ranks={people} big={!both} unit={v.unit} limit={50} />
 						</section>
 					{/if}
 				</div>
 			{/if}
 		</main>
-		<p class="foot small muted">{v.kind === 'session' ? 'Ranked by percentage of marks.' : 'Ranked by points.'} Updated {new Date(v.updated_at).toLocaleTimeString()}.</p>
+		<p class="foot small muted">{tr("{0} Updated {1}.", [v.kind === 'session' ? tr("Ranked by percentage of marks.") : tr("Ranked by points."), new Date(v.updated_at).toLocaleTimeString(localeTag())])}</p>
 	{/if}
 </div>
 

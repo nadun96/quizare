@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Live results for one poll question, by type (D-40). Charts follow the
 	// dataviz rules: one hue for single-series bars, a validated diverging
 	// palette for Likert, a one-hue ramp for grids, thin rounded bars, labels
@@ -94,7 +95,7 @@
 	const fileURL = (id: string) => `/api/teacher/polls/${pollId}/files/${id}`;
 	const fmtDate = (d: string) => {
 		const [y, m, day] = d.split('-').map(Number);
-		return new Date(y, m - 1, day).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+		return new Date(y, m - 1, day).toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 	};
 
 	function hideText(t: TextItem) {
@@ -108,26 +109,26 @@
 
 <div class="results" class:big>
 	{#if answerKey && question.type !== 'SINGLE' && question.type !== 'MULTI'}
-		<p class="key-line small m-0"><Icon name="check-circle" size={14} /><span><strong>Correct answer:</strong> {describeKey(question, answerKey)}</span></p>
+		<p class="key-line small m-0"><Icon name="check-circle" size={14} /><span><strong>{tr("Correct answer:")}</strong> {describeKey(question, answerKey)}</span></p>
 	{/if}
 	<div class="res-head">
 		<span class="small muted"><strong class="tabular text-base-content">{r.responses}</strong> {r.responses === 1 ? 'response' : 'responses'}</span>
 		<span class="spacer"></span>
 		{#if hasTable && r.responses > 0}
-			<button type="button" class="btn btn-ghost btn-xs" aria-pressed={table} onclick={() => (table = !table)}>{table ? 'Show chart' : 'Show table'}</button>
+			<button type="button" class="btn btn-ghost btn-xs" aria-pressed={table} onclick={() => (table = !table)}>{table ? tr("Show chart") : tr("Show table")}</button>
 		{/if}
 	</div>
 
 	<!-- The room needs to see a choice question's options before anyone has answered. -->
 	{#if r.responses === 0 && !texts.length && !(toon && (question.type === 'SINGLE' || question.type === 'MULTI'))}
-		<p class="waiting muted small"><span class="loading loading-dots loading-sm text-primary"></span> Waiting for answers…</p>
+		<p class="waiting muted small"><span class="loading loading-dots loading-sm text-primary"></span> {tr("Waiting for answers…")}</p>
 	{:else if question.type === 'SINGLE' || question.type === 'MULTI'}
 		{#if table}
-			<table class="table table-sm"><thead><tr><th>Option</th><th class="text-right">People</th><th class="text-right">Share</th></tr></thead>
-				<tbody>{#each optionBars as o (o.id)}<tr><td>{o.label}</td><td class="text-right tabular">{o.n}</td><td class="text-right tabular">{pct(o.n, r.responses)}%</td></tr>{/each}</tbody></table>
+			<table class="table table-sm"><thead><tr><th>{tr("Option")}</th><th class="text-right">{tr("People")}</th><th class="text-right">{tr("Share")}</th></tr></thead>
+				<tbody>{#each optionBars as o (o.id)}<tr><td>{tr(o.label)}</td><td class="text-right tabular">{o.n}</td><td class="text-right tabular">{pct(o.n, r.responses)}%</td></tr>{/each}</tbody></table>
 		{:else if toon}
 			<ToonChoices options={optionBars} responses={r.responses} {big} correct={answerKey?.correct ?? null} />
-			{#if question.type === 'MULTI'}<p class="small muted m-0 mt-2">Percentages are of respondents; people could choose more than one.</p>{/if}
+			{#if question.type === 'MULTI'}<p class="small muted m-0 mt-2">{tr("Percentages are of respondents; people could choose more than one.")}</p>{/if}
 		{:else}
 			<ul class="bars">
 				{#each optionBars as o, i (o.id)}
@@ -135,32 +136,32 @@
 					<!-- Chart marks take focus so keyboard users get the same tooltip as mouse users. -->
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 					<li class="bar-row" class:correct={right} tabindex="0" aria-label="{o.label}{right ? ' (correct)' : ''}: {o.n} ({pct(o.n, r.responses)}%)">
-						<span class="bar-label"><span class="letter-chip" aria-hidden="true">{#if right}<Icon name="check" size={13} />{:else}{String.fromCharCode(65 + i)}{/if}</span>{o.label}</span>
+						<span class="bar-label"><span class="letter-chip" aria-hidden="true">{#if right}<Icon name="check" size={13} />{:else}{String.fromCharCode(65 + i)}{/if}</span>{tr(o.label)}</span>
 						<span class="bar-track"><span class="bar" style:width="{(o.n / maxBar) * 100}%"></span></span>
 						<span class="bar-value tabular">{pct(o.n, r.responses)}% <span class="muted">({o.n})</span></span>
-						<span class="tip" role="tooltip">{o.label}: {o.n} {o.n === 1 ? 'person' : 'people'}, {pct(o.n, r.responses)}%</span>
+						<span class="tip" role="tooltip">{tr(o.label)}: {o.n} {o.n === 1 ? 'person' : 'people'}, {pct(o.n, r.responses)}%</span>
 					</li>
 				{/each}
 			</ul>
-			{#if question.type === 'MULTI'}<p class="small muted m-0">Percentages are of respondents; people could choose more than one.</p>{/if}
+			{#if question.type === 'MULTI'}<p class="small muted m-0">{tr("Percentages are of respondents; people could choose more than one.")}</p>{/if}
 		{/if}
 	{:else if question.type === 'WORD_CLOUD'}
 		{#if table}
-			<table class="table table-sm"><thead><tr><th>Word</th><th class="text-right">Mentions</th></tr></thead>
-				<tbody>{#each r.words ?? [] as w (w.word)}<tr class:opacity-50={w.hidden}><td>{w.word}{w.hidden ? ' (hidden)' : ''}</td><td class="text-right tabular">{w.count}</td></tr>{/each}</tbody></table>
+			<table class="table table-sm"><thead><tr><th>{tr("Word")}</th><th class="text-right">{tr("Mentions")}</th></tr></thead>
+				<tbody>{#each r.words ?? [] as w (w.word)}<tr class:opacity-50={w.hidden}><td>{w.word}{w.hidden ? tr(" (hidden)") : ''}</td><td class="text-right tabular">{w.count}</td></tr>{/each}</tbody></table>
 		{:else}
 			<WordCloud words={r.words ?? []} {teacher} {big} onhide={hideWord} />
-			{#if teacher}<p class="small muted m-0">Click a word to hide it from participants (and click again to bring it back).</p>{/if}
+			{#if teacher}<p class="small muted m-0">{tr("Click a word to hide it from participants (and click again to bring it back).")}</p>{/if}
 		{/if}
 	{:else if question.type === 'RATING' || question.type === 'SLIDER' || question.type === 'NUMBER'}
 		<div class="tiles">
-			<div class="tile"><span class="tile-label">Average</span><span class="tile-value">{stats?.mean ?? '–'}{question.type === 'RATING' ? ` / ${b.points ?? 5}` : b.unit ? ` ${b.unit}` : ''}</span></div>
-			<div class="tile"><span class="tile-label">Median</span><span class="tile-value">{stats?.median ?? '–'}</span></div>
-			<div class="tile"><span class="tile-label">Range</span><span class="tile-value">{stats ? `${stats.min}–${stats.max}` : '–'}</span></div>
+			<div class="tile"><span class="tile-label">{tr("Average")}</span><span class="tile-value">{stats?.mean ?? '–'}{question.type === 'RATING' ? ` / ${b.points ?? 5}` : b.unit ? ` ${b.unit}` : ''}</span></div>
+			<div class="tile"><span class="tile-label">{tr("Median")}</span><span class="tile-value">{stats?.median ?? '–'}</span></div>
+			<div class="tile"><span class="tile-label">{tr("Range")}</span><span class="tile-value">{stats ? `${stats.min}–${stats.max}` : '–'}</span></div>
 		</div>
 		{#if table}
-			<table class="table table-sm"><thead><tr><th>{question.type === 'RATING' ? 'Stars' : 'Value'}</th><th class="text-right">People</th></tr></thead>
-				<tbody>{#each stats?.buckets ?? [] as bk (bk.label)}<tr><td>{bk.label}</td><td class="text-right tabular">{bk.count}</td></tr>{/each}</tbody></table>
+			<table class="table table-sm"><thead><tr><th>{question.type === 'RATING' ? tr("Stars") : tr("Value")}</th><th class="text-right">{tr("People")}</th></tr></thead>
+				<tbody>{#each stats?.buckets ?? [] as bk (bk.label)}<tr><td>{tr(bk.label)}</td><td class="text-right tabular">{bk.count}</td></tr>{/each}</tbody></table>
 		{:else}
 			<div class="cols" role="list" style:--n={stats?.buckets.length ?? 1}>
 				{#each stats?.buckets ?? [] as bk (bk.label)}
@@ -168,15 +169,15 @@
 					<div class="col" role="listitem" tabindex="0" aria-label="{bk.label}: {bk.count}">
 						<span class="col-value tabular">{bk.count || ''}</span>
 						<span class="col-track"><span class="col-bar" style:height="{(bk.count / maxBucket) * 100}%"></span></span>
-						<span class="col-label">{question.type === 'RATING' ? '★'.repeat(Number(bk.label)) : bk.label}</span>
-						<span class="tip" role="tooltip">{bk.label}{question.type === 'RATING' ? ' stars' : ''}: {bk.count}</span>
+						<span class="col-label">{question.type === 'RATING' ? '★'.repeat(Number(bk.label)) : tr(bk.label)}</span>
+						<span class="tip" role="tooltip">{tr(bk.label)}{question.type === 'RATING' ? tr(" stars") : ''}: {bk.count}</span>
 					</div>
 				{/each}
 			</div>
 		{/if}
 	{:else if question.type === 'LIKERT'}
 		{#if table}
-			<div class="table-wrap"><table class="table table-sm"><thead><tr><th>Statement</th>{#each scale as l (l)}<th class="text-right">{l}</th>{/each}<th class="text-right">Mean</th></tr></thead>
+			<div class="table-wrap"><table class="table table-sm"><thead><tr><th>{tr("Statement")}</th>{#each scale as l (l)}<th class="text-right">{l}</th>{/each}<th class="text-right">{tr("Mean")}</th></tr></thead>
 				<tbody>{#each b.rows ?? [] as row (row.id)}{@const lr = likertRow(row.id)}<tr><td>{row.text}</td>{#each lr.counts as n, i (i)}<td class="text-right tabular">{n}</td>{/each}<td class="text-right tabular">{r.row_means?.[row.id] ?? '–'}</td></tr>{/each}</tbody></table></div>
 		{:else}
 			<div class="likert {likertColors}">
@@ -186,7 +187,7 @@
 				{#each b.rows ?? [] as row (row.id)}
 					{@const lr = likertRow(row.id)}
 					<div class="lk-row">
-						<span class="lk-label">{row.text} <span class="small muted ml-1">· mean {r.row_means?.[row.id] ?? '–'}</span></span>
+						<span class="lk-label">{row.text} <span class="small muted ml-1">{tr("· mean {0}", [r.row_means?.[row.id] ?? '–'])}</span></span>
 						<div class="lk-track" aria-hidden="true">
 							<span class="lk-mid"></span>
 							<div class="lk-bar" style:margin-left="{50 - lr.left * likertFit}%">
@@ -211,7 +212,7 @@
 				<tbody>{#each grid.rows as row (row.id)}<tr><td>{row.text}</td>{#each grid.cols as c (c.id)}<td class="text-right tabular">{r.grid?.[row.id]?.[c.id] ?? 0}</td>{/each}</tr>{/each}</tbody></table></div>
 		{:else}
 			<div class="table-wrap">
-				<div class="heat" style:--cols={grid.cols.length} role="table" aria-label="Answers by row and column">
+				<div class="heat" style:--cols={grid.cols.length} role="table" aria-label={tr("Answers by row and column")}>
 					<span role="columnheader"></span>
 					{#each grid.cols as c (c.id)}<span class="hh" role="columnheader">{c.text}</span>{/each}
 					{#each grid.rows as row (row.id)}
@@ -222,17 +223,17 @@
 							{@const t = tot ? n / tot : 0}
 							<span class="cell" class:ink={t > 0.55} style:--t={t} role="cell" tabindex="0" aria-label="{row.text}, {c.text}: {n}">
 								<span class="tabular">{n ? `${Math.round(t * 100)}%` : '–'}</span>
-								<span class="tip" role="tooltip">{row.text} → {c.text}: {n} of {tot}</span>
+								<span class="tip" role="tooltip">{tr("{0} → {1}: {2} of {3}", [row.text, c.text, n, tot])}</span>
 							</span>
 						{/each}
 					{/each}
 				</div>
 			</div>
-			<p class="small muted m-0">Shading shows each row's share; darker means more people.</p>
+			<p class="small muted m-0">{tr("Shading shows each row's share; darker means more people.")}</p>
 		{/if}
 	{:else if question.type === 'DRAG'}
 		{#if table}
-			<table class="table table-sm"><thead><tr><th>Item</th><th class="text-right">Average rank</th><th class="text-right">Ranked first</th></tr></thead>
+			<table class="table table-sm"><thead><tr><th>{tr("Item")}</th><th class="text-right">{tr("Average rank")}</th><th class="text-right">{tr("Ranked first")}</th></tr></thead>
 				<tbody>{#each ranks as x (x.id)}<tr><td>{nameOf(b.options, x.id)}</td><td class="text-right tabular">{x.avg_rank}</td><td class="text-right tabular">{x.first}</td></tr>{/each}</tbody></table>
 		{:else}
 			<ol class="ranks">
@@ -240,9 +241,9 @@
 					<li animate:flip={{ duration: flipMs() }}>
 						<span class="rank-n">{i + 1}</span>
 						<span class="rank-label">{nameOf(b.options, x.id)}</span>
-						<span class="small muted tabular">avg {x.avg_rank}</span>
-						<span class="tooltip bar-track mini" data-tip="Ranked first by {x.first}"><span class="bar" style:width="{(x.first / maxFirst) * 100}%"></span></span>
-						<span class="small muted tabular w-16 text-right">{x.first} first</span>
+						<span class="small muted tabular">{tr("avg {0}", [x.avg_rank])}</span>
+						<span class="tooltip bar-track mini" data-tip={tr("Ranked first by {0}", [x.first])}><span class="bar" style:width="{(x.first / maxFirst) * 100}%"></span></span>
+						<span class="small muted tabular w-16 text-right">{tr("{0} first", [x.first])}</span>
 					</li>
 				{/each}
 			</ol>
@@ -250,7 +251,7 @@
 	{:else if question.type === 'BLANK_TEXT'}
 		{#each b.blanks ?? [] as bl (bl)}
 			<div class="vstack">
-				<p class="m-0 font-semibold">Blank {bl}</p>
+				<p class="m-0 font-semibold">{tr("Blank {0}", [bl])}</p>
 				{#if table}
 					<table class="table table-sm"><tbody>{#each r.blank_words?.[bl] ?? [] as w (w.word)}<tr><td>{w.word}</td><td class="text-right tabular">{w.count}</td></tr>{/each}</tbody></table>
 				{:else}
@@ -284,10 +285,10 @@
 					{#if question.type === 'CODE'}<pre class="m-0"><code>{t.text}</code></pre>{:else}<p class="m-0">{t.text}</p>{/if}
 					{#if teacher}
 						<div class="mt-2 flex items-center gap-2">
-							<span class="small muted">{t.name || 'Anonymous'}</span>
+							<span class="small muted">{t.name || tr("Anonymous")}</span>
 							<span class="spacer"></span>
-							{#if t.hidden}<span class="badge badge-soft badge-sm">hidden</span>{/if}
-							{#if t.participant_id && !t.cell}<button type="button" class="btn btn-ghost btn-xs" onclick={() => hideText(t)}><Icon name={t.hidden ? 'eye' : 'eye-off'} size={14} />{t.hidden ? 'Show' : 'Hide'}</button>{/if}
+							{#if t.hidden}<span class="badge badge-soft badge-sm">{tr("hidden")}</span>{/if}
+							{#if t.participant_id && !t.cell}<button type="button" class="btn btn-ghost btn-xs" onclick={() => hideText(t)}><Icon name={t.hidden ? 'eye' : 'eye-off'} size={14} />{t.hidden ? tr("Show") : tr("Hide")}</button>{/if}
 						</div>
 					{/if}
 				</li>
@@ -301,30 +302,30 @@
 				{#each r.files ?? [] as f (f.file.id)}
 					<li class="file-card" class:is-hidden={f.hidden} in:fadeIn>
 						{#if f.file.removed}
-							<p class="small muted m-0">{f.file.name} · {f.name || 'Anonymous'} · removed in a storage clean-up</p>
+							<p class="small muted m-0">{tr("{0} · {1} · removed in a storage clean-up", [f.file.name, f.name || tr("Anonymous")])}</p>
 						{:else if question.type === 'AUDIO'}
 							<audio controls preload="none" src={fileURL(f.file.id)} class="w-full"></audio>
 						{:else if question.type === 'VIDEO'}
 							<!-- svelte-ignore a11y_media_has_caption -->
 							<video controls preload="none" src={fileURL(f.file.id)} class="w-full rounded-lg bg-black"></video>
 						{:else if f.file.content_type.startsWith('image/')}
-							<a href={fileURL(f.file.id)} target="_blank" rel="noopener"><img src={fileURL(f.file.id)} alt="Upload from {f.name || 'a participant'}" class="thumb" loading="lazy" /></a>
+							<a href={fileURL(f.file.id)} target="_blank" rel="noopener"><img src={fileURL(f.file.id)} alt={tr("Upload from {0}", [f.name || tr("a participant")])} class="thumb" loading="lazy" /></a>
 						{/if}
 						{#if !f.file.removed}
 						<div class="mt-2 flex items-center gap-2">
 							<div class="min-w-0 flex-1">
 								<p class="m-0 truncate font-semibold small">{f.file.name}</p>
-								<p class="small muted m-0">{f.name || 'Anonymous'} · {fmtSize(f.file.size)}</p>
+								<p class="small muted m-0">{f.name || tr("Anonymous")} · {fmtSize(f.file.size)}</p>
 							</div>
-							<a class="btn btn-ghost btn-xs" href={fileURL(f.file.id)} download={f.file.name}>Download</a>
-							<button type="button" class="btn btn-ghost btn-xs" onclick={() => onmoderate?.({ question_id: question.id, participant_id: f.participant_id, hidden: !f.hidden })}>{f.hidden ? 'Unhide' : 'Hide'}</button>
+							<a class="btn btn-ghost btn-xs" href={fileURL(f.file.id)} download={f.file.name}>{tr("Download")}</a>
+							<button type="button" class="btn btn-ghost btn-xs" onclick={() => onmoderate?.({ question_id: question.id, participant_id: f.participant_id, hidden: !f.hidden })}>{f.hidden ? tr("Unhide") : tr("Hide")}</button>
 						</div>
 						{/if}
 					</li>
 				{/each}
 			</ul>
 		{:else}
-			<p class="small muted m-0">Only the presenter can open uploaded files.</p>
+			<p class="small muted m-0">{tr("Only the presenter can open uploaded files.")}</p>
 		{/if}
 	{/if}
 </div>

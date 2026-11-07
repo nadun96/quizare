@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Display preferences (D-39, D-48): theme (ours or any daisyUI theme),
 	// main colour, button labels, text size and motion. The research found that
 	// letting students tune the screen reduces stress; also WCAG 1.4.4
@@ -24,8 +25,8 @@
 <div class="vstack">
 	<!-- Language (D-109): each name in its own script, so anyone can find theirs. -->
 	<fieldset class="m-0 border-0 p-0">
-		<legend class="small font-semibold mb-1 p-0">{t('lang.label')}{i18n.locale !== 'en' ? ' · Language' : ''}</legend>
-		<div class="join w-full" role="radiogroup" aria-label="Language">
+		<legend class="small font-semibold mb-1 p-0">{t('lang.label')}{i18n.locale !== 'en' ? tr(" · Language") : ''}</legend>
+		<div class="join w-full" role="radiogroup" aria-label={tr("Language")}>
 			{#each LOCALES as l (l.id)}
 				<button type="button" role="radio" lang={l.id} aria-checked={i18n.locale === l.id} title={l.english} class="join-item btn btn-sm flex-1" class:btn-primary={i18n.locale === l.id} onclick={() => i18n.set(l.id)}>{l.name}</button>
 			{/each}
@@ -34,7 +35,7 @@
 	</fieldset>
 	<fieldset class="m-0 border-0 p-0">
 		<legend class="small font-semibold mb-1 p-0">{t('display.theme')}</legend>
-		<div class="join w-full" role="radiogroup" aria-label="Our themes">
+		<div class="join w-full" role="radiogroup" aria-label={tr("Our themes")}>
 			{#each own as [v, l, icon] (v)}
 				<button type="button" role="radio" aria-checked={prefs.theme === v} class="join-item btn btn-sm flex-1 gap-1" class:btn-primary={prefs.theme === v} onclick={() => prefs.set('theme', v)}><Icon name={icon} size={15} />{l}</button>
 			{/each}
@@ -43,7 +44,7 @@
 			<summary class="collapse-title min-h-0 py-2 text-sm font-semibold">{t('display.moreThemes')}{#if !own.some(([v]) => v === prefs.theme)}<span class="badge badge-soft badge-primary badge-sm ml-2">{title(daisyTheme(prefs.theme)?.name ?? '')}</span>{/if}</summary>
 			<div class="collapse-content themes">
 				{#each groups as g (g.label)}
-					<p class="small muted m-0 mt-1">{g.label}</p>
+					<p class="small muted m-0 mt-1">{tr(g.label)}</p>
 					<div class="grid">
 						{#each g.list as t (t.name)}
 							<label class="tile" class:on={prefs.theme === themeValue(t.name)} style:background={t.base} style:color={t.text}>
@@ -54,7 +55,7 @@
 						{/each}
 					</div>
 				{/each}
-				<p class="small muted m-0 mt-2">Colours in these themes are adjusted where needed so text stays readable (WCAG AA).</p>
+				<p class="small muted m-0 mt-2">{tr("Colours in these themes are adjusted where needed so text stays readable (WCAG AA).")}</p>
 			</div>
 		</details>
 	</fieldset>
@@ -62,20 +63,20 @@
 	<fieldset class="m-0 border-0 p-0">
 		<legend class="small font-semibold mb-1 p-0">{t('display.mainColour')}</legend>
 		<div class="flex flex-wrap items-center gap-1.5">
-			<span class="tooltip" data-tip="The theme's own colour">
-				<button type="button" class="swatch none" aria-label="Theme colour" aria-pressed={!prefs.color} onclick={() => prefs.set('color', '')}><Icon name="x" size={12} /></button>
+			<span class="tooltip" data-tip={tr("The theme's own colour")}>
+				<button type="button" class="swatch none" aria-label={tr("Theme colour")} aria-pressed={!prefs.color} onclick={() => prefs.set('color', '')}><Icon name="x" size={12} /></button>
 			</span>
 			{#each COLORS as [c, name] (c)}
 				<span class="tooltip" data-tip={name}>
 					<button type="button" class="swatch" style:background={c} aria-label={name} aria-pressed={prefs.color.toLowerCase() === c} onclick={() => prefs.set('color', c)}></button>
 				</span>
 			{/each}
-			<label class="tooltip m-0" data-tip="Pick any colour">
-				<span class="sr-only">Pick any colour</span>
+			<label class="tooltip m-0" data-tip={tr("Pick any colour")}>
+				<span class="sr-only">{tr("Pick any colour")}</span>
 				<input type="color" class="picker" value={prefs.color || '#1f5aa6'} onchange={(e) => prefs.set('color', e.currentTarget.value)} />
 			</label>
 		</div>
-		{#if prefs.color && prefs.colorAdjusted}<p class="small muted m-0 mt-1 flex items-center gap-1"><Icon name="info" size={13} />Adjusted a little to stay readable on this theme.</p>{/if}
+		{#if prefs.color && prefs.colorAdjusted}<p class="small muted m-0 mt-1 flex items-center gap-1"><Icon name="info" size={13} />{tr("Adjusted a little to stay readable on this theme.")}</p>{/if}
 	</fieldset>
 
 	<label class="flex items-center justify-between gap-3 font-normal m-0">
@@ -87,7 +88,7 @@
 		<p id="{idPrefix}-text" class="small font-semibold m-0 mb-1">{t('display.textSize')}</p>
 		<div class="join w-full">
 			{#each sizes as [v, l, name] (v)}
-				<button type="button" role="radio" aria-checked={prefs.text === v} aria-label="{name} text" class="join-item btn btn-sm flex-1" class:btn-primary={prefs.text === v} onclick={() => prefs.set('text', v)}>{l}</button>
+				<button type="button" role="radio" aria-checked={prefs.text === v} aria-label={tr("{0} text", [name])} class="join-item btn btn-sm flex-1" class:btn-primary={prefs.text === v} onclick={() => prefs.set('text', v)}>{l}</button>
 			{/each}
 		</div>
 	</div>
