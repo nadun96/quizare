@@ -2,6 +2,7 @@ package grading
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -88,22 +89,30 @@ func (s *Service) ResultAccess(ctx context.Context, kind, itemID, userID string)
 
 // ReportItem is a quiz or tutorial with its setup, and how the class did on it.
 type ReportItem struct {
-	Kind          string   `json:"kind"`
-	ID            string   `json:"id"`
-	Title         string   `json:"title"`
-	Topic         string   `json:"topic"`
-	Module        string   `json:"module"`
-	Included      bool     `json:"included"`
-	Weight        float64  `json:"weight"`
-	Pick          string   `json:"pick"`
-	Detail        string   `json:"detail"`
-	ReviewMinutes int      `json:"review_minutes"`
-	GroupRule     string   `json:"group_rule"` // how a group's mark comes from its members' (D-141)
-	Taken         int      `json:"taken"`
-	Avg           *float64 `json:"avg"`
-	High          *float64 `json:"high"`
-	Low           *float64 `json:"low"`
-	MaxMarks      float64  `json:"max_marks"`
+	Kind          string    `json:"kind"`
+	ID            string    `json:"id"`
+	Title         string    `json:"title"`
+	Topic         string    `json:"topic"`
+	Module        string    `json:"module"`
+	Included      bool      `json:"included"`
+	Weight        float64   `json:"weight"`
+	Pick          string    `json:"pick"`
+	Detail        string    `json:"detail"`
+	ReviewMinutes int       `json:"review_minutes"`
+	GroupRule     string    `json:"group_rule"` // how a group's mark comes from its members' (D-141)
+	Taken         int       `json:"taken"`
+	Avg           *float64  `json:"avg"`
+	High          *float64  `json:"high"`
+	Low           *float64  `json:"low"`
+	MaxMarks      float64   `json:"max_marks"`
+	Date          time.Time `json:"date"` // a quiz's first session, a tutorial's publishing, a poll's opening
+}
+
+// ReportOptions says what else the report shows (D-156).
+type ReportOptions struct {
+	Violations bool `json:"violations"`
+	Attendance bool `json:"attendance"`
+	Dates      bool `json:"dates"`
 }
 
 // ReportMark is the mark the report uses for one student on one item.
@@ -125,6 +134,10 @@ type ReportStudent struct {
 	Total         float64               `json:"total"`   // weighted points
 	Missing       int                   `json:"missing"` // weighted items with no mark, which count 0
 	Final         *float64              `json:"final"`   // the total as a percentage of the weights
+	// Violations in each quiz in the report, and in all, counting every attempt
+	// of every session: an attempt thrown out for them matters most (D-156).
+	Violations      map[string]int `json:"violations,omitempty"`
+	ViolationsTotal int            `json:"violations_total"`
 }
 
 // ResultException is one student's different level or review time on an item.
@@ -145,6 +158,7 @@ type ClassReport struct {
 	Exceptions  []ResultException `json:"exceptions"`
 	ClassGroups []GroupRow        `json:"class_groups"` // the whole class's groups (D-141)
 	ItemGroups  []ItemGroups      `json:"item_groups"`  // items with groups of their own
+	Options     ReportOptions     `json:"options"`
 }
 
 // submission is one valid mark a student has on an item.
@@ -180,6 +194,48 @@ func pickMark(list []submission, pick string) submission {
 	return best
 }
 
+// loadReportExtras fills in the options and each student's violations.
+func (s *Service) loadReportExtras(ctx context.Context, classroomID string, rep *ClassReport) error {
+	err := s.pool.QueryRow(ctx, `SELECT show_violations, show_attendance, show_dates FROM grading.report_options WHERE classroom_id = $1`, classroomID).
+		Scan(&rep.Options.Violations, &rep.Options.Attendance, &rep.Options.Dates)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	included := map[string]bool{}
+	for _, it := range rep.Items {
+		included[Key(it.Kind, it.ID)] = it.Included
+	}
+	byUser := map[string]*ReportStudent{}
+	for i := range rep.Students {
+		byUser[rep.Students[i].UserID] = &rep.Students[i]
+	}
+	rows, err := s.pool.Query(ctx, `SELECT a.user_id::text, 'quiz:' || se.quiz_id::text, sum(a.violations)::int
+		FROM live.attempts a JOIN live.sessions se ON se.id = a.session_id
+		WHERE se.classroom_id = $1 AND a.violations > 0
+		GROUP BY a.user_id, se.quiz_id`, classroomID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var user, key string
+		var n int
+		if err := rows.Scan(&user, &key, &n); err != nil {
+			return err
+		}
+		st := byUser[user]
+		if st == nil || !included[key] {
+			continue
+		}
+		if st.Violations == nil {
+			st.Violations = map[string]int{}
+		}
+		st.Violations[key] = n
+		st.ViolationsTotal += n
+	}
+	return rows.Err()
+}
+
 // ClassReport builds the report from the current setup and marks.
 func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string) (ClassReport, error) {
 	name, err := s.teaches(ctx, teacherID, classroomID)
@@ -208,7 +264,7 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 				AND EXISTS (SELECT 1 FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL AND x.points > 0)
 		)
 		SELECT i.kind, i.id::text, i.title, i.topic, i.module, coalesce(ri.included, true),
-			coalesce(ri.weight, w.weight / 100, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average')
+			coalesce(ri.weight, w.weight / 100, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average'), i.at
 		FROM items i
 		LEFT JOIN grading.report_items ri ON ri.classroom_id = $1 AND ri.kind = i.kind AND ri.item_id = i.id
 		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = i.kind AND w.item_id = i.id
@@ -218,7 +274,7 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 	}
 	if rep.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (ReportItem, error) {
 		var it ReportItem
-		return it, r.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Module, &it.Included, &it.Weight, &it.Pick, &it.Detail, &it.ReviewMinutes, &it.GroupRule)
+		return it, r.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Module, &it.Included, &it.Weight, &it.Pick, &it.Detail, &it.ReviewMinutes, &it.GroupRule, &it.Date)
 	}); err != nil {
 		return rep, err
 	}
@@ -332,6 +388,9 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			it.Avg, it.High, it.Low = &a, &h, &l
 		}
 	}
+	if err := s.loadReportExtras(ctx, classroomID, &rep); err != nil {
+		return rep, err
+	}
 	rep.WeightTotal = round(rep.WeightTotal, 4)
 	rep.OutOf = round(rep.WeightTotal*100, 2)
 	for j := range rep.Students {
@@ -376,6 +435,7 @@ type ReportItemInput struct {
 type ReportSetup struct {
 	Items      []ReportItemInput `json:"items"`
 	Exceptions []ResultException `json:"exceptions"`
+	Options    *ReportOptions    `json:"options,omitempty"` // left out: as they are
 }
 
 func validDetail(d string) bool {
@@ -461,6 +521,13 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 		for _, x := range in.Exceptions {
 			if _, err := tx.Exec(ctx, `INSERT INTO grading.result_exceptions (classroom_id, kind, item_id, user_id, detail, review_minutes)
 				VALUES ($1, $2, $3, $4, $5, $6)`, classroomID, x.Kind, x.ID, x.UserID, x.Detail, x.ReviewMinutes); err != nil {
+				return err
+			}
+		}
+		if in.Options != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO grading.report_options (classroom_id, show_violations, show_attendance, show_dates) VALUES ($1, $2, $3, $4)
+				ON CONFLICT (classroom_id) DO UPDATE SET show_violations = $2, show_attendance = $3, show_dates = $4, updated_at = now()`,
+				classroomID, in.Options.Violations, in.Options.Attendance, in.Options.Dates); err != nil {
 				return err
 			}
 		}

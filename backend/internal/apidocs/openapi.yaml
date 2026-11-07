@@ -3629,6 +3629,13 @@ components:
         user_id: { type: string }
         detail: { type: string, enum: ['', marks, correctness, answers], description: "empty: the item's" }
         review_minutes: { type: integer, nullable: true, description: "null: the item's; 0: no limit" }
+    ReportOptions:
+      type: object
+      description: What else a class report shows (D-156)
+      properties:
+        violations: { type: boolean }
+        attendance: { type: boolean }
+        dates: { type: boolean }
     ClassReport:
       type: object
       properties:
