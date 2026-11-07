@@ -43,7 +43,7 @@ describe('downloading a report (D-141)', () => {
 		expect(calls.every((c) => c.method === 'GET')).toBe(true); // nothing saved, no form
 		expect(exportPdf).toHaveBeenCalledOnce();
 		const [sheets, header, title, file] = vi.mocked(exportPdf).mock.calls[0];
-		expect(sheets[0].rows).toEqual([['Amaya']]);
+		expect(sheets[0].rows).toEqual([[1, 'Amaya']]); // numbered (D-154)
 		expect(header.footer).toBe('© RUSL');
 		expect(title).toBe('Science: class report');
 		expect(file).toBe('Science');

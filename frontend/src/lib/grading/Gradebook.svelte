@@ -10,8 +10,11 @@
 	import { toast } from '../ui/toast.svelte';
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
-	import { classAverage, gradebookCSV, key, marksLine, studentRange, totalAverage, mergeTutoring, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
+	import { classAverage, gradebookCSV, key, marksLine, studentRange, totalAverage, mergeTutoring, scopedGradebook, scopeFrom, scopeLabel, scopeOptions, scopeValue, summarise, weightTotal, type GradeStudent, type Attendance, type AttendanceSummary, type Gradebook } from './grading';
+	import ReportControls from './ReportControls.svelte';
 	import ReportPdfButton from './ReportPdfButton.svelte';
+	import ReportTh from './ReportTh.svelte';
+	import { bandOptions, inBand, matches, newView, shownNote, sortRows, type ViewCol } from './reportView';
 	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
 	import ScopePicker from './ScopePicker.svelte';
 
@@ -80,17 +83,39 @@
 	}
 
 	const weighted = $derived(!!shown && shown.weight_total > 0);
+	// Search, filter and sort (D-154). The class figures below stay the whole class's.
+	let view = $state(newView());
+	const attendanceShown = $derived(scoped ? null : attendanceAll);
+	const viewCols = $derived<ViewCol<GradeStudent>[]>(shown ? [
+		{ key: 'student', label: 'Student', value: (s) => s.name },
+		{ key: 'id', label: 'Student ID', value: (s) => s.student_number },
+		...shown.items.map((it) => ({ key: key(it), label: it.title, value: (s: GradeStudent) => s.marks[key(it)]?.pct, numeric: true })),
+		{ key: 'average', label: 'Average', value: (s) => s.average, numeric: true },
+		{ key: 'marks', label: 'Total marks', value: (s) => s.marks_total, numeric: true },
+		...(weighted ? [{ key: 'points', label: 'Points', value: (s: GradeStudent) => s.total, numeric: true }, { key: 'final', label: 'Final', value: (s: GradeStudent) => s.final, numeric: true }] : []),
+		...(attendanceShown ? [{ key: 'attendance', label: 'Attendance', value: (s: GradeStudent) => attendanceShown.get(s.user_id)?.rate, numeric: true }] : [])
+	] : []);
+	const measure = (s: GradeStudent) => (weighted ? s.final : s.average);
+	const showOptions = $derived([...bandOptions(bands, weighted ? 'Final' : 'Average'), { v: 'missing', label: 'Has work missing' }]);
+	const shownStudents = $derived.by(() => {
+		if (!shown) return [];
+		const kept = shown.students.filter((s) =>
+			matches(`${s.name} ${s.student_number ?? ''}`, view.q) &&
+			(!view.show || (view.show === 'missing' ? shown.items.some((it) => !s.marks[key(it)]) : inBand(measure(s), view.show, bands))));
+		return sortRows(kept, viewCols, view.sort, view.dir);
+	});
+	const note = $derived(shown ? shownNote(shownStudents.length, shown.students.length, 'students') : '');
 	const fmt = (v: number | null | undefined, unit = '') => (v == null ? '–' : `${Math.round(v * 100) / 100}${unit}`);
 	const file = (what: string) => `${what}-${classroomName}-${new Date().toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
 
 	function download() {
-		if (shown) saveFile(file(scoped ? `results-${scopeName}` : 'results') + '.csv', gradebookCSV(shown, scoped ? undefined : (attendanceAll ?? undefined)));
+		if (shown) saveFile(file(scoped ? `results-${scopeName}` : 'results') + '.csv', gradebookCSV(shown, scoped ? undefined : (attendanceAll ?? undefined), shownStudents));
 	}
 	const pdfTitle = $derived(`Results · ${classroomName}${scoped ? ' · ' + scopeName : ''}`);
 	function table(g: Gradebook) {
 		const attendance = scoped ? null : attendanceAll;
 		const head = ['Student', 'ID', ...g.items.map((it) => it.title + (it.weight ? ` (${it.weight}%)` : '')), 'Average', 'Total marks', ...(weighted ? ['Points', 'Final'] : []), ...(attendance ? ['Attendance'] : [])];
-		const rows = g.students.map((s) => [
+		const rows = shownStudents.map((s) => [
 			s.name,
 			s.student_number ?? '',
 			...g!.items.map((it) => {
@@ -102,7 +127,7 @@
 			...(weighted ? [`${s.total} / ${g!.weight_total}`, s.final == null ? '–' : s.final + '%'] : []),
 			...(attendance ? [attendance.get(s.user_id)?.rate != null ? attendance.get(s.user_id)!.rate + '%' : '–'] : [])
 		]);
-		const tones = g.students.map((s) => [
+		const tones = shownStudents.map((s) => [
 			null,
 			null,
 			...g.items.map((it) => toneFor(s.marks[key(it)]?.pct, bands) ?? (it.weight ? ('missing' as const) : null)),
@@ -111,7 +136,7 @@
 			...(weighted ? [null, toneFor(s.final, bands)] : []),
 			...(attendance ? [toneFor(attendance.get(s.user_id)?.rate, bands)] : [])
 		]);
-		const heading = weighted ? `Weighted items count for ${g.weight_total}% of the final result; a mark shows as percent · points.` : 'Each student’s best mark on each quiz and tutorial.';
+		const heading = (weighted ? `Weighted items count for ${g.weight_total}% of the final result; a mark shows as percent · points.` : 'Each student’s best mark on each quiz and tutorial.') + (note ? ` ${note}.` : '');
 		return { heading, head, rows, tones };
 	}
 </script>
@@ -128,9 +153,10 @@
 			{#if full && full.items.length}<ScopePicker options={scopeOptions(full.items)} value={scopeValue(scope)} onchange={(v) => ((scope = scopeFrom(v)), (editing = false))} />{/if}
 			<span class="grow"></span>
 			{#if !editing && !scoped}<button class="btn btn-sm" onclick={startEditing} disabled={!g.items.length}><Icon name="sliders" size={15} />Weights</button>{/if}
-			<button class="btn btn-sm" onclick={download} disabled={!g.students.length}><Icon name="download" size={15} />CSV</button>
-			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => (shown ? [{ ...table(shown), frozen: 2 }] : [])} disabled={!g.students.length} onbands={(b) => (bands = b)} />
+			<button class="btn btn-sm" onclick={download} disabled={!shownStudents.length}><Icon name="download" size={15} />CSV</button>
+			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => (shown ? [{ ...table(shown), frozen: 2 }] : [])} disabled={!shownStudents.length} onbands={(b) => (bands = b)} />
 		</div>
+		{#if g.students.length}<ReportControls bind:view cols={viewCols} show={showOptions} shown={shownStudents.length} total={g.students.length} noun="students" />{/if}
 		<div class="flex flex-wrap items-center gap-2">
 			<p class="small muted m-0 grow">
 				{#if scoped}<strong>{scopeName}</strong>: {g.items.length} {g.items.length === 1 ? 'item' : 'items'}{#if weighted}, worth <strong>{g.weight_total}%</strong> of the final result; the final here is the points as a percentage of that{/if}. Weights are set for the whole classroom.
@@ -166,19 +192,21 @@
 				<table class="table table-sm">
 					<thead>
 						<tr>
-							<th>Student</th>
+							<th class="num">No.</th>
+							<ReportTh bind:view cols={viewCols} col="student" label="Student" />
 							{#each g.items as it (key(it))}
-								<th class="num" title={it.topic}>{it.title}<br /><span class="small muted font-normal">{it.kind === 'tutorial' ? 'Tutorial' : 'Quiz'}{it.weight ? ` · ${it.weight}%` : weighted ? ' · not counted' : ''}</span></th>
+								<ReportTh bind:view cols={viewCols} col={key(it)} label={it.title} class="num" title={it.topic}><span class="small muted font-normal">{it.kind === 'tutorial' ? 'Tutorial' : 'Quiz'}{it.weight ? ` · ${it.weight}%` : weighted ? ' · not counted' : ''}</span></ReportTh>
 							{/each}
-							<th class="num">Average</th>
-							<th class="num">Total marks</th>
-							{#if weighted}<th class="num">Points<br /><span class="small muted font-normal">of {g.weight_total}</span></th><th class="num">Final</th>{/if}
-							{#if attendance}<th class="num">Attendance</th>{/if}
+							<ReportTh bind:view cols={viewCols} col="average" label="Average" class="num" />
+							<ReportTh bind:view cols={viewCols} col="marks" label="Total marks" class="num" />
+							{#if weighted}<ReportTh bind:view cols={viewCols} col="points" label="Points" class="num"><span class="small muted font-normal">of {g.weight_total}</span></ReportTh><ReportTh bind:view cols={viewCols} col="final" label="Final" class="num" />{/if}
+							{#if attendance}<ReportTh bind:view cols={viewCols} col="attendance" label="Attendance" class="num" />{/if}
 						</tr>
 					</thead>
 					<tbody>
-						{#each g.students as s (s.user_id)}
+						{#each shownStudents as s, n (s.user_id)}
 							<tr>
+								<td class="num tabular muted">{n + 1}</td>
 								<td>{s.name}{#if s.student_number}<br /><span class="small muted">{s.student_number}</span>{/if}</td>
 								{#each g.items as it (key(it))}
 									{@const m = s.marks[key(it)]}
@@ -193,27 +221,27 @@
 								{#if attendance}<td class="num tabular">{fmt(attendance.get(s.user_id)?.rate, '%')}</td>{/if}
 							</tr>
 						{:else}
-							<tr><td colspan={g.items.length + 5} class="muted">No students yet.</td></tr>
+							<tr><td colspan={g.items.length + 6} class="muted">{g.students.length ? 'Nobody matches. Clear the filters to see everyone.' : 'No students yet.'}</td></tr>
 						{/each}
 					</tbody>
 					{#if g.students.length && g.items.length}
 						<tfoot>
 							<tr>
-								<th>Class average</th>
+								<td></td><th>Class average</th>
 								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.avg, '%')}<br /><span class="small muted">{it.taken} took it{#if it.max_marks} · out of {it.max_marks}{/if}</span></td>{/each}
 								<td class="num tabular">{fmt(classAverage(g), '%')}</td>
 								<td class="num tabular">{fmt(totalAverage(g))}</td>
 								<td colspan={(weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
 							</tr>
 							<tr class="sub">
-								<th>Highest</th>
+								<td></td><th>Highest</th>
 								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.high, '%')}</td>{/each}
 								<td class="num tabular">{fmt(range.avgHigh, '%')}</td>
 								<td class="num tabular">{fmt(range.totalHigh)}</td>
 								<td colspan={(weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
 							</tr>
 							<tr class="sub">
-								<th>Lowest</th>
+								<td></td><th>Lowest</th>
 								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.low, '%')}</td>{/each}
 								<td class="num tabular">{fmt(range.avgLow, '%')}</td>
 								<td class="num tabular">{fmt(range.totalLow)}</td>
@@ -231,10 +259,11 @@
 				<summary class="p-3 sm:px-4 cursor-pointer font-semibold">Each session’s report <span class="badge badge-soft badge-sm">{g.sessions.length}</span></summary>
 				<div class="table-wrap px-2 pb-2 sm:px-4">
 					<table class="table table-sm">
-						<thead><tr><th>Session</th><th>When</th><th class="num">Took part</th><th class="num">Results</th><th class="num">Average</th><th><span class="sr-only">Reports</span></th></tr></thead>
+						<thead><tr><th class="num">No.</th><th>Session</th><th>When</th><th class="num">Took part</th><th class="num">Results</th><th class="num">Average</th><th><span class="sr-only">Reports</span></th></tr></thead>
 						<tbody>
-							{#each g.sessions as x (x.id)}
+							{#each g.sessions as x, n (x.id)}
 								<tr>
+									<td class="num tabular muted">{n + 1}</td>
 									<td>{x.title}{#if x.status !== 'ended'} <span class="badge badge-soft badge-sm">{x.status}</span>{/if}</td>
 									<td class="small">{new Date(x.at).toLocaleString()}</td>
 									<td class="num tabular">{x.attempts}</td>
