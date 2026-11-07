@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A session's plan (D-81, TS-FR-08): how many students, what the
 	// broadcaster sends, how many students may share at once, and video in
 	// groups. The forecast is checked against what the server has free now;
@@ -41,10 +42,10 @@
 			pv = await client.put<PlanView>(`/api/sessions/${sessionId}/plan`, draft);
 			saved = JSON.stringify(draft);
 			errors = {};
-			toast('Plan saved');
+			toast(tr("Plan saved"));
 		} catch (err) {
 			if (err instanceof ApiError) errors = err.fields;
-			toast(err instanceof ApiError ? err.message : 'Could not save', 'error');
+			toast(err instanceof ApiError ? err.message : tr("Could not save"), 'error');
 		}
 	}
 	function apply(id: string) {
@@ -52,64 +53,64 @@
 		if (p) draft = { ...p.plan };
 	}
 	async function saveAs() {
-		const name = await promptDialog({ title: 'Save this plan', confirm: 'Save', label: 'Name', maxlength: 60, value: '' });
+		const name = await promptDialog({ title: tr("Save this plan"), confirm: tr("Save"), label: tr("Name"), maxlength: 60, value: '' });
 		if (!name?.trim()) return;
 		try {
 			const p = await client.post<Preset>('/api/plan-presets', { name, plan: draft });
 			presets = [...presets.filter((x) => x.name !== p.name), p].sort((a, b) => a.name.localeCompare(b.name));
-			toast(`Saved as “${p.name}”`);
+			toast(tr("Saved as “{0}”", [p.name]));
 		} catch (err) {
-			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Could not save', 'error');
+			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("Could not save"), 'error');
 		}
 	}
 	async function remove(p: Preset) {
-		if (!(await confirmDialog({ title: `Delete the plan “${p.name}”?`, confirm: 'Delete', danger: true }))) return;
-		await client.del(`/api/plan-presets/${p.id}`).then(() => (presets = presets.filter((x) => x.id !== p.id)), () => toast('Could not delete', 'error'));
+		if (!(await confirmDialog({ title: tr("Delete the plan “{0}”?", [p.name]), confirm: tr("Delete"), danger: true }))) return;
+		await client.del(`/api/plan-presets/${p.id}`).then(() => (presets = presets.filter((x) => x.id !== p.id)), () => toast(tr("Could not delete"), 'error'));
 	}
 	let picked = $state('');
 </script>
 
-<form class="vstack gap-3" onsubmit={save} aria-label="Session plan">
+<form class="vstack gap-3" onsubmit={save} aria-label={tr("Session plan")}>
 	{#if presets.length}
 		<div class="row gap-2 flex-wrap">
-			<label class="small" for="preset">Start from</label>
+			<label class="small" for="preset">{tr("Start from")}</label>
 			<select id="preset" class="select select-sm w-auto" bind:value={picked} onchange={() => apply(picked)} disabled={readonly}>
-				<option value="">A saved plan…</option>
+				<option value="">{tr("A saved plan…")}</option>
 				{#each presets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
 			</select>
-			{#if picked}{@const p = presets.find((x) => x.id === picked)}{#if p}<button type="button" class="btn btn-ghost btn-xs" onclick={() => remove(p)}>Delete “{p.name}”</button>{/if}{/if}
+			{#if picked}{@const p = presets.find((x) => x.id === picked)}{#if p}<button type="button" class="btn btn-ghost btn-xs" onclick={() => remove(p)}>{tr("Delete “{0}”", [p.name])}</button>{/if}{/if}
 		</div>
 	{/if}
 	<fieldset class="plan" disabled={readonly}>
-		<label class="small">Students expected <input class="input input-sm" type="number" min="1" max="500" bind:value={draft.students} aria-invalid={!!errors.students} /></label>
-		<label class="small">Screens <input class="input input-sm" type="number" min="0" max="8" bind:value={draft.screens} aria-invalid={!!errors.screens} /></label>
-		<label class="small">Cameras <input class="input input-sm" type="number" min="0" max="8" bind:value={draft.cameras} /></label>
-		<label class="small">Screen quality
-			<select class="select select-sm" bind:value={draft.quality}><option value="readable">Readable (slides, code)</option><option value="smooth">Smooth (video, small classes)</option></select>
+		<label class="small">{tr("Students expected")} <input class="input input-sm" type="number" min="1" max="500" bind:value={draft.students} aria-invalid={!!errors.students} /></label>
+		<label class="small">{tr("Screens")} <input class="input input-sm" type="number" min="0" max="8" bind:value={draft.screens} aria-invalid={!!errors.screens} /></label>
+		<label class="small">{tr("Cameras")} <input class="input input-sm" type="number" min="0" max="8" bind:value={draft.cameras} /></label>
+		<label class="small">{tr("Screen quality")}
+			<select class="select select-sm" bind:value={draft.quality}><option value="readable">{tr("Readable (slides, code)")}</option><option value="smooth">{tr("Smooth (video, small classes)")}</option></select>
 		</label>
-		<label class="small">Students sharing a camera <input class="input input-sm" type="number" min="0" max="50" bind:value={draft.student_cameras} aria-invalid={!!errors.student_cameras} /></label>
-		<label class="small">Students sharing a screen <input class="input input-sm" type="number" min="0" max="50" bind:value={draft.student_screens} aria-invalid={!!errors.student_screens} /></label>
-		<label class="small">Students speaking at once <input class="input input-sm" type="number" min="0" max="50" bind:value={draft.student_mics} /></label>
-		<label class="row font-normal small self-end"><input type="checkbox" class="toggle toggle-sm" bind:checked={draft.group_video} /> Cameras in breakout groups</label>
+		<label class="small">{tr("Students sharing a camera")} <input class="input input-sm" type="number" min="0" max="50" bind:value={draft.student_cameras} aria-invalid={!!errors.student_cameras} /></label>
+		<label class="small">{tr("Students sharing a screen")} <input class="input input-sm" type="number" min="0" max="50" bind:value={draft.student_screens} aria-invalid={!!errors.student_screens} /></label>
+		<label class="small">{tr("Students speaking at once")} <input class="input input-sm" type="number" min="0" max="50" bind:value={draft.student_mics} /></label>
+		<label class="row font-normal small self-end"><input type="checkbox" class="toggle toggle-sm" bind:checked={draft.group_video} /> {tr("Cameras in breakout groups")}</label>
 	</fieldset>
 	{#each Object.entries(errors) as [k, msg] (k)}<p class="small text-error m-0">{msg}</p>{/each}
 
 	{#if pv && m}
 		<div class="vstack gap-1" aria-live="polite">
-			<p class="m-0 small">Needs about <strong>{mbps(pv.forecast.mbps)}</strong> of the {mbps(pv.limit_mbps)} free now{#if pv.budget.session_mbps}{' '}(a session may use up to {mbps(pv.budget.session_mbps)}){/if}.</p>
-			<progress class="progress w-full" class:progress-warning={m.level === 'warn'} class:progress-error={m.level === 'over'} value={m.pct} max="100" aria-label="Forecast against what's free"></progress>
+			<p class="m-0 small">{tr("Needs about")} <strong>{mbps(pv.forecast.mbps)}</strong> {tr("of the {0} free now", [mbps(pv.limit_mbps)])}{#if pv.budget.session_mbps}{tr(" (a session may use up to {0})", [mbps(pv.budget.session_mbps)])}{/if}.</p>
+			<progress class="progress w-full" class:progress-warning={m.level === 'warn'} class:progress-error={m.level === 'over'} value={m.pct} max="100" aria-label={tr("Forecast against what's free")}></progress>
 			{#if !pv.fits}
-				<p class="small m-0 text-error">Too much for what’s free{pv.advice?.length ? ': ' + pv.advice.join(', or ') : ''}.{pv.forecast.mbps <= pv.hard_free_mbps ? ' You can still start it; other sessions may get worse video.' : ' It can’t start like this.'}</p>
+				<p class="small m-0 text-error">{tr("Too much for what’s free{0}.{1}", [pv.advice?.length ? ': ' + pv.advice.join(', or ') : '', pv.forecast.mbps <= pv.hard_free_mbps ? tr(" You can still start it; other sessions may get worse video.") : tr(" It can’t start like this.")])}</p>
 			{/if}
-			<details class="small"><summary class="muted">How it adds up (estimated)</summary>
+			<details class="small"><summary class="muted">{tr("How it adds up (estimated)")}</summary>
 				<ul class="m-0 mt-1 ps-4">{#each pv.forecast.items as it (it.name)}<li>{it.name}: <span class="tabular">{mbps(it.mbps)}</span></li>{/each}</ul>
 			</details>
 		</div>
 	{/if}
 	{#if !readonly}
 		<div class="row gap-2 flex-wrap">
-			<button class="btn btn-sm btn-primary" disabled={!dirty}>Save plan</button>
-			<button type="button" class="btn btn-sm" onclick={saveAs}>Save as a preset…</button>
+			<button class="btn btn-sm btn-primary" disabled={!dirty}>{tr("Save plan")}</button>
+			<button type="button" class="btn btn-sm" onclick={saveAs}>{tr("Save as a preset…")}</button>
 		</div>
 	{/if}
 </form>

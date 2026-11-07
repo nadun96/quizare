@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The teacher's classrooms (D-128): cards with each classroom's course
 	// code, department, year, semester, term and tags, filtered by them and
 	// grouped by one of them; the address keeps the view.
@@ -64,11 +65,11 @@
 	async function answer(inv: Invitation, accept: boolean) {
 		try {
 			await api.post(`/api/teacher/invitations/${inv.classroom_id}/${accept ? 'accept' : 'decline'}`);
-			toast(accept ? `You now co-teach “${inv.classroom}”` : 'Invitation declined');
+			toast(accept ? tr("You now co-teach “{0}”", [inv.classroom]) : tr("Invitation declined"));
 			invitations = invitations.filter((x) => x.classroom_id !== inv.classroom_id);
 			if (accept) list.load();
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'That didn’t work', 'error');
+			toast(err instanceof ApiError ? err.message : tr("That didn’t work"), 'error');
 		}
 	}
 	function toggleArchived() {
@@ -82,7 +83,7 @@
 		errors = {};
 		try {
 			await api.post('/api/teacher/classrooms', { name, props: details });
-			toast(`Classroom “${name}” created`);
+			toast(tr("Classroom “{0}” created", [name]));
 			name = '';
 			details = emptyProps();
 			more = adding = false;
@@ -102,52 +103,52 @@
 <div class="page-container vstack">
 	<div class="row">
 		<div>
-			<h1 class="m-0">Classrooms</h1>
-			{#if list.loaded && list.total}<p class="m-0 small muted">{list.total} {list.total === 1 ? 'classroom' : 'classrooms'}{filtered ? ' match' : ''}</p>{/if}
+			<h1 class="m-0">{tr("Classrooms")}</h1>
+			{#if list.loaded && list.total}<p class="m-0 small muted">{list.total} {list.total === 1 ? 'classroom' : 'classrooms'}{filtered ? tr(" match") : ''}</p>{/if}
 		</div>
 		<span class="spacer"></span>
-		{#if !formOpen}<button class="btn btn-primary" onclick={openForm}><Icon name="plus" size={16} />New classroom</button>{/if}
+		{#if !formOpen}<button class="btn btn-primary" onclick={openForm}><Icon name="plus" size={16} />{tr("New classroom")}</button>{/if}
 	</div>
 	{#each invitations as inv (inv.classroom_id)}
 		<div class="alert alert-info alert-soft" role="status">
 			<Icon name="users" size={18} />
-			<span class="grow"><strong>{inv.owner_name}</strong> invites you to co-teach <strong>{inv.classroom}</strong>.</span>
-			<button class="btn btn-sm btn-ghost" onclick={() => answer(inv, false)}>Decline</button>
-			<button class="btn btn-sm btn-primary" onclick={() => answer(inv, true)}>Accept</button>
+			<span class="grow"><strong>{inv.owner_name}</strong> {tr("invites you to co-teach")} <strong>{inv.classroom}</strong>.</span>
+			<button class="btn btn-sm btn-ghost" onclick={() => answer(inv, false)}>{tr("Decline")}</button>
+			<button class="btn btn-sm btn-primary" onclick={() => answer(inv, true)}>{tr("Accept")}</button>
 		</div>
 	{/each}
 	{#if formOpen}
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-5 vstack gap-3" onsubmit={create} in:flyIn>
 			<div class="row items-end">
-				<label class="flex flex-col gap-1" style="flex:1;min-width:14rem"><span>Classroom name</span><input class="input w-full" class:input-error={errors.name} bind:this={nameEl} bind:value={name} placeholder="e.g. MGT/IS/2025" required /></label>
-				<button type="button" class="btn btn-ghost" aria-expanded={more} onclick={() => (more = !more)}><Icon name={more ? 'chevron-down' : 'chevron-right'} size={16} />Details</button>
+				<label class="flex flex-col gap-1" style="flex:1;min-width:14rem"><span>{tr("Classroom name")}</span><input class="input w-full" class:input-error={errors.name} bind:this={nameEl} bind:value={name} placeholder={tr("e.g. MGT/IS/2025")} required /></label>
+				<button type="button" class="btn btn-ghost" aria-expanded={more} onclick={() => (more = !more)}><Icon name={more ? 'chevron-down' : 'chevron-right'} size={16} />{tr("Details")}</button>
 			</div>
 			{#if errors.name}<p class="field-error m-0">{errors.name}</p>{/if}
 			{#if more}
 				<div in:flyIn>
-					<p class="small muted m-0 mb-2">All optional: they help you find and filter classrooms later.</p>
+					<p class="small muted m-0 mb-2">{tr("All optional: they help you find and filter classrooms later.")}</p>
 					<PropsFields bind:value={details} {facets} dates {errors} id="new-classroom" />
 				</div>
 			{/if}
 			<div class="flex gap-2">
-				<button class="btn btn-primary">Create classroom</button>
-				{#if list.total > 0}<button type="button" class="btn btn-ghost" onclick={() => ((adding = false), (errors = {}))}>Cancel</button>{/if}
+				<button class="btn btn-primary">{tr("Create classroom")}</button>
+				{#if list.total > 0}<button type="button" class="btn btn-ghost" onclick={() => ((adding = false), (errors = {}))}>{tr("Cancel")}</button>{/if}
 			</div>
 		</form>
 	{/if}
 
 	<div class="filters card card-border bg-base-100 p-3 sm:p-4 vstack gap-3">
 		<div class="flex flex-wrap items-center gap-3">
-			<ListSearch {list} placeholder="Search name, course code, department or tag" label="Search classrooms" />
-			<label class="row small" style="font-weight:400"><input class="checkbox checkbox-sm" type="checkbox" checked={showArchived} onchange={toggleArchived} /> Show archived</label>
+			<ListSearch {list} placeholder={tr("Search name, course code, department or tag")} label={tr("Search classrooms")} />
+			<label class="row small" style="font-weight:400"><input class="checkbox checkbox-sm" type="checkbox" checked={showArchived} onchange={toggleArchived} /> {tr("Show archived")}</label>
 			<span class="spacer"></span>
-			<label class="small muted flex items-center gap-2">Group
+			<label class="small muted flex items-center gap-2">{tr("Group")}
 				<select class="select select-sm w-auto" bind:value={group} onchange={() => list.refilter()}>
-					<option value="">None</option><option value="department">Department</option><option value="year">Year</option><option value="semester">Semester</option>
+					<option value="">{tr("None")}</option><option value="department">{tr("Department")}</option><option value="year">{tr("Year")}</option><option value="semester">{tr("Semester")}</option>
 				</select></label>
-			<label class="small muted flex items-center gap-2">Sort
+			<label class="small muted flex items-center gap-2">{tr("Sort")}
 				<select class="select select-sm w-auto" value={list.sort} onchange={(e) => list.sortBy(e.currentTarget.value, ['created', 'starts', 'year'].includes(e.currentTarget.value))}>
-					<option value="created">Newest first</option><option value="name">Name A–Z</option><option value="starts">Start date</option><option value="year">Year</option>
+					<option value="created">{tr("Newest first")}</option><option value="name">{tr("Name A–Z")}</option><option value="starts">{tr("Start date")}</option><option value="year">{tr("Year")}</option>
 				</select></label>
 		</div>
 		<PropsFilters bind:value={filter} {facets} when onchange={() => list.refilter()} />
@@ -157,7 +158,7 @@
 		<div class="auto-grid"><Skeleton lines={3} /><Skeleton lines={3} /><Skeleton lines={3} /></div>
 	{:else}
 		{#each groups as g (g.label)}
-			{#if g.label}<h2 class="group-h">{g.label} <span class="badge badge-soft badge-sm">{g.rows.length}</span></h2>{/if}
+			{#if g.label}<h2 class="group-h">{tr(g.label)} <span class="badge badge-soft badge-sm">{g.rows.length}</span></h2>{/if}
 			<div class="auto-grid">
 				{#each g.rows as c, i (c.id)}
 					{@const t = term(c.props)}
@@ -166,8 +167,8 @@
 						<div class="p-4 sm:p-5 vstack gap-2">
 							<div class="flex items-center gap-2">
 								{#if c.props.course_code}<span class="code">{c.props.course_code}</span>{:else}<span class="icon" aria-hidden="true"><Icon name="book" size={16} /></span>{/if}
-								{#if t}<span class="badge badge-soft badge-sm {TONE[t.state]}">{t.label}</span>{/if}
-								{#if c.archived}<span class="badge badge-soft badge-sm">Archived</span>{/if}
+								{#if t}<span class="badge badge-soft badge-sm {TONE[t.state]}">{tr(t.label)}</span>{/if}
+								{#if c.archived}<span class="badge badge-soft badge-sm">{tr("Archived")}</span>{/if}
 								<span class="spacer"></span>
 								<span class="muted" aria-hidden="true"><Icon name="arrow-right" size={16} /></span>
 							</div>
@@ -177,25 +178,25 @@
 							{#if t}
 								<div class="vstack gap-1">
 									<span class="small muted flex items-center gap-1"><Icon name="clock" size={13} />{t.range}</span>
-									{#if t.progress !== null}<progress class="progress progress-success h-1.5" value={Math.round(t.progress * 100)} max="100" aria-label="Through the term"></progress>{/if}
+									{#if t.progress !== null}<progress class="progress progress-success h-1.5" value={Math.round(t.progress * 100)} max="100" aria-label={tr("Through the term")}></progress>{/if}
 								</div>
 							{/if}
 							{#if c.props.tags.length}<div class="flex flex-wrap gap-1">{#each c.props.tags as tag (tag)}<span class="badge badge-ghost badge-sm">{tag}</span>{/each}</div>{/if}
 						</div>
 						<div class="foot small">
 							<span class="flex items-center gap-1"><Icon name="users" size={14} />{c.students} {c.students === 1 ? 'student' : 'students'}</span>
-							{#if c.role === 'coteacher'}<span class="truncate">Co-teacher with {c.owner_name}</span>{:else}<span class="muted">Code <strong class="tabular">{c.join_code}</strong></span>{/if}
+							{#if c.role === 'coteacher'}<span class="truncate">{tr("Co-teacher with {0}", [c.owner_name])}</span>{:else}<span class="muted">{tr("Code")} <strong class="tabular">{c.join_code}</strong></span>{/if}
 						</div>
 					</a>
 				{/each}
 			</div>
 		{:else}
 			<div class="card card-border bg-base-100">
-				{#if filtered}<EmptyState icon="search" title="No classrooms match">Try fewer filters or another search.</EmptyState>
-				{:else}<EmptyState icon="book" title="No classrooms yet">Name your first one above. You'll add modules, topics and quizzes inside it.</EmptyState>{/if}
+				{#if filtered}<EmptyState icon="search" title={tr("No classrooms match")}>{tr("Try fewer filters or another search.")}</EmptyState>
+				{:else}<EmptyState icon="book" title={tr("No classrooms yet")}>{tr("Name your first one above. You'll add modules, topics and quizzes inside it.")}</EmptyState>{/if}
 			</div>
 		{/each}
-		<Pager {list} label="Classrooms" />
+		<Pager {list} label={tr("Classrooms")} />
 	{/if}
 </div>
 

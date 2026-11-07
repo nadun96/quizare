@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	import MathText from '$lib/richtext/MathText.svelte';
 	import { promptDialog } from '$lib/ui/dialog.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
@@ -69,20 +70,20 @@
 	}
 
 	async function override(r: Result, m: Mark) {
-		const s = await promptDialog({ title: `Score for ${m.code}`, body: `Between 0 and ${m.max_score}. Leave it empty to keep the current mark.`, label: 'Score', value: m.score == null ? '' : String(m.score), inputmode: 'decimal', allowEmpty: true, confirm: 'Next' });
+		const s = await promptDialog({ title: tr("Score for {0}", [m.code]), body: tr("Between 0 and {0}. Leave it empty to keep the current mark.", [m.max_score]), label: tr("Score"), value: m.score == null ? '' : String(m.score), inputmode: 'decimal', allowEmpty: true, confirm: tr("Next") });
 		if (s === null) return;
-		const fb = await promptDialog({ title: 'Feedback for the student', body: 'Optional. Shown with the mark when results are released.', label: 'Feedback', value: m.feedback || m.ai_feedback || '', allowEmpty: true, multiline: true, maxlength: 2000 });
+		const fb = await promptDialog({ title: tr("Feedback for the student"), body: tr("Optional. Shown with the mark when results are released."), label: tr("Feedback"), value: m.feedback || m.ai_feedback || '', allowEmpty: true, multiline: true, maxlength: 2000 });
 		try {
 			await api.put('/api/teacher/marks/' + r.attempt_id + '/' + m.question_id, { score: s === '' ? undefined : Number(s), feedback: fb ?? undefined });
 			load();
 		} catch (e) {
-			notice = e instanceof ApiError ? Object.values(e.fields).join('; ') || e.message : 'Save failed';
+			notice = e instanceof ApiError ? (Object.values(e.fields).join('; ') || e.message) : tr("Save failed");
 		}
 	}
 	async function remark(r: Result, m: Mark) {
 		try {
 			await api.post('/api/teacher/marks/' + r.attempt_id + '/' + m.question_id + '/remark');
-			toast('Re-marking queued', 'info');
+			toast(tr("Re-marking queued"), 'info');
 			load();
 		} catch (e) {
 			notice = e instanceof ApiError ? e.message : '';
@@ -102,7 +103,7 @@
 			newToken = location.origin + '/r/' + l.token;
 			openTab('share');
 		} catch (err) {
-			notice = err instanceof ApiError ? Object.values(err.fields).join('; ') || err.message : '';
+			notice = err instanceof ApiError ? (Object.values(err.fields).join('; ') || err.message) : '';
 		}
 	}
 	async function revoke(l: Link) {
@@ -121,43 +122,43 @@
 
 <div class="page-container vstack" style="max-width:1200px">
 	{#if session}
-		<p class="small"><a href={'/t/sessions/' + id}>← Live dashboard</a></p>
+		<p class="small"><a href={'/t/sessions/' + id}>{tr("← Live dashboard")}</a></p>
 		<div class="row">
-			<h1 style="margin:0">Results: {session.title}</h1>
+			<h1 style="margin:0">{tr("Results: {0}", [session.title])}</h1>
 			<span class="spacer"></span>
-			<a class="btn" href={'/api/teacher/sessions/' + id + '/export.csv'} download>Export CSV</a>
+			<a class="btn" href={'/api/teacher/sessions/' + id + '/export.csv'} download>{tr("Export CSV")}</a>
 			<SaveToDrive kind="session" {id} />
 			{#if session.results_released_at}
-				<span class="badge badge-soft badge-success">Released</span><button class="btn" onclick={() => release(false)}>Hide results</button>
-			{:else}<button class="btn btn-primary" onclick={() => release(true)}>Release results now</button>{/if}
+				<span class="badge badge-soft badge-success">{tr("Released")}</span><button class="btn" onclick={() => release(false)}>{tr("Hide results")}</button>
+			{:else}<button class="btn btn-primary" onclick={() => release(true)}>{tr("Release results now")}</button>{/if}
 		</div>
-		{#if estimate?.answers}<p class="small muted">LLM usage for this session: {estimate.answers} answer(s), about {estimate.estimated_tokens.toLocaleString()} tokens on your own API key.</p>{/if}
+		{#if estimate?.answers}<p class="small muted">{tr("LLM usage for this session: {0} answer(s), about {1} tokens on your own API key.", [estimate.answers, estimate.estimated_tokens.toLocaleString(localeTag())])}</p>{/if}
 		{#if notice}<p class="alert alert-soft alert-warning small">{notice}</p>{/if}
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			<button class="tab" role="tab" aria-selected={tab === 'marking'} class:tab-active={tab === 'marking'} onclick={() => openTab('marking')}>Marking</button>
-			<button class="tab" role="tab" aria-selected={tab === 'analytics'} class:tab-active={tab === 'analytics'} onclick={() => openTab('analytics')}>Analytics</button>
-			<button class="tab" role="tab" aria-selected={tab === 'share'} class:tab-active={tab === 'share'} onclick={() => openTab('share')}>Public links</button>
-			<button class="tab" role="tab" aria-selected={tab === 'log'} class:tab-active={tab === 'log'} onclick={() => openTab('log')}>Integrity log</button>
+			<button class="tab" role="tab" aria-selected={tab === 'marking'} class:tab-active={tab === 'marking'} onclick={() => openTab('marking')}>{tr("Marking")}</button>
+			<button class="tab" role="tab" aria-selected={tab === 'analytics'} class:tab-active={tab === 'analytics'} onclick={() => openTab('analytics')}>{tr("Analytics")}</button>
+			<button class="tab" role="tab" aria-selected={tab === 'share'} class:tab-active={tab === 'share'} onclick={() => openTab('share')}>{tr("Public links")}</button>
+			<button class="tab" role="tab" aria-selected={tab === 'log'} class:tab-active={tab === 'log'} onclick={() => openTab('log')}>{tr("Integrity log")}</button>
 		</div>
 
 		{#if tab === 'marking'}
 			<div class="row small">
-				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'review'} onchange={() => setFilter('review')} /> Needs review (manual, flagged or AI-marked)</label>
-				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'all'} onchange={() => setFilter('all')} /> All students</label>
+				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'review'} onchange={() => setFilter('review')} /> {tr("Needs review (manual, flagged or AI-marked)")}</label>
+				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'all'} onchange={() => setFilter('all')} /> {tr("All students")}</label>
 				<span class="spacer"></span>
-				<ListSearch list={results} placeholder="Search student ID" label="Search results by student ID" />
-				<label class="small muted flex items-center gap-2">Sort
+				<ListSearch list={results} placeholder={tr("Search student ID")} label={tr("Search results by student ID")} />
+				<label class="small muted flex items-center gap-2">{tr("Sort")}
 					<select class="select select-sm w-auto" value={results.sort} onchange={(e) => results.sortBy(e.currentTarget.value)}>
-						<option value="joined">Join order</option><option value="number">Student ID</option><option value="score">Score</option>
+						<option value="joined">{tr("Join order")}</option><option value="number">{tr("Student ID")}</option><option value="score">{tr("Score")}</option>
 					</select></label>
 			</div>
 			{#each shown as r (r.attempt_id)}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 					<div class="row">
-						<strong>{names[r.attempt_id] ?? byUser[r.user_id] ?? 'Student'}</strong><span class="muted small">{r.student_number ?? ''}</span>{#if (r.tries ?? 1) > 1}<span class="badge badge-soft badge-info badge-sm" title="The best try counts">best of {r.tries} tries · try {r.try}</span>{/if}
+						<strong>{names[r.attempt_id] ?? byUser[r.user_id] ?? tr("Student")}</strong><span class="muted small">{r.student_number ?? ''}</span>{#if (r.tries ?? 1) > 1}<span class="badge badge-soft badge-info badge-sm" title={tr("The best try counts")}>{tr("best of {0} tries · try {1}", [r.tries, r.try])}</span>{/if}
 						<span class="spacer"></span>
-						{#if r.invalidated}<span class="badge badge-soft badge-error">invalidated</span>{/if}
-						{#if !r.complete}<span class="badge badge-soft badge-warning">incomplete</span>{/if}
+						{#if r.invalidated}<span class="badge badge-soft badge-error">{tr("invalidated")}</span>{/if}
+						{#if !r.complete}<span class="badge badge-soft badge-warning">{tr("incomplete")}</span>{/if}
 						<strong>{r.score}/{r.max_score} ({r.pct}%)</strong>
 					</div>
 					{#each r.marks.filter((m) => filter === 'all' || needsReview(m)) as m (m.question_id)}
@@ -165,29 +166,29 @@
 							<div class="row small">
 								<strong>{m.code}</strong>
 								<span class="badge badge-soft {m.status === 'needs_manual' ? 'warn' : m.status === 'pending' ? '' : 'ok'}">{m.status.replace('_', ' ')}</span>
-								{#if m.ai_marked}<span class="badge badge-soft">AI-marked</span>{/if}
-								{#if m.flagged}<span class="badge badge-soft badge-error" title={m.flag_reason}>flagged</span>{/if}
+								{#if m.ai_marked}<span class="badge badge-soft">{tr("AI-marked")}</span>{/if}
+								{#if m.flagged}<span class="badge badge-soft badge-error" title={m.flag_reason}>{tr("flagged")}</span>{/if}
 								<span class="spacer"></span>
 								<span>{m.score ?? '—'} / {m.max_score}</span>
-								<button class="btn btn-sm" onclick={() => override(r, m)}>Set mark</button>
-								{#if m.type === 'ESSAY' || m.type === 'BLANK_TEXT'}<button class="btn btn-sm" onclick={() => remark(r, m)}>Re-run AI</button>{/if}
+								<button class="btn btn-sm" onclick={() => override(r, m)}>{tr("Set mark")}</button>
+								{#if m.type === 'ESSAY' || m.type === 'BLANK_TEXT'}<button class="btn btn-sm" onclick={() => remark(r, m)}>{tr("Re-run AI")}</button>{/if}
 							</div>
-							<p class="small" style="margin:0.25rem 0"><span class="muted">Answer:</span> <span style="white-space:pre-wrap"><MathText text={describeResponse(m.type, bodies[m.question_id] ?? {}, m.response)} /></span></p>
-							<p class="small muted" style="margin:0">Key: <MathText text={describeKey(m.type, bodies[m.question_id] ?? {}, m.key)} /></p>
+							<p class="small" style="margin:0.25rem 0"><span class="muted">{tr("Answer:")}</span> <span style="white-space:pre-wrap"><MathText text={describeResponse(m.type, bodies[m.question_id] ?? {}, m.response)} /></span></p>
+							<p class="small muted" style="margin:0">{tr("Key:")} <MathText text={describeKey(m.type, bodies[m.question_id] ?? {}, m.key)} /></p>
 							{#if m.flag_reason}<p class="small" style="color:var(--danger);margin:0">{m.flag_reason}</p>{/if}
-							{#if m.ai_rationale}<p class="small muted" style="margin:0">AI rationale: {m.ai_rationale}</p>{/if}
-							{#if m.feedback || m.ai_feedback}<p class="small" style="margin:0">Feedback: {m.feedback} {m.ai_feedback}</p>{/if}
+							{#if m.ai_rationale}<p class="small muted" style="margin:0">{tr("AI rationale: {0}", [m.ai_rationale])}</p>{/if}
+							{#if m.feedback || m.ai_feedback}<p class="small" style="margin:0">{tr("Feedback: {0} {1}", [m.feedback, m.ai_feedback])}</p>{/if}
 						</div>
 					{/each}
 				</div>
-			{:else}<p class="muted">{!results.loaded ? 'Loading…' : results.q ? 'No results match.' : filter === 'review' ? 'Nothing needs review.' : 'No finished attempts yet.'}</p>{/each}
-			<Pager list={results} label="Results" />
+			{:else}<p class="muted">{!results.loaded ? tr("Loading…") : results.q ? tr("No results match.") : filter === 'review' ? tr("Nothing needs review.") : tr("No finished attempts yet.")}</p>{/each}
+			<Pager list={results} label={tr("Results")} />
 		{:else if tab === 'analytics'}
 			{#if stats}<AnalyticsView cls={stats.class} questions={stats.questions} students={stats.students} />{:else}<Skeleton lines={4} />{/if}
 		{:else if tab === 'share'}
 			<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={createLink}>
-				<strong>Create a public link</strong>
-				<p class="small muted">Anyone with the link can view it. Names and emails are never shown.</p>
+				<strong>{tr("Create a public link")}</strong>
+				<p class="small muted">{tr("Anyone with the link can view it. Names and emails are never shown.")}</p>
 				<div class="row">
 					{#each [['question_pct', 'Question-wise % correct'], ['pass_rate', 'Class pass rate'], ['individual', 'Individual results']] as [v, l] (v)}
 						<label class="row" style="font-weight:400"><input class="checkbox" type="checkbox" checked={share.views.includes(v)} onchange={() => toggleView(v)} /> {l}</label>
@@ -195,51 +196,51 @@
 				</div>
 				{#if share.views.includes('individual')}
 					<div class="row">
-						<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={share.identify} value="anonymous" /> Anonymous</label>
-						<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={share.identify} value="student_id" /> Show student IDs</label>
-						<label class="row" style="font-weight:400"><input class="checkbox" type="checkbox" bind:checked={share.show_answers} /> Include individual answers</label>
+						<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={share.identify} value="anonymous" /> {tr("Anonymous")}</label>
+						<label class="row" style="font-weight:400"><input class="radio" type="radio" bind:group={share.identify} value="student_id" /> {tr("Show student IDs")}</label>
+						<label class="row" style="font-weight:400"><input class="checkbox" type="checkbox" bind:checked={share.show_answers} /> {tr("Include individual answers")}</label>
 					</div>
 				{/if}
-				<div style="max-width:16rem"><label for="exp">Expires (optional)</label><input class="input w-full" id="exp" type="datetime-local" bind:value={share.expires_at} /></div>
-				<button class="btn btn-primary" disabled={!share.views.length}>Create link</button>
-				{#if newToken}<p class="alert alert-soft alert-success small">Copy this link now; it is only shown once: <a href={newToken} target="_blank" style="word-break:break-all">{newToken}</a></p>{/if}
+				<div style="max-width:16rem"><label for="exp">{tr("Expires (optional)")}</label><input class="input w-full" id="exp" type="datetime-local" bind:value={share.expires_at} /></div>
+				<button class="btn btn-primary" disabled={!share.views.length}>{tr("Create link")}</button>
+				{#if newToken}<p class="alert alert-soft alert-success small">{tr("Copy this link now; it is only shown once:")} <a href={newToken} target="_blank" style="word-break:break-all">{newToken}</a></p>{/if}
 			</form>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
-				<table class="table"><thead><tr><th>Shows</th><th>Created</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>
+				<table class="table"><thead><tr><th>{tr("Shows")}</th><th>{tr("Created")}</th><th>{tr("Expires")}</th><th>{tr("Status")}</th><th></th></tr></thead><tbody>
 					{#each links.rows as l (l.id)}
 						<tr>
-							<td class="small">{l.views.join(', ')}{l.identify === 'student_id' ? ' · IDs' : ''}{l.show_answers ? ' · answers' : ''}</td>
-							<td class="small">{new Date(l.created_at).toLocaleString()}</td>
-							<td class="small">{l.expires_at ? new Date(l.expires_at).toLocaleString() : 'never'}</td>
-							<td>{#if l.revoked_at}<span class="badge badge-soft">revoked</span>{:else}<span class="badge badge-soft badge-success">active</span>{/if}</td>
-							<td class="row">{#if !l.revoked_at}<button class="btn btn-sm" onclick={() => revoke(l)}>Revoke</button>{/if}<button class="btn btn-sm" onclick={() => regenerate(l)}>New link</button></td>
+							<td class="small">{l.views.join(', ')}{l.identify === 'student_id' ? tr(" · IDs") : ''}{l.show_answers ? tr(" · answers") : ''}</td>
+							<td class="small">{new Date(l.created_at).toLocaleString(localeTag())}</td>
+							<td class="small">{l.expires_at ? new Date(l.expires_at).toLocaleString(localeTag()) : 'never'}</td>
+							<td>{#if l.revoked_at}<span class="badge badge-soft">{tr("revoked")}</span>{:else}<span class="badge badge-soft badge-success">{tr("active")}</span>{/if}</td>
+							<td class="row">{#if !l.revoked_at}<button class="btn btn-sm" onclick={() => revoke(l)}>{tr("Revoke")}</button>{/if}<button class="btn btn-sm" onclick={() => regenerate(l)}>{tr("New link")}</button></td>
 						</tr>
-					{:else}<tr><td colspan="5" class="muted">{links.loaded ? 'No links yet.' : 'Loading…'}</td></tr>
+					{:else}<tr><td colspan="5" class="muted">{links.loaded ? tr("No links yet.") : tr("Loading…")}</td></tr>
 					{/each}
 				</tbody></table>
 			</div>
-			<Pager list={links} label="Links" />
+			<Pager list={links} label={tr("Links")} />
 		{:else}
 			<div class="row">
-				<ListSearch list={events} placeholder="Search events" label="Search the integrity log" />
-				<select class="select select-sm w-auto" bind:value={kind} onchange={() => events.refilter()} aria-label="Event kind">
-					<option value="">All events</option><option value="violation">Violations</option><option value="admitted">Admitted</option><option value="started">Started</option><option value="submitted">Submitted</option><option value="reinstated">Reinstated</option><option value="reopened">Reopened</option>
+				<ListSearch list={events} placeholder={tr("Search events")} label={tr("Search the integrity log")} />
+				<select class="select select-sm w-auto" bind:value={kind} onchange={() => events.refilter()} aria-label={tr("Event kind")}>
+					<option value="">{tr("All events")}</option><option value="violation">{tr("Violations")}</option><option value="admitted">{tr("Admitted")}</option><option value="started">{tr("Started")}</option><option value="submitted">{tr("Submitted")}</option><option value="reinstated">{tr("Reinstated")}</option><option value="reopened">{tr("Reopened")}</option>
 				</select>
 			</div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
-				<table class="table"><thead><tr><th>Time</th><th>Event</th><th>Student</th><th>Details</th></tr></thead><tbody>
+				<table class="table"><thead><tr><th>{tr("Time")}</th><th>{tr("Event")}</th><th>{tr("Student")}</th><th>{tr("Details")}</th></tr></thead><tbody>
 					{#each events.rows as e (e.id)}
 						<tr class:violation={e.kind === 'violation'}>
-							<td class="small">{new Date(e.created_at).toLocaleTimeString()}</td>
+							<td class="small">{new Date(e.created_at).toLocaleTimeString(localeTag())}</td>
 							<td>{e.kind.replaceAll('_', ' ')}</td>
 							<td class="small">{e.attempt_id ? (names[e.attempt_id] ?? '') : ''}</td>
 							<td class="small">{Object.entries(e.details ?? {}).map(([k, v]) => `${k}: ${v}`).join(', ')}</td>
 						</tr>
-					{:else}<tr><td colspan="4" class="muted">{events.loaded ? 'No events.' : 'Loading…'}</td></tr>
+					{:else}<tr><td colspan="4" class="muted">{events.loaded ? tr("No events.") : tr("Loading…")}</td></tr>
 					{/each}
 				</tbody></table>
 			</div>
-			<Pager list={events} label="Integrity log" />
+			<Pager list={events} label={tr("Integrity log")} />
 		{/if}
 	{/if}
 </div>

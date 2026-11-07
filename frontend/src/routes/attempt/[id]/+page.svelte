@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { count } from '$lib/words';
 	// The student's live quiz (UC-03). The server owns all state and timers;
 	// this page renders whatever state it is sent and reports changes back.
@@ -64,7 +65,7 @@
 			const next = await api.post<StudentState>('/api/attempts/' + id + '/retry');
 			location.assign('/attempt/' + next.attempt_id);
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'That didn’t work; try again';
+			notice = e instanceof ApiError ? e.message : tr("That didn’t work; try again");
 			retrying = false;
 		}
 	}
@@ -149,7 +150,7 @@
 			try {
 				apply(await api.post<StudentState>('/api/attempts/' + id + '/start'));
 			} catch (e) {
-				notice = e instanceof ApiError ? e.message : 'Could not start';
+				notice = e instanceof ApiError ? e.message : tr("Could not start");
 			}
 		}
 	}
@@ -166,7 +167,7 @@
 			await queue.flush();
 			apply(await api.post<StudentState>('/api/attempts/' + id + '/advance', { question_id: st.question.id }));
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Could not continue; we will retry';
+			notice = e instanceof ApiError ? e.message : tr("Could not continue; we will retry");
 		} finally {
 			advancing = false;
 		}
@@ -190,7 +191,7 @@
 		try {
 			apply(await api.put<StudentState>('/api/attempts/' + id + '/flags/' + st.question.id, { flagged: !curFlagged }));
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Could not flag the question';
+			notice = e instanceof ApiError ? e.message : tr("Could not flag the question");
 		} finally {
 			flagging = false;
 		}
@@ -213,7 +214,7 @@
 			await queue.flush();
 			apply(await api.post<StudentState>('/api/attempts/' + id + '/submit'));
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Could not submit; try again';
+			notice = e instanceof ApiError ? e.message : tr("Could not submit; try again");
 		} finally {
 			advancing = false;
 		}
@@ -252,24 +253,24 @@
 <div class="quiz" class:with-panel={panelOpen && st?.state === 'in_progress'}>
 	<header class="quiz-bar">
 		<div class="quiz-bar-inner">
-			<strong class="title">{st?.quiz_title ?? 'Quiz'}</strong>
+			<strong class="title">{st?.quiz_title ?? tr("Quiz")}</strong>
 			<span class="spacer"></span>
 			{#if st?.team}
-				<span class="tooltip tooltip-bottom" data-tip="Your team"><span class="badge badge-soft gap-1 max-w-40"><span class="tdot" style:background="var(--cat-{st.team.color})" aria-hidden="true"></span><span class="truncate">{st.team.name}</span>{#if st.captain}<Icon name="star" size={12} /><span class="sr-only">(captain)</span>{/if}</span></span>
+				<span class="tooltip tooltip-bottom" data-tip={tr("Your team")}><span class="badge badge-soft gap-1 max-w-40"><span class="tdot" style:background="var(--cat-{st.team.color})" aria-hidden="true"></span><span class="truncate">{st.team.name}</span>{#if st.captain}<Icon name="star" size={12} /><span class="sr-only">{tr("(captain)")}</span>{/if}</span></span>
 			{/if}
 			{#if !online}
-				<span class="badge badge-soft badge-warning gap-1" role="status"><Icon name="wifi-off" size={14} />Offline · answers will sync</span>
+				<span class="badge badge-soft badge-warning gap-1" role="status"><Icon name="wifi-off" size={14} />{tr("Offline · answers will sync")}</span>
 			{:else if pendingSaves > 0}
-				<span class="badge badge-soft gap-1" role="status"><span class="loading loading-spinner loading-xs"></span>Saving…</span>
+				<span class="badge badge-soft gap-1" role="status"><span class="loading loading-spinner loading-xs"></span>{tr("Saving…")}</span>
 			{:else if savedRecently}
-				<span class="badge badge-soft badge-success gap-1" role="status" in:scaleIn><Icon name="check" size={14} />Saved</span>
+				<span class="badge badge-soft badge-success gap-1" role="status" in:scaleIn><Icon name="check" size={14} />{tr("Saved")}</span>
 			{/if}
 			{#if quizLeft != null && (st?.state === 'in_progress' || st?.state === 'paused')}
 				<button
 					class="timer {quizUrgency}"
 					class:compact={timerCompact}
-					aria-label={`Time left: ${formatDuration(quizLeft)}. ${timerCompact ? 'Show' : 'Hide'} the timer`}
-					title={timerCompact ? 'Show timer' : 'Make the timer smaller'}
+					aria-label={tr("Time left: {0}. {1} the timer", [formatDuration(quizLeft), timerCompact ? tr("Show") : tr("Hide")])}
+					title={timerCompact ? tr("Show timer") : tr("Make the timer smaller")}
 					onclick={() => prefs.set('timer', prefs.timer === 'compact' ? 'shown' : 'compact')}
 				>
 					<Icon name="clock" size={16} />
@@ -278,7 +279,7 @@
 			{/if}
 		</div>
 		{#if st && (st.state === 'in_progress' || st.state === 'paused') && st.total > 0}
-			<progress class="progress progress-primary quiz-progress" value={st.index + 1} max={st.total} aria-label={`Question ${st.index + 1} of ${st.total}`}></progress>
+			<progress class="progress progress-primary quiz-progress" value={st.index + 1} max={st.total} aria-label={tr("Question {0} of {1}", [st.index + 1, st.total])}></progress>
 		{/if}
 	</header>
 	<p class="sr-only" aria-live="assertive">{announcement}</p>
@@ -291,24 +292,24 @@
 		{:else if st.state === 'waiting'}
 			<div class="state-card" in:flyIn>
 				<div class="pulse-dot" aria-hidden="true"><span></span></div>
-				<h1>You're in the waiting room</h1>
-				<p class="lead">Your teacher will let you in shortly. Keep this page open.</p>
-				{#if st.student_number}<p class="badge badge-soft badge-lg">Student ID: {st.student_number}</p>{/if}
+				<h1>{tr("You're in the waiting room")}</h1>
+				<p class="lead">{tr("Your teacher will let you in shortly. Keep this page open.")}</p>
+				{#if st.student_number}<p class="badge badge-soft badge-lg">{tr("Student ID: {0}", [st.student_number])}</p>{/if}
 				<div class="alert alert-soft alert-info small text-left">
 					<Icon name="info" />
-					<span>Once the quiz starts, stay on this screen. Leaving it or switching apps {st.violation_policy === 'log_only' ? 'is recorded' : 'may end your attempt'}.</span>
+					<span>{tr("Once the quiz starts, stay on this screen. Leaving it or switching apps {0}.", [st.violation_policy === 'log_only' ? tr("is recorded") : tr("may end your attempt")])}</span>
 				</div>
 			</div>
 		{:else if st.state === 'admitted' && st.countdown_deadline == null}
 			<div class="state-card" in:flyIn>
 				<div class="pulse-dot" aria-hidden="true"><span></span></div>
-				<h1>You're in</h1>
-				<p class="lead" role="status">Waiting for your teacher to start the quiz. Keep this page open.</p>
-				<p class="small muted">{st.total} question{st.total === 1 ? '' : 's'} · Stay on this screen until you finish.</p>
+				<h1>{tr("You're in")}</h1>
+				<p class="lead" role="status">{tr("Waiting for your teacher to start the quiz. Keep this page open.")}</p>
+				<p class="small muted">{tr("{0} question{1} · Stay on this screen until you finish.", [st.total, st.total === 1 ? '' : 's'])}</p>
 			</div>
 		{:else if st.state === 'admitted'}
 			<div class="state-card" in:flyIn>
-				<h1>Get ready</h1>
+				<h1>{tr("Get ready")}</h1>
 				<div
 					class="radial-progress countdown-ring text-primary"
 					style:--value={countdownPct}
@@ -316,40 +317,40 @@
 					style:--thickness="0.6rem"
 					role="timer"
 					aria-live="polite"
-					aria-label="Starting in {formatDuration(countdown)}"
+					aria-label={tr("Starting in {0}", [formatDuration(countdown)])}
 				>
 					<span class="tabular text-3xl font-bold text-base-content">{formatDuration(countdown)}</span>
 				</div>
-				<p class="lead">The quiz starts automatically when the countdown ends.</p>
-				<button class="btn btn-primary btn-lg btn-wide" onclick={start}><Icon name="play" size={18} />Start now</button>
-				<p class="small muted">{st.total} question{st.total === 1 ? '' : 's'} · Stay on this screen until you finish.</p>
+				<p class="lead">{tr("The quiz starts automatically when the countdown ends.")}</p>
+				<button class="btn btn-primary btn-lg btn-wide" onclick={start}><Icon name="play" size={18} />{tr("Start now")}</button>
+				<p class="small muted">{tr("{0} question{1} · Stay on this screen until you finish.", [st.total, st.total === 1 ? '' : 's'])}</p>
 			</div>
 		{:else if st.state === 'in_progress' && st.question}
 			{#if fullscreenOffer && !document.fullscreenElement}
-				<button class="btn btn-outline btn-primary w-full" onclick={() => enterFullscreen().then(() => (fullscreenOffer = false))}>Tap to go full screen</button>
+				<button class="btn btn-outline btn-primary w-full" onclick={() => enterFullscreen().then(() => (fullscreenOffer = false))}>{tr("Tap to go full screen")}</button>
 			{/if}
 			{#if st.warnings > 0 && st.violation_policy === 'warn_then_invalidate'}
 				<div class="alert alert-soft alert-warning" role="alert" in:flyIn>
 					<Icon name="alert" />
-					<span><strong>Warning {st.warnings} of {st.allowed_warnings}:</strong> leaving the quiz was detected. Next time your attempt will end.</span>
+					<span><strong>{tr("Warning {0} of {1}:", [st.warnings, st.allowed_warnings])}</strong> {tr("leaving the quiz was detected. Next time your attempt will end.")}</span>
 				</div>
 			{/if}
 			<div class="q-meta">
-				<span class="font-semibold">Question {st.index + 1} <span class="muted font-normal">of {st.total}</span></span>
+				<span class="font-semibold">{tr("Question {0}", [st.index + 1])} <span class="muted font-normal">{tr("of {0}", [st.total])}</span></span>
 				<span class="muted">· {count(st.question.marks, 'mark')}</span>
-				{#if answeredCount != null}<span class="muted">· {answeredCount} answered</span>{/if}
+				{#if answeredCount != null}<span class="muted">{tr("· {0} answered", [answeredCount])}</span>{/if}
 				{#if !st.one_way && st.flagged}
 					<button class="btn btn-sm btn-ghost flag-btn gap-1" class:on={curFlagged} aria-pressed={curFlagged} disabled={flagging} onclick={toggleFlag}>
-						<Icon name="flag" size={14} />{curFlagged ? 'Flagged' : 'Flag for review'}
+						<Icon name="flag" size={14} />{curFlagged ? tr("Flagged") : tr("Flag for review")}
 					</button>
 				{/if}
 				<span class="spacer"></span>
 				{#if questionLeft != null}
-					<span class="badge badge-soft tabular gap-1 {urgency(questionLeft, 30_000, 10_000)}"><Icon name="clock" size={13} />This question: {formatDuration(questionLeft)}</span>
+					<span class="badge badge-soft tabular gap-1 {urgency(questionLeft, 30_000, 10_000)}"><Icon name="clock" size={13} />{tr("This question: {0}", [formatDuration(questionLeft)])}</span>
 				{/if}
 			</div>
 			{#if !st.one_way && st.answered}
-				<nav class="nav-q" aria-label="Questions">
+				<nav class="nav-q" aria-label={tr("Questions")}>
 					{#each st.answered as done, i (i)}
 						<button
 							class="q-dot"
@@ -357,14 +358,14 @@
 							class:done
 							class:flagged={st.flagged?.[i]}
 							aria-current={i === st.index ? 'step' : undefined}
-							aria-label={`Question ${i + 1}, ${done ? 'answered' : 'not answered'}${st.flagged?.[i] ? ', flagged' : ''}`}
+							aria-label={tr("Question {0}, {1}{2}", [i + 1, done ? 'answered' : tr("not answered"), st.flagged?.[i] ? tr(", flagged") : ''])}
 							onclick={() => goTo(i)}
 							>{#if done && i !== st.index}<Icon name="check" size={12} />{:else}{i + 1}{/if}{#if st.flagged?.[i]}<span class="q-flag" aria-hidden="true"><Icon name="flag" size={10} /></span>{/if}</button
 						>
 					{/each}
 					{#if st.flagged}
 						<button class="btn btn-sm btn-soft flagged-toggle gap-1" aria-expanded={panelOpen} aria-controls="flag-panel" onclick={() => (panelOpen = !panelOpen)}>
-							<Icon name="flag" size={14} />Flagged · {flagged.length}
+							<Icon name="flag" size={14} />{tr("Flagged · {0}", [flagged.length])}
 						</button>
 					{/if}
 				</nav>
@@ -376,68 +377,68 @@
 			{/key}
 			{#if notice}<div class="alert alert-soft alert-warning small" role="status"><Icon name="info" />{notice}</div>{/if}
 			<div class="actions">
-				{#if !st.one_way}<button class="btn btn-ghost" onclick={submitNow}><Icon name="send" size={16} />Submit quiz</button>{/if}
+				{#if !st.one_way}<button class="btn btn-ghost" onclick={submitNow}><Icon name="send" size={16} />{tr("Submit quiz")}</button>{/if}
 				<span class="spacer"></span>
 				<button class="btn btn-primary btn-lg min-w-36" disabled={advancing} onclick={next}>
 					{#if advancing}<span class="loading loading-spinner loading-sm"></span>{/if}
-					{isLast ? 'Finish' : 'Next'}
+					{isLast ? tr("Finish") : tr("Next")}
 					{#if !advancing && !isLast}<Icon name="arrow-right" size={18} />{/if}
 				</button>
 			</div>
-			{#if st.one_way}<p class="small muted center m-0"><Icon name="info" size={14} /> You can't go back to a question once you move on.</p>{/if}
+			{#if st.one_way}<p class="small muted center m-0"><Icon name="info" size={14} /> {tr("You can't go back to a question once you move on.")}</p>{/if}
 		{:else if st.state === 'paused'}
 			<div class="state-card" in:flyIn>
 				<div class="state-icon bg-warning/15 text-warning"><Icon name="pause" size={30} /></div>
-				<h1>Paused</h1>
-				<p class="lead">Your teacher has paused the quiz. Your time is stopped.</p>
+				<h1>{tr("Paused")}</h1>
+				<p class="lead">{tr("Your teacher has paused the quiz. Your time is stopped.")}</p>
 			</div>
 		{:else if st.state === 'submitted'}
 			<div class="state-card" in:flyIn>
 				<div class="state-icon bg-success/15 text-success" in:scaleIn={{ start: 0.5, duration: 350 }}><Icon name="check" size={34} /></div>
-				<h1>Submitted</h1>
-				<p class="lead">Your answers are in. Results appear when your teacher releases them.</p>
-				{#if (st.tries ?? 1) > 1}<p class="small muted m-0">Try {st.try} of {st.tries}. Your best try counts.</p>{/if}
+				<h1>{tr("Submitted")}</h1>
+				<p class="lead">{tr("Your answers are in. Results appear when your teacher releases them.")}</p>
+				{#if (st.tries ?? 1) > 1}<p class="small muted m-0">{tr("Try {0} of {1}. Your best try counts.", [st.try, st.tries])}</p>{/if}
 				<div class="flex flex-wrap justify-center gap-2">
-					{#if st.can_retry}<button class="btn btn-primary" disabled={retrying} onclick={retry}><Icon name="undo" size={16} />Try again from the start</button>{/if}
-					<a class="btn" class:btn-primary={!st.can_retry} href="/my">My quizzes</a>
+					{#if st.can_retry}<button class="btn btn-primary" disabled={retrying} onclick={retry}><Icon name="undo" size={16} />{tr("Try again from the start")}</button>{/if}
+					<a class="btn" class:btn-primary={!st.can_retry} href="/my">{tr("My quizzes")}</a>
 				</div>
 			</div>
 		{:else if st.state === 'invalidated'}
 			<div class="state-card" in:flyIn>
 				<div class="state-icon bg-error/15 text-error"><Icon name="alert" size={30} /></div>
-				<h1>Attempt ended</h1>
-				<p class="lead">Your attempt was stopped because leaving the quiz was detected ({st.invalid_reason?.replace('_', ' ')}). Your teacher has been told and can reinstate it.</p>
+				<h1>{tr("Attempt ended")}</h1>
+				<p class="lead">{tr("Your attempt was stopped because leaving the quiz was detected ({0}). Your teacher has been told and can reinstate it.", [st.invalid_reason?.replace('_', ' ')])}</p>
 			</div>
 		{:else}
 			<div class="state-card" in:flyIn>
-				<h1>This session has ended</h1>
-				<a class="btn btn-primary" href="/my">My quizzes</a>
+				<h1>{tr("This session has ended")}</h1>
+				<a class="btn btn-primary" href="/my">{tr("My quizzes")}</a>
 			</div>
 		{/if}
 	</section>
 
 	{#if panelOpen && st?.state === 'in_progress'}
-		<button class="flag-backdrop" aria-label="Close the flagged questions" onclick={() => (panelOpen = false)}></button>
-		<aside id="flag-panel" class="flag-panel" aria-label="Flagged questions" in:flyIn={{ x: 24, y: 0, duration: 200 }}>
+		<button class="flag-backdrop" aria-label={tr("Close the flagged questions")} onclick={() => (panelOpen = false)}></button>
+		<aside id="flag-panel" class="flag-panel" aria-label={tr("Flagged questions")} in:flyIn={{ x: 24, y: 0, duration: 200 }}>
 			<div class="flag-head">
-				<h2 class="m-0 text-base"><Icon name="flag" size={16} /> Flagged questions</h2>
-				<button class="btn btn-sm btn-ghost btn-square" aria-label="Close" onclick={() => (panelOpen = false)}><Icon name="x" size={16} /></button>
+				<h2 class="m-0 text-base"><Icon name="flag" size={16} /> {tr("Flagged questions")}</h2>
+				<button class="btn btn-sm btn-ghost btn-square" aria-label={tr("Close")} onclick={() => (panelOpen = false)}><Icon name="x" size={16} /></button>
 			</div>
 			{#if flagged.length}
 				<ul class="flag-list">
 					{#each flagged as f (f.index)}
 						<li>
 							<button class="flag-item" class:cur={f.index === st.index} aria-current={f.index === st.index ? 'step' : undefined} onclick={() => openFlagged(f.index)}>
-								<span class="font-semibold">Question {f.index + 1}</span>
-								<span class="badge badge-sm badge-soft" class:badge-success={f.answered}>{f.answered ? 'Answered' : 'Not answered'}</span>
-								{#if f.index === st.index}<span class="small muted">You’re here</span>{:else}<Icon name="arrow-right" size={14} />{/if}
+								<span class="font-semibold">{tr("Question {0}", [f.index + 1])}</span>
+								<span class="badge badge-sm badge-soft" class:badge-success={f.answered}>{f.answered ? tr("Answered") : tr("Not answered")}</span>
+								{#if f.index === st.index}<span class="small muted">{tr("You’re here")}</span>{:else}<Icon name="arrow-right" size={14} />{/if}
 							</button>
 						</li>
 					{/each}
 				</ul>
-				<p class="small muted m-0">Open a question and press <strong>Flagged</strong> to clear its flag.</p>
+				<p class="small muted m-0">{tr("Open a question and press")} <strong>{tr("Flagged")}</strong> {tr("to clear its flag.")}</p>
 			{:else}
-				<p class="small muted m-0">No flagged questions. Press <strong>Flag for review</strong> on a question to find it here later.</p>
+				<p class="small muted m-0">{tr("No flagged questions. Press")} <strong>{tr("Flag for review")}</strong> {tr("on a question to find it here later.")}</p>
 			{/if}
 		</aside>
 	{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, safeNext, withBusyRetry } from '$lib/api';
@@ -40,7 +41,7 @@
 	}
 </script>
 
-<svelte:head><title>Log in · Classroom Quiz</title><meta name="description" content="Log in to Classroom Quiz to take quizzes, read tutorials and see your progress, or to run your classroom." /></svelte:head>
+<svelte:head><title>{tr("Log in · Classroom Quiz")}</title><meta name="description" content="Log in to Classroom Quiz to take quizzes, read tutorials and see your progress, or to run your classroom." /></svelte:head>
 
 
 <div class="narrow">

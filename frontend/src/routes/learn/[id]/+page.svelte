@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import MathText from '$lib/richtext/MathText.svelte';
 	// A student working through a tutorial (D-74): one page at a time, with
 	// reading, questions, checks and feedback as the teacher set them. Time
@@ -59,9 +60,9 @@
 			refresh(next);
 			const p = next.page;
 			if (!p || viaLink || p.leaving === 'allowed' || p.index !== before.index) return;
-			if (p.locked && !before.locked) toast('You left the app too often: this page is locked until your teacher unlocks it', 'error');
-			else if (p.leaving === 'blocked' && p.lock_after && !p.locked) toast(`You left the app: ${p.leaves} of ${p.lock_after} times before this page locks`, 'error');
-			else if (!p.locked) toast('You left the app: your teacher will see it', 'info');
+			if (p.locked && !before.locked) toast(tr("You left the app too often: this page is locked until your teacher unlocks it"), 'error');
+			else if (p.leaving === 'blocked' && p.lock_after && !p.locked) toast(tr("You left the app: {0} of {1} times before this page locks", [p.leaves, p.lock_after]), 'error');
+			else if (!p.locked) toast(tr("You left the app: your teacher will see it"), 'info');
 		} catch {
 			/* recorded next time, or not at all: it's evidence, not a gate */
 		}
@@ -89,7 +90,7 @@
 			goto(loginUrl('/learn/' + id), { replaceState: true });
 			return;
 		}
-		api.post<RunView>('/api/tutorials/' + id + '/open').then(show, (e) => (problem = e instanceof ApiError ? e.message : 'Could not open the tutorial'));
+		api.post<RunView>('/api/tutorials/' + id + '/open').then(show, (e) => (problem = e instanceof ApiError ? e.message : tr("Could not open the tutorial")));
 	});
 
 	async function act(f: () => Promise<RunView>) {
@@ -98,7 +99,7 @@
 		try {
 			show(await f());
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Something went wrong; try again', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Something went wrong; try again"), 'error');
 		} finally {
 			busy = false;
 		}
@@ -109,7 +110,7 @@
 	async function check() {
 		if (!v?.page) return;
 		const responses = changed(v.page.questions, drafts);
-		if (!Object.keys(responses).length) return toast('Answer a question first', 'info');
+		if (!Object.keys(responses).length) return toast(tr("Answer a question first"), 'info');
 		await act(() => api.post<RunView>('/api/tutorials/' + id + '/answers', { page: v!.page!.index, responses }));
 	}
 
@@ -127,7 +128,7 @@
 	}
 </script>
 
-<svelte:head><title>{v?.tutorial.title ?? 'Tutorial'}</title></svelte:head>
+<svelte:head><title>{v?.tutorial.title ?? tr("Tutorial")}</title></svelte:head>
 
 <div class="page-container learn">
 	{#if problem}
@@ -150,11 +151,11 @@
 					{#if v.tutorial.teacher}<span>{t('read.by', { name: v.tutorial.teacher })}</span>{/if}
 					{#if v.tutorial.published_at}<time datetime={v.tutorial.published_at}>{new Date(v.tutorial.published_at).toLocaleDateString(i18n.tag, { day: 'numeric', month: 'long', year: 'numeric' })}</time>{/if}
 					<span>{t('read.minutes', { n: readingMinutes(p.blocks) })}</span>
-					{#if v.score}<span class="tabular">{t('read.score', { score: v.score.score, max: v.score.max })}{v.score.pending ? ` · ${v.score.pending} waiting for your teacher` : ''}</span>{/if}
+					{#if v.score}<span class="tabular">{t('read.score', { score: v.score.score, max: v.score.max })}{v.score.pending ? tr(" · {0} waiting for your teacher", [v.score.pending]) : ''}</span>{/if}
 				</p>
 			</div>
 			<div class="progress-row">
-				<progress class="progress progress-primary flex-1" value={pct} max="100" aria-label="Progress: {pct}%"></progress>
+				<progress class="progress progress-primary flex-1" value={pct} max="100" aria-label={tr("Progress: {0}%", [pct])}></progress>
 				<span class="small muted tabular">{v.finished ? t('read.finished') : t('read.pageOf', { page: p.index + 1, pages: v.pages.length })}</span>
 			</div>
 			<nav class="steps-nav" aria-label={t('read.pages')}>
@@ -167,8 +168,8 @@
 			{#if v.finished && reviewNote(v.review)}<p class="alert alert-soft alert-info m-0" role="status"><Icon name="info" size={18} />{reviewNote(v.review)}</p>{/if}
 			{#if v.finished}
 				<p class="alert alert-soft alert-success m-0"><Icon name="check-circle" size={18} />
-					{v.score ? `Finished. Your score: ${v.score.score} out of ${v.score.max}.` : v.tutorial.feedback === 'release' ? 'Finished. Your teacher will release your marks.' : 'Finished.'}
-					{#if v.score?.pending} {count(v.score.pending, 'answer')} still waiting for your teacher.{/if}</p>
+					{v.score ? tr("Finished. Your score: {0} out of {1}.", [v.score.score, v.score.max]) : v.tutorial.feedback === 'release' ? tr("Finished. Your teacher will release your marks.") : tr("Finished.")}
+					{#if v.score?.pending} {tr("{0} still waiting for your teacher.", [count(v.score.pending, 'answer')])}{/if}</p>
 			{/if}
 		</header>
 
@@ -182,21 +183,21 @@
 			{#if p.blocks.length}<Blocks blocks={p.blocks} onlink={() => watch?.viaLink()} />{/if}
 			{#each p.questions as q, i (q.id)}
 				<section class="question" aria-labelledby="q-{q.id}">
-					<p class="small muted m-0" id="q-{q.id}">Question {i + 1} · {count(q.marks, 'mark')}{q.tries > 1 ? ` · try ${q.tries}` : ''}</p>
+					<p class="small muted m-0" id="q-{q.id}">{tr("Question {0} · {1}{2}", [i + 1, count(q.marks, 'mark'), q.tries > 1 ? tr(" · try {0}", [q.tries]) : ''])}</p>
 					<QuestionView question={q} value={drafts[q.id] ?? null} disabled={q.locked || busy} onchange={(r) => (drafts[q.id] = r)} />
 					{#if q.mark}
 						<div class="mark" class:right={q.mark.correct} class:pending={q.mark.pending} role="status">
 							<Icon name={q.mark.pending ? 'clock' : q.mark.correct ? 'check-circle' : 'alert'} size={18} />
 							<div class="min-w-0">
-								<strong>{q.mark.marking ? 'Being marked…' : q.mark.pending ? 'Your teacher will mark this' : q.mark.correct ? 'Right' : q.locked ? 'Not quite' : 'Not quite: try again'}</strong>
+								<strong>{q.mark.marking ? tr("Being marked…") : q.mark.pending ? tr("Your teacher will mark this") : q.mark.correct ? tr("Right") : q.locked ? tr("Not quite") : tr("Not quite: try again")}</strong>
 								{#if !q.mark.pending}<span class="small tabular"> · {q.mark.score} / {q.mark.max}</span>{/if}
 								{#if q.mark.feedback}<p class="m-0 mt-1">{q.mark.feedback}</p>{/if}
-								{#if q.mark.key && !q.mark.correct}<p class="small m-0 mt-1">The right answer: <MathText text={describeKey(q.type, q.body, q.mark.key)} /></p>{/if}
-								{#if q.mark.comment}<p class="small m-0 mt-1"><strong>Your teacher:</strong> {q.mark.comment}</p>{/if}
+								{#if q.mark.key && !q.mark.correct}<p class="small m-0 mt-1">{tr("The right answer:")} <MathText text={describeKey(q.type, q.body, q.mark.key)} /></p>{/if}
+								{#if q.mark.comment}<p class="small m-0 mt-1"><strong>{tr("Your teacher:")}</strong> {q.mark.comment}</p>{/if}
 							</div>
 						</div>
 					{:else if q.checked && !v.read_only}
-						<p class="small muted m-0"><Icon name="check" size={14} /> Answer saved{v.tutorial.feedback === 'end' ? '; you’ll see how you did at the end' : v.tutorial.feedback === 'release' ? '; your teacher will release the marks' : ''}.</p>
+						<p class="small muted m-0"><Icon name="check" size={14} /> {tr("Answer saved{0}.", [v.tutorial.feedback === 'end' ? tr("; you’ll see how you did at the end") : v.tutorial.feedback === 'release' ? tr("; your teacher will release the marks") : ''])}</p>
 					{/if}
 				</section>
 			{/each}

@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // Optional details of a classroom, meeting or tutoring session (D-128):
 // department, course code, year, semester, tags, and a classroom's term.
 // Lists filter by them; this turns them into words and filters.
@@ -26,7 +27,7 @@ export function propsLine(p: Props | undefined, withCode = true): string {
 }
 
 const day = (s: string) => new Date(s + 'T00:00:00');
-const fmt = (d: Date, year: boolean) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
+const fmt = (d: Date, year: boolean) => d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
 
 export type Term = { state: 'upcoming' | 'running' | 'ended'; label: string; range: string; progress: number | null };
 

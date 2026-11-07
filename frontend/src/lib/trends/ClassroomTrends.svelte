@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A classroom over months and years (D-119): how many members take part,
 	// the average and pass rate, results and tutorials, month by month; and
 	// each student over the same span, with whether they're going up or down.
@@ -44,49 +45,49 @@
 <section class="vstack" aria-labelledby="trends-h">
 	<div class="flex flex-wrap items-end gap-3">
 		<div class="grow">
-			<h2 id="trends-h" class="m-0 text-lg">Trends</h2>
-			<p class="m-0 small muted">Month by month{data?.updated_at ? `, brought up to date ${new Date(data.updated_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}. Results count in the month they were handed in.</p>
+			<h2 id="trends-h" class="m-0 text-lg">{tr("Trends")}</h2>
+			<p class="m-0 small muted">{tr("Month by month{0}. Results count in the month they were handed in.", [data?.updated_at ? tr(", brought up to date {0}", [new Date(data.updated_at).toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' })]) : ''])}</p>
 		</div>
-		<div class="join" role="group" aria-label="Span">
-			{#each SPANS as s (s.months)}<button class="btn btn-sm join-item" class:btn-active={months === s.months} aria-pressed={months === s.months} onclick={() => (months = s.months)}>{s.label}</button>{/each}
+		<div class="join" role="group" aria-label={tr("Span")}>
+			{#each SPANS as s (s.months)}<button class="btn btn-sm join-item" class:btn-active={months === s.months} aria-pressed={months === s.months} onclick={() => (months = s.months)}>{tr(s.label)}</button>{/each}
 		</div>
 	</div>
 
 	{#if failed}
-		<p class="alert alert-soft alert-warning m-0">The trends couldn’t be loaded.</p>
+		<p class="alert alert-soft alert-warning m-0">{tr("The trends couldn’t be loaded.")}</p>
 	{:else if !data}
 		<Skeleton lines={6} />
 	{:else if sum.results + sum.tutorials === 0}
-		<div class="card card-border bg-base-100 p-6 small muted">Nothing yet in this span. Trends appear once students hand in quizzes or finish tutorials; they are brought up to date every 15 minutes.</div>
+		<div class="card card-border bg-base-100 p-6 small muted">{tr("Nothing yet in this span. Trends appear once students hand in quizzes or finish tutorials; they are brought up to date every 15 minutes.")}</div>
 	{:else}
 		<div class="tiles">
-			<StatTile label="Members taking part" kpi={k(sum.takingPart)} unit="%" versus="" hint="Members with a result or a finished tutorial, over the months shown" />
-			<StatTile label="Average score" kpi={k(sum.avg)} unit="%" versus="" />
-			<StatTile label="Pass rate" kpi={k(sum.passRate)} unit="%" versus="" />
-			<StatTile label="Quiz results" kpi={k(sum.results)} versus="" />
-			<StatTile label="Tutorials finished" kpi={k(sum.tutorials)} versus="" />
+			<StatTile label={tr("Members taking part")} kpi={k(sum.takingPart)} unit="%" versus="" hint={tr("Members with a result or a finished tutorial, over the months shown")} />
+			<StatTile label={tr("Average score")} kpi={k(sum.avg)} unit="%" versus="" />
+			<StatTile label={tr("Pass rate")} kpi={k(sum.passRate)} unit="%" versus="" />
+			<StatTile label={tr("Quiz results")} kpi={k(sum.results)} versus="" />
+			<StatTile label={tr("Tutorials finished")} kpi={k(sum.tutorials)} versus="" />
 		</div>
 		<div class="charts">
 			<div class="card card-border bg-base-100 p-4 vstack gap-2">
-				<h3 class="m-0 text-base">Average score each month</h3>
+				<h3 class="m-0 text-base">{tr("Average score each month")}</h3>
 				{#if avgPoints.length}
-					<TrendChart title="Average score each month" name="Average" contextName="Pass rate" rowName="Month" noun="months" points={avgPoints} />
+					<TrendChart title={tr("Average score each month")} name="Average" contextName="Pass rate" rowName="Month" noun="months" points={avgPoints} />
 				{:else}
-					<p class="m-0 small muted">No quiz results in this span, only tutorials.</p>
+					<p class="m-0 small muted">{tr("No quiz results in this span, only tutorials.")}</p>
 				{/if}
 			</div>
 			<div class="card card-border bg-base-100 p-4 vstack gap-2">
-				<h3 class="m-0 text-base">Members taking part each month</h3>
-				<ColumnChart title="Members taking part each month"
+				<h3 class="m-0 text-base">{tr("Members taking part each month")}</h3>
+				<ColumnChart title={tr("Members taking part each month")}
 					cols={shown.filter((m) => m.taking_part !== null && m.taking_part !== undefined).map((m) => ({ label: monthLabel(m.month), sub: monthLabel(m.month, true), value: m.taking_part ?? 0, lines: [`${m.active} of ${m.enrolled} members`, `${m.quizzes} results, ${m.tutorials} tutorials`] }))} />
 			</div>
 		</div>
 
 		<details class="card card-border bg-base-100 p-4">
-			<summary class="font-semibold">Every month</summary>
+			<summary class="font-semibold">{tr("Every month")}</summary>
 			<div class="table-wrap mt-2">
 				<table class="table table-sm">
-					<thead><tr><th>Month</th><th>Members</th><th>Taking part</th><th>Sessions</th><th>Results</th><th>Average</th><th>Pass rate</th><th>Tutorials</th></tr></thead>
+					<thead><tr><th>{tr("Month")}</th><th>{tr("Members")}</th><th>{tr("Taking part")}</th><th>{tr("Sessions")}</th><th>{tr("Results")}</th><th>{tr("Average")}</th><th>{tr("Pass rate")}</th><th>{tr("Tutorials")}</th></tr></thead>
 					<tbody>
 						{#each [...shown].reverse() as m (m.month)}
 							<tr><td>{monthLabel(m.month)}</td><td class="tabular">{m.enrolled ?? 0}</td><td class="tabular">{m.taking_part ?? '—'}{m.taking_part != null ? '%' : ''}</td><td class="tabular">{m.sessions ?? 0}</td><td class="tabular">{m.quizzes}</td><td class="tabular">{m.avg ?? '—'}{m.avg !== null ? '%' : ''}</td><td class="tabular">{m.pass_rate ?? '—'}{m.pass_rate !== null ? '%' : ''}</td><td class="tabular">{m.tutorials}</td></tr>
@@ -100,19 +101,19 @@
 	{#if data && data.students.length}
 		<div class="card card-border bg-base-100 p-4 vstack gap-3">
 			<div class="flex flex-wrap items-center gap-2">
-				<h3 class="m-0 grow text-base">Students over this span</h3>
-				<label class="input input-sm w-full sm:w-60"><Icon name="search" size={14} /><span class="sr-only">Find a student</span><input type="search" placeholder="Find a student" bind:value={find} /></label>
-				<label class="sr-only" for="trend-sort">Order</label>
+				<h3 class="m-0 grow text-base">{tr("Students over this span")}</h3>
+				<label class="input input-sm w-full sm:w-60"><Icon name="search" size={14} /><span class="sr-only">{tr("Find a student")}</span><input type="search" placeholder={tr("Find a student")} bind:value={find} /></label>
+				<label class="sr-only" for="trend-sort">{tr("Order")}</label>
 				<select id="trend-sort" class="select select-sm w-auto" bind:value={sortBy}>
-					<option value="name">By name</option>
-					<option value="avg">Lowest average first</option>
-					<option value="change">Falling most first</option>
-					<option value="quizzes">Fewest results first</option>
+					<option value="name">{tr("By name")}</option>
+					<option value="avg">{tr("Lowest average first")}</option>
+					<option value="change">{tr("Falling most first")}</option>
+					<option value="quizzes">{tr("Fewest results first")}</option>
 				</select>
 			</div>
 			<div class="table-wrap">
 				<table class="table table-sm">
-					<thead><tr><th>Student</th><th>Results</th><th>Average</th><th>Last 3 months</th><th>Tutorials</th><th>Active months</th><th>Last active</th><th><span class="sr-only">Details</span></th></tr></thead>
+					<thead><tr><th>{tr("Student")}</th><th>{tr("Results")}</th><th>{tr("Average")}</th><th>{tr("Last 3 months")}</th><th>{tr("Tutorials")}</th><th>{tr("Active months")}</th><th>{tr("Last active")}</th><th><span class="sr-only">{tr("Details")}</span></th></tr></thead>
 					<tbody>
 						{#each students as s (s.user_id)}
 							{@const dir = direction(s.recent_avg, s.earlier_avg)}
@@ -122,15 +123,15 @@
 								<td class="tabular">{s.avg ?? '—'}{s.avg !== null ? '%' : ''}</td>
 								<td class="tabular">
 									{s.recent_avg ?? '—'}{s.recent_avg !== null ? '%' : ''}
-									{#if dir}<span class="dir {dir}" title="Against the three months before: {s.earlier_avg}%"><Icon name={dir === 'up' ? 'arrow-up' : dir === 'down' ? 'arrow-down' : 'minus'} size={13} />{dir}</span>{/if}
+									{#if dir}<span class="dir {dir}" title={tr("Against the three months before: {0}%", [s.earlier_avg])}><Icon name={dir === 'up' ? 'arrow-up' : dir === 'down' ? 'arrow-down' : 'minus'} size={13} />{dir}</span>{/if}
 								</td>
 								<td class="tabular">{s.tutorials}</td>
 								<td class="tabular">{s.active_months}</td>
-								<td class="small">{s.last_active ? monthLabel(s.last_active) : 'Not yet'}</td>
-								<td><button class="btn btn-xs" onclick={() => (open = s)}>Months</button></td>
+								<td class="small">{s.last_active ? monthLabel(s.last_active) : tr("Not yet")}</td>
+								<td><button class="btn btn-xs" onclick={() => (open = s)}>{tr("Months")}</button></td>
 							</tr>
 						{:else}
-							<tr><td colspan="8" class="muted">No student matches “{find}”.</td></tr>
+							<tr><td colspan="8" class="muted">{tr("No student matches “{0}”.", [find])}</td></tr>
 						{/each}
 					</tbody>
 				</table>

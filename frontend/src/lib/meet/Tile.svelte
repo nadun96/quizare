@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// One person's camera (or a shared screen) in a meeting. With the camera
 	// off it shows their initials; the video element stays, since it also
 	// plays their sound.
@@ -54,19 +55,19 @@
 
 <div class="tile" class:screen class:self bind:this={box}>
 	<!-- svelte-ignore a11y_media_has_caption -->
-	<video bind:this={el} autoplay playsinline muted={self} class:hidden={!video} aria-label={screen ? `${name}'s screen` : `${name}'s camera`}></video>
+	<video bind:this={el} autoplay playsinline muted={self} class:hidden={!video} aria-label={screen ? tr("{0}'s screen", [name]) : tr("{0}'s camera", [name])}></video>
 	{#if !video}
 		<div class="face" aria-hidden="true"><span>{initials(name)}</span></div>
 	{/if}
 	{#if status}<span class="status badge badge-sm">{status}</span>{/if}
 	<div class="cap small">
-		{#if hand}<span class="raised" title="Hand raised"><Icon name="hand" size={14} label="Hand raised" /></span>{/if}
-		{#if !screen && !mic}<Icon name="mic-off" size={14} label="Muted" />{/if}
-		<span class="truncate">{screen ? `${self ? 'Your' : name + "'s"} screen` : self ? `${name} (you)` : name}</span>
-		{#if host && !screen}<span class="badge badge-xs">Host</span>{/if}
+		{#if hand}<span class="raised" title={tr("Hand raised")}><Icon name="hand" size={14} label={tr("Hand raised")} /></span>{/if}
+		{#if !screen && !mic}<Icon name="mic-off" size={14} label={tr("Muted")} />{/if}
+		<span class="truncate">{screen ? tr("{0} screen", [self ? tr("Your") : name + "'s"]) : self ? tr("{0} (you)", [name]) : name}</span>
+		{#if host && !screen}<span class="badge badge-xs">{tr("Host")}</span>{/if}
 		<span class="spacer"></span>
 		{@render actions?.()}
-		{#if video}<IconBtn icon="maximize" label="Full screen" class="btn-xs btn-ghost" onclick={fullscreen} />{/if}
+		{#if video}<IconBtn icon="maximize" label={tr("Full screen")} class="btn-xs btn-ghost" onclick={fullscreen} />{/if}
 	</div>
 </div>
 

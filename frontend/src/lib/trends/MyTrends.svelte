@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A student's own months across their classrooms (D-119): their average
 	// beside their classes', and what they did each month.
 	import { api } from '../api';
@@ -21,27 +22,27 @@
 {#if data && sum.results + sum.tutorials > 0}
 	<section class="vstack" aria-labelledby="my-trends-h">
 		<div class="flex flex-wrap items-end gap-3">
-			<h2 id="my-trends-h" class="m-0 grow">Over time</h2>
-			<div class="join" role="group" aria-label="Span">
-				{#each SPANS as s (s.months)}<button class="btn btn-sm join-item" class:btn-active={months === s.months} aria-pressed={months === s.months} onclick={() => (months = s.months)}>{s.label}</button>{/each}
+			<h2 id="my-trends-h" class="m-0 grow">{tr("Over time")}</h2>
+			<div class="join" role="group" aria-label={tr("Span")}>
+				{#each SPANS as s (s.months)}<button class="btn btn-sm join-item" class:btn-active={months === s.months} aria-pressed={months === s.months} onclick={() => (months = s.months)}>{tr(s.label)}</button>{/each}
 			</div>
 		</div>
 		<div class="tiles">
-			<StatTile label="Average score" kpi={k(sum.avg)} unit="%" versus="" />
-			<StatTile label="Quizzes" kpi={k(sum.results)} versus="" />
-			<StatTile label="Tutorials finished" kpi={k(sum.tutorials)} versus="" />
-			<StatTile label="Active months" kpi={k(sum.activeMonths)} versus="" />
+			<StatTile label={tr("Average score")} kpi={k(sum.avg)} unit="%" versus="" />
+			<StatTile label={tr("Quizzes")} kpi={k(sum.results)} versus="" />
+			<StatTile label={tr("Tutorials finished")} kpi={k(sum.tutorials)} versus="" />
+			<StatTile label={tr("Active months")} kpi={k(sum.activeMonths)} versus="" />
 		</div>
 		{#if pts.length}
 			<div class="card card-border bg-base-100 p-4">
-				<TrendChart title="Your average each month" name="You" contextName="Your classes" rowName="Month" noun="months" points={pts} />
+				<TrendChart title={tr("Your average each month")} name="You" contextName="Your classes" rowName="Month" noun="months" points={pts} />
 			</div>
 		{/if}
 		<details class="card card-border bg-base-100 p-4">
-			<summary class="font-semibold">Every month</summary>
+			<summary class="font-semibold">{tr("Every month")}</summary>
 			<div class="table-wrap mt-2">
 				<table class="table table-sm">
-					<thead><tr><th>Month</th><th>Quizzes</th><th>Your average</th><th>Your classes</th><th>Tutorials</th><th>Active days</th></tr></thead>
+					<thead><tr><th>{tr("Month")}</th><th>{tr("Quizzes")}</th><th>{tr("Your average")}</th><th>{tr("Your classes")}</th><th>{tr("Tutorials")}</th><th>{tr("Active days")}</th></tr></thead>
 					<tbody>
 						{#each [...shown].reverse() as m (m.month)}
 							<tr><td>{monthLabel(m.month)}</td><td class="tabular">{m.quizzes}</td><td class="tabular">{m.avg ?? '—'}{m.avg !== null ? '%' : ''}</td><td class="tabular">{m.class_avg ?? '—'}{m.class_avg != null ? '%' : ''}</td><td class="tabular">{m.tutorials}</td><td class="tabular">{m.active}</td></tr>

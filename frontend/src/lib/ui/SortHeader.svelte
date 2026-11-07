@@ -1,4 +1,5 @@
 <script lang="ts" generics="T">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A sortable column heading for a server-paginated list (TS-FR-93): sorts
 	// every page on the server; pressing it again flips the direction.
 	import type { Paged } from '../paged.svelte';
@@ -8,7 +9,7 @@
 	const active = $derived(list.sort === key);
 </script>
 
-<button type="button" class="sort" class:active onclick={() => list.sortBy(key, desc)} aria-label="Sort by {label}{active ? (list.desc ? ', descending' : ', ascending') : ''}">
+<button type="button" class="sort" class:active onclick={() => list.sortBy(key, desc)} aria-label={tr("Sort by {0}{1}", [label, active ? (list.desc ? tr(", descending") : tr(", ascending")) : ''])}>
 	{label}
 	<span aria-hidden="true" class="ind">{#if active}<Icon name={list.desc ? 'arrow-down' : 'arrow-up'} size={12} />{:else}<Icon name="arrow-up-down" size={12} />{/if}</span>
 </button>

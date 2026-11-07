@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The one celebration (D-97): shown when a student reaches a new level or
 	// earns a badge since they last looked. One short burst, then still;
 	// nothing moves with reduced motion.
@@ -39,10 +40,10 @@
 		<div class="stage" class:still bind:this={stage}>
 			{#if !still}{#each sparks as a (a)}<span class="spark-arm" style:transform="rotate({a}deg)"><span class="spark"></span></span>{/each}{/if}
 			<LevelRing fraction={still ? levelFraction(p) : fill} level={p.level} size={132} stroke={9} badge={false}>
-				<span class="medal"><span class="small muted">Level</span><strong>{p.level}</strong></span>
+				<span class="medal"><span class="small muted">{tr("Level")}</span><strong>{p.level}</strong></span>
 			</LevelRing>
 		</div>
-		<h2 id="celebrate-h" class="m-0 mt-4 text-xl text-center">{levelUp ? `You reached level ${p.level}` : badges.length === 1 ? `New badge: ${badges[0].name}` : `${badges.length} new badges`}</h2>
+		<h2 id="celebrate-h" class="m-0 mt-4 text-xl text-center">{levelUp ? tr("You reached level {0}", [p.level]) : badges.length === 1 ? tr("New badge: {0}", [badges[0].name]) : tr("{0} new badges", [badges.length])}</h2>
 		{#if badges.length}
 			<ul class="earned">
 				{#each badges as b (b.id)}
@@ -50,8 +51,8 @@
 				{/each}
 			</ul>
 		{/if}
-		<p class="m-0 mt-2 small muted text-center">{p.next_level_xp - p.xp} XP to level {p.level + 1}.</p>
-		<div class="modal-action justify-center"><button class="btn btn-primary" onclick={() => dialog?.close()}>Keep going</button></div>
+		<p class="m-0 mt-2 small muted text-center">{tr("{0} XP to level {1}.", [p.next_level_xp - p.xp, p.level + 1])}</p>
+		<div class="modal-action justify-center"><button class="btn btn-primary" onclick={() => dialog?.close()}>{tr("Keep going")}</button></div>
 	</div>
 </dialog>
 

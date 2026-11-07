@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { t } from '../i18n/i18n.svelte';
 	// The single confirmation and prompt dialog (lib/ui/dialog.svelte.ts). A
 	// native modal <dialog>: focus moves into it (the field, for prompts),
@@ -62,6 +63,6 @@
 				<button class="btn {c.danger ? 'btn-error' : 'btn-primary'}" bind:this={confirmBtn} disabled={c.prompt && !c.allowEmpty && !dialogs.value.trim()} onclick={() => dialogs.close(true)}>{c.confirm ?? t('common.ok')}</button>
 			</div>
 		</div>
-		<div class="modal-backdrop"><button tabindex="-1" aria-label="Close" onclick={() => dialogs.close(false)}>close</button></div>
+		<div class="modal-backdrop"><button tabindex="-1" aria-label={tr("Close")} onclick={() => dialogs.close(false)}>{tr("close")}</button></div>
 	{/if}
 </dialog>

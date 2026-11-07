@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import AnswerList from '$lib/poll/AnswerList.svelte';
 	import SaveToDrive from '$lib/drive/SaveToDrive.svelte';
 	import ParticipantList from '$lib/poll/ParticipantList.svelte';
@@ -75,30 +76,30 @@
 	async function setStatus(status: Poll['status']) {
 		try {
 			poll = await api.post<Poll>('/api/teacher/polls/' + id + '/status', { status });
-			toast(status === 'open' ? 'Poll is open — share the code' : status === 'closed' ? 'Poll closed' : 'Back to draft');
+			toast(status === 'open' ? tr("Poll is open — share the code") : status === 'closed' ? tr("Poll closed") : tr("Back to draft"));
 			if (status === 'open') tab = 'share';
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not change the status', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not change the status"), 'error');
 		}
 	}
 	async function saveSettings() {
 		if (!settings) return;
 		try {
 			poll = await api.put<Poll>('/api/teacher/polls/' + id, { settings, classroom_id: classroomId ?? '', topic_id: (classroomId && topicId) || '' });
-			toast('Settings saved');
+			toast(tr("Settings saved"));
 		} catch (e) {
-			toast(e instanceof ApiError ? Object.values(e.fields)[0] ?? e.message : 'Could not save', 'error');
+			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : tr("Could not save"), 'error');
 		}
 	}
 	async function rename() {
-		const t = await promptDialog({ title: 'Rename poll', label: 'Poll title', value: poll?.title ?? '', maxlength: 200 });
+		const t = await promptDialog({ title: tr("Rename poll"), label: tr("Poll title"), value: poll?.title ?? '', maxlength: 200 });
 		if (!t?.trim()) return;
 		poll = await api.put<Poll>('/api/teacher/polls/' + id, { title: t });
 	}
 	async function delQ(q: PollQuestion) {
-		if (!(await confirmDialog({ title: 'Delete this question?', body: 'Its answers are deleted too.', confirm: 'Delete', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete this question?"), body: tr("Its answers are deleted too."), confirm: tr("Delete"), danger: true }))) return;
 		await api.del('/api/teacher/poll-questions/' + q.id);
-		toast('Question deleted');
+		toast(tr("Question deleted"));
 		await load();
 	}
 	async function move(i: number, d: number) {
@@ -109,33 +110,33 @@
 		await load();
 	}
 	async function reset() {
-		if (!(await confirmDialog({ title: 'Clear all responses?', body: 'Every participant, answer and uploaded file is deleted. The questions stay.', confirm: 'Clear responses', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Clear all responses?"), body: tr("Every participant, answer and uploaded file is deleted. The questions stay."), confirm: tr("Clear responses"), danger: true }))) return;
 		await api.post('/api/teacher/polls/' + id + '/reset');
-		toast('Responses cleared');
+		toast(tr("Responses cleared"));
 		await load();
 	}
 	async function del() {
-		if (!(await confirmDialog({ title: 'Delete this poll?', body: 'The questions, answers and files are deleted. This cannot be undone.', confirm: 'Delete poll', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete this poll?"), body: tr("The questions, answers and files are deleted. This cannot be undone."), confirm: tr("Delete poll"), danger: true }))) return;
 		await api.del('/api/teacher/polls/' + id);
-		toast('Poll deleted');
+		toast(tr("Poll deleted"));
 		goto('/t/polls');
 	}
 	async function moderate(m: { question_id: string; participant_id?: string; word?: string; hidden: boolean }): Promise<void> {
 		await api.post('/api/teacher/polls/' + id + '/moderation', m);
-		toast(m.hidden ? 'Hidden from participants' : 'Shown again', 'info');
+		toast(m.hidden ? tr("Hidden from participants") : tr("Shown again"), 'info');
 	}
 	async function renameParticipant(r: Rank) {
-		const n = await promptDialog({ title: 'Rename participant', body: 'Shown on the leaderboard. Leave it empty for "Participant N".', label: 'Nickname', value: r.nickname ?? '', allowEmpty: true, maxlength: 30 });
+		const n = await promptDialog({ title: tr("Rename participant"), body: tr("Shown on the leaderboard. Leave it empty for \"Participant N\"."), label: tr("Nickname"), value: r.nickname ?? '', allowEmpty: true, maxlength: 30 });
 		if (n === null || !r.participant_id) return;
 		await api.post('/api/teacher/polls/' + id + '/moderation', { participant_id: r.participant_id, nickname: n });
-		toast('Renamed', 'info');
+		toast(tr("Renamed"), 'info');
 	}
 	async function copy(text: string) {
 		try {
 			await navigator.clipboard.writeText(text);
-			toast('Link copied');
+			toast(tr("Link copied"));
 		} catch {
-			toast('Copy failed; select the link instead', 'warning');
+			toast(tr("Copy failed; select the link instead"), 'warning');
 		}
 	}
 	const STATUS = { draft: ['Draft', ''], open: ['Open', 'ok'], closed: ['Closed', 'warn'] } as const;
@@ -147,25 +148,25 @@
 	{#if !poll || !settings}
 		<Skeleton lines={5} />
 	{:else}
-		<p class="small m-0"><a href="/t/polls">← Polls</a></p>
+		<p class="small m-0"><a href="/t/polls">{tr("← Polls")}</a></p>
 		<div class="row">
 			<h1 class="m-0">{poll.title}</h1>
 			<span class="badge badge-soft gap-1 {STATUS[poll.status][1]}">{#if poll.status === 'open'}<span class="status status-success animate-pulse" aria-hidden="true"></span>{/if}{STATUS[poll.status][0]}</span>
-			<button class="btn btn-ghost btn-xs" onclick={rename}>Rename</button>
+			<button class="btn btn-ghost btn-xs" onclick={rename}>{tr("Rename")}</button>
 			<span class="spacer"></span>
 			{#if poll.status !== 'open'}
-				<button class="btn btn-primary" onclick={() => setStatus('open')} disabled={!questions.length}><Icon name="play" size={16} />{poll.status === 'closed' ? 'Reopen' : 'Open poll'}</button>
+				<button class="btn btn-primary" onclick={() => setStatus('open')} disabled={!questions.length}><Icon name="play" size={16} />{poll.status === 'closed' ? tr("Reopen") : tr("Open poll")}</button>
 			{:else}
-				<button class="btn" onclick={() => setStatus('closed')}><Icon name="pause" size={16} />Close</button>
+				<button class="btn" onclick={() => setStatus('closed')}><Icon name="pause" size={16} />{tr("Close")}</button>
 			{/if}
-			<a class="btn" href={'/t/polls/' + id + '/present'} target="_blank" rel="noopener"><Icon name="monitor" size={16} />Present</a>
+			<a class="btn" href={'/t/polls/' + id + '/present'} target="_blank" rel="noopener"><Icon name="monitor" size={16} />{tr("Present")}</a>
 		</div>
-		<p class="small muted m-0">{IDENTITY_LABEL[poll.identity]} · {poll.pacing === 'presenter' ? 'Presenter-led' : 'Self-paced'} · Results: {RESULTS_LABEL[poll.show_results].toLowerCase()}{poll.scoring ? ' · Scored' : ''} · Code <strong class="tabular">{poll.join_code}</strong></p>
+		<p class="small muted m-0">{tr("{0} · {1} · Results: {2}{3} · Code", [IDENTITY_LABEL[poll.identity], poll.pacing === 'presenter' ? tr("Presenter-led") : tr("Self-paced"), RESULTS_LABEL[poll.show_results].toLowerCase(), poll.scoring ? tr(" · Scored") : ''])} <strong class="tabular">{poll.join_code}</strong></p>
 
-		<div class="stats-grid" role="list" aria-label="Poll counts">
-			<StatCounter label="Participants" value={poll.participants} icon="users" tone="primary" />
-			<StatCounter label="Questions" value={questions.length} icon="menu" />
-			<StatCounter label="Answers" value={answered} icon="check-circle" tone="success" />
+		<div class="stats-grid" role="list" aria-label={tr("Poll counts")}>
+			<StatCounter label={tr("Participants")} value={poll.participants} icon="users" tone="primary" />
+			<StatCounter label={tr("Questions")} value={questions.length} icon="menu" />
+			<StatCounter label={tr("Answers")} value={answered} icon="check-circle" tone="success" />
 		</div>
 
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
@@ -182,48 +183,48 @@
 					{/key}
 				</div>
 			{:else}
-				<div><button class="btn btn-primary" onclick={() => (editing = 'new')}><Icon name="plus" size={16} />Add a question</button></div>
+				<div><button class="btn btn-primary" onclick={() => (editing = 'new')}><Icon name="plus" size={16} />{tr("Add a question")}</button></div>
 			{/if}
 			{#each questions as q, i (q.id)}
 				<div class="card card-border bg-base-100 p-4 shadow-sm" in:flyIn={{ delay: Math.min(i, 6) * 30 }}>
 					<div class="flex flex-wrap items-center gap-2">
 						<span class="q-num">{i + 1}</span>
-						<span class="badge badge-soft badge-primary gap-1"><Icon name={TYPE_META[q.type].icon} size={12} />{TYPE_META[q.type].label}</span>
-						{#if q.required}<span class="badge badge-soft badge-sm">required</span>{/if}
-						{#if poll.scoring && q.key}<span class="badge badge-soft badge-success badge-sm gap-1"><Icon name="check" size={11} />{fmtPoints(q.points ?? 100)} pts</span>
-						{:else if poll.scoring && SCORABLE.has(q.type)}<span class="tooltip" data-tip="Edit the question to set its correct answer"><span class="badge badge-soft badge-warning badge-sm">no answer key</span></span>{/if}
+						<span class="badge badge-soft badge-primary gap-1"><Icon name={TYPE_META[q.type].icon} size={12} />{tr(TYPE_META[q.type].label)}</span>
+						{#if q.required}<span class="badge badge-soft badge-sm">{tr("required")}</span>{/if}
+						{#if poll.scoring && q.key}<span class="badge badge-soft badge-success badge-sm gap-1"><Icon name="check" size={11} />{tr("{0} pts", [fmtPoints(q.points ?? 100)])}</span>
+						{:else if poll.scoring && SCORABLE.has(q.type)}<span class="tooltip" data-tip={tr("Edit the question to set its correct answer")}><span class="badge badge-soft badge-warning badge-sm">{tr("no answer key")}</span></span>{/if}
 						{#if q.time_limit_sec && poll.pacing === 'presenter'}<span class="badge badge-soft badge-sm tabular">{q.time_limit_sec}s</span>{/if}
-						<span class="small muted tabular">{results?.results[q.id]?.responses ?? 0} answers</span>
+						<span class="small muted tabular">{tr("{0} answers", [results?.results[q.id]?.responses ?? 0])}</span>
 						<span class="spacer"></span>
-						<IconBtn icon="arrow-up" label="Up" hint="Move question {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)} />
-						<IconBtn icon="arrow-down" label="Down" hint="Move question {i + 1} down" disabled={i === questions.length - 1} onclick={() => move(i, 1)} />
-						<button class="btn btn-sm" onclick={() => (editing = q)}>Edit</button>
-						<button class="btn btn-sm btn-ghost text-error" onclick={() => delQ(q)}>Delete</button>
+						<IconBtn icon="arrow-up" label={tr("Up")} hint={tr("Move question {0} up", [i + 1])} disabled={i === 0} onclick={() => move(i, -1)} />
+						<IconBtn icon="arrow-down" label={tr("Down")} hint={tr("Move question {0} down", [i + 1])} disabled={i === questions.length - 1} onclick={() => move(i, 1)} />
+						<button class="btn btn-sm" onclick={() => (editing = q)}>{tr("Edit")}</button>
+						<button class="btn btn-sm btn-ghost text-error" onclick={() => delQ(q)}>{tr("Delete")}</button>
 					</div>
 					<RichText text={q.text} format={q.body.format} blanks="chip" class="mt-2" />
 				</div>
 			{:else}
-				{#if !editing}<div class="card card-border bg-base-100"><EmptyState icon="menu" title="No questions yet">Add one to open the poll.</EmptyState></div>{/if}
+				{#if !editing}<div class="card card-border bg-base-100"><EmptyState icon="menu" title={tr("No questions yet")}>{tr("Add one to open the poll.")}</EmptyState></div>{/if}
 			{/each}
 		{:else if tab === 'results'}
 			<div class="row small">
-				<span class="badge badge-soft gap-1" class:ok={connected}>{#if connected}<span class="status status-success animate-pulse" aria-hidden="true"></span>Live{:else}<Icon name="wifi-off" size={12} />Reconnecting…{/if}</span>
+				<span class="badge badge-soft gap-1" class:ok={connected}>{#if connected}<span class="status status-success animate-pulse" aria-hidden="true"></span>{tr("Live")}{:else}<Icon name="wifi-off" size={12} />{tr("Reconnecting…")}{/if}</span>
 				<span class="spacer"></span>
-				<a class="btn btn-sm" href={'/api/teacher/polls/' + id + '/export.csv'} download><Icon name="arrow-right" size={14} />Export CSV</a>
+				<a class="btn btn-sm" href={'/api/teacher/polls/' + id + '/export.csv'} download><Icon name="arrow-right" size={14} />{tr("Export CSV")}</a>
 				<SaveToDrive kind="poll" {id} size="btn-sm" />
-				<button class="btn btn-sm btn-ghost text-error" onclick={reset}>Clear responses</button>
+				<button class="btn btn-sm btn-ghost text-error" onclick={reset}>{tr("Clear responses")}</button>
 			</div>
 			{#if poll.scoring}
 				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6">
 					<div class="lb-grid" class:two={!!results?.group_leaderboard?.length}>
 						{#if results?.group_leaderboard?.length}
 							<div>
-								<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="users" size={18} />Groups</h2>
+								<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="users" size={18} />{tr("Groups")}</h2>
 								<Leaderboard ranks={groupRanks(results.group_leaderboard)} limit={50} />
 							</div>
 						{/if}
 						<div>
-							<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="trophy" size={18} />{results?.group_leaderboard?.length ? 'Individuals' : 'Leaderboard'}</h2>
+							<h2 class="m-0 mb-3 flex items-center gap-2 text-lg"><Icon name="trophy" size={18} />{results?.group_leaderboard?.length ? tr("Individuals") : tr("Leaderboard")}</h2>
 							<Leaderboard ranks={results?.leaderboard ?? []} teacher limit={50} onrename={renameParticipant} />
 						</div>
 					</div>
@@ -231,13 +232,13 @@
 			{/if}
 			{#each questions as q, i (q.id)}
 				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6">
-					<p class="small muted m-0">Question {i + 1} · {TYPE_META[q.type].label}</p>
+					<p class="small muted m-0">{tr("Question {0} · {1}", [i + 1, tr(TYPE_META[q.type].label)])}</p>
 					<RichText text={q.text} format={q.body.format} blanks="chip" class="mb-3 font-semibold" />
 					<PollResults question={q} result={results?.results[q.id]} teacher toon pollId={id} onmoderate={moderate} />
 					<AnswerList pollId={id} questionId={q.id} onmoderate={moderate} />
 				</section>
 			{:else}
-				<div class="card card-border bg-base-100"><EmptyState icon="chart" title="Nothing to show yet">Add questions and open the poll.</EmptyState></div>
+				<div class="card card-border bg-base-100"><EmptyState icon="chart" title={tr("Nothing to show yet")}>{tr("Add questions and open the poll.")}</EmptyState></div>
 			{/each}
 		{:else if tab === 'people'}
 			<ParticipantList pollId={id} scoring={poll.scoring} groups={poll.groups !== 'off'} />
@@ -247,34 +248,34 @@
 			<div class="card card-border vstack bg-base-100 p-4 shadow-sm sm:p-6">
 				<PollSettingsForm bind:settings bind:classroomId bind:topicId {classrooms} locked={poll.participants > 0} />
 				<div class="flex flex-wrap gap-2">
-					<button class="btn btn-primary" onclick={saveSettings}>Save settings</button>
+					<button class="btn btn-primary" onclick={saveSettings}>{tr("Save settings")}</button>
 					<span class="spacer"></span>
-					{#if poll.status !== 'draft'}<button class="btn btn-ghost" onclick={() => setStatus('draft')}>Back to draft</button>{/if}
-					<button class="btn btn-error btn-outline" onclick={del}>Delete poll</button>
+					{#if poll.status !== 'draft'}<button class="btn btn-ghost" onclick={() => setStatus('draft')}>{tr("Back to draft")}</button>{/if}
+					<button class="btn btn-error btn-outline" onclick={del}>{tr("Delete poll")}</button>
 				</div>
 			</div>
 		{:else}
 			<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-6">
-				{#if poll.status !== 'open'}<div class="alert alert-soft alert-warning mb-4"><Icon name="info" />The poll is {poll.status}; open it so people can join.</div>{/if}
+				{#if poll.status !== 'open'}<div class="alert alert-soft alert-warning mb-4"><Icon name="info" />{tr("The poll is {0}; open it so people can join.", [poll.status])}</div>{/if}
 				<div class="share">
 					<div class="qr"><QrCode text={poll.join_url} size={220} /></div>
 					<div class="vstack min-w-0">
-						<p class="small muted m-0">Join code</p>
+						<p class="small muted m-0">{tr("Join code")}</p>
 						<p class="code tabular m-0">{poll.join_code}</p>
-						<p class="small muted m-0">or open</p>
+						<p class="small muted m-0">{tr("or open")}</p>
 						<div class="join w-full">
-							<input class="input input-sm join-item w-full" readonly value={poll.join_url} aria-label="Join link" onfocus={(e) => e.currentTarget.select()} />
-							<button class="btn btn-sm join-item" onclick={() => copy(poll!.join_url)}>Copy</button>
+							<input class="input input-sm join-item w-full" readonly value={poll.join_url} aria-label={tr("Join link")} onfocus={(e) => e.currentTarget.select()} />
+							<button class="btn btn-sm join-item" onclick={() => copy(poll!.join_url)}>{tr("Copy")}</button>
 						</div>
-						<p class="small muted m-0">People can also type the code at <strong>/join</strong>. {poll.identity === 'identified' ? 'They will be asked to log in.' : poll.identity === 'optional' ? 'Logging in is optional.' : 'No login is needed.'}</p>
-						<a class="btn btn-primary w-fit" href={'/t/polls/' + id + '/present'} target="_blank" rel="noopener"><Icon name="monitor" size={16} />Open the presenter screen</a>
+						<p class="small muted m-0">{tr("People can also type the code at")} <strong>{tr("/join")}</strong>. {poll.identity === 'identified' ? tr("They will be asked to log in.") : poll.identity === 'optional' ? tr("Logging in is optional.") : tr("No login is needed.")}</p>
+						<a class="btn btn-primary w-fit" href={'/t/polls/' + id + '/present'} target="_blank" rel="noopener"><Icon name="monitor" size={16} />{tr("Open the presenter screen")}</a>
 					</div>
 				</div>
 			</div>
 			{#if poll.scoring}
 				<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-6"><LiveLinks scope="live_poll" targetId={id} teams={poll.groups !== 'off'} /></div>
 			{:else}
-				<p class="small muted m-0">Turn on <strong>Score answers</strong> in Settings to share a live leaderboard.</p>
+				<p class="small muted m-0">{tr("Turn on")} <strong>{tr("Score answers")}</strong> {tr("in Settings to share a live leaderboard.")}</p>
 			{/if}
 		{/if}
 	{/if}

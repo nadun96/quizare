@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { en } from './en';
-import { DICTS, LOCALES, fill, i18n, t, tn } from './i18n.svelte';
+import { DICTS, LOCALES, fill, i18n, t, tn, tr } from './i18n.svelte';
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -26,5 +26,22 @@ describe('languages (D-109)', () => {
 		expect(tn('ins.students', 3)).toBe('3 students');
 		expect(fill('{a} and {b}', { a: 1 })).toBe('1 and {b}');
 		expect(i18n.tag).toBe('en-LK');
+	});
+});
+
+describe('phrases (D-157)', () => {
+	it('falls back to the English, filling placeholders', () => {
+		i18n.set('en');
+		expect(tr('Showing {0} of {1}', [1, 3])).toBe('Showing 1 of 3');
+		expect(tr('Save')).toBe('Save');
+		expect(tr(undefined)).toBe('');
+		expect(tr(null)).toBe('');
+	});
+	it('uses a translation, which may reorder the placeholders', () => {
+		i18n.phrases = { 'Showing {0} of {1}': '{1} න් {0} ක්', Save: 'සුරකින්න' };
+		expect(tr('Showing {0} of {1}', [1, 3])).toBe('3 න් 1 ක්');
+		expect(tr('Save')).toBe('සුරකින්න');
+		expect(tr('Not translated yet')).toBe('Not translated yet');
+		i18n.phrases = {};
 	});
 });

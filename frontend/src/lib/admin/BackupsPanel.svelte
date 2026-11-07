@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Backups (PL-FR-07 to PL-FR-09, D-57): export a full, encrypted backup,
 	// follow it while it runs (the page can be left), and see the history of
 	// console and nightly backups, one page at a time.
@@ -61,7 +62,7 @@
 		try {
 			await api.post('/api/admin/backups', { passphrase: pass });
 			pass = pass2 = '';
-			toast('Backup started; you can leave this page while it runs');
+			toast(tr("Backup started; you can leave this page while it runs"));
 			reload();
 		} catch (err) {
 			if (err instanceof ApiError) errors = Object.keys(err.fields).length ? err.fields : { _: err.message };
@@ -80,101 +81,101 @@
 			a.click();
 			a.remove();
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'Download failed', 'error');
+			toast(err instanceof ApiError ? err.message : tr("Download failed"), 'error');
 		}
 	}
 	async function remove(b: Backup) {
-		if (!(await confirmDialog({ title: 'Delete this backup?', body: `${b.name} (${fmtBytes(b.size_bytes)}) is removed from the server. Copies you downloaded are not affected.`, confirm: 'Delete', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete this backup?"), body: tr("{0} ({1}) is removed from the server. Copies you downloaded are not affected.", [b.name, fmtBytes(b.size_bytes)]), confirm: tr("Delete"), danger: true }))) return;
 		try {
 			await api.del('/api/admin/backups/' + b.id);
 			list.load();
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'Delete failed', 'error');
+			toast(err instanceof ApiError ? err.message : tr("Delete failed"), 'error');
 		}
 	}
-	const when = (s?: string) => (s ? new Date(s).toLocaleString() : '');
+	const when = (s?: string) => (s ? new Date(s).toLocaleString(localeTag()) : '');
 	const pct = (b: Backup) => (b.tables_total ? Math.round((b.tables_done / b.tables_total) * 100) : 0);
 </script>
 
 <div class="vstack">
 	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={start}>
-		<h2 class="m-0 text-base">Export a backup</h2>
-		<p class="small m-0">A backup holds the whole database: accounts, classrooms, quizzes, answers, results, polls with their uploaded files, and the audit log. It is compressed and encrypted with the passphrase you choose.</p>
+		<h2 class="m-0 text-base">{tr("Export a backup")}</h2>
+		<p class="small m-0">{tr("A backup holds the whole database: accounts, classrooms, quizzes, answers, results, polls with their uploaded files, and the audit log. It is compressed and encrypted with the passphrase you choose.")}</p>
 		<ul class="small muted m-0 ps-5 list-disc">
-			<li><strong>The passphrase isn't stored anywhere.</strong> Without it the backup can't be opened, by you or anyone.</li>
-			<li><strong>Not included:</strong> the master key, which encrypts teachers' AI keys. Keep a copy of it safe, separately; restoring without it means teachers re-enter their keys. Recordings aren't included either (they're kept 2 days).</li>
-			<li>Restore on the server with <code>server restore-backup</code> into a new, empty database (see the deployment guide).</li>
+			<li><strong>{tr("The passphrase isn't stored anywhere.")}</strong> {tr("Without it the backup can't be opened, by you or anyone.")}</li>
+			<li><strong>{tr("Not included:")}</strong> {tr("the master key, which encrypts teachers' AI keys. Keep a copy of it safe, separately; restoring without it means teachers re-enter their keys. Recordings aren't included either (they're kept 2 days).")}</li>
+			<li>{tr("Restore on the server with")} <code>server restore-backup</code> {tr("into a new, empty database (see the deployment guide).")}</li>
 		</ul>
 		<div class="pp">
 			<div>
-				<label for="bk-pass">Passphrase</label>
+				<label for="bk-pass">{tr("Passphrase")}</label>
 				<input id="bk-pass" class="input w-full" type="password" autocomplete="new-password" minlength="12" required bind:value={pass} aria-invalid={!!errors.passphrase} aria-describedby="bk-pass-h" />
-				<p id="bk-pass-h" class="small muted m-0">At least 12 characters. A few unrelated words work well.</p>
+				<p id="bk-pass-h" class="small muted m-0">{tr("At least 12 characters. A few unrelated words work well.")}</p>
 				{#if errors.passphrase}<p class="field-error">{errors.passphrase}</p>{/if}
 			</div>
 			<div>
-				<label for="bk-pass2">Passphrase again</label>
+				<label for="bk-pass2">{tr("Passphrase again")}</label>
 				<input id="bk-pass2" class="input w-full" type="password" autocomplete="new-password" required bind:value={pass2} aria-invalid={!!errors.passphrase2} />
 				{#if errors.passphrase2}<p class="field-error">{errors.passphrase2}</p>{/if}
 			</div>
 		</div>
 		{#if errors._}<p class="alert alert-soft alert-error small m-0" role="alert">{errors._}</p>{/if}
-		<div><button class="btn btn-primary" disabled={starting || list.rows.some((b) => b.status === 'running')}>Start backup</button></div>
+		<div><button class="btn btn-primary" disabled={starting || list.rows.some((b) => b.status === 'running')}>{tr("Start backup")}</button></div>
 	</form>
 
 	{#if nightly?.configured}
 		<div class="alert alert-soft {nightly.stale ? 'alert-warning' : 'alert-info'} small" role={nightly.stale ? 'alert' : undefined}>
 			<span>
-				<strong>Nightly backup:</strong>
-				{#if nightly.last_run_at}last ran {when(nightly.last_run_at)}, {nightly.last_run_ok ? 'succeeded' : 'failed'}.{:else}no run recorded yet.{/if}
-				{#if nightly.stale}It hasn't succeeded for 2 days{nightly.last_success_at ? ` (last success ${when(nightly.last_success_at)})` : ''}; check the server's backup job.{/if}
+				<strong>{tr("Nightly backup:")}</strong>
+				{#if nightly.last_run_at}{tr("last ran {0}, {1}.", [when(nightly.last_run_at), nightly.last_run_ok ? 'succeeded' : 'failed'])}{:else}{tr("no run recorded yet.")}{/if}
+				{#if nightly.stale}{tr("It hasn't succeeded for 2 days{0}; check the server's backup job.", [nightly.last_success_at ? tr(" (last success {0})", [when(nightly.last_success_at)]) : ''])}{/if}
 			</span>
 		</div>
 	{/if}
 
 	<div class="row">
-		<h2 class="m-0 text-base">History</h2>
+		<h2 class="m-0 text-base">{tr("History")}</h2>
 		<span class="spacer"></span>
-		<select class="select select-sm w-auto" bind:value={kind} onchange={() => list.refilter()} aria-label="Kind of backup"><option value="">All backups</option><option value="console">From the console</option><option value="nightly">Nightly</option></select>
+		<select class="select select-sm w-auto" bind:value={kind} onchange={() => list.refilter()} aria-label={tr("Kind of backup")}><option value="">{tr("All backups")}</option><option value="console">{tr("From the console")}</option><option value="nightly">{tr("Nightly")}</option></select>
 	</div>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 		<table class="table">
-			<thead><tr><th><SortHeader {list} key="started" label="Started" desc /></th><th>Made by</th><th>Status</th><th><SortHeader {list} key="size" label="Size" desc /></th><th><span class="sr-only">Actions</span></th></tr></thead>
+			<thead><tr><th><SortHeader {list} key="started" label={tr("Started")} desc /></th><th>{tr("Made by")}</th><th>{tr("Status")}</th><th><SortHeader {list} key="size" label={tr("Size")} desc /></th><th><span class="sr-only">{tr("Actions")}</span></th></tr></thead>
 			<tbody>
 				{#each list.rows as b (b.id)}
 					<tr>
 						<td class="small tabular">{when(b.started_at)}<br /><span class="muted">{b.name}</span></td>
-						<td class="small">{b.kind === 'nightly' ? 'Nightly job' : b.created_by || '—'}</td>
+						<td class="small">{b.kind === 'nightly' ? tr("Nightly job") : (b.created_by || '—')}</td>
 						<td class="small">
 							{#if b.status === 'running'}
-								<span class="badge badge-soft warn">running</span>
-								<progress class="progress w-24 align-middle" value={pct(b)} max="100" aria-label="Backup progress">{pct(b)}%</progress>
-								<span class="muted tabular">{b.tables_done}/{b.tables_total || '…'} tables</span>
+								<span class="badge badge-soft warn">{tr("running")}</span>
+								<progress class="progress w-24 align-middle" value={pct(b)} max="100" aria-label={tr("Backup progress")}>{pct(b)}%</progress>
+								<span class="muted tabular">{tr("{0}/{1} tables", [b.tables_done, b.tables_total || '…'])}</span>
 							{:else if b.status === 'failed'}
-								<span class="badge badge-soft danger">failed</span> <span class="muted">{b.error}</span>
+								<span class="badge badge-soft danger">{tr("failed")}</span> <span class="muted">{b.error}</span>
 							{:else if b.on_server}
-								<span class="badge badge-soft ok">on the server</span>
+								<span class="badge badge-soft ok">{tr("on the server")}</span>
 							{:else}
-								<span class="badge badge-soft">deleted</span> <span class="muted">{when(b.deleted_at)}</span>
+								<span class="badge badge-soft">{tr("deleted")}</span> <span class="muted">{when(b.deleted_at)}</span>
 							{/if}
 						</td>
 						<td class="small tabular">{b.status === 'done' ? fmtBytes(b.size_bytes) : ''}</td>
 						<td>
 							<div class="flex flex-wrap gap-1">
 								{#if b.status === 'done' && b.on_server}
-									<button class="btn btn-sm" onclick={() => download(b)}>Download</button>
-									{#if b.kind === 'console'}<button class="btn btn-sm btn-error btn-outline" onclick={() => remove(b)}>Delete</button>{/if}
+									<button class="btn btn-sm" onclick={() => download(b)}>{tr("Download")}</button>
+									{#if b.kind === 'console'}<button class="btn btn-sm btn-error btn-outline" onclick={() => remove(b)}>{tr("Delete")}</button>{/if}
 								{/if}
 							</div>
 						</td>
 					</tr>
 				{:else}
-					<tr><td colspan="5" class="muted">{list.loaded ? 'No backups yet.' : 'Loading…'}</td></tr>
+					<tr><td colspan="5" class="muted">{list.loaded ? tr("No backups yet.") : tr("Loading…")}</td></tr>
 				{/each}
 			</tbody>
 		</table>
 	</div>
-	<Pager {list} label="Backups" />
+	<Pager {list} label={tr("Backups")} />
 </div>
 
 <style>

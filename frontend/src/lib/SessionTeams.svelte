@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Teams in a live session (V2-06, V2-07, D-44): form them, move students,
 	// pick captains, and follow the standings as members finish.
 	import { api, ApiError } from './api';
@@ -47,7 +48,7 @@
 			if (ok) toast(ok);
 			await load();
 		} catch (e) {
-			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : 'Something went wrong', 'error');
+			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : tr("Something went wrong"), 'error');
 		} finally {
 			busy = false;
 		}
@@ -58,11 +59,11 @@
 	const move = (m: TeamMember, team: string) => run(() => api.post(base + '/members', { attempt_ids: [m.attempt_id], team_id: team }));
 	const captain = (m: TeamMember) => run(() => api.post(base + '/members', { attempt_ids: [m.attempt_id], captain: !m.captain }));
 	async function rename(id: string, name: string) {
-		const n = await promptDialog({ title: 'Rename team', label: 'Team name', value: name, maxlength: 40 });
+		const n = await promptDialog({ title: tr("Rename team"), label: tr("Team name"), value: name, maxlength: 40 });
 		if (n?.trim() && n !== name) await run(() => api.patch('/api/teacher/session-teams/' + id, { name: n }));
 	}
 	async function remove(id: string, name: string) {
-		if (await confirmDialog({ title: `Delete ${name}?`, body: 'Its members carry on with the quiz without a team. Their marks are kept.', confirm: 'Delete team', danger: true }))
+		if (await confirmDialog({ title: tr("Delete {0}?", [name]), body: tr("Its members carry on with the quiz without a team. Their marks are kept."), confirm: tr("Delete team"), danger: true }))
 			await run(() => api.del('/api/teacher/session-teams/' + id), 'Team deleted');
 	}
 	const RULE: Record<string, string> = {
@@ -76,10 +77,10 @@
 	<li class="member">
 		<span class="min-w-0 flex-1"><span class="block truncate">{m.name}</span>{#if m.student_number}<span class="small muted">{m.student_number}</span>{/if}</span>
 		{#if teamId}
-			<IconBtn icon="star" label={m.captain ? 'Captain' : 'Make captain'} hint={m.captain ? `${m.name} is captain` : `Make ${m.name} captain`} class="btn-ghost btn-xs {m.captain ? 'text-warning' : ''}" size={14} aria-pressed={m.captain} disabled={busy || ended} onclick={() => captain(m)} />
+			<IconBtn icon="star" label={m.captain ? tr("Captain") : tr("Make captain")} hint={m.captain ? tr("{0} is captain", [m.name]) : tr("Make {0} captain", [m.name])} class="btn-ghost btn-xs {m.captain ? 'text-warning' : ''}" size={14} aria-pressed={m.captain} disabled={busy || ended} onclick={() => captain(m)} />
 		{/if}
-		<select class="select select-xs w-28" aria-label="Move {m.name} to" value={teamId} disabled={busy || ended} onchange={(e) => move(m, e.currentTarget.value)}>
-			<option value="">No team</option>
+		<select class="select select-xs w-28" aria-label={tr("Move {0} to", [m.name])} value={teamId} disabled={busy || ended} onchange={(e) => move(m, e.currentTarget.value)}>
+			<option value="">{tr("No team")}</option>
 			{#each view?.teams ?? [] as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
 		</select>
 	</li>
@@ -87,12 +88,12 @@
 
 <section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6 vstack" aria-labelledby="teams-h">
 	<div class="flex flex-wrap items-center gap-2">
-		<h2 id="teams-h" class="m-0 flex items-center gap-2 text-lg"><Icon name="users" size={18} />Teams</h2>
+		<h2 id="teams-h" class="m-0 flex items-center gap-2 text-lg"><Icon name="users" size={18} />{tr("Teams")}</h2>
 		{#if view}<span class="small muted">{RULE[view.acceptance]}{view.acceptance === 'all' ? `, ${CALC[view.calc]}` : ''}</span>{/if}
 	</div>
 
 	{#if standings.length}
-		<ol class="standings" aria-label="Team standings">
+		<ol class="standings" aria-label={tr("Team standings")}>
 			{#each standings as s (s.id)}
 				<li class="stand" in:flyIn>
 					<span class="pos tabular" class:m1={s.rank === 1}>{s.rank}</span>
@@ -102,21 +103,21 @@
 					</span>
 					<span class="text-right tabular">
 						<strong>{fmt(s.pct)}%</strong>
-						<span class="small muted block">{fmt(s.score)}/{fmt(s.max_score)} · {s.finished}/{s.members} done{#if !s.complete}{' · '}<span class="text-warning">marking</span>{/if}</span>
+						<span class="small muted block">{tr("{0}/{1} · {2}/{3} done", [fmt(s.score), fmt(s.max_score), s.finished, s.members])}{#if !s.complete}{' · '}<span class="text-warning">{tr("marking")}</span>{/if}</span>
 					</span>
 				</li>
 			{/each}
 		</ol>
-		<p class="small muted m-0">Marks arrive as each member finishes. Teams are ranked by percentage, so team size doesn't decide the winner.</p>
+		<p class="small muted m-0">{tr("Marks arrive as each member finishes. Teams are ranked by percentage, so team size doesn't decide the winner.")}</p>
 	{/if}
 
 	{#if !ended}
 		<div class="flex flex-wrap items-end gap-2">
-			<div class="w-20"><label for="st-n">Teams</label><input id="st-n" class="input input-sm w-full" type="number" min="2" max="50" bind:value={count} /></div>
-			<button class="btn btn-sm btn-primary" disabled={busy} onclick={() => generate('random')}><Icon name="shuffle" size={14} />Random teams</button>
-			<button class="btn btn-sm" disabled={busy} onclick={() => generate('categories')}>From categories</button>
-			<button class="btn btn-sm" disabled={busy} onclick={add}><Icon name="plus" size={14} />Add a team</button>
-			<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={reassign} />Also move students who have a team</label>
+			<div class="w-20"><label for="st-n">{tr("Teams")}</label><input id="st-n" class="input input-sm w-full" type="number" min="2" max="50" bind:value={count} /></div>
+			<button class="btn btn-sm btn-primary" disabled={busy} onclick={() => generate('random')}><Icon name="shuffle" size={14} />{tr("Random teams")}</button>
+			<button class="btn btn-sm" disabled={busy} onclick={() => generate('categories')}>{tr("From categories")}</button>
+			<button class="btn btn-sm" disabled={busy} onclick={add}><Icon name="plus" size={14} />{tr("Add a team")}</button>
+			<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={reassign} />{tr("Also move students who have a team")}</label>
 		</div>
 	{/if}
 
@@ -129,18 +130,18 @@
 						<strong class="min-w-0 flex-1 truncate">{t.name}</strong>
 						<span class="badge badge-soft badge-sm tabular">{t.member_list.length}</span>
 						{#if !ended}
-							<IconBtn icon="pencil" label="Rename" hint="Rename {t.name}" class="btn-ghost btn-xs" size={13} onclick={() => rename(t.id, t.name)} />
-							<IconBtn icon="x" label="Delete" hint="Delete {t.name}" class="btn-ghost btn-xs text-error" size={13} onclick={() => remove(t.id, t.name)} />
+							<IconBtn icon="pencil" label={tr("Rename")} hint={tr("Rename {0}", [t.name])} class="btn-ghost btn-xs" size={13} onclick={() => rename(t.id, t.name)} />
+							<IconBtn icon="x" label={tr("Delete")} hint={tr("Delete {0}", [t.name])} class="btn-ghost btn-xs text-error" size={13} onclick={() => remove(t.id, t.name)} />
 						{/if}
 					</div>
-					<ul class="members">{#each t.member_list as m (m.attempt_id)}{@render member(m, t.id)}{:else}<li class="small muted py-1">Nobody yet</li>{/each}</ul>
+					<ul class="members">{#each t.member_list as m (m.attempt_id)}{@render member(m, t.id)}{:else}<li class="small muted py-1">{tr("Nobody yet")}</li>{/each}</ul>
 				</div>
 			{/each}
 		</div>
-		{#if !view.teams.length}<p class="small muted m-0">No teams yet.{view.mode === 'self' ? ' Students choose from your teams when they join, so add some first.' : ''}</p>{/if}
+		{#if !view.teams.length}<p class="small muted m-0">{tr("No teams yet.{0}", [view.mode === 'self' ? tr(" Students choose from your teams when they join, so add some first.") : ''])}</p>{/if}
 		{#if view.unassigned.length}
 			<div class="team">
-				<strong>No team <span class="badge badge-soft badge-sm tabular">{view.unassigned.length}</span></strong>
+				<strong>{tr("No team")} <span class="badge badge-soft badge-sm tabular">{view.unassigned.length}</span></strong>
 				<ul class="members">{#each view.unassigned as m (m.attempt_id)}{@render member(m, '')}{/each}</ul>
 			</div>
 		{/if}

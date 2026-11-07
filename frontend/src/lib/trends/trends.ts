@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // Long-term trends (D-119): month-by-month figures for a classroom, a
 // student in it, or a student's own, read from the server's roll-ups.
 
@@ -38,7 +39,7 @@ export const SPANS = [
 export function monthLabel(m: string, short = false): string {
 	const [y, mo] = m.split('-').map(Number);
 	const d = new Date(Date.UTC(y, mo - 1, 1));
-	return d.toLocaleDateString(undefined, short ? { month: 'short', timeZone: 'UTC' } : { month: 'short', year: 'numeric', timeZone: 'UTC' });
+	return d.toLocaleDateString(localeTag(), short ? { month: 'short', timeZone: 'UTC' } : { month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;

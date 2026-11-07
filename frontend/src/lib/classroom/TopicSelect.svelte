@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Chooses one of a classroom's topics, by module (D-147). With no topics
 	// there's nothing to choose, so it shows nothing.
 	import { api } from '../api';
@@ -24,8 +25,8 @@
 </script>
 
 {#if groups.length}
-	<select class="select w-full max-w-xs" class:select-sm={compact} aria-label="Topic" value={value ?? ''} onchange={(e) => (value = e.currentTarget.value || null)}>
-		<option value="">No topic</option>
+	<select class="select w-full max-w-xs" class:select-sm={compact} aria-label={tr("Topic")} value={value ?? ''} onchange={(e) => (value = e.currentTarget.value || null)}>
+		<option value="">{tr("No topic")}</option>
 		{#each groups as g (g.module.id)}
 			<optgroup label={g.module.name}>
 				{#each g.topics as t (t.id)}<option value={t.id} selected={t.id === value}>{t.name}</option>{/each}

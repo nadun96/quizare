@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A range slider that only counts once moved: "untouched" is not an answer.
 	let { min = 0, max = 100, step = 1, minLabel = '', maxLabel = '', value, disabled = false, label, onchange }: {
 		min?: number; max?: number; step?: number; minLabel?: string; maxLabel?: string; value?: number; disabled?: boolean; label: string; onchange: (v: number | undefined) => void;
@@ -29,7 +30,7 @@
 		<span>{minLabel || fmt(min)}</span>
 		<span>{maxLabel || fmt(max)}</span>
 	</div>
-	{#if value === undefined}<p class="small muted m-0 mt-1">Move the slider to answer.</p>{:else if !disabled}<button type="button" class="btn btn-ghost btn-xs mt-1" onclick={() => onchange(undefined)}>Clear</button>{/if}
+	{#if value === undefined}<p class="small muted m-0 mt-1">{tr("Move the slider to answer.")}</p>{:else if !disabled}<button type="button" class="btn btn-ghost btn-xs mt-1" onclick={() => onchange(undefined)}>{tr("Clear")}</button>{/if}
 </div>
 
 <style>

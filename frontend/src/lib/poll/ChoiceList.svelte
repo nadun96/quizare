@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Editable list of choices (options, rows, columns, boxes, statements).
 	import { flip } from 'svelte/animate';
 	import Icon from '../ui/Icon.svelte';
@@ -52,13 +53,13 @@
 					}}
 				/>
 				{#if textHasMath(c.text)}<span class="pv small" style="order: 9"><MathText text={c.text} /></span>{/if}
-				<IconBtn icon="arrow-up" label="Up" hint="Move {noun} {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)} />
-				<IconBtn icon="arrow-down" label="Down" hint="Move {noun} {i + 1} down" disabled={i === items.length - 1} onclick={() => move(i, 1)} />
-				<IconBtn icon="x" label="Remove" hint="Remove {noun} {i + 1}" size={15} disabled={items.length <= min} onclick={() => items.splice(i, 1)} />
+				<IconBtn icon="arrow-up" label={tr("Up")} hint={tr("Move {0} {1} up", [noun, i + 1])} disabled={i === 0} onclick={() => move(i, -1)} />
+				<IconBtn icon="arrow-down" label={tr("Down")} hint={tr("Move {0} {1} down", [noun, i + 1])} disabled={i === items.length - 1} onclick={() => move(i, 1)} />
+				<IconBtn icon="x" label={tr("Remove")} hint={tr("Remove {0} {1}", [noun, i + 1])} size={15} disabled={items.length <= min} onclick={() => items.splice(i, 1)} />
 			</li>
 		{/each}
 	</ol>
-	<button type="button" class="btn btn-sm mt-2" disabled={items.length >= max} onclick={() => add()}><Icon name="plus" size={14} />Add {noun}</button>
+	<button type="button" class="btn btn-sm mt-2" disabled={items.length >= max} onclick={() => add()}><Icon name="plus" size={14} />{tr("Add {0}", [noun])}</button>
 </fieldset>
 
 <style>

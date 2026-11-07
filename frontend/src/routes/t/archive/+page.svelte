@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A teacher's finished activities in one place (D-149): search and filter
 	// them, put them in the archive, bring them back, or delete them from there.
 	import { api, ApiError } from '$lib/api';
@@ -74,7 +75,7 @@
 		reload();
 	}
 
-	const when = (s: string) => new Date(s).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+	const when = (s: string) => new Date(s).toLocaleString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 	async function run(id: string, done: string, act: () => Promise<unknown>, list: { load(): Promise<void> }) {
 		busy = id;
@@ -83,7 +84,7 @@
 			toast(done);
 			await list.load();
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'That didn’t work. Try again.', 'error');
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work. Try again."), 'error');
 		} finally {
 			busy = '';
 		}
@@ -102,66 +103,66 @@
 	}
 </script>
 
-<svelte:head><title>Past sessions</title></svelte:head>
+<svelte:head><title>{tr("Past sessions")}</title></svelte:head>
 
 {#snippet row(k: Kind, title: string, detail: string, room: string, started: string, ended: string, people: number | null, href: string, id: string, onarchive: () => void, onrestore: () => void, onremove: () => void)}
 	<tr>
-		<td class="whitespace-nowrap"><span class="flex items-center gap-2"><Icon name={kindInfo(k).icon} size={16} />{kindInfo(k).label}</span></td>
+		<td class="whitespace-nowrap"><span class="flex items-center gap-2"><Icon name={kindInfo(k).icon} size={16} />{tr(kindInfo(k).label)}</span></td>
 		<td class="min-w-48">{#if href}<a {href}>{title}</a>{:else}{title}{/if}{#if detail && detail !== title}<br /><span class="text-xs muted">{detail}</span>{/if}</td>
 		<td>{room || '—'}</td>
-		<td class="whitespace-nowrap">{when(started)}{#if ended !== started}<br /><span class="text-xs muted">ended {when(ended)}</span>{/if}</td>
+		<td class="whitespace-nowrap">{when(started)}{#if ended !== started}<br /><span class="text-xs muted">{tr("ended {0}", [when(ended)])}</span>{/if}</td>
 		<td class="tabular">{people ?? '—'}</td>
 		<td class="whitespace-nowrap text-right">
 			{#if view === 'past'}
-				<button class="btn btn-sm" disabled={busy === id} onclick={onarchive} aria-label={'Archive ' + title}><Icon name="archive" size={15} />Archive</button>
+				<button class="btn btn-sm" disabled={busy === id} onclick={onarchive} aria-label={tr("Archive {0}", [title])}><Icon name="archive" size={15} />{tr("Archive")}</button>
 			{:else}
-				<button class="btn btn-sm" disabled={busy === id} onclick={onrestore} aria-label={'Bring back ' + title}><Icon name="undo" size={15} />Bring back</button>
-				<button class="btn btn-sm btn-error btn-outline" disabled={busy === id} onclick={onremove} aria-label={'Delete ' + title}><Icon name="trash" size={15} />Delete</button>
+				<button class="btn btn-sm" disabled={busy === id} onclick={onrestore} aria-label={tr("Bring back {0}", [title])}><Icon name="undo" size={15} />{tr("Bring back")}</button>
+				<button class="btn btn-sm btn-error btn-outline" disabled={busy === id} onclick={onremove} aria-label={tr("Delete {0}", [title])}><Icon name="trash" size={15} />{tr("Delete")}</button>
 			{/if}
 		</td>
 	</tr>
 {/snippet}
 
 {#snippet head()}
-	<thead><tr><th>Activity</th><th>Title</th><th>Classroom</th><th>When</th><th>People</th><th><span class="sr-only">Actions</span></th></tr></thead>
+	<thead><tr><th>{tr("Activity")}</th><th>{tr("Title")}</th><th>{tr("Classroom")}</th><th>{tr("When")}</th><th>{tr("People")}</th><th><span class="sr-only">{tr("Actions")}</span></th></tr></thead>
 {/snippet}
 
 <div class="page-container vstack">
-	<h1 class="m-0">Past sessions</h1>
-	<p class="muted m-0">Quiz sessions, polls, meetings, live presentations and tutoring sessions that have finished. Archiving takes one out of your everyday lists and keeps its marks and attendance. Delete it from the archive to remove it for good.</p>
+	<h1 class="m-0">{tr("Past sessions")}</h1>
+	<p class="muted m-0">{tr("Quiz sessions, polls, meetings, live presentations and tutoring sessions that have finished. Archiving takes one out of your everyday lists and keeps its marks and attendance. Delete it from the archive to remove it for good.")}</p>
 
-	<div class="join" role="group" aria-label="Which sessions">
-		<button class="btn btn-sm join-item" class:btn-primary={view === 'past'} aria-pressed={view === 'past'} onclick={() => setView('past')}>Finished</button>
-		<button class="btn btn-sm join-item" class:btn-primary={view === 'archived'} aria-pressed={view === 'archived'} onclick={() => setView('archived')}><Icon name="archive" size={15} />Archive</button>
+	<div class="join" role="group" aria-label={tr("Which sessions")}>
+		<button class="btn btn-sm join-item" class:btn-primary={view === 'past'} aria-pressed={view === 'past'} onclick={() => setView('past')}>{tr("Finished")}</button>
+		<button class="btn btn-sm join-item" class:btn-primary={view === 'archived'} aria-pressed={view === 'archived'} onclick={() => setView('archived')}><Icon name="archive" size={15} />{tr("Archive")}</button>
 	</div>
 
 	<div class="flex flex-wrap items-end gap-3">
-		<label class="vstack gap-1 small grow sm:grow-0">Search
-			<input class="input input-sm w-full sm:w-64" type="search" bind:value={text} oninput={typed} placeholder="Title, quiz or classroom" />
+		<label class="vstack gap-1 small grow sm:grow-0">{tr("Search")}
+			<input class="input input-sm w-full sm:w-64" type="search" bind:value={text} oninput={typed} placeholder={tr("Title, quiz or classroom")} />
 		</label>
-		<label class="vstack gap-1 small">Activity
+		<label class="vstack gap-1 small">{tr("Activity")}
 			<select class="select select-sm w-auto" bind:value={kind} onchange={reload}>
-				<option value="">All activities</option>
-				{#each kinds as k (k.v)}<option value={k.v}>{k.label}</option>{/each}
+				<option value="">{tr("All activities")}</option>
+				{#each kinds as k (k.v)}<option value={k.v}>{tr(k.label)}</option>{/each}
 			</select>
 		</label>
-		<label class="vstack gap-1 small">Classroom
+		<label class="vstack gap-1 small">{tr("Classroom")}
 			<select class="select select-sm w-auto max-w-56" bind:value={classroom} onchange={reload}>
-				<option value="">All classrooms</option>
+				<option value="">{tr("All classrooms")}</option>
 				{#each classrooms as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 			</select>
 		</label>
-		<label class="vstack gap-1 small">From<input class="input input-sm w-auto" type="date" bind:value={from} max={to || undefined} onchange={reload} /></label>
-		<label class="vstack gap-1 small">To<input class="input input-sm w-auto" type="date" bind:value={to} min={from || undefined} onchange={reload} /></label>
-		{#if filtered}<button class="btn btn-ghost btn-sm" onclick={clearFilters}>Clear filters</button>{/if}
+		<label class="vstack gap-1 small">{tr("From")}<input class="input input-sm w-auto" type="date" bind:value={from} max={to || undefined} onchange={reload} /></label>
+		<label class="vstack gap-1 small">{tr("To")}<input class="input input-sm w-auto" type="date" bind:value={to} min={from || undefined} onchange={reload} /></label>
+		{#if filtered}<button class="btn btn-ghost btn-sm" onclick={clearFilters}>{tr("Clear filters")}</button>{/if}
 	</div>
 
 	{#if !items.loaded}
 		<Skeleton lines={4} />
 	{:else if nothing}
 		<div class="card card-border bg-base-100">
-			<EmptyState icon="archive" title={filtered ? 'Nothing matches' : view === 'past' ? 'Nothing finished yet' : 'The archive is empty'}>
-				{filtered ? 'Try fewer filters.' : view === 'past' ? 'Sessions appear here when they end.' : 'Archive a finished session and it appears here.'}
+			<EmptyState icon="archive" title={filtered ? tr("Nothing matches") : view === 'past' ? tr("Nothing finished yet") : tr("The archive is empty")}>
+				{filtered ? tr("Try fewer filters.") : view === 'past' ? tr("Sessions appear here when they end.") : tr("Archive a finished session and it appears here.")}
 			</EmptyState>
 		</div>
 	{:else}
@@ -176,10 +177,10 @@
 					</tbody>
 				</table>
 			</div>
-			<Pager list={items} label="Past sessions" />
+			<Pager list={items} label={tr("Past sessions")} />
 		{/if}
 		{#if showSessions && sessions.rows.length}
-			{#if showItems && items.rows.length}<h2 class="m-0 text-base">Tutoring sessions</h2>{/if}
+			{#if showItems && items.rows.length}<h2 class="m-0 text-base">{tr("Tutoring sessions")}</h2>{/if}
 			<div class="card card-border bg-base-100 shadow-sm overflow-x-auto">
 				<table class="table table-sm">
 					{@render head()}
@@ -191,7 +192,7 @@
 					</tbody>
 				</table>
 			</div>
-			<Pager list={sessions} label="Tutoring sessions" />
+			<Pager list={sessions} label={tr("Tutoring sessions")} />
 		{/if}
 	{/if}
 </div>

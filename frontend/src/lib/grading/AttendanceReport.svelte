@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A classroom's attendance (D-122): its quiz sessions, meetings and, with
 	// tutoring on, tutoring sessions between two dates; each student's count
 	// by kind and in all, and session by session. Downloads as a summary or a
@@ -47,7 +48,7 @@
 			}
 			all = mergeTutoring(a, tutoring);
 		} catch (e) {
-			error = e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : 'The report didn’t load';
+			error = e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : tr("The report didn’t load");
 		} finally {
 			busy = false;
 		}
@@ -64,9 +65,9 @@
 		try {
 			await new TutorClient().put(`/api/classrooms/${classroomId}/attendance/settings`, { counts_in_results: on });
 			if (tutoring) tutoring.counts_in_results = on;
-			toast(on ? 'Attendance now shows in the classroom’s results' : 'Attendance left out of the results');
+			toast(on ? tr("Attendance now shows in the classroom’s results") : tr("Attendance left out of the results"));
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'That didn’t work', 'error');
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work"), 'error');
 		}
 	}
 
@@ -99,16 +100,16 @@
 	}
 </script>
 
-<section class="vstack gap-3" aria-label="Attendance">
+<section class="vstack gap-3" aria-label={tr("Attendance")}>
 	<div class="flex flex-wrap items-end gap-2">
-		<label class="small">From <input class="input input-sm" type="date" bind:value={from} max={to} /></label>
-		<label class="small">To <input class="input input-sm" type="date" bind:value={to} min={from} /></label>
-		<button class="btn btn-sm" onclick={load} disabled={busy}>Show</button>
+		<label class="small">{tr("From")} <input class="input input-sm" type="date" bind:value={from} max={to} /></label>
+		<label class="small">{tr("To")} <input class="input input-sm" type="date" bind:value={to} min={from} /></label>
+		<button class="btn btn-sm" onclick={load} disabled={busy}>{tr("Show")}</button>
 		{#if scopes.length > 1}<ScopePicker options={scopes} value={scopeValue(scope)} onchange={(v) => (scope = scopeFrom(v))} />{/if}
 		<span class="grow"></span>
 		{#if data}
-			<button class="btn btn-sm" onclick={() => saveFile(file('attendance') + '.csv', attendanceSummaryCSV(data!, rows))} disabled={!rows.length}><Icon name="download" size={15} />Summary CSV</button>
-			<button class="btn btn-sm" onclick={() => saveFile(file('attendance-by-session') + '.csv', attendanceDetailCSV(data!, rows.map((r) => r.user_id)))} disabled={!data.events.length}><Icon name="download" size={15} />By session CSV</button>
+			<button class="btn btn-sm" onclick={() => saveFile(file('attendance') + '.csv', attendanceSummaryCSV(data!, rows))} disabled={!rows.length}><Icon name="download" size={15} />{tr("Summary CSV")}</button>
+			<button class="btn btn-sm" onclick={() => saveFile(file('attendance-by-session') + '.csv', attendanceDetailCSV(data!, rows.map((r) => r.user_id)))} disabled={!data.events.length}><Icon name="download" size={15} />{tr("By session CSV")}</button>
 			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => [{ heading: `${from} to ${to} · ${data?.events.length ?? 0} sessions${note ? ` · ${note}` : ''}`, ...table(), frozen: 2 }]} disabled={!rows.length} onbands={(b) => (bands = b)} />
 		{/if}
 	</div>
@@ -116,15 +117,15 @@
 	{#if !data}
 		{#if !error}<Skeleton lines={5} />{/if}
 	{:else}
-		<p class="small muted m-0">{data.events.length} {data.events.length === 1 ? 'session' : 'sessions'} from {from} to {to}: {kinds.map((k) => `${data!.events.filter((e) => e.kind === k).length} ${LABEL[k].toLowerCase()}`).join(', ') || 'none yet'}. {#if scope.kind !== 'all'}Only <strong>{scopeName}</strong>’s quiz sessions: meetings and tutoring belong to no module. {/if}A student came to a quiz session when admitted to it, to a meeting when they joined it{tutoringOn ? ', and to a tutoring session when connected while it was live' : ''}.</p>
+		<p class="small muted m-0">{tr("{0} {1} from {2} to {3}: {4}.", [data.events.length, data.events.length === 1 ? 'session' : 'sessions', from, to, kinds.map((k) => `${data!.events.filter((e) => e.kind === k).length} ${LABEL[k].toLowerCase()}`).join(', ') || tr("none yet")])} {#if scope.kind !== 'all'}{tr("Only")} <strong>{scopeName}</strong>{tr("’s quiz sessions: meetings and tutoring belong to no module.")} {/if}{tr("A student came to a quiz session when admitted to it, to a meeting when they joined it{0}.", [tutoringOn ? tr(", and to a tutoring session when connected while it was live") : ''])}</p>
 		{#if tutoring}
-			<label class="flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={tutoring.counts_in_results} onchange={(e) => setCounts(e.currentTarget.checked)} /> Show attendance in the classroom’s results</label>
+			<label class="flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={tutoring.counts_in_results} onchange={(e) => setCounts(e.currentTarget.checked)} /> {tr("Show attendance in the classroom’s results")}</label>
 		{/if}
 		{#if allRows.length}<ReportControls bind:view cols={viewCols} show={showOptions} shown={rows.length} total={allRows.length} noun="students" />{/if}
 		<div class="card card-border bg-base-100 p-2 sm:p-4">
 			<div class="table-wrap">
 				<table class="table table-sm">
-					<thead><tr><th class="num">No.</th><ReportTh bind:view cols={viewCols} col="student" label="Student" />{#each kinds as k (k)}<ReportTh bind:view cols={viewCols} col={k} label={LABEL[k]} class="num" />{/each}<ReportTh bind:view cols={viewCols} col="came" label="Attended" class="num" /><ReportTh bind:view cols={viewCols} col="rate" label="Rate" class="num" /><ReportTh bind:view cols={viewCols} col="minutes" label="Minutes" class="num" /></tr></thead>
+					<thead><tr><th class="num">{tr("No.")}</th><ReportTh bind:view cols={viewCols} col="student" label={tr("Student")} />{#each kinds as k (k)}<ReportTh bind:view cols={viewCols} col={k} label={LABEL[k]} class="num" />{/each}<ReportTh bind:view cols={viewCols} col="came" label={tr("Attended")} class="num" /><ReportTh bind:view cols={viewCols} col="rate" label={tr("Rate")} class="num" /><ReportTh bind:view cols={viewCols} col="minutes" label={tr("Minutes")} class="num" /></tr></thead>
 					<tbody>
 						{#each rows as r, n (r.user_id)}
 							<tr>
@@ -136,7 +137,7 @@
 								<td class="num tabular">{r.minutes}</td>
 							</tr>
 						{:else}
-							<tr><td colspan={kinds.length + 5} class="muted">{allRows.length ? 'Nobody matches. Clear the filters to see everyone.' : 'No students yet.'}</td></tr>
+							<tr><td colspan={kinds.length + 5} class="muted">{allRows.length ? tr("Nobody matches. Clear the filters to see everyone.") : tr("No students yet.")}</td></tr>
 						{/each}
 					</tbody>
 				</table>
@@ -144,10 +145,10 @@
 		</div>
 		{#if data.events.length}
 			<details class="card card-border bg-base-100 p-4 small">
-				<summary class="font-semibold">Every session</summary>
+				<summary class="font-semibold">{tr("Every session")}</summary>
 				<ul class="m-0 mt-2 ps-4">
 					{#each data.events as e (e.kind + e.id)}
-						<li>{new Date(e.at).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · {LABEL[e.kind]} · {e.title} · {data.students.filter((s) => s.attended.includes(e.id)).length} of {data.students.length} present</li>
+						<li>{tr("{0} · {1} · {2} · {3} of {4} present", [new Date(e.at).toLocaleString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }), LABEL[e.kind], e.title, data.students.filter((s) => s.attended.includes(e.id)).length, data.students.length])}</li>
 					{/each}
 				</ul>
 			</details>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A student going through a presentation at their own pace (D-76). The
 	// next slide loads ahead; arrow keys move; time on each slide is recorded
 	// while it's on screen, and the student is told so (PR-FR-34).
@@ -25,7 +26,7 @@
 			goto(loginUrl('/slides/' + id), { replaceState: true });
 			return;
 		}
-		api.post<View>(`/api/presentations/${id}/open`).then((r) => (v = r), (e) => (problem = e instanceof ApiError ? e.message : 'Could not open the presentation'));
+		api.post<View>(`/api/presentations/${id}/open`).then((r) => (v = r), (e) => (problem = e instanceof ApiError ? e.message : tr("Could not open the presentation")));
 	});
 
 	const src = (n: number) => `/api/presentations/${id}/slides/${n}?v=${v?.presentation.version}`;
@@ -59,7 +60,7 @@
 		try {
 			v = await api.post<View>(`/api/presentations/${id}/go`, { to: n });
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Something went wrong; try again', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Something went wrong; try again"), 'error');
 		} finally {
 			busy = false;
 		}
@@ -79,48 +80,48 @@
 	}
 </script>
 
-<svelte:head><title>{v?.presentation.title ?? 'Presentation'}</title></svelte:head>
+<svelte:head><title>{v?.presentation.title ?? tr("Presentation")}</title></svelte:head>
 <svelte:window onkeydown={key} />
 <svelte:document onfullscreenchange={() => (full = !!document.fullscreenElement)} />
 
 <div class="page-container viewer">
 	{#if problem}
 		<div class="card card-border bg-base-100 shadow-sm p-6 text-center vstack" role="alert">
-			<h1 class="m-0">Can’t open this presentation</h1>
+			<h1 class="m-0">{tr("Can’t open this presentation")}</h1>
 			<p class="muted m-0">{problem}</p>
-			<a class="btn mx-auto" href="/my">Back to my page</a>
+			<a class="btn mx-auto" href="/my">{tr("Back to my page")}</a>
 		</div>
 	{:else if !v || !slide}
 		<Skeleton lines={8} />
 	{:else}
 		<header class="vstack gap-2">
-			<p class="small m-0"><a href="/my">← My page</a></p>
+			<p class="small m-0"><a href="/my">{tr("← My page")}</a></p>
 			<div class="flex flex-wrap items-baseline gap-3">
 				<h1 class="m-0">{v.presentation.title}</h1>
-				{#if v.presentation.allow_download}<a class="btn btn-sm btn-ghost" href={`/api/presentations/${id}/pdf`} download><Icon name="download" size={14} />PDF</a>{/if}
+				{#if v.presentation.allow_download}<a class="btn btn-sm btn-ghost" href={`/api/presentations/${id}/pdf`} download><Icon name="download" size={14} />{tr("PDF")}</a>{/if}
 			</div>
 			{#if v.presentation.description}<p class="muted m-0">{v.presentation.description}</p>{/if}
 		</header>
 
-		<section class="stage" class:full bind:this={stage} aria-label="Slides">
+		<section class="stage" class:full bind:this={stage} aria-label={tr("Slides")}>
 			<img src={src(v.current)} alt={slideAlt(slide, total)} width={slide.width} height={slide.height} />
 			<div class="controls">
-				<button class="btn" disabled={busy || v.current === 1} onclick={() => go(v!.current - 1)} aria-label="Previous slide"><Icon name="arrow-left" size={16} /><span class="hide-sm">Back</span></button>
+				<button class="btn" disabled={busy || v.current === 1} onclick={() => go(v!.current - 1)} aria-label={tr("Previous slide")}><Icon name="arrow-left" size={16} /><span class="hide-sm">{tr("Back")}</span></button>
 				{#if v.presentation.allow_jump}
-					<select class="select select-sm w-auto" aria-label="Go to slide" value={v.current} onchange={(e) => go(Number(e.currentTarget.value))}>
+					<select class="select select-sm w-auto" aria-label={tr("Go to slide")} value={v.current} onchange={(e) => go(Number(e.currentTarget.value))}>
 						{#each v.slides as s (s.n)}<option value={s.n}>{s.n} / {total}</option>{/each}
 					</select>
 				{:else}
 					<span class="tabular small" aria-live="polite">{v.current} / {total}</span>
 				{/if}
-				<button class="btn btn-primary" disabled={busy || v.current === total} onclick={() => go(v!.current + 1)} aria-label="Next slide"><span class="hide-sm">Next</span><Icon name="arrow-right" size={16} /></button>
-				<button class="btn btn-ghost" onclick={fullscreen} aria-label={full ? 'Leave full screen' : 'Full screen'}><Icon name={full ? 'minimize' : 'maximize'} size={16} /></button>
+				<button class="btn btn-primary" disabled={busy || v.current === total} onclick={() => go(v!.current + 1)} aria-label={tr("Next slide")}><span class="hide-sm">{tr("Next")}</span><Icon name="arrow-right" size={16} /></button>
+				<button class="btn btn-ghost" onclick={fullscreen} aria-label={full ? tr("Leave full screen") : tr("Full screen")}><Icon name={full ? 'minimize' : 'maximize'} size={16} /></button>
 			</div>
 		</section>
-		<progress class="progress progress-primary w-full" value={v.reached} max={total} aria-label="Seen {v.reached} of {total} slides"></progress>
+		<progress class="progress progress-primary w-full" value={v.reached} max={total} aria-label={tr("Seen {0} of {1} slides", [v.reached, total])}></progress>
 		<p class="small muted m-0">
-			{#if v.finished}You’ve seen every slide.{:else if !v.presentation.allow_jump}Go through the slides in order.{/if}
-			Your teacher sees which slides you view and for how long. Arrow keys move between slides.
+			{#if v.finished}{tr("You’ve seen every slide.")}{:else if !v.presentation.allow_jump}{tr("Go through the slides in order.")}{/if}
+			{tr("Your teacher sees which slides you view and for how long. Arrow keys move between slides.")}
 		</p>
 	{/if}
 </div>

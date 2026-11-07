@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // Explore (D-120): the catalog and results of /api/insight, and the small
 // pieces the page needs: a pivot of two dimensions, CSV, the query kept in
 // the address, and date ranges.
@@ -61,8 +62,8 @@ export function dateLabel(v: string, grain: string): string {
 	const o: Intl.DateTimeFormatOptions = { timeZone: 'UTC' };
 	if (grain === 'year') return String(y);
 	if (grain === 'quarter') return `Q${Math.floor(((m || 1) - 1) / 3) + 1} ${y}`;
-	if (grain === 'month') return dt.toLocaleDateString(undefined, { ...o, month: 'short', year: 'numeric' });
-	const s = dt.toLocaleDateString(undefined, { ...o, day: 'numeric', month: 'short', year: 'numeric' });
+	if (grain === 'month') return dt.toLocaleDateString(localeTag(), { ...o, month: 'short', year: 'numeric' });
+	const s = dt.toLocaleDateString(localeTag(), { ...o, day: 'numeric', month: 'short', year: 'numeric' });
 	return grain === 'week' ? `Week of ${s}` : s;
 }
 
@@ -74,7 +75,7 @@ export function cellText(dim: string, c: Cell | undefined, grain: string): strin
 
 export function fmt(v: number | null | undefined, unit?: string): string {
 	if (v === null || v === undefined) return '—';
-	const n = v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+	const n = v.toLocaleString(localeTag(), { maximumFractionDigits: 1 });
 	return unit === '%' ? n + '%' : unit ? `${n} ${unit}` : n;
 }
 

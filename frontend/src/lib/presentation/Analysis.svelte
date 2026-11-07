@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Time on a presentation set beside marks (D-78, PR-FR-32, PR-FR-33): the
 	// quizzes and tutorials it goes with, each student as a point (time
 	// across, score up) with the straight-line trend, slide by slide who
@@ -36,7 +37,7 @@
 			editing = false;
 			a = await api.get<Analysis>(`/api/teacher/presentations/${id}/analysis`);
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not save', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not save"), 'error');
 		}
 	}
 
@@ -66,21 +67,21 @@
 {:else}
 	<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack gap-3" aria-labelledby="links-h">
 		<div class="flex flex-wrap items-center gap-2">
-			<h3 class="m-0 text-base flex-1" id="links-h">Set beside marks from</h3>
-			{#if !editing && links.options.length}<button class="btn btn-sm" onclick={() => (editing = true)}><Icon name="pencil" size={14} />Change</button>{/if}
+			<h3 class="m-0 text-base flex-1" id="links-h">{tr("Set beside marks from")}</h3>
+			{#if !editing && links.options.length}<button class="btn btn-sm" onclick={() => (editing = true)}><Icon name="pencil" size={14} />{tr("Change")}</button>{/if}
 		</div>
 		{#if !links.options.length}
-			<p class="small muted m-0">This topic has no quizzes or tutorials yet. Add the lesson’s quiz or tutorial to the topic, then link it here.</p>
+			<p class="small muted m-0">{tr("This topic has no quizzes or tutorials yet. Add the lesson’s quiz or tutorial to the topic, then link it here.")}</p>
 		{:else if editing}
-			<ul class="opts" aria-label="Quizzes and tutorials of this topic">
+			<ul class="opts" aria-label={tr("Quizzes and tutorials of this topic")}>
 				{#each links.options as o (key(o))}
 					<li><label class="flex items-center gap-2"><input type="checkbox" class="checkbox checkbox-sm" checked={chosen.includes(key(o))}
 						onchange={(e) => (chosen = e.currentTarget.checked ? [...chosen, key(o)] : chosen.filter((k) => k !== key(o)))} />
-						<span class="badge badge-soft badge-sm">{o.kind === 'quiz' ? 'Quiz' : 'Tutorial'}</span>{o.title}</label></li>
+						<span class="badge badge-soft badge-sm">{o.kind === 'quiz' ? tr("Quiz") : tr("Tutorial")}</span>{o.title}</label></li>
 				{/each}
 			</ul>
-			<div class="flex gap-2"><button class="btn btn-sm btn-primary" onclick={saveLinks}>Save</button>{#if links.linked.length}<button class="btn btn-sm btn-ghost" onclick={() => { editing = false; chosen = links!.linked.map(key); }}>Cancel</button>{/if}</div>
-			<p class="small muted m-0">Students’ best attempt at each quiz and their marked tutorial answers are added up into one score.</p>
+			<div class="flex gap-2"><button class="btn btn-sm btn-primary" onclick={saveLinks}>{tr("Save")}</button>{#if links.linked.length}<button class="btn btn-sm btn-ghost" onclick={() => { editing = false; chosen = links!.linked.map(key); }}>{tr("Cancel")}</button>{/if}</div>
+			<p class="small muted m-0">{tr("Students’ best attempt at each quiz and their marked tutorial answers are added up into one score.")}</p>
 		{:else}
 			<p class="m-0">{links.linked.map((l) => `${l.title} (${l.kind})`).join(', ')}</p>
 		{/if}
@@ -88,14 +89,14 @@
 
 	{#if links.linked.length}
 		<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack gap-3" aria-labelledby="scatter-h">
-			<h3 class="m-0 text-base" id="scatter-h">Time on the slides against score</h3>
+			<h3 class="m-0 text-base" id="scatter-h">{tr("Time on the slides against score")}</h3>
 			{#if !a.points.length}
-				<p class="small muted m-0">Nothing to set side by side yet: no student has both viewed the slides and been marked on what’s linked.</p>
+				<p class="small muted m-0">{tr("Nothing to set side by side yet: no student has both viewed the slides and been marked on what’s linked.")}</p>
 			{:else}
 				{#if a.trend}<p class="m-0">{trendWords(a.trend, span.from, span.to, duration)}</p>{/if}
 				<div class="chart">
 					<svg viewBox="0 0 {W} {H}" role="img" aria-labelledby="scatter-h scatter-d">
-						<desc id="scatter-d">{count(a.points.length, 'student')}: time on the slides across, score up. The table below has the same numbers.</desc>
+						<desc id="scatter-d">{tr("{0}: time on the slides across, score up. The table below has the same numbers.", [count(a.points.length, 'student')])}</desc>
 						{#each [0, 25, 50, 75, 100] as g (g)}
 							<line class="grid" x1={L} x2={W - R} y1={y(g)} y2={y(g)} />
 							<text class="tick" x={L - 8} y={y(g) + 4} text-anchor="end">{g}%</text>
@@ -103,8 +104,8 @@
 						{#each xTicks as t (t)}
 							<text class="tick" x={x(t)} y={H - B + 18} text-anchor="middle">{t ? duration(t) : '0'}</text>
 						{/each}
-						<text class="tick" x={(L + W - R) / 2} y={H - 4} text-anchor="middle">time on the slides</text>
-						<text class="tick" x={L - 8} y={T - 18} text-anchor="end">score</text>
+						<text class="tick" x={(L + W - R) / 2} y={H - 4} text-anchor="middle">{tr("time on the slides")}</text>
+						<text class="tick" x={L - 8} y={T - 18} text-anchor="end">{tr("score")}</text>
 						<clipPath id="plot-{id}"><rect x={L} y={T} width={W - L - R} height={H - T - B} /></clipPath>
 						{#if trendLine}
 							<line class="trend" {...trendLine} clip-path="url(#plot-{id})" />
@@ -125,14 +126,14 @@
 					{/if}
 				</div>
 				<p class="small muted m-0">
-					{#if a.not_viewed}{count(a.not_viewed, 'student')} with marks never opened the slides. {/if}
-					{#if a.no_score}{count(a.no_score, 'student')} viewed the slides but have no marks yet. {/if}
-					{#if trendLine}The grey line is the trend.{/if} Spending longer and scoring higher can go together without one causing the other.
+					{#if a.not_viewed}{tr("{0} with marks never opened the slides.", [count(a.not_viewed, 'student')])} {/if}
+					{#if a.no_score}{tr("{0} viewed the slides but have no marks yet.", [count(a.no_score, 'student')])} {/if}
+					{#if trendLine}{tr("The grey line is the trend.")}{/if} {tr("Spending longer and scoring higher can go together without one causing the other.")}
 				</p>
 				<details>
-					<summary class="small">As a table</summary>
+					<summary class="small">{tr("As a table")}</summary>
 					<table class="table table-sm">
-						<thead><tr><th>Student</th><th class="text-right">Time</th><th class="text-right">Slides</th><th class="text-right">Score</th></tr></thead>
+						<thead><tr><th>{tr("Student")}</th><th class="text-right">{tr("Time")}</th><th class="text-right">{tr("Slides")}</th><th class="text-right">{tr("Score")}</th></tr></thead>
 						<tbody>{#each a.points as p (p.user_id)}<tr><td>{p.name}</td><td class="text-right tabular">{duration(p.seconds)}</td><td class="text-right tabular">{p.seen}</td><td class="text-right tabular">{pct(p.score_pct)}</td></tr>{/each}</tbody>
 					</table>
 				</details>
@@ -141,10 +142,10 @@
 
 		{#if a.points.length}
 			<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap" aria-labelledby="split-h">
-				<h3 class="m-0 text-base" id="split-h">Slide by slide</h3>
-				<p class="small muted mt-1 mb-2">For each slide: the score of students who spent at least the median time on it, and of those who spent less or skipped it.</p>
+				<h3 class="m-0 text-base" id="split-h">{tr("Slide by slide")}</h3>
+				<p class="small muted mt-1 mb-2">{tr("For each slide: the score of students who spent at least the median time on it, and of those who spent less or skipped it.")}</p>
 				<table class="table table-sm">
-					<thead><tr><th>Slide</th><th class="text-right">Median time</th><th class="text-right">Longer: score</th><th class="text-right">Less: score</th><th class="text-right">Skipped</th></tr></thead>
+					<thead><tr><th>{tr("Slide")}</th><th class="text-right">{tr("Median time")}</th><th class="text-right">{tr("Longer: score")}</th><th class="text-right">{tr("Less: score")}</th><th class="text-right">{tr("Skipped")}</th></tr></thead>
 					<tbody>
 						{#each a.slides as s (s.n)}
 							<tr>
@@ -162,8 +163,8 @@
 	{/if}
 
 	<section class="card card-border bg-base-100 shadow-sm p-4 flex flex-wrap items-center gap-2">
-		<span class="flex-1">The viewing records, one row per student, with each slide’s time{links.linked.length ? ' and the linked score' : ''}.</span>
-		<a class="btn btn-sm" href={`/api/teacher/presentations/${id}/report.csv`} download><Icon name="download" size={14} />CSV</a>
+		<span class="flex-1">{tr("The viewing records, one row per student, with each slide’s time{0}.", [links.linked.length ? tr(" and the linked score") : ''])}</span>
+		<a class="btn btn-sm" href={`/api/teacher/presentations/${id}/report.csv`} download><Icon name="download" size={14} />{tr("CSV")}</a>
 		<SaveToDrive kind="presentation" {id} size="btn-sm" />
 	</section>
 {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Live results of a choice question, cartoon style (D-150): columns that jump
 	// as answers arrive, over a tile for each option with its share. The tiles say
 	// everything the columns do, so screen readers read those.
@@ -31,8 +32,8 @@
 			{@const right = !!correct?.includes(o.id)}
 			<li class="tile" class:right style:--tile={markFor(i).color}>
 				<span class="mark"><ToonMark index={i} size={big && !dense ? 30 : 22} /></span>
-				<span class="opt-label" title={o.label}>{o.label}</span>
-				{#if right}<span class="tick"><Icon name="check" size={big ? 20 : 15} /><span class="sr-only">Correct</span></span>{/if}
+				<span class="opt-label" title={tr(o.label)}>{tr(o.label)}</span>
+				{#if right}<span class="tick"><Icon name="check" size={big ? 20 : 15} /><span class="sr-only">{tr("Correct")}</span></span>{/if}
 				<span class="share tabular">{pct(o.n)}%<span class="sr-only">, {o.n} {o.n === 1 ? 'person' : 'people'}</span></span>
 			</li>
 		{/each}

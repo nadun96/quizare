@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// The student's progress on their My page (D-97): their level ring, XP
 	// to the next level, the weekly streak, badges and what earned XP lately.
 	// Theirs alone: no ranking against classmates.
@@ -9,41 +10,41 @@
 	let { p }: { p: Progress } = $props();
 	const toNext = $derived(p.next_level_xp - p.xp);
 	const earned = $derived(p.badges.filter((b) => b.earned).length);
-	const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+	const when = (iso: string) => new Date(iso).toLocaleDateString(localeTag(), { day: 'numeric', month: 'short' });
 </script>
 
 <section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6" aria-labelledby="progress-h">
-	<h2 id="progress-h" class="sr-only">Your progress</h2>
+	<h2 id="progress-h" class="sr-only">{tr("Your progress")}</h2>
 	<div class="top">
 		<LevelRing fraction={levelFraction(p)} level={p.level} size={96} stroke={7} badge={false}>
-			<span class="medal"><span class="small muted">Level</span><strong>{p.level}</strong></span>
+			<span class="medal"><span class="small muted">{tr("Level")}</span><strong>{p.level}</strong></span>
 		</LevelRing>
 		<div class="vstack gap-1 min-w-0">
-			<p class="m-0 text-2xl font-bold tabular-nums">{p.xp} XP</p>
-			<p class="m-0 small muted">{toNext} XP to level {p.level + 1}</p>
+			<p class="m-0 text-2xl font-bold tabular-nums">{tr("{0} XP", [p.xp])}</p>
+			<p class="m-0 small muted">{tr("{0} XP to level {1}", [toNext, p.level + 1])}</p>
 			<div class="flex flex-wrap gap-2 pt-1">
-				<span class="chip" class:on={p.streak_weeks > 0} title="Weeks in a row with a quiz or tutorial">
-					<Icon name="sparkles" size={14} />{p.streak_weeks ? weeks(p.streak_weeks) + ' running' : 'No streak yet'}
+				<span class="chip" class:on={p.streak_weeks > 0} title={tr("Weeks in a row with a quiz or tutorial")}>
+					<Icon name="sparkles" size={14} />{p.streak_weeks ? tr("{0} running", [weeks(p.streak_weeks)]) : tr("No streak yet")}
 				</span>
-				{#if p.streak_weeks && !p.active_this_week}<span class="chip warn"><Icon name="clock" size={14} />Do one this week to keep it</span>{/if}
-				<span class="chip"><Icon name="trophy" size={14} />{earned} of {p.badges.length} badges</span>
+				{#if p.streak_weeks && !p.active_this_week}<span class="chip warn"><Icon name="clock" size={14} />{tr("Do one this week to keep it")}</span>{/if}
+				<span class="chip"><Icon name="trophy" size={14} />{tr("{0} of {1} badges", [earned, p.badges.length])}</span>
 			</div>
 		</div>
 	</div>
 
-	<ul class="badges" aria-label="Badges">
+	<ul class="badges" aria-label={tr("Badges")}>
 		{#each p.badges as b (b.id)}
 			<li class="badge-item" class:earned={b.earned} title={b.description}>
 				<span class="disc"><Icon name={BADGE_ICON[b.id] ?? 'star'} size={20} /></span>
 				<span class="name">{b.name}</span>
-				<span class="note">{b.earned && b.earned_at ? when(b.earned_at) : b.need > 1 ? `${b.have} of ${b.need}` : b.description}</span>
+				<span class="note">{b.earned && b.earned_at ? when(b.earned_at) : b.need > 1 ? tr("{0} of {1}", [b.have, b.need]) : b.description}</span>
 			</li>
 		{/each}
 	</ul>
 
 	{#if p.recent.length}
 		<details class="recent">
-			<summary class="small">What earned XP lately</summary>
+			<summary class="small">{tr("What earned XP lately")}</summary>
 			<ul class="m-0 mt-2 p-0 list-none vstack gap-1">
 				{#each p.recent as a (a.kind + a.at)}
 					<li class="flex items-center gap-2 small"><Icon name={a.kind === 'quiz' ? 'check-circle' : 'book'} size={14} /><span class="truncate flex-1">{a.title}</span><span class="muted">{when(a.at)}</span><strong class="xp">+{a.xp}</strong></li>
@@ -51,7 +52,7 @@
 			</ul>
 		</details>
 	{:else}
-		<p class="m-0 mt-3 small muted">Finish a quiz or a tutorial to start earning XP. Results count once your teacher releases them.</p>
+		<p class="m-0 mt-3 small muted">{tr("Finish a quiz or a tutorial to start earning XP. Results count once your teacher releases them.")}</p>
 	{/if}
 </section>
 

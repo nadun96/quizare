@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, safeNext, withBusyRetry } from '$lib/api';
@@ -35,7 +36,7 @@
 	}
 </script>
 
-<svelte:head><title>Create an account · Classroom Quiz</title><meta name="description" content="Create a free Classroom Quiz account as a student or a teacher." /></svelte:head>
+<svelte:head><title>{tr("Create an account · Classroom Quiz")}</title><meta name="description" content="Create a free Classroom Quiz account as a student or a teacher." /></svelte:head>
 
 
 <div class="narrow">

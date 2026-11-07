@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Recordings someone may watch (D-80): a student's, of sessions they were
 	// in whose teacher lets students watch; a teacher's, of sessions they
 	// taught. Shown only when tutoring is on and there are some.
@@ -23,7 +24,7 @@
 		<h2 class="m-0" id="my-recs-h">{heading}</h2>
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
 			<RecordingsList {client} recordings={list} {meId} leadOf={(r) => r.lead} showSession onchange={load} />
-			<p class="small muted m-0 mt-2">Each recording is deleted 2 days after it ends.</p>
+			<p class="small muted m-0 mt-2">{tr("Each recording is deleted 2 days after it ends.")}</p>
 		</div>
 	</section>
 {/if}

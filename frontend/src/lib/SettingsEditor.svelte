@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Edits the sparse overrides of one configuration level (BA §7). Unset keys
 	// inherit, and the inherited value is shown as the default choice, so a
 	// teacher sees what applies without reading "Inherit (…)" everywhere.
@@ -84,9 +85,9 @@
 					<span class="s-icon" aria-hidden="true"><Icon name={s.icon} size={17} /></span>
 					<span class="min-w-0 flex-1">
 						<span class="s-title">{s.title}</span>
-						<span class="s-sum">{summary(s.metas) || 'Uses the values from above'}</span>
+						<span class="s-sum">{summary(s.metas) || tr("Uses the values from above")}</span>
 					</span>
-					{#if changed}<span class="badge badge-soft badge-primary badge-sm whitespace-nowrap">{changed} set here</span>{/if}
+					{#if changed}<span class="badge badge-soft badge-primary badge-sm whitespace-nowrap">{tr("{0} set here", [changed])}</span>{/if}
 					<span class="chev" aria-hidden="true"><Icon name="chevron-right" size={16} /></span>
 				</summary>
 				<div class="rows">
@@ -95,26 +96,26 @@
 						{@const err = errors['settings.' + m.key] ?? errors[m.key]}
 						<div class="srow">
 							<div class="slabel">
-								<span class="font-semibold" id={'l-' + m.key}>{m.label}</span>
+								<span class="font-semibold" id={'l-' + m.key}>{tr(m.label)}</span>
 								{#if m.help}<span class="small muted">{m.help}</span>{/if}
 							</div>
 							<div class="scontrol">
 								{#if m.kind === 'enum'}
-									<OptionGroup label={m.label} options={m.options ?? []} value={draft[m.key] as string | undefined} fallback={fallbackOf(m)} onchange={(v) => set(m.key, v)} />
+									<OptionGroup label={tr(m.label)} options={m.options ?? []} value={draft[m.key] as string | undefined} fallback={fallbackOf(m)} onchange={(v) => set(m.key, v)} />
 								{:else if m.kind === 'bool'}
-									<OptionGroup label={m.label} options={boolOptions(m)} value={draft[m.key] === undefined ? undefined : String(draft[m.key])} fallback={fallbackOf(m)} onchange={(v) => set(m.key, v === 'true')} />
+									<OptionGroup label={tr(m.label)} options={boolOptions(m)} value={draft[m.key] === undefined ? undefined : String(draft[m.key])} fallback={fallbackOf(m)} onchange={(v) => set(m.key, v === 'true')} />
 								{:else if m.kind === 'int'}
 									<label class="input input-sm w-36" aria-labelledby={'l-' + m.key}>
 										<input type="number" min="0" inputmode="numeric" placeholder={effective[m.key] !== undefined ? String(effective[m.key]) : ''} value={draft[m.key] ?? ''}
 											oninput={(e) => set(m.key, e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))} aria-labelledby={'l-' + m.key} />
 										{#if m.unit}<span class="muted">{m.unit}</span>{/if}
 									</label>
-									{#if !own && effective[m.key] !== undefined}<span class="small muted">Default: {describe(m, effective[m.key])}</span>{/if}
+									{#if !own && effective[m.key] !== undefined}<span class="small muted">{tr("Default: {0}", [describe(m, effective[m.key])])}</span>{/if}
 								{:else}
-									<input class="input input-sm w-full max-w-xs" aria-labelledby={'l-' + m.key} placeholder={effective[m.key] ? String(effective[m.key]) : 'Default'} value={draft[m.key] ?? ''} oninput={(e) => set(m.key, e.currentTarget.value || undefined)} />
+									<input class="input input-sm w-full max-w-xs" aria-labelledby={'l-' + m.key} placeholder={effective[m.key] ? String(effective[m.key]) : tr("Default")} value={draft[m.key] ?? ''} oninput={(e) => set(m.key, e.currentTarget.value || undefined)} />
 								{/if}
 								<!-- `effective` already includes this level's own value, so the default it would fall back to isn't known here. -->
-								{#if own}<button type="button" class="link link-hover small reset" onclick={() => set(m.key, undefined)}>Use the default</button>{/if}
+								{#if own}<button type="button" class="link link-hover small reset" onclick={() => set(m.key, undefined)}>{tr("Use the default")}</button>{/if}
 								{#if err}<p class="field-error m-0">{err}</p>{/if}
 							</div>
 						</div>
@@ -124,8 +125,8 @@
 		{/each}
 	</div>
 	<div class="row">
-		<button class="btn btn-primary" disabled={saving || !dirty}>Save settings</button>
-		{#if dirty}<span class="small muted">Not saved yet</span>{:else if saved}<span class="badge badge-soft badge-success">Saved</span>{/if}
+		<button class="btn btn-primary" disabled={saving || !dirty}>{tr("Save settings")}</button>
+		{#if dirty}<span class="small muted">{tr("Not saved yet")}</span>{:else if saved}<span class="badge badge-soft badge-success">{tr("Saved")}</span>{/if}
 	</div>
 </form>
 

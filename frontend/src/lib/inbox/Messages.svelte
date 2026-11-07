@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Messages (D-103) between a teacher and a student of theirs: the
 	// conversations, latest first, beside the open one. Either side starts
 	// one from the people they can write to. An open conversation checks for
@@ -56,7 +57,7 @@
 			scrollDown();
 			if (current.unread) read(id);
 		} catch {
-			toast('That conversation is not yours, or no longer there', 'error');
+			toast(tr("That conversation is not yours, or no longer there"), 'error');
 			current = null;
 		}
 	}
@@ -108,7 +109,7 @@
 			scrollDown();
 			list.load();
 		} catch (err) {
-			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Could not send it', 'error');
+			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("Could not send it"), 'error');
 		} finally {
 			sending = false;
 		}
@@ -147,7 +148,7 @@
 </script>
 
 <div class="msgs" class:open={!!(current || to || picking)}>
-	<aside class="msgs-list card card-border bg-base-100 shadow-sm" aria-label="Conversations">
+	<aside class="msgs-list card card-border bg-base-100 shadow-sm" aria-label={tr("Conversations")}>
 		<div class="flex items-center gap-2 p-3 pb-0">
 			<button class="btn btn-primary btn-sm" onclick={newMessage}><Icon name="plus" size={16} />{t('inbox.newMessage')}</button>
 		</div>
@@ -159,62 +160,62 @@
 						<Avatar id={c.with.id} name={c.with.name} avatar={c.with.avatar} size={36} />
 						<span class="grow min-w-0 text-left">
 							<span class="flex items-baseline gap-2"><span class="grow truncate" class:font-bold={c.unread > 0}>{c.with.name}</span><span class="small muted shrink-0">{when(c.last_at)}</span></span>
-							<span class="flex items-center gap-2"><span class="small muted grow truncate">{c.last_mine ? t('inbox.you') : ''}{c.last}</span>{#if c.unread}<span class="badge badge-primary badge-sm" aria-label="{c.unread} unread">{c.unread}</span>{/if}</span>
+							<span class="flex items-center gap-2"><span class="small muted grow truncate">{c.last_mine ? t('inbox.you') : ''}{c.last}</span>{#if c.unread}<span class="badge badge-primary badge-sm" aria-label={tr("{0} unread", [c.unread])}>{c.unread}</span>{/if}</span>
 						</span>
 					</button>
 				</li>
 			{:else}
-				<li class="p-4 small muted">{list.loaded ? (list.q ? `Nobody matches “${list.q}”.` : teacher ? 'No messages yet. Write to a student of your classrooms with New message.' : 'No messages yet. You can write to your teachers with New message.') : 'Loading…'}</li>
+				<li class="p-4 small muted">{list.loaded ? (list.q ? tr("Nobody matches “{0}”.", [list.q]) : teacher ? tr("No messages yet. Write to a student of your classrooms with New message.") : tr("No messages yet. You can write to your teachers with New message.")) : tr("Loading…")}</li>
 			{/each}
 		</ul>
-		<div class="px-3"><Pager {list} label="Conversations" /></div>
+		<div class="px-3"><Pager {list} label={tr("Conversations")} /></div>
 	</aside>
 
-	<section class="msgs-thread card card-border bg-base-100 shadow-sm" aria-label={other ? `Messages with ${other.name}` : 'Messages'}>
+	<section class="msgs-thread card card-border bg-base-100 shadow-sm" aria-label={other ? tr("Messages with {0}", [other.name]) : tr("Messages")}>
 		{#if picking && contacts}
 			<div class="p-4 vstack">
 				<div class="flex items-center gap-2">
-					<button class="btn btn-ghost btn-sm btn-circle back" aria-label="Back to conversations" onclick={() => (picking = false)}><Icon name="x" size={18} /></button>
-					<h2 class="m-0 text-lg">Write to {teacher ? 'a student' : 'a teacher'}</h2>
+					<button class="btn btn-ghost btn-sm btn-circle back" aria-label={tr("Back to conversations")} onclick={() => (picking = false)}><Icon name="x" size={18} /></button>
+					<h2 class="m-0 text-lg">{tr("Write to {0}", [teacher ? tr("a student") : tr("a teacher")])}</h2>
 				</div>
-				<ListSearch list={contacts} placeholder={teacher ? 'Search name, email or student ID' : 'Search your teachers'} label="Search people" />
+				<ListSearch list={contacts} placeholder={teacher ? tr("Search name, email or student ID") : tr("Search your teachers")} label={tr("Search people")} />
 				<ul class="conv">
 					{#each contacts.rows as p (p.id)}
 						<li><button class="conv-row" onclick={() => choose(p)}><Avatar id={p.id} name={p.name} avatar={p.avatar} size={32} /><span class="grow min-w-0 text-left"><span class="block truncate">{p.name}</span><span class="block small muted truncate">{p.classrooms}</span></span></button></li>
 					{:else}
-						<li class="p-3 small muted">{contacts.loaded ? (contacts.q ? `Nobody matches “${contacts.q}”.` : teacher ? 'No students in your classrooms yet.' : "You aren't in a classroom yet.") : 'Loading…'}</li>
+						<li class="p-3 small muted">{contacts.loaded ? (contacts.q ? tr("Nobody matches “{0}”.", [contacts.q]) : teacher ? tr("No students in your classrooms yet.") : tr("You aren't in a classroom yet.")) : tr("Loading…")}</li>
 					{/each}
 				</ul>
-				<Pager list={contacts} label="People" />
+				<Pager list={contacts} label={tr("People")} />
 			</div>
 		{:else if other}
 			<header class="thread-head">
-				<button class="btn btn-ghost btn-sm btn-circle back" aria-label="Back to conversations" onclick={() => ((current = null), (to = null))}><Icon name="x" size={18} /></button>
+				<button class="btn btn-ghost btn-sm btn-circle back" aria-label={tr("Back to conversations")} onclick={() => ((current = null), (to = null))}><Icon name="x" size={18} /></button>
 				<Avatar id={other.id} name={other.name} avatar={other.avatar} size={36} />
 				<div class="min-w-0"><h2 class="m-0 text-base truncate">{other.name}</h2>{#if other.classrooms}<p class="m-0 small muted truncate">{other.classrooms}</p>{/if}</div>
 			</header>
 			<div class="thread" bind:this={thread} aria-live="polite">
-				{#if messages.length < total}<div class="text-center"><button class="btn btn-xs btn-ghost" onclick={earlier}>Earlier messages</button></div>{/if}
+				{#if messages.length < total}<div class="text-center"><button class="btn btn-xs btn-ghost" onclick={earlier}>{tr("Earlier messages")}</button></div>{/if}
 				{#each messages as m, i (m.id)}
 					{#if i === 0 || !sameDay(messages[i - 1].created_at, m.created_at)}
-						<p class="day small muted">{new Date(m.created_at).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+						<p class="day small muted">{new Date(m.created_at).toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })}</p>
 					{/if}
 					<div class="bubble-row" class:mine={m.mine}>
 						<div class="bubble" class:mine={m.mine}>
-							<span class="sr-only">{m.mine ? 'You' : m.sender}:</span>
+							<span class="sr-only">{m.mine ? tr("You") : m.sender}:</span>
 							<p class="m-0 whitespace-pre-wrap">{m.body}</p>
-							<time class="stamp" datetime={m.created_at}>{new Date(m.created_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</time>
+							<time class="stamp" datetime={m.created_at}>{new Date(m.created_at).toLocaleTimeString(localeTag(), { hour: 'numeric', minute: '2-digit' })}</time>
 						</div>
 					</div>
 				{:else}
-					<p class="m-auto small muted text-center">Say hello to {other.name}. They get an email too, unless they turned those off.</p>
+					<p class="m-auto small muted text-center">{tr("Say hello to {0}. They get an email too, unless they turned those off.", [other.name])}</p>
 				{/each}
 			</div>
 			{#if current && !current.can_reply}
-				<p class="m-0 p-3 small muted border-t border-base-300">{teacher ? 'They are no longer in any of your classrooms' : 'You are no longer in any of their classrooms'}, so no more messages can be sent here.</p>
+				<p class="m-0 p-3 small muted border-t border-base-300">{tr("{0}, so no more messages can be sent here.", [teacher ? tr("They are no longer in any of your classrooms") : tr("You are no longer in any of their classrooms")])}</p>
 			{:else}
 				<form class="composer" onsubmit={send}>
-					<label for="msg-draft" class="sr-only">Message to {other.name}</label>
+					<label for="msg-draft" class="sr-only">{tr("Message to {0}", [other.name])}</label>
 					<textarea id="msg-draft" class="textarea grow" rows="2" maxlength="5000" placeholder={t('inbox.writePlaceholder')} bind:value={draft} onkeydown={keys}></textarea>
 					<button class="btn btn-primary btn-circle" aria-label={t('inbox.send')} disabled={!draft.trim() || sending}><Icon name="send" size={18} /></button>
 				</form>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Live word cloud (D-40). Size encodes how many people gave a word; each
 	// word has its own colour from the categorical palette, made readable on
 	// the current theme (D-67). Layout is a deterministic
@@ -72,9 +73,9 @@
 	});
 </script>
 
-<figure class="cloud m-0" class:animate={!reduced()} bind:clientWidth={width} bind:this={el} aria-label="Word cloud of {words.length} words">
+<figure class="cloud m-0" class:animate={!reduced()} bind:clientWidth={width} bind:this={el} aria-label={tr("Word cloud of {0} words", [words.length])}>
 	{#if !words.length}
-		<div class="empty muted small" style:height="{Math.min(height, 200)}px">Words appear here as people answer.</div>
+		<div class="empty muted small" style:height="{Math.min(height, 200)}px">{tr("Words appear here as people answer.")}</div>
 	{:else}
 		<svg viewBox="0 0 {width} {height}" width="100%" height={height} role="img" aria-hidden="true">
 			{#each placed as p (p.w.word)}
@@ -90,13 +91,13 @@
 						tabindex={teacher ? 0 : undefined}
 						onclick={() => teacher && onhide?.(p.w)}
 						onkeydown={(e) => teacher && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onhide?.(p.w))}
-					><title>{p.w.word}: {p.w.count}{p.w.hidden ? ' (hidden from participants)' : ''}{teacher ? ' — click to ' + (p.w.hidden ? 'show' : 'hide') : ''}</title>{p.w.word}</text>
+					><title>{p.w.word}: {p.w.count}{p.w.hidden ? tr(" (hidden from participants)") : ''}{teacher ? tr(" — click to {0}", [p.w.hidden ? 'show' : 'hide']) : ''}</title>{p.w.word}</text>
 				</g>
 			{/each}
 		</svg>
 	{/if}
 	<ul class="sr-only">
-		{#each words as w (w.word)}<li>{w.word}: {w.count} of {total}{w.hidden ? ', hidden' : ''}</li>{/each}
+		{#each words as w (w.word)}<li>{tr("{0}: {1} of {2}{3}", [w.word, w.count, total, w.hidden ? tr(", hidden") : ''])}</li>{/each}
 	</ul>
 </figure>
 

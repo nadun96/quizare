@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// How a poll runs: who is identified, who may answer, pacing, and what
 	// participants see (D-40). One row per setting: icon-and-label choices,
 	// with only the selected choice explained (D-63).
@@ -98,14 +99,14 @@
 
 <div class="vstack">
 	<section class="block">
-		<h3 class="b-title"><Icon name="users" size={16} />Who takes part</h3>
-		{#snippet identityC()}<OptionGroup label="Identity" options={identity} value={settings.identity} onchange={(v) => (settings.identity = v as PollSettings['identity'])} />{/snippet}
+		<h3 class="b-title"><Icon name="users" size={16} />{tr("Who takes part")}</h3>
+		{#snippet identityC()}<OptionGroup label={tr("Identity")} options={identity} value={settings.identity} onchange={(v) => (settings.identity = v as PollSettings['identity'])} />{/snippet}
 		{@render row('Identity', locked ? 'Fixed now that people have joined. Reset the responses to change it.' : '', identityC)}
 		{#snippet audienceC()}
-			<OptionGroup label="Who can answer" options={audience} value={settings.audience} onchange={(v) => (settings.audience = v as PollSettings['audience'])} />
+			<OptionGroup label={tr("Who can answer")} options={audience} value={settings.audience} onchange={(v) => (settings.audience = v as PollSettings['audience'])} />
 			{#if settings.audience === 'classroom' || classrooms.length}
-				<select class="select select-sm w-full max-w-xs" aria-label="Classroom" value={classroomId ?? ''} onchange={(e) => (classroomId = e.currentTarget.value || null)}>
-					<option value="">{settings.audience === 'classroom' ? 'Choose a classroom' : 'No classroom'}</option>
+				<select class="select select-sm w-full max-w-xs" aria-label={tr("Classroom")} value={classroomId ?? ''} onchange={(e) => (classroomId = e.currentTarget.value || null)}>
+					<option value="">{settings.audience === 'classroom' ? tr("Choose a classroom") : tr("No classroom")}</option>
 					{#each classrooms as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 				</select>
 				{#if classroomId}<TopicSelect {classroomId} bind:value={topicId} compact />{/if}
@@ -115,43 +116,43 @@
 	</section>
 
 	<section class="block">
-		<h3 class="b-title"><Icon name="play" size={16} />How it runs</h3>
-		{#snippet pacingC()}<OptionGroup label="Pacing" options={pacing} value={settings.pacing} onchange={(v) => (settings.pacing = v as PollSettings['pacing'])} />{/snippet}
+		<h3 class="b-title"><Icon name="play" size={16} />{tr("How it runs")}</h3>
+		{#snippet pacingC()}<OptionGroup label={tr("Pacing")} options={pacing} value={settings.pacing} onchange={(v) => (settings.pacing = v as PollSettings['pacing'])} />{/snippet}
 		{@render row('Pacing', '', pacingC)}
-		{#snippet resultsC()}<OptionGroup label="Participants see results" options={results} value={settings.show_results} onchange={(v) => (settings.show_results = v as PollSettings['show_results'])} />{/snippet}
+		{#snippet resultsC()}<OptionGroup label={tr("Participants see results")} options={results} value={settings.show_results} onchange={(v) => (settings.show_results = v as PollSettings['show_results'])} />{/snippet}
 		{@render row('Participants see results', 'You always see live results. Participants never see names.', resultsC)}
-		{#snippet editC()}<OptionGroup label="Changing answers" options={editing} value={String(settings.allow_edit)} onchange={(v) => (settings.allow_edit = v === 'true')} />{/snippet}
+		{#snippet editC()}<OptionGroup label={tr("Changing answers")} options={editing} value={String(settings.allow_edit)} onchange={(v) => (settings.allow_edit = v === 'true')} />{/snippet}
 		{@render row('Changing answers', '', editC)}
 	</section>
 
 	<section class="block">
-		<h3 class="b-title"><Icon name="trophy" size={16} />Competition</h3>
-		{#snippet scoreC()}<OptionGroup label="Points" options={scoring} value={String(settings.scoring)} onchange={(v) => (settings.scoring = v === 'true')} />{/snippet}
+		<h3 class="b-title"><Icon name="trophy" size={16} />{tr("Competition")}</h3>
+		{#snippet scoreC()}<OptionGroup label={tr("Points")} options={scoring} value={String(settings.scoring)} onchange={(v) => (settings.scoring = v === 'true')} />{/snippet}
 		{@render row('Points', '', scoreC)}
 		{#if settings.scoring}
-			{#snippet speedC()}<OptionGroup label="Speed" options={speed} value={String(settings.speed_bonus)} onchange={(v) => (settings.speed_bonus = v === 'true')} />{/snippet}
+			{#snippet speedC()}<OptionGroup label={tr("Speed")} options={speed} value={String(settings.speed_bonus)} onchange={(v) => (settings.speed_bonus = v === 'true')} />{/snippet}
 			{@render row('Speed', '', speedC)}
-			{#snippet boardC()}<OptionGroup label="Leaderboard" options={board} value={settings.leaderboard} onchange={(v) => (settings.leaderboard = v as PollSettings['leaderboard'])} />{/snippet}
+			{#snippet boardC()}<OptionGroup label={tr("Leaderboard")} options={board} value={settings.leaderboard} onchange={(v) => (settings.leaderboard = v as PollSettings['leaderboard'])} />{/snippet}
 			{@render row('Leaderboard', '', boardC)}
-			{#snippet answersC()}<OptionGroup label="Correct answers shown" options={answers} value={settings.show_answers} onchange={(v) => (settings.show_answers = v as PollSettings['show_answers'])} />{/snippet}
+			{#snippet answersC()}<OptionGroup label={tr("Correct answers shown")} options={answers} value={settings.show_answers} onchange={(v) => (settings.show_answers = v as PollSettings['show_answers'])} />{/snippet}
 			{@render row('Correct answers shown', '', answersC)}
-			{#snippet namesC()}<OptionGroup label="Names on the leaderboard" options={names} value={settings.names} onchange={(v) => (settings.names = v as PollSettings['names'])} />{/snippet}
+			{#snippet namesC()}<OptionGroup label={tr("Names on the leaderboard")} options={names} value={settings.names} onchange={(v) => (settings.names = v as PollSettings['names'])} />{/snippet}
 			{@render row('Names on the leaderboard', '', namesC)}
 		{/if}
 	</section>
 
 	<section class="block">
-		<h3 class="b-title"><Icon name="users" size={16} />Groups</h3>
-		{#snippet groupsC()}<OptionGroup label="Groups" options={groups} value={settings.groups} onchange={(v) => (settings.groups = v as PollSettings['groups'])} />{/snippet}
+		<h3 class="b-title"><Icon name="users" size={16} />{tr("Groups")}</h3>
+		{#snippet groupsC()}<OptionGroup label={tr("Groups")} options={groups} value={settings.groups} onchange={(v) => (settings.groups = v as PollSettings['groups'])} />{/snippet}
 		{@render row('Groups', '', groupsC)}
 		{#if settings.groups !== 'off'}
-			{#snippet acceptC()}<OptionGroup label="Answers that count" options={accept} value={settings.group_acceptance} onchange={(v) => (settings.group_acceptance = v as PollSettings['group_acceptance'])} />{/snippet}
+			{#snippet acceptC()}<OptionGroup label={tr("Answers that count")} options={accept} value={settings.group_acceptance} onchange={(v) => (settings.group_acceptance = v as PollSettings['group_acceptance'])} />{/snippet}
 			{@render row('Answers that count', '', acceptC)}
 			{#if settings.group_acceptance === 'all'}
-				{#snippet calcC()}<OptionGroup label="Group mark" options={calc} value={settings.group_calc} onchange={(v) => (settings.group_calc = v as PollSettings['group_calc'])} />{/snippet}
+				{#snippet calcC()}<OptionGroup label={tr("Group mark")} options={calc} value={settings.group_calc} onchange={(v) => (settings.group_calc = v as PollSettings['group_calc'])} />{/snippet}
 				{@render row('Group mark', '', calcC)}
 			{/if}
-			{#if !settings.scoring}<p class="small muted m-0 pt-2">Turn on <strong>Score answers</strong> for a group leaderboard.</p>{/if}
+			{#if !settings.scoring}<p class="small muted m-0 pt-2">{tr("Turn on")} <strong>{tr("Score answers")}</strong> {tr("for a group leaderboard.")}</p>{/if}
 		{/if}
 	</section>
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// File answer: drop or pick, checked for type and size before upload, with
 	// progress. The server checks again by sniffing the bytes.
 	import Icon from '../../ui/Icon.svelte';
@@ -21,19 +22,19 @@
 		error = '';
 		if (!f) return;
 		if (f.size > maxMB * 1024 * 1024) {
-			error = `That file is ${fmtSize(f.size)}; the limit is ${maxMB} MB.`;
+			error = tr("That file is {0}; the limit is {1} MB.", [fmtSize(f.size), maxMB]);
 			return;
 		}
 		const ext = '.' + (f.name.split('.').pop() ?? '').toLowerCase();
 		if (!acceptAttr.split(',').includes(ext)) {
-			error = `Please choose ${kinds}.`;
+			error = tr("Please choose {0}.", [kinds]);
 			return;
 		}
 		progress = 0;
 		try {
 			await upload(f, (p) => (progress = p));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Upload failed';
+			error = e instanceof Error ? e.message : tr("Upload failed");
 		} finally {
 			progress = null;
 		}
@@ -62,18 +63,18 @@
 			<span class="grid size-10 place-items-center rounded-lg bg-success/15 text-success" aria-hidden="true"><Icon name="check" /></span>
 			<div class="min-w-0 flex-1 text-left">
 				<p class="m-0 truncate font-semibold">{value.name}</p>
-				<p class="small muted m-0">{fmtSize(value.size)} · uploaded</p>
+				<p class="small muted m-0">{tr("{0} · uploaded", [fmtSize(value.size)])}</p>
 			</div>
-			{#if !disabled}<button type="button" class="btn btn-sm" onclick={() => picker?.click()}>Replace</button>{/if}
+			{#if !disabled}<button type="button" class="btn btn-sm" onclick={() => picker?.click()}>{tr("Replace")}</button>{/if}
 		</div>
 	{:else}
 		<span class="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-primary/10 text-primary" aria-hidden="true"><Icon name="plus" size={22} /></span>
-		<p class="m-0 font-semibold">Drop a file here, or</p>
-		<button type="button" class="btn btn-primary btn-sm mt-2" {disabled} onclick={() => picker?.click()}>Choose a file</button>
-		<p class="small muted m-0 mt-2">{kinds[0].toUpperCase() + kinds.slice(1)}, up to {maxMB} MB</p>
+		<p class="m-0 font-semibold">{tr("Drop a file here, or")}</p>
+		<button type="button" class="btn btn-primary btn-sm mt-2" {disabled} onclick={() => picker?.click()}>{tr("Choose a file")}</button>
+		<p class="small muted m-0 mt-2">{tr("{0}, up to {1} MB", [kinds[0].toUpperCase() + kinds.slice(1), maxMB])}</p>
 	{/if}
 	<input bind:this={picker} type="file" class="sr-only" accept={acceptAttr} tabindex="-1" aria-hidden="true" onchange={(e) => take(e.currentTarget.files?.[0])} />
-	{#if progress !== null}<progress class="progress progress-primary mt-3 w-full" value={progress} max="1" aria-label="Uploading"></progress>{/if}
+	{#if progress !== null}<progress class="progress progress-primary mt-3 w-full" value={progress} max="1" aria-label={tr("Uploading")}></progress>{/if}
 	{#if error}<p class="field-error" role="alert">{error}</p>{/if}
 </div>
 

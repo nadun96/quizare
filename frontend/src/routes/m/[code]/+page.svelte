@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A peer-to-peer meeting (D-69): a lobby to check the microphone and
 	// camera, then the call. The call fills the screen with nothing to scroll
 	// (D-72): the stage shows the whiteboard, a shared screen or everyone's
@@ -35,12 +36,12 @@
 			return;
 		}
 		if (typeof RTCPeerConnection === 'undefined' || !navigator.mediaDevices) {
-			problem = 'This browser can’t make video calls. Try a recent Chrome, Edge, Firefox or Safari.';
+			problem = tr("This browser can’t make video calls. Try a recent Chrome, Edge, Firefox or Safari.");
 			return;
 		}
 		api.get<MeetingAccess>('/api/meetings/' + encodeURIComponent(code)).then(
 			(a) => (access = a),
-			(e) => (problem = e instanceof ApiError ? e.message : 'Could not open the meeting')
+			(e) => (problem = e instanceof ApiError ? e.message : tr("Could not open the meeting"))
 		);
 	});
 
@@ -63,17 +64,17 @@
 	}
 
 	async function endForAll() {
-		if (await confirmDialog({ title: 'End the meeting for everyone?', body: 'Everyone leaves, the link stops working and the whiteboard is cleared.', confirm: 'End meeting', danger: true })) call.endForAll();
+		if (await confirmDialog({ title: tr("End the meeting for everyone?"), body: tr("Everyone leaves, the link stops working and the whiteboard is cleared."), confirm: tr("End meeting"), danger: true })) call.endForAll();
 	}
 
 	async function remove(peerId: string, name: string) {
-		if (await confirmDialog({ title: `Remove ${name}?`, body: 'They can join again with the link while the meeting is open.', confirm: 'Remove', danger: true })) call.remove(peerId);
+		if (await confirmDialog({ title: tr("Remove {0}?", [name]), body: tr("They can join again with the link while the meeting is open."), confirm: tr("Remove"), danger: true })) call.remove(peerId);
 	}
 
 	async function copyLink() {
 		try {
 			await navigator.clipboard.writeText(link);
-			toast('Link copied');
+			toast(tr("Link copied"));
 		} catch {
 			toast(link);
 		}
@@ -103,7 +104,7 @@
 	const hands = $derived(call.people.filter((p) => p.hand).length + (call.hand ? 1 : 0));
 	let lastHands = 0;
 	$effect(() => {
-		if (host && hands > lastHands) toast(hands === 1 ? 'A hand is raised' : `${hands} hands are raised`);
+		if (host && hands > lastHands) toast(hands === 1 ? tr("A hand is raised") : tr("{0} hands are raised", [hands]));
 		lastHands = hands;
 	});
 
@@ -137,18 +138,18 @@
 
 	function setBoard(open: boolean) {
 		call.setBoard(open);
-		toast(open ? 'The whiteboard is showing for everyone' : 'The whiteboard is hidden');
+		toast(open ? tr("The whiteboard is showing for everyone") : tr("The whiteboard is hidden"));
 	}
 </script>
 
-<svelte:head><title>{access?.meeting.title ?? 'Meeting'}</title></svelte:head>
+<svelte:head><title>{access?.meeting.title ?? tr("Meeting")}</title></svelte:head>
 
 {#snippet person(p: (typeof call.people)[number], small = false)}
 	{@const r = call.remotes[p.peer_id]}
 	<Tile name={p.name} stream={r?.cam ?? null} rev={r?.rev ?? 0} video={p.cam && !!r?.cam} mic={p.mic} hand={p.hand} host={p.host}
 		status={sending(p) && r && r.link !== 'connected' ? (linkLabel[r.link] ?? '') : ''}>
 		{#snippet actions()}
-			{#if host && !small}<IconBtn icon="x" label="Remove" hint="Remove {p.name}" class="btn-xs btn-ghost" onclick={() => remove(p.peer_id, p.name)} />{/if}
+			{#if host && !small}<IconBtn icon="x" label={tr("Remove")} hint={tr("Remove {0}", [p.name])} class="btn-xs btn-ghost" onclick={() => remove(p.peer_id, p.name)} />{/if}
 		{/snippet}
 	</Tile>
 {/snippet}
@@ -163,17 +164,17 @@
 			<h1 class="m-0">{ENDINGS[call.ending].title}</h1>
 			<p class="muted m-0">{ENDINGS[call.ending].body}</p>
 			<div class="flex flex-wrap justify-center gap-2">
-				{#if call.ending === 'left' || call.ending === 'full'}<button class="btn btn-primary" onclick={() => location.reload()}>Rejoin</button>{/if}
-				<a class="btn" href={auth.home()}>Home</a>
+				{#if call.ending === 'left' || call.ending === 'full'}<button class="btn btn-primary" onclick={() => location.reload()}>{tr("Rejoin")}</button>{/if}
+				<a class="btn" href={auth.home()}>{tr("Home")}</a>
 			</div>
 		</div>
 	</div>
 {:else if problem}
 	<div class="center-screen">
 		<div class="card card-border vstack bg-base-100 p-6 text-center shadow-sm" role="alert">
-			<h1 class="m-0">Can’t join this meeting</h1>
+			<h1 class="m-0">{tr("Can’t join this meeting")}</h1>
 			<p class="muted m-0">{problem}</p>
-			<div class="flex flex-wrap justify-center gap-2"><a class="btn" href="/join">Try another code</a><a class="btn btn-ghost" href={auth.home()}>Home</a></div>
+			<div class="flex flex-wrap justify-center gap-2"><a class="btn" href="/join">{tr("Try another code")}</a><a class="btn btn-ghost" href={auth.home()}>{tr("Home")}</a></div>
 		</div>
 	</div>
 {:else if !access}
@@ -182,29 +183,29 @@
 	<div class="center-screen">
 		<div class="card card-border vstack lobby bg-base-100 p-5 shadow-sm sm:p-7">
 			<div>
-				<p class="small muted m-0"><a href={auth.home()}>← Home</a> · Meeting{access.meeting.host_name ? ` hosted by ${access.meeting.host_name}` : ''}</p>
+				<p class="small muted m-0"><a href={auth.home()}>{tr("← Home")}</a> {tr("· Meeting{0}", [access.meeting.host_name ? tr(" hosted by {0}", [access.meeting.host_name]) : ''])}</p>
 				<h1 class="m-0">{access.meeting.title}</h1>
 			</div>
 			<div class="preview"><Tile name={auth.user?.name ?? 'You'} stream={call.local} rev={call.localRev} video={call.cam} self mic={call.mic} /></div>
 			<div class="flex flex-wrap gap-2">
 				<button class="btn flex-1" class:btn-primary={call.mic} aria-pressed={call.mic} disabled={starting !== ''} onclick={() => toggle('mic')}>
-					<Icon name={call.mic ? 'mic' : 'mic-off'} size={18} />{call.mic ? 'Microphone on' : 'Microphone off'}
+					<Icon name={call.mic ? 'mic' : 'mic-off'} size={18} />{call.mic ? tr("Microphone on") : tr("Microphone off")}
 				</button>
 				<button class="btn flex-1" class:btn-primary={call.cam} aria-pressed={call.cam} disabled={starting !== ''} onclick={() => toggle('cam')}>
-					<Icon name={call.cam ? 'video' : 'video-off'} size={18} />{call.cam ? 'Camera on' : 'Camera off'}
+					<Icon name={call.cam ? 'video' : 'video-off'} size={18} />{call.cam ? tr("Camera on") : tr("Camera off")}
 				</button>
 			</div>
-			<button class="btn btn-primary btn-lg w-full" onclick={join}>Join meeting<Icon name="arrow-right" size={18} /></button>
-			<p class="small muted m-0 center">Video goes straight between the people in the call{access.meeting.max_people ? `, up to ${access.meeting.max_people}` : ''}. You can change these once you’re in.</p>
+			<button class="btn btn-primary btn-lg w-full" onclick={join}>{tr("Join meeting")}<Icon name="arrow-right" size={18} /></button>
+			<p class="small muted m-0 center">{tr("Video goes straight between the people in the call{0}. You can change these once you’re in.", [access.meeting.max_people ? tr(", up to {0}", [access.meeting.max_people]) : ''])}</p>
 		</div>
 	</div>
 {:else}
-	<div class="call" class:away class:with-strip={stage !== 'people' && stripOpen} onpointermove={wake} onpointerdown={wake} onpointerup={wake} role="application" aria-label="Meeting: {access.meeting.title}">
+	<div class="call" class:away class:with-strip={stage !== 'people' && stripOpen} onpointermove={wake} onpointerdown={wake} onpointerup={wake} role="application" aria-label={tr("Meeting: {0}", [access.meeting.title])}>
 		<main class="stage">
 			<!-- The box inside the stage's padding: what the tiles must fit. -->
 			<div class="fitbox" bind:clientWidth={stageW} bind:clientHeight={stageH}>
 			{#if stage === 'board'}
-				<Whiteboard {board} client={call.boardClient} teacher={host} title={access.meeting.title + ' whiteboard'} fit />
+				<Whiteboard {board} client={call.boardClient} teacher={host} title={tr("{0} whiteboard", [access.meeting.title])} fit />
 			{:else if stage === 'screens'}
 				<div class="tiles" style:--cols={grid.cols} style:--tw="{grid.w}px">
 					{#each screens as s (s.key)}<div class="cell"><Tile name={s.name} stream={s.stream} rev={s.rev} self={s.self} screen /></div>{/each}
@@ -215,16 +216,16 @@
 					{#each call.people as p (p.peer_id)}<div class="cell">{@render person(p)}</div>{/each}
 				</div>
 				{#if call.people.length === 0}
-					<p class="alone">You’re the only one here. Share the link or the code <strong class="tabular">{code}</strong>.</p>
+					<p class="alone">{tr("You’re the only one here. Share the link or the code")} <strong class="tabular">{code}</strong>.</p>
 				{/if}
 			{/if}
 			</div>
 		</main>
 
 		{#if stage !== 'people'}
-			<aside class="strip" class:closed={!stripOpen} aria-label="People in the meeting">
+			<aside class="strip" class:closed={!stripOpen} aria-label={tr("People in the meeting")}>
 				<button class="btn btn-xs strip-toggle" aria-expanded={stripOpen} onclick={() => (stripOpen = !stripOpen)}>
-					<Icon name="users" size={13} />{stripOpen ? 'Hide' : count}
+					<Icon name="users" size={13} />{stripOpen ? tr("Hide") : count}
 				</button>
 				{#if stripOpen}
 					<div class="strip-tiles">
@@ -238,42 +239,42 @@
 		<header class="bar top" onfocusin={() => (barsHaveFocus = true)} onfocusout={() => (barsHaveFocus = false)}>
 			<h1 class="m-0 truncate text-base">{access.meeting.title}</h1>
 			<span class="badge badge-soft"><Icon name="users" size={14} />{count}</span>
-			{#if !call.connected}<span class="badge badge-warning"><Icon name="wifi-off" size={14} />Reconnecting…</span>{/if}
-			<IconBtn icon="link" label="Copy link" hint="Copy the meeting link" class="btn-sm btn-ghost" onclick={copyLink} />
+			{#if !call.connected}<span class="badge badge-warning"><Icon name="wifi-off" size={14} />{tr("Reconnecting…")}</span>{/if}
+			<IconBtn icon="link" label={tr("Copy link")} hint={tr("Copy the meeting link")} class="btn-sm btn-ghost" onclick={copyLink} />
 		</header>
 
-		<div class="bar bottom" role="toolbar" aria-label="Call controls" onfocusin={() => (barsHaveFocus = true)} onfocusout={() => (barsHaveFocus = false)}>
-			<button class="btn" class:btn-error={!call.mic} aria-pressed={call.mic} disabled={starting !== ''} onclick={() => toggle('mic')} title={call.mic ? 'Mute' : 'Unmute'}>
-				<Icon name={call.mic ? 'mic' : 'mic-off'} size={18} /><span class="lbl">{call.mic ? 'Mute' : 'Unmute'}</span>
+		<div class="bar bottom" role="toolbar" aria-label={tr("Call controls")} onfocusin={() => (barsHaveFocus = true)} onfocusout={() => (barsHaveFocus = false)}>
+			<button class="btn" class:btn-error={!call.mic} aria-pressed={call.mic} disabled={starting !== ''} onclick={() => toggle('mic')} title={call.mic ? tr("Mute") : tr("Unmute")}>
+				<Icon name={call.mic ? 'mic' : 'mic-off'} size={18} /><span class="lbl">{call.mic ? tr("Mute") : tr("Unmute")}</span>
 			</button>
-			<button class="btn" class:btn-error={!call.cam} aria-pressed={call.cam} disabled={starting !== ''} onclick={() => toggle('cam')} title={call.cam ? 'Stop camera' : 'Start camera'}>
-				<Icon name={call.cam ? 'video' : 'video-off'} size={18} /><span class="lbl">{call.cam ? 'Stop camera' : 'Start camera'}</span>
+			<button class="btn" class:btn-error={!call.cam} aria-pressed={call.cam} disabled={starting !== ''} onclick={() => toggle('cam')} title={call.cam ? tr("Stop camera") : tr("Start camera")}>
+				<Icon name={call.cam ? 'video' : 'video-off'} size={18} /><span class="lbl">{call.cam ? tr("Stop camera") : tr("Start camera")}</span>
 			</button>
 			{#if canShare}
-				<button class="btn" class:btn-primary={call.screen} aria-pressed={call.screen} onclick={() => call.setScreen(!call.screen)} title={call.screen ? 'Stop sharing' : 'Share screen'}>
-					<Icon name="monitor" size={18} /><span class="lbl">{call.screen ? 'Stop sharing' : 'Share screen'}</span>
+				<button class="btn" class:btn-primary={call.screen} aria-pressed={call.screen} onclick={() => call.setScreen(!call.screen)} title={call.screen ? tr("Stop sharing") : tr("Share screen")}>
+					<Icon name="monitor" size={18} /><span class="lbl">{call.screen ? tr("Stop sharing") : tr("Share screen")}</span>
 				</button>
 			{/if}
 			{#if host}
-				<button class="btn" class:btn-primary={board.open} aria-pressed={board.open} onclick={() => setBoard(!board.open)} title={board.open ? 'Hide the whiteboard for everyone' : 'Show the whiteboard to everyone'}>
-					<Icon name="brush" size={18} /><span class="lbl">Whiteboard</span>
+				<button class="btn" class:btn-primary={board.open} aria-pressed={board.open} onclick={() => setBoard(!board.open)} title={board.open ? tr("Hide the whiteboard for everyone") : tr("Show the whiteboard to everyone")}>
+					<Icon name="brush" size={18} /><span class="lbl">{tr("Whiteboard")}</span>
 				</button>
 				{#if board.open}
-					<button class="btn" aria-pressed={board.mode === 'everyone'} onclick={() => call.setBoard(true, board.mode === 'everyone' ? 'host' : 'everyone')} title="Who can draw">
-						<Icon name={board.mode === 'everyone' ? 'users' : 'user'} size={18} /><span class="lbl">{board.mode === 'everyone' ? 'Everyone draws' : 'Only I draw'}</span>
+					<button class="btn" aria-pressed={board.mode === 'everyone'} onclick={() => call.setBoard(true, board.mode === 'everyone' ? 'host' : 'everyone')} title={tr("Who can draw")}>
+						<Icon name={board.mode === 'everyone' ? 'users' : 'user'} size={18} /><span class="lbl">{board.mode === 'everyone' ? tr("Everyone draws") : tr("Only I draw")}</span>
 					</button>
 				{/if}
 			{:else if board.open}
-				<button class="btn" aria-pressed={!peopleView} onclick={() => (peopleView = !peopleView)} title={peopleView ? 'Show the whiteboard' : 'Show the people'}>
-					<Icon name={peopleView ? 'brush' : 'users'} size={18} /><span class="lbl">{peopleView ? 'Whiteboard' : 'People'}</span>
+				<button class="btn" aria-pressed={!peopleView} onclick={() => (peopleView = !peopleView)} title={peopleView ? tr("Show the whiteboard") : tr("Show the people")}>
+					<Icon name={peopleView ? 'brush' : 'users'} size={18} /><span class="lbl">{peopleView ? tr("Whiteboard") : tr("People")}</span>
 				</button>
 			{/if}
-			<button class="btn" class:btn-warning={call.hand} aria-pressed={call.hand} onclick={() => call.setHand(!call.hand)} title={call.hand ? 'Lower hand' : 'Raise hand'}>
-				<Icon name="hand" size={18} /><span class="lbl">{call.hand ? 'Lower hand' : 'Raise hand'}</span>
+			<button class="btn" class:btn-warning={call.hand} aria-pressed={call.hand} onclick={() => call.setHand(!call.hand)} title={call.hand ? tr("Lower hand") : tr("Raise hand")}>
+				<Icon name="hand" size={18} /><span class="lbl">{call.hand ? tr("Lower hand") : tr("Raise hand")}</span>
 			</button>
-			<IconBtn icon={pinned ? 'eye' : 'eye-off'} label={pinned ? 'Let controls hide' : 'Keep controls visible'} hint={pinned ? 'Let the controls hide when the pointer rests' : 'Keep the controls visible'} class="btn-ghost" aria-pressed={pinned} onclick={() => { pinned = !pinned; wake(); }} />
-			{#if host}<button class="btn btn-error btn-outline" onclick={endForAll}><span class="lbl">End for all</span><span class="sm-only">End</span></button>{/if}
-			<button class="btn btn-error" onclick={() => call.leave()} title="Leave"><Icon name="logout" size={18} /><span class="lbl">Leave</span></button>
+			<IconBtn icon={pinned ? 'eye' : 'eye-off'} label={pinned ? tr("Let controls hide") : tr("Keep controls visible")} hint={pinned ? tr("Let the controls hide when the pointer rests") : tr("Keep the controls visible")} class="btn-ghost" aria-pressed={pinned} onclick={() => { pinned = !pinned; wake(); }} />
+			{#if host}<button class="btn btn-error btn-outline" onclick={endForAll}><span class="lbl">{tr("End for all")}</span><span class="sm-only">{tr("End")}</span></button>{/if}
+			<button class="btn btn-error" onclick={() => call.leave()} title={tr("Leave")}><Icon name="logout" size={18} /><span class="lbl">{tr("Leave")}</span></button>
 		</div>
 	</div>
 {/if}

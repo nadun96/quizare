@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// School sign-in (D-64): students and teachers sign in with their Windows
 	// Active Directory or LDAP account. The admin fills in the connection, tests
 	// it with a real account step by step, then turns it on.
@@ -73,11 +74,11 @@
 		try {
 			const saved = await api.put<Config>('/api/admin/directory', { ...c, enabled });
 			c = { ...saved, bind_password: '' };
-			toast(enabled ? 'School sign-in is on' : 'Settings saved');
+			toast(enabled ? tr("School sign-in is on") : tr("Settings saved"));
 		} catch (e) {
 			if (e instanceof ApiError) {
 				errors = e.fields;
-				toast(Object.keys(e.fields).length ? 'Check the highlighted settings' : e.message, 'error');
+				toast(Object.keys(e.fields).length ? tr("Check the highlighted settings") : e.message, 'error');
 			}
 		} finally {
 			saving = false;
@@ -93,7 +94,7 @@
 		} catch (e) {
 			if (e instanceof ApiError) {
 				errors = e.fields;
-				toast(Object.keys(e.fields).length ? 'Check the highlighted settings' : e.message, 'error');
+				toast(Object.keys(e.fields).length ? tr("Check the highlighted settings") : e.message, 'error');
 			}
 		} finally {
 			testing = false;
@@ -121,20 +122,20 @@
 			<div class="flex flex-wrap items-center gap-3">
 				<span class="s-icon" aria-hidden="true"><Icon name="users" size={18} /></span>
 				<div class="min-w-0 flex-1">
-					<p class="m-0 font-semibold">School sign-in is {c.enabled ? 'on' : 'off'}</p>
-					<p class="small muted m-0">{c.enabled ? 'Students and teachers sign in with their school account. Admins and managers keep their own password.' : 'Students and teachers sign in with an account made here. Test the settings below, then turn school sign-in on.'}</p>
+					<p class="m-0 font-semibold">{tr("School sign-in is {0}", [c.enabled ? 'on' : 'off'])}</p>
+					<p class="small muted m-0">{c.enabled ? tr("Students and teachers sign in with their school account. Admins and managers keep their own password.") : tr("Students and teachers sign in with an account made here. Test the settings below, then turn school sign-in on.")}</p>
 				</div>
-				{#if c.enabled}<button class="btn btn-sm" disabled={saving} onclick={() => save(false)}>Turn off</button>
-				{:else}<button class="btn btn-sm btn-primary" disabled={saving} onclick={() => save(true)}><Icon name="check" size={15} />Turn on</button>{/if}
+				{#if c.enabled}<button class="btn btn-sm" disabled={saving} onclick={() => save(false)}>{tr("Turn off")}</button>
+				{:else}<button class="btn btn-sm btn-primary" disabled={saving} onclick={() => save(true)}><Icon name="check" size={15} />{tr("Turn on")}</button>{/if}
 			</div>
 		</div>
 
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-			<h3 class="b-title"><Icon name="link" size={16} />Connection</h3>
+			<h3 class="b-title"><Icon name="link" size={16} />{tr("Connection")}</h3>
 			<div class="srow">
-				<div class="slabel"><span class="font-semibold">Directory</span></div>
+				<div class="slabel"><span class="font-semibold">{tr("Directory")}</span></div>
 				<div class="scontrol">
-					<OptionGroup label="Directory" value={c.kind} onchange={setKind} options={[
+					<OptionGroup label={tr("Directory")} value={c.kind} onchange={setKind} options={[
 						{ v: 'ad', label: 'Active Directory', icon: 'monitor', hint: 'Windows Server: users sign in with their Windows name, user@domain, or email.' },
 						{ v: 'ldap', label: 'Other LDAP', icon: 'list', hint: 'OpenLDAP and similar: users sign in with their uid or email.' }
 					]} />
@@ -142,9 +143,9 @@
 			</div>
 			{@render field('url', 'Server', 'A domain controller or LDAP server.', c.kind === 'ad' ? 'ldaps://dc1.school.local' : 'ldaps://ldap.school.local')}
 			<div class="srow">
-				<div class="slabel"><span class="font-semibold">Encryption</span><span class="small muted">Passwords never cross the network unencrypted.</span></div>
+				<div class="slabel"><span class="font-semibold">{tr("Encryption")}</span><span class="small muted">{tr("Passwords never cross the network unencrypted.")}</span></div>
 				<div class="scontrol">
-					<OptionGroup label="Encryption" value={secure} onchange={setSecure} options={[
+					<OptionGroup label={tr("Encryption")} value={secure} onchange={setSecure} options={[
 						{ v: 'ldaps', label: 'LDAPS', icon: 'check', hint: 'Encrypted from the start, usually port 636.' },
 						{ v: 'starttls', label: 'StartTLS', icon: 'arrow-up', hint: 'A plain connection upgraded to encryption, usually port 389.' }
 					]} />
@@ -152,15 +153,15 @@
 				</div>
 			</div>
 			<div class="srow">
-				<div class="slabel"><label class="font-semibold" for="d-ca">Certificate authority</label><span class="small muted">Only if the server's certificate comes from your own CA. Paste it in PEM.</span></div>
+				<div class="slabel"><label class="font-semibold" for="d-ca">{tr("Certificate authority")}</label><span class="small muted">{tr("Only if the server's certificate comes from your own CA. Paste it in PEM.")}</span></div>
 				<div class="scontrol">
-					<textarea class="textarea textarea-sm w-full font-mono" class:textarea-error={errors.ca_pem} id="d-ca" rows="3" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----" bind:value={c.ca_pem}></textarea>
+					<textarea class="textarea textarea-sm w-full font-mono" class:textarea-error={errors.ca_pem} id="d-ca" rows="3" spellcheck="false" placeholder={tr("-----BEGIN CERTIFICATE-----")} bind:value={c.ca_pem}></textarea>
 					{#if errors.ca_pem}<p class="field-error m-0">{errors.ca_pem}</p>{/if}
 				</div>
 			</div>
 			{@render field('bind_dn', 'Service account', 'A read-only account that looks users up.', 'CN=svc-quiz,OU=Service Accounts,DC=school,DC=local')}
 			<div class="srow">
-				<div class="slabel"><label class="font-semibold" for="d-pw">Service account password</label><span class="small muted">{c.bind_password_set ? 'Stored, encrypted. Leave empty to keep it.' : 'Stored encrypted with the master key.'}</span></div>
+				<div class="slabel"><label class="font-semibold" for="d-pw">{tr("Service account password")}</label><span class="small muted">{c.bind_password_set ? tr("Stored, encrypted. Leave empty to keep it.") : tr("Stored encrypted with the master key.")}</span></div>
 				<div class="scontrol">
 					<input class="input input-sm w-full max-w-xs" class:input-error={errors.bind_password} id="d-pw" type="password" autocomplete="new-password" placeholder={c.bind_password_set ? '••••••••' : ''} bind:value={c.bind_password} />
 					{#if errors.bind_password}<p class="field-error m-0">{errors.bind_password}</p>{/if}
@@ -170,14 +171,14 @@
 		</div>
 
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-			<h3 class="b-title"><Icon name="users" size={16} />Who signs in as what</h3>
+			<h3 class="b-title"><Icon name="users" size={16} />{tr("Who signs in as what")}</h3>
 			{@render field('teacher_group', 'Teachers group', 'Members sign in as teachers.', 'CN=Staff,OU=Groups,DC=school,DC=local')}
 			{@render field('student_group', 'Students group', 'Members sign in as students. Leave empty to let everyone else found sign in as a student.', 'CN=Students,OU=Groups,DC=school,DC=local')}
 			{#if c.kind === 'ad'}
 				<div class="srow">
-					<div class="slabel"><span class="font-semibold">Groups inside the groups</span></div>
+					<div class="slabel"><span class="font-semibold">{tr("Groups inside the groups")}</span></div>
 					<div class="scontrol">
-						<OptionGroup label="Groups inside the groups" value={String(c.nested_groups)} onchange={(v) => c && (c.nested_groups = v === 'true')} options={[
+						<OptionGroup label={tr("Groups inside the groups")} value={String(c.nested_groups)} onchange={(v) => c && (c.nested_groups = v === 'true')} options={[
 							{ v: 'true', label: 'Count too', icon: 'check', hint: 'Members of Year 10, when Year 10 is inside Students, sign in as students.' },
 							{ v: 'false', label: 'Direct members only', icon: 'x' }
 						]} />
@@ -185,15 +186,15 @@
 				</div>
 			{/if}
 			<div class="srow">
-				<div class="slabel"><span class="font-semibold">Existing accounts</span><span class="small muted">A student or teacher who already has an account here with the same email.</span></div>
+				<div class="slabel"><span class="font-semibold">{tr("Existing accounts")}</span><span class="small muted">{tr("A student or teacher who already has an account here with the same email.")}</span></div>
 				<div class="scontrol">
-					<OptionGroup label="Existing accounts" value={String(c.link_by_email)} onchange={(v) => c && (c.link_by_email = v === 'true')} options={[
+					<OptionGroup label={tr("Existing accounts")} value={String(c.link_by_email)} onchange={(v) => c && (c.link_by_email = v === 'true')} options={[
 						{ v: 'true', label: 'Move to school sign-in', icon: 'arrow-right', hint: 'They keep their classrooms and results; their old password stops working.' },
 						{ v: 'false', label: 'Leave them', icon: 'x', hint: 'They can’t sign in with their school account until an admin removes the old one.' }
 					]} />
 				</div>
 			</div>
-			<button type="button" class="link link-hover small mt-2" onclick={() => (advanced = !advanced)} aria-expanded={advanced}>{advanced ? 'Hide' : 'Show'} the search filter and attributes</button>
+			<button type="button" class="link link-hover small mt-2" onclick={() => (advanced = !advanced)} aria-expanded={advanced}>{tr("{0} the search filter and attributes", [advanced ? tr("Hide") : tr("Show")])}</button>
 			{#if advanced}
 				{@render field('user_filter', 'Search filter', '{login} is replaced by what the person types.')}
 				{@render field('id_attr', 'Unique id attribute', 'Never changes, even when someone is renamed.')}
@@ -203,12 +204,12 @@
 		</div>
 
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-			<h3 class="b-title"><Icon name="play" size={16} />Test with a real account</h3>
-			<p class="small muted m-0 mb-3">Tries the settings above, saved or not. The password is used once and not kept.</p>
+			<h3 class="b-title"><Icon name="play" size={16} />{tr("Test with a real account")}</h3>
+			<p class="small muted m-0 mb-3">{tr("Tries the settings above, saved or not. The password is used once and not kept.")}</p>
 			<form class="flex flex-wrap items-end gap-2" onsubmit={(e) => { e.preventDefault(); test(); }}>
-				<div><label class="small font-semibold" for="t-login">School username or email</label><input class="input input-sm w-56" id="t-login" autocomplete="off" bind:value={testLogin} /></div>
-				<div><label class="small font-semibold" for="t-pw">Their password</label><input class="input input-sm w-48" id="t-pw" type="password" autocomplete="off" bind:value={testPassword} /></div>
-				<button class="btn btn-sm" disabled={testing}>{#if testing}<span class="loading loading-spinner loading-xs"></span>{/if}{testLogin ? 'Test sign-in' : 'Test the connection'}</button>
+				<div><label class="small font-semibold" for="t-login">{tr("School username or email")}</label><input class="input input-sm w-56" id="t-login" autocomplete="off" bind:value={testLogin} /></div>
+				<div><label class="small font-semibold" for="t-pw">{tr("Their password")}</label><input class="input input-sm w-48" id="t-pw" type="password" autocomplete="off" bind:value={testPassword} /></div>
+				<button class="btn btn-sm" disabled={testing}>{#if testing}<span class="loading loading-spinner loading-xs"></span>{/if}{testLogin ? tr("Test sign-in") : tr("Test the connection")}</button>
 			</form>
 			{#if result}
 				<ol class="steps-list" aria-live="polite">
@@ -217,13 +218,13 @@
 					{/each}
 				</ol>
 				{#if result.account}
-					<p class="alert alert-soft alert-success small m-0 mt-2"><Icon name="check" size={15} />{result.account.name} ({result.account.email}) would sign in as a {result.account.role}.</p>
+					<p class="alert alert-soft alert-success small m-0 mt-2"><Icon name="check" size={15} />{tr("{0} ({1}) would sign in as a {2}.", [result.account.name, result.account.email, result.account.role])}</p>
 				{/if}
 			{/if}
 		</div>
 
 		<div class="row">
-			<button class="btn btn-primary" disabled={saving} onclick={() => save()}>Save settings</button>
+			<button class="btn btn-primary" disabled={saving} onclick={() => save()}>{tr("Save settings")}</button>
 		</div>
 	</div>
 {/if}

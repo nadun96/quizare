@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// The database's size over the last 30 days (PL-FR-04): one series, so no
 	// legend; the heading names it. A crosshair and tooltip follow the
 	// pointer or the arrow keys, and a table gives the same figures.
@@ -40,7 +41,7 @@
 			active = Math.min(points.length - 1, Math.max(0, (active ?? (step > 0 ? -1 : points.length)) + step));
 		}
 	}
-	const day = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	const day = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString(localeTag(), { month: 'short', day: 'numeric' });
 </script>
 
 <!-- A div, not <figure>: daisyUI lays out figures inside cards as centred rows. -->
@@ -56,7 +57,7 @@
 			class="chart"
 			role="img"
 			tabindex="0"
-			aria-label="Database size over the last {points.length} days{points.length ? `, now ${fmtBytes(points[points.length - 1].db_bytes)}` : ''}. Use the arrow keys to read each day."
+			aria-label={tr("Database size over the last {0} days{1}. Use the arrow keys to read each day.", [points.length, points.length ? tr(", now {0}", [fmtBytes(points[points.length - 1].db_bytes)]) : ''])}
 			onpointermove={onMove}
 			onpointerleave={() => (active = null)}
 			onkeydown={onKey}
@@ -85,9 +86,9 @@
 		{/if}
 	</div>
 	<details class="small">
-		<summary>Show as a table</summary>
+		<summary>{tr("Show as a table")}</summary>
 		<table class="table table-sm">
-			<thead><tr><th>Day</th><th>Database</th></tr></thead>
+			<thead><tr><th>{tr("Day")}</th><th>{tr("Database")}</th></tr></thead>
 			<tbody>{#each points as p (p.day)}<tr><td>{day(p.day)}</td><td class="tabular">{fmtBytes(p.db_bytes)}</td></tr>{/each}</tbody>
 		</table>
 	</details>
