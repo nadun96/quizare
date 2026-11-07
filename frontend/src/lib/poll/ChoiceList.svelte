@@ -4,11 +4,13 @@
 	import Icon from '../ui/Icon.svelte';
 	import IconBtn from '../ui/IconBtn.svelte';
 	import { flipMs } from '../ui/motion';
+	import { markFor } from './toon';
+	import ToonMark from './ToonMark.svelte';
 	import type { Choice } from './types';
 	import MathText from '../richtext/MathText.svelte';
 	import { textHasMath } from '../richtext/plain';
 
-	let { items = $bindable([]), label, noun = 'option', min = 2, max = 50, letters = false }: { items?: Choice[]; label: string; noun?: string; min?: number; max?: number; letters?: boolean } = $props();
+	let { items = $bindable([]), label, noun = 'option', min = 2, max = 50, letters = false, marks = false }: { items?: Choice[]; label: string; noun?: string; min?: number; max?: number; letters?: boolean; /** Each option's colour and shape, as people will see it (D-151). */ marks?: boolean } = $props();
 	let keySeq = 0;
 	const keys = new WeakMap<Choice, number>();
 	const keyOf = (c: Choice) => {
@@ -33,9 +35,10 @@
 	<ol class="vstack">
 		{#each items as c, i (keyOf(c))}
 			<li class="flex flex-wrap items-center gap-2" animate:flip={{ duration: flipMs() }}>
-				<span class="mark" aria-hidden="true">{letters ? String.fromCharCode(65 + i) : i + 1}</span>
+				{#if marks}<span class="toon-chip" aria-hidden="true" style:background={markFor(i).color}><ToonMark index={i} size={18} /></span>
+				{:else}<span class="mark" aria-hidden="true">{letters ? String.fromCharCode(65 + i) : i + 1}</span>{/if}
 				<input
-					class="input input-sm w-full"
+					class="input input-sm option-input"
 					bind:this={inputs[i]}
 					bind:value={c.text}
 					maxlength="300"
@@ -64,5 +67,8 @@
 	ol { list-style: none; padding: 0; margin: 0; }
 	ol > li + li { margin-top: 0.4rem; }
 	.mark { width: 1.6rem; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--color-muted); flex: none; }
+	.toon-chip { display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; border: 2.5px solid #1b2148; border-radius: 0.6rem; }
+	/* Beside its mark and buttons, on one line unless it gets too narrow. */
+	.option-input { flex: 1 1 10rem; min-width: 0; width: auto; }
 	.pv { flex-basis: 100%; padding: 0.2rem 0.6rem; margin-left: 2rem; background: var(--color-base-200); border-left: 3px solid var(--color-primary); }
 </style>

@@ -124,7 +124,7 @@
 			</div>
 
 			{#if type === 'SINGLE' || type === 'MULTI' || type === 'BLANK_OPT'}
-				<ChoiceList bind:items={body.options} label={type === 'BLANK_OPT' ? 'Word choices (shared by all blanks)' : 'Options'} letters={type !== 'BLANK_OPT'} />
+				<ChoiceList marks={type === 'SINGLE' || type === 'MULTI'} bind:items={body.options} label={type === 'BLANK_OPT' ? 'Word choices (shared by all blanks)' : 'Options'} letters={type !== 'BLANK_OPT'} />
 				{#if type === 'SINGLE'}
 					<div class="join">
 						<button type="button" class="btn btn-sm join-item" class:btn-primary={body.display !== 'dropdown'} onclick={() => (body.display = 'radio')}>Radio buttons</button>
