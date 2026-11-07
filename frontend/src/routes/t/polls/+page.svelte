@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
+	import ToonPage from '$lib/poll/ToonPage.svelte';
 	import { IDENTITY_LABEL } from '$lib/poll/meta';
 	import PollSettingsForm from '$lib/poll/PollSettingsForm.svelte';
 	import { DEFAULT_SETTINGS } from '$lib/poll/scoring';
@@ -51,6 +52,7 @@
 	const STATUS = { draft: ['Draft', ''], open: ['Open', 'ok'], closed: ['Closed', 'warn'] } as const;
 </script>
 
+<ToonPage>
 <div class="page-container vstack">
 	<div class="row">
 		<h1 class="m-0">Polls</h1>
@@ -103,3 +105,5 @@
 		<Pager list={polls} label="Polls" />
 	{/if}
 </div>
+</ToonPage>
+
