@@ -1,6 +1,7 @@
 // The class report (D-140): the setup a teacher edits, and the report built
 // from it, from /api/teacher/classrooms/{id}/class-report.
 import { toCSV } from '../tutoring/types';
+import { numberCSV, numberSheet } from './reportView';
 import { DEFAULT_BANDS, toneFor, type Bands, type Sheet, type Tone } from './reportPdf';
 
 export type Pick = 'high' | 'low';
@@ -127,7 +128,7 @@ export function finalRange(r: ClassReport): { avg: number | null; high: number |
 	return { avg: Math.round((f.reduce((a, b) => a + b, 0) / f.length) * 10) / 10, high: Math.max(...f), low: Math.min(...f) };
 }
 
-export function classReportCSV(r: ClassReport): string {
+export function classReportCSV(r: ClassReport, students: ReportStudent[] = r.students): string {
 	const cols = columns(r);
 	const head = ['Student', 'Student ID'];
 	for (const it of cols) {
@@ -136,7 +137,7 @@ export function classReportCSV(r: ClassReport): string {
 	}
 	head.push('Total', 'Out of', 'Final (%)', 'Counted items missed');
 	const rows: (string | number)[][] = [head];
-	for (const s of r.students) {
+	for (const s of students) {
 		const row: (string | number)[] = [s.name, s.student_number ?? ''];
 		for (const it of cols) {
 			const m = s.marks[itemKey(it)];
@@ -154,7 +155,7 @@ export function classReportCSV(r: ClassReport): string {
 	rows.push(['Lowest (%)', '', ...per((it) => it.low ?? ''), '', '', range.low ?? '']);
 	rows.push(['Weight', '', ...per((it) => it.weight)]);
 	rows.push(['Mark used', '', ...per((it) => (it.kind === 'tutorial' ? 'only one' : it.pick === 'low' ? 'lowest' : 'highest'))]);
-	return toCSV(rows);
+	return toCSV(numberCSV(rows, students.length));
 }
 
 /** A mark's colour: by how high it is, or for one that counts and is missing. */
@@ -215,7 +216,8 @@ export function groupSheets(r: ClassReport, bands: Bands = DEFAULT_BANDS): Sheet
 /** Group sheets as CSV, one after another. */
 export function groupsCSV(r: ClassReport): string {
 	const rows: (string | number)[][] = [];
-	for (const sh of groupSheets(r)) {
+	for (const sheet of groupSheets(r)) {
+		const sh = numberSheet(sheet);
 		if (rows.length) rows.push([]);
 		rows.push([sh.heading ?? '']);
 		rows.push(sh.head);
