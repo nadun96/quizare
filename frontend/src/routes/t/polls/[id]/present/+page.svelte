@@ -387,6 +387,19 @@
 		.layout.wide .people-card { order: 2; }
 		.layout.wide .join-card, .layout.wide .people-card { margin: 2rem 0 0; }
 	}
+	/* A presenter's screen: exactly the window, with nothing to scroll for a choice
+	   question. What's still too tall, such as a long list of answers, scrolls in the middle. */
+	@media (min-width: 1180px) and (min-height: 620px) {
+		.stage { height: 100dvh; overflow: clip; }
+		.layout { min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+		.main { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding-top: 1.25rem; padding-bottom: 0.5rem; }
+		.question { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+		.q-banner { flex: none; margin-bottom: 0.6rem; padding: 0.6rem 1.25rem; }
+		.question :global(.q-title) { font-size: clamp(1.4rem, 0.8rem + 1.6vw, 2.5rem); }
+		.layout.wide .join-card, .layout.wide .people-card { margin-top: 1.25rem; align-self: start; max-height: calc(100% - 2rem); overflow-y: auto; }
+		.controls { padding-block: 0.5rem; }
+		.keys { margin-bottom: 0.4rem; }
+	}
 	.side-title { display: block; font-size: 1.1rem; font-weight: 650; }
 	.join-card, .people-card { display: grid; gap: 0.5rem; padding: 0.9rem; margin: 0 1.5rem 1rem; min-width: 0; }
 	.join-card { justify-items: center; text-align: center; }

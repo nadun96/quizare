@@ -358,6 +358,11 @@
 	:is(.bar-row, .col, .seg, .cell):is(:hover, :focus-visible) > .tip { opacity: 1; }
 	:is(.bar-row, .col, .seg, .cell):focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 4px; }
 
+	/* On a presenter's screen, cartoon choices take the height that's left (D-153). */
+	@media (min-width: 1180px) and (min-height: 620px) {
+		.results.big:has(> :global(.toon-choices)) { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+	}
+
 	/* Stat tiles. */
 	.tiles { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); }
 	.tile { display: grid; padding: 0.6rem 0.8rem; border-radius: var(--radius-field); background: var(--color-base-200); }
