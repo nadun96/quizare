@@ -159,6 +159,59 @@ describe('colours on mark sheets (D-143)', () => {
 
 const EOL = new RegExp(String.fromCharCode(13) + '?' + String.fromCharCode(10));
 
+describe('what else the class report shows (D-156)', () => {
+	const withExtras = (options: Partial<ClassReport['options'] & object>): ClassReport => {
+		const r = report();
+		r.items[0].date = '2026-03-04T10:00:00Z';
+		r.options = { violations: false, attendance: false, dates: false, ...options };
+		r.students[0].violations = { 'quiz:q1': 2 };
+		r.students[0].violations_total = 2;
+		return r;
+	};
+	const att = new Map([['u1', { user_id: 'u1', name: 'Amaya', number: 'S1', byKind: {} as never, came: 5, of: 6, rate: 83, minutes: 0 }]]);
+
+	it('shows nothing extra unless asked', () => {
+		const t = individualSheet(withExtras({}), undefined, att);
+		expect(t.head).toEqual(['Student', 'ID', 'Cells (Weight 0.2, 20%)', 'Atoms (Not in the total)', 'Total', 'Final']);
+		expect(t.rows[0].join()).not.toContain('violation');
+		expect(classReportCSV(withExtras({}), undefined, att)).not.toContain('iolations');
+	});
+	it('adds violations to the marks and a column', () => {
+		const t = individualSheet(withExtras({ violations: true }));
+		expect(t.head.at(-1)).toBe('Violations');
+		expect(t.rows[0][2]).toBe('8 / 10 (80%), final mark 16, 2 violations');
+		expect(t.rows[0].at(-1)).toBe(2);
+		expect(t.tones?.[0].length).toBe(t.head.length);
+		const csv = classReportCSV(withExtras({ violations: true }));
+		expect(csv).toContain('Cells (violations)');
+		expect(csv).not.toContain('Atoms (violations)'); // only quizzes have them
+	});
+	it('adds attendance, in its colour', () => {
+		const t = individualSheet(withExtras({ attendance: true }), undefined, att);
+		expect(t.head.at(-1)).toBe('Attendance (last 12 months)');
+		expect(t.rows[0].at(-1)).toBe('5 / 6 (83%)');
+		expect(t.tones?.[0].at(-1)).toBe('#dcfce7');
+		expect(classReportCSV(withExtras({ attendance: true }), undefined, att)).toContain('Attendance (%)');
+	});
+	it('adds each item’s date', () => {
+		const t = individualSheet(withExtras({ dates: true }));
+		expect(t.head[2]).toMatch(/^Cells \(Weight 0\.2, 20%, .*2026\)$/);
+		expect(classReportCSV(withExtras({ dates: true }))).toContain('2026-03-04');
+	});
+	it('keeps the class rows lined up under their columns', () => {
+		const lines = classReportCSV(withExtras({ violations: true, dates: true }), undefined, att).trim().split(EOL);
+		const head = lines[0].split(',');
+		const avg = lines.find((l) => l.startsWith(',Class average'))!.split(',');
+		expect(avg[head.indexOf('Cells (%)')]).toBe('80');
+	});
+	it('sends the options when saved, and starts from what’s saved', () => {
+		const d = draftFrom(withExtras({ dates: true }));
+		expect(d.options).toEqual({ violations: false, attendance: false, dates: true });
+		expect(setupPayload(d).options).toEqual(d.options);
+		expect(draftFrom(report()).options).toEqual({ violations: false, attendance: false, dates: false });
+	});
+});
+
 describe('the class report as filtered (D-154)', () => {
 	it('writes only who’s shown, numbered, with the class figures whole', () => {
 		const r = report();
