@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Questions from the teacher's question bank (D-66), copied into a
 	// tutorial page (D-75, TU-FR-04). Copies, so editing them here leaves the
 	// bank as it is.
@@ -35,7 +36,7 @@
 			const r = await api.post<{ questions: Question[] }>(`/api/teacher/tutorials/${tutorialId}/questions/copy`, { ids: chosen });
 			oncopied(r.questions);
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not copy the questions', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not copy the questions"), 'error');
 		} finally {
 			busy = false;
 		}
@@ -44,15 +45,15 @@
 
 <div class="picker vstack gap-2">
 	<div class="flex flex-wrap items-center gap-2">
-		<strong class="flex-1">From your question bank</strong>
-		<input class="input input-sm" style="min-width:12rem" placeholder="Search code, text or category" aria-label="Search the question bank" bind:value={filter} />
+		<strong class="flex-1">{tr("From your question bank")}</strong>
+		<input class="input input-sm" style="min-width:12rem" placeholder={tr("Search code, text or category")} aria-label={tr("Search the question bank")} bind:value={filter} />
 	</div>
 	{#if !bank}
-		<p class="small muted m-0">Loading…</p>
+		<p class="small muted m-0">{tr("Loading…")}</p>
 	{:else if !bank.length}
-		<p class="small muted m-0">Your question bank is empty. <a href="/t/bank">Add questions to it</a> to reuse them in quizzes and tutorials.</p>
+		<p class="small muted m-0">{tr("Your question bank is empty.")} <a href="/t/bank">{tr("Add questions to it")}</a> {tr("to reuse them in quizzes and tutorials.")}</p>
 	{:else}
-		<ul class="list" aria-label="Questions in your bank">
+		<ul class="list" aria-label={tr("Questions in your bank")}>
 			{#each shown as q (q.id)}
 				<li>
 					<label class="row">
@@ -62,13 +63,13 @@
 						<span class="small muted whitespace-nowrap">{q.category ? q.category + ' · ' : ''}{count(q.marks, 'mark')}</span>
 					</label>
 				</li>
-			{:else}<li class="small muted">Nothing matches.</li>{/each}
+			{:else}<li class="small muted">{tr("Nothing matches.")}</li>{/each}
 		</ul>
 	{/if}
 	<div class="flex flex-wrap items-center gap-2">
-		<button type="button" class="btn btn-sm btn-primary" disabled={!chosen.length || busy} onclick={copy}><Icon name="copy" size={14} />{chosen.length ? `Copy ${count(chosen.length, 'question')} to this page` : 'Choose questions'}</button>
-		<button type="button" class="btn btn-sm btn-ghost" onclick={oncancel}>Cancel</button>
-		<span class="small muted">They’re copied: changing them here leaves the bank as it is.</span>
+		<button type="button" class="btn btn-sm btn-primary" disabled={!chosen.length || busy} onclick={copy}><Icon name="copy" size={14} />{chosen.length ? tr("Copy {0} to this page", [count(chosen.length, 'question')]) : tr("Choose questions")}</button>
+		<button type="button" class="btn btn-sm btn-ghost" onclick={oncancel}>{tr("Cancel")}</button>
+		<span class="small muted">{tr("They’re copied: changing them here leaves the bank as it is.")}</span>
 	</div>
 </div>
 

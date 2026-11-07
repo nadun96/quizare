@@ -5,6 +5,7 @@
   "version": "2.52.0",
   "type": "module",
   "scripts": {
+    "i18n": "node scripts/i18n/wrap.mjs && node scripts/i18n/catalog.mjs",
     "dev": "vite dev",
     "build": "vite build && node scripts/precompress.mjs",
     "preview": "vite preview",

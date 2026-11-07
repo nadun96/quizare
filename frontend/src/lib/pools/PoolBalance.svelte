@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Randomizing a pool (D-132): where the right answers of single-answer
 	// questions sit, A, B, C…, per category, and a button that spreads them
 	// evenly. Students then can't guess "it's usually A".
@@ -27,19 +28,19 @@
 	async function balance(category: string | null) {
 		const name = category === null ? 'every category' : `“${category || 'No category'}”`;
 		const ok = await confirmDialog({
-			title: `Spread the right answers in ${name}?`,
-			body: 'Each single-answer question’s options are reordered so the right one falls evenly on A, B, C…; the wrong ones are shuffled. Multiple-answer questions are shuffled. Options like “All of the above” and True/False keep their order. Answer keys stay right, and sessions already run keep their questions.',
-			confirm: 'Spread them'
+			title: tr("Spread the right answers in {0}?", [name]),
+			body: tr("Each single-answer question’s options are reordered so the right one falls evenly on A, B, C…; the wrong ones are shuffled. Multiple-answer questions are shuffled. Options like “All of the above” and True/False keep their order. Answer keys stay right, and sessions already run keep their questions."),
+			confirm: tr("Spread them")
 		});
 		if (!ok) return;
 		busy = category ?? '*';
 		try {
 			const r = await api.post<{ moved: number; shuffled: number; kept: number }>(`/api/teacher/quizzes/${quizId}/questions/balance`, { category });
-			toast(`${r.moved} reordered${r.shuffled ? `, ${r.shuffled} shuffled` : ''}${r.kept ? `; ${r.kept} kept in order` : ''}`);
+			toast(tr("{0} reordered{1}{2}", [r.moved, r.shuffled ? tr(", {0} shuffled", [r.shuffled]) : '', r.kept ? tr("; {0} kept in order", [r.kept]) : '']));
 			await load();
 			onchange?.();
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'That didn’t work', 'error');
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work"), 'error');
 		} finally {
 			busy = '';
 		}
@@ -53,23 +54,23 @@
 	<div class="vstack gap-3">
 		<div class="card card-border bg-base-100 p-4 sm:p-5 flex flex-wrap items-center gap-3">
 			<div class="grow min-w-0">
-				<h3 class="m-0 text-base flex items-center gap-2"><Icon name="shuffle" size={18} />Where the right answers are</h3>
-				<p class="m-0 small muted">Files written by hand often put the right answer first. Spread them so students can’t guess by position. To also give each student their own order, set <strong>Answer option order: shuffled</strong> in a quiz’s Settings.</p>
+				<h3 class="m-0 text-base flex items-center gap-2"><Icon name="shuffle" size={18} />{tr("Where the right answers are")}</h3>
+				<p class="m-0 small muted">{tr("Files written by hand often put the right answer first. Spread them so students can’t guess by position. To also give each student their own order, set")} <strong>{tr("Answer option order: shuffled")}</strong> {tr("in a quiz’s Settings.")}</p>
 			</div>
-			<button class="btn btn-primary" disabled={!!busy || !s.all.singles} onclick={() => balance(null)}><Icon name="shuffle" size={16} />{busy === '*' ? 'Spreading…' : 'Spread every category'}</button>
+			<button class="btn btn-primary" disabled={!!busy || !s.all.singles} onclick={() => balance(null)}><Icon name="shuffle" size={16} />{busy === '*' ? tr("Spreading…") : tr("Spread every category")}</button>
 		</div>
 
 		{#each s.categories as c (c.category)}
-			<section class="card card-border bg-base-100 p-4 sm:p-5 vstack gap-3" aria-label={c.category || 'No category'}>
+			<section class="card card-border bg-base-100 p-4 sm:p-5 vstack gap-3" aria-label={c.category || tr("No category")}>
 				<div class="flex flex-wrap items-center gap-2">
-					<strong>{c.category || 'No category'}</strong>
-					<span class="small muted">{c.singles} single-answer{multis(c.category) ? ` · ${multis(c.category)} multiple-answer` : ''}</span>
+					<strong>{c.category || tr("No category")}</strong>
+					<span class="small muted">{tr("{0} single-answer{1}", [c.singles, multis(c.category) ? tr(" · {0} multiple-answer", [multis(c.category)]) : ''])}</span>
 					{#if c.singles}<span class="badge badge-soft badge-sm" class:badge-warning={c.skewed} class:badge-success={!c.skewed}>{#if c.skewed}<Icon name="alert" size={12} />{/if}{spreadLine(c)}</span>{/if}
 					<span class="grow"></span>
-					{#if c.singles || multis(c.category)}<button class="btn btn-sm" class:btn-primary={c.skewed} disabled={!!busy} onclick={() => balance(c.category)}>{busy === c.category ? 'Spreading…' : 'Spread'}</button>{/if}
+					{#if c.singles || multis(c.category)}<button class="btn btn-sm" class:btn-primary={c.skewed} disabled={!!busy} onclick={() => balance(c.category)}>{busy === c.category ? tr("Spreading…") : tr("Spread")}</button>{/if}
 				</div>
 				{#if c.singles}
-					<div class="bars" role="img" aria-label="Right answers by position: {c.at.map((n, i) => `${letter(i)} ${n}`).join(', ')}">
+					<div class="bars" role="img" aria-label={tr("Right answers by position: {0}", [c.at.map((n, i) => `${letter(i)} ${n}`).join(', ')])}>
 						{#each c.at as n, i (i)}
 							<div class="bar">
 								<span class="pos">{letter(i)}</span>
@@ -79,7 +80,7 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="m-0 small muted">No single-answer questions here.</p>
+					<p class="m-0 small muted">{tr("No single-answer questions here.")}</p>
 				{/if}
 			</section>
 		{/each}

@@ -1,0 +1,30 @@
+// Keeps the app translatable (D-157): a word added to a screen without tr(), or a
+// phrase missing from the list translators work from, fails here. To fix either,
+// run `npm run i18n`, which wraps new words and refreshes the list.
+// @vitest-environment node
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { bareWords } from '../../../scripts/i18n/wrap-lib.mjs';
+import { allMessages } from '../../../scripts/i18n/catalog.mjs';
+import list from './catalog/en.json';
+
+const SRC = join(process.cwd(), 'src');
+function svelteFiles(dir: string): string[] {
+	return readdirSync(dir).flatMap((f) => {
+		const p = join(dir, f);
+		if (statSync(p).isDirectory()) return /[\\/]docs$/.test(p) ? [] : svelteFiles(p);
+		return f.endsWith('.svelte') ? [p] : [];
+	});
+}
+
+describe('the app stays translatable (D-157)', () => {
+	it('has no bare words on any screen', () => {
+		const found = svelteFiles(SRC).flatMap((f) => bareWords(readFileSync(f, 'utf8')).map((w) => `${f.split(/[\\/]src[\\/]/)[1]}: ${w}`));
+		expect(found).toEqual([]);
+	});
+	it('lists every phrase for translators', () => {
+		const known = new Set(list as string[]);
+		expect(allMessages().filter((m) => !known.has(m))).toEqual([]);
+	});
+});

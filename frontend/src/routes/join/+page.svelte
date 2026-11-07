@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { goto } from '$app/navigation';
 	import Icon, { type IconName } from '$lib/ui/Icon.svelte';
 	import { flyIn } from '$lib/ui/motion';
@@ -20,7 +21,7 @@
 	}
 </script>
 
-<svelte:head><title>Join a quiz, poll, classroom or meeting · Classroom Quiz</title><meta name="description" content="Enter the code from your teacher, or scan the QR code on the board, to join a live quiz, poll, classroom or meeting." /></svelte:head>
+<svelte:head><title>{tr("Join a quiz, poll, classroom or meeting · Classroom Quiz")}</title><meta name="description" content="Enter the code from your teacher, or scan the QR code on the board, to join a live quiz, poll, classroom or meeting." /></svelte:head>
 
 
 <div class="narrow">
@@ -47,7 +48,7 @@
 				inputmode="text"
 				maxlength="12"
 				required
-				placeholder="K7Q2XM"
+				placeholder={tr("K7Q2XM")}
 			/>
 		</div>
 		<button class="btn btn-primary btn-lg w-full" disabled={!code.trim()}>{t('join.continue')}<Icon name="arrow-right" size={18} /></button>

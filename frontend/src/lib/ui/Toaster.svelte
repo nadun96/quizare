@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { flip } from 'svelte/animate';
 	import Icon from './Icon.svelte';
 	import { flyIn, fadeIn, flipMs } from './motion';
@@ -13,7 +14,7 @@
 		<div class="alert {CLS[t.kind]} shadow-lg max-w-sm" in:flyIn={{ y: 16 }} out:fadeIn={{ duration: 150 }} animate:flip={{ duration: flipMs() }}>
 			<Icon name={ICON[t.kind]} />
 			<span>{t.text}</span>
-			<button class="btn btn-ghost btn-sm btn-circle" aria-label="Dismiss" onclick={() => toasts.dismiss(t.id)}><Icon name="x" size={16} /></button>
+			<button class="btn btn-ghost btn-sm btn-circle" aria-label={tr("Dismiss")} onclick={() => toasts.dismiss(t.id)}><Icon name="x" size={16} /></button>
 		</div>
 	{/each}
 </div>

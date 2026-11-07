@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The inbox (D-103): announcements from (or to) classrooms and messages
 	// between teachers and their students, with the choice of getting new
 	// ones by email. ?tab=messages&c=… opens a conversation (the email links
@@ -45,14 +46,14 @@
 		try {
 			await api.put('/api/my/inbox/prefs', { email: on });
 			inbox.current = inbox.current ? { ...inbox.current, email: on } : null;
-			toast(on ? 'New announcements and messages come by email too' : 'No more emails for announcements and messages');
+			toast(on ? tr("New announcements and messages come by email too") : tr("No more emails for announcements and messages"));
 		} catch {
-			toast('Could not change it', 'error');
+			toast(tr("Could not change it"), 'error');
 		}
 	}
 </script>
 
-<svelte:head><title>Inbox · Classroom Quiz</title></svelte:head>
+<svelte:head><title>{tr("Inbox · Classroom Quiz")}</title></svelte:head>
 
 {#if auth.user && (auth.user.role === 'student' || auth.user.role === 'teacher')}
 	<div class="page-container vstack py-6">
@@ -68,10 +69,10 @@
 
 		<div role="tablist" class="tabs tabs-box w-fit" aria-label={t('inbox.title')}>
 			<button class="tab gap-2" role="tab" aria-selected={tab === 'announcements'} class:tab-active={tab === 'announcements'} onclick={() => show('announcements')}>
-				{t('inbox.announcements')}{#if !teacher && inbox.current?.announcements}<span class="badge badge-primary badge-sm" aria-label="{inbox.current.announcements} unread">{badge(inbox.current.announcements)}</span>{/if}
+				{t('inbox.announcements')}{#if !teacher && inbox.current?.announcements}<span class="badge badge-primary badge-sm" aria-label={tr("{0} unread", [inbox.current.announcements])}>{badge(inbox.current.announcements)}</span>{/if}
 			</button>
 			<button class="tab gap-2" role="tab" aria-selected={tab === 'messages'} class:tab-active={tab === 'messages'} onclick={() => show('messages')}>
-				{t('inbox.messages')}{#if inbox.current?.messages}<span class="badge badge-primary badge-sm" aria-label="{inbox.current.messages} unread">{badge(inbox.current.messages)}</span>{/if}
+				{t('inbox.messages')}{#if inbox.current?.messages}<span class="badge badge-primary badge-sm" aria-label={tr("{0} unread", [inbox.current.messages])}>{badge(inbox.current.messages)}</span>{/if}
 			</button>
 		</div>
 

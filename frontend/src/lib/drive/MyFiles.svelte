@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A classroom's Drive files on a student's page (D-71); nothing when there are none.
 	import { api } from '../api';
 	import type { ClassroomFile } from '../drive';
@@ -12,7 +13,7 @@
 </script>
 
 {#if files.length}
-	<ul class="files" aria-label="Files from your teacher">
+	<ul class="files" aria-label={tr("Files from your teacher")}>
 		{#each files as f (f.id)}
 			<li>
 				{#if f.icon_link}<img src={f.icon_link} alt="" width="16" height="16" />{:else}<Icon name="cloud" size={16} />{/if}

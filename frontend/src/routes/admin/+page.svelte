@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	import DirectoryPanel from '$lib/admin/DirectoryPanel.svelte';
 	import SsoPanel from '$lib/admin/SsoPanel.svelte';
 	import DrivePanel from '$lib/admin/DrivePanel.svelte';
@@ -103,7 +104,7 @@
 		}
 	}
 	async function del(u: U) {
-		if (!(await confirmDialog({ title: `Delete ${u.name}?`, body: 'Their personal data is removed; results stay anonymised.', confirm: 'Delete user', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete {0}?", [u.name]), body: tr("Their personal data is removed; results stay anonymised."), confirm: tr("Delete user"), danger: true }))) return;
 		try {
 			await api.del('/api/admin/users/' + u.id);
 			loadUsers();
@@ -118,7 +119,7 @@
 		admin: 'They get the whole admin console, every setting and every account. Give this only to someone you trust with all of it.'
 	};
 	async function changeRole(u: U, to: 'student' | 'teacher' | 'admin') {
-		if (!(await confirmDialog({ title: `Make ${u.name} ${to === 'admin' ? 'an' : 'a'} ${to}?`, body: ROLE_WORDS[to], confirm: `Make ${to}`, danger: to === 'admin' }))) return;
+		if (!(await confirmDialog({ title: tr("Make {0} {1} {2}?", [u.name, to === 'admin' ? 'an' : 'a', to]), body: ROLE_WORDS[to], confirm: tr("Make {0}", [to]), danger: to === 'admin' }))) return;
 		try {
 			await api.post('/api/admin/users/' + u.id + '/role', { role: to });
 			notice = '';
@@ -154,7 +155,7 @@
 	}
 	async function savePolicy() {
 		await api.put('/api/admin/auth-policy', policy);
-		toast('Settings saved');
+		toast(tr("Settings saved"));
 	}
 	async function savePlatform(o: Overrides) {
 		errors = {};
@@ -170,81 +171,81 @@
 <div class="page-container vstack">
 	{#if notice}<p class="alert alert-soft alert-warning small m-0">{notice}</p>{/if}
 	{#if ready() && !tabs.length}
-		<h1>{isAdmin(auth.user) ? 'Admin' : 'Manage'}</h1>
-		<p class="alert alert-soft alert-info">You're a manager, but an admin hasn't given you any features yet.</p>
+		<h1>{isAdmin(auth.user) ? tr("Admin") : tr("Manage")}</h1>
+		<p class="alert alert-soft alert-info">{tr("You're a manager, but an admin hasn't given you any features yet.")}</p>
 	{:else if !tab}
 		<!-- The tiles (D-118). -->
 		<div class="flex flex-wrap items-end gap-3">
 			<div class="grow">
-				<h1 class="m-0">{isAdmin(auth.user) ? 'Admin' : 'Manage'}</h1>
-				<p class="m-0 muted">Choose what to work on.</p>
+				<h1 class="m-0">{isAdmin(auth.user) ? tr("Admin") : tr("Manage")}</h1>
+				<p class="m-0 muted">{tr("Choose what to work on.")}</p>
 			</div>
 			<label class="input input-sm w-full sm:w-72">
 				<Icon name="search" size={15} />
-				<span class="sr-only">Find a tool</span>
-				<input type="search" placeholder="Find a tool" bind:value={find} />
+				<span class="sr-only">{tr("Find a tool")}</span>
+				<input type="search" placeholder={tr("Find a tool")} bind:value={find} />
 			</label>
 		</div>
 		{#each groups as g (g.key)}
 			<section class="vstack gap-2" aria-labelledby="g-{g.key}">
-				<h2 id="g-{g.key}" class="group-h">{g.label}</h2>
+				<h2 id="g-{g.key}" class="group-h">{tr(g.label)}</h2>
 				<div class="tiles">
 					{#each g.tools as t (t.key)}
 						{@const b = badge(t.key)}
 						<a class="tile g-{g.key}" href="/admin?tool={t.key}">
 							<span class="tile-ico" aria-hidden="true"><Icon name={t.icon} size={26} /></span>
-							<span class="tile-text"><span class="tile-name">{t.label}</span><span class="small muted">{t.blurb}</span></span>
+							<span class="tile-text"><span class="tile-name">{tr(t.label)}</span><span class="small muted">{t.blurb}</span></span>
 							{#if b}<span class="badge badge-warning badge-sm tile-badge">{b}</span>{/if}
 						</a>
 					{/each}
 				</div>
 			</section>
 		{:else}
-			<p class="muted">No tool matches “{find}”.</p>
+			<p class="muted">{tr("No tool matches “{0}”.", [find])}</p>
 		{/each}
 	{:else}
 		{@const cur = TOOLS[tab]}
 		<div class="console" class:with-rail={tabs.length > 1}>
 			{#if tabs.length > 1}
 				<!-- Every tool one click away, as icons (D-118). -->
-				<nav class="rail" aria-label="Admin tools">
-					<a class="rail-btn" href="/admin" title="All tools" aria-label="All tools"><Icon name="grid" size={20} /></a>
+				<nav class="rail" aria-label={tr("Admin tools")}>
+					<a class="rail-btn" href="/admin" title={tr("All tools")} aria-label={tr("All tools")}><Icon name="grid" size={20} /></a>
 					{#each grouped(tabs) as g (g.key)}
 						<span class="rail-sep"></span>
 						{#each g.tools as t (t.key)}
-							<a class="rail-btn g-{g.key}" class:on={t.key === tab} href="/admin?tool={t.key}" title={t.label} aria-label={t.label} aria-current={t.key === tab ? 'page' : undefined}><Icon name={t.icon} size={20} /></a>
+							<a class="rail-btn g-{g.key}" class:on={t.key === tab} href="/admin?tool={t.key}" title={tr(t.label)} aria-label={tr(t.label)} aria-current={t.key === tab ? 'page' : undefined}><Icon name={t.icon} size={20} /></a>
 						{/each}
 					{/each}
 				</nav>
 			{/if}
 			<div class="vstack min-w-0">
 				<header class="flex flex-wrap items-center gap-3">
-					{#if tabs.length > 1}<a class="btn btn-ghost btn-sm" href="/admin"><Icon name="arrow-left" size={16} />All tools</a>{/if}
+					{#if tabs.length > 1}<a class="btn btn-ghost btn-sm" href="/admin"><Icon name="arrow-left" size={16} />{tr("All tools")}</a>{/if}
 					<span class="tile-ico g-{cur.group} small-ico" aria-hidden="true"><Icon name={cur.icon} size={20} /></span>
 					<div class="min-w-0">
-						<h1 class="m-0 text-2xl">{cur.label}</h1>
+						<h1 class="m-0 text-2xl">{tr(cur.label)}</h1>
 						<p class="m-0 small muted">{cur.blurb}</p>
 					</div>
 				</header>
 			{#if tab === 'users'}
 				<div class="row">
-					<ListSearch list={users} placeholder="Search name or email" label="Search users" />
-					<select class="select select-sm w-full" style="width:9rem" bind:value={role} onchange={() => users.refilter()} aria-label="Role"><option value="">All roles</option><option>student</option><option>teacher</option><option>manager</option><option>admin</option></select>
-					<select class="select select-sm w-full" style="width:11rem" bind:value={status} onchange={() => users.refilter()} aria-label="Status"><option value="">All statuses</option><option value="active">active</option><option value="pending_approval">pending approval</option><option value="suspended">suspended</option></select>
+					<ListSearch list={users} placeholder={tr("Search name or email")} label={tr("Search users")} />
+					<select class="select select-sm w-full" style="width:9rem" bind:value={role} onchange={() => users.refilter()} aria-label={tr("Role")}><option value="">{tr("All roles")}</option><option>{tr("student")}</option><option>{tr("teacher")}</option><option>{tr("manager")}</option><option>{tr("admin")}</option></select>
+					<select class="select select-sm w-full" style="width:11rem" bind:value={status} onchange={() => users.refilter()} aria-label={tr("Status")}><option value="">{tr("All statuses")}</option><option value="active">{tr("active")}</option><option value="pending_approval">{tr("pending approval")}</option><option value="suspended">{tr("suspended")}</option></select>
 				</div>
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
-					<table class="table"><thead><tr><th><SortHeader list={users} key="name" label="Name" /></th><th><SortHeader list={users} key="role" label="Role" /></th><th><SortHeader list={users} key="status" label="Status" /></th><th><SortHeader list={users} key="created" label="Joined" desc /></th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+					<table class="table"><thead><tr><th><SortHeader list={users} key="name" label={tr("Name")} /></th><th><SortHeader list={users} key="role" label={tr("Role")} /></th><th><SortHeader list={users} key="status" label={tr("Status")} /></th><th><SortHeader list={users} key="created" label={tr("Joined")} desc /></th><th><span class="sr-only">{tr("Actions")}</span></th></tr></thead><tbody>
 						{#each users.rows as u (u.id)}
 							<tr>
-								<td>{u.name}{#if u.directory}{' '}<span class="badge badge-soft badge-sm">School account</span>{/if}<br /><span class="small muted">{u.email}{u.email_verified ? '' : ' · unverified'}</span></td>
+								<td>{u.name}{#if u.directory}{' '}<span class="badge badge-soft badge-sm">{tr("School account")}</span>{/if}<br /><span class="small muted">{u.email}{u.email_verified ? '' : tr(" · unverified")}</span></td>
 								<td>{roleLabel(u)}</td>
 								<td><span class="badge badge-soft {u.status === 'active' ? 'ok' : u.status === 'suspended' ? 'danger' : 'warn'}">{u.status.replace('_', ' ')}</span></td>
-								<td class="small tabular">{u.created_at ? new Date(u.created_at).toLocaleDateString() : ''}</td>
+								<td class="small tabular">{u.created_at ? new Date(u.created_at).toLocaleDateString(localeTag()) : ''}</td>
 								<td>
 									<div class="flex items-center justify-end gap-1">
-										{#if canActOn(auth.user, u) && u.status === 'pending_approval'}<button class="btn btn-sm btn-primary" onclick={() => setStatus(u, 'active')}>Approve</button>{/if}
+										{#if canActOn(auth.user, u) && u.status === 'pending_approval'}<button class="btn btn-sm btn-primary" onclick={() => setStatus(u, 'active')}>{tr("Approve")}</button>{/if}
 										{#if canActOn(auth.user, u) || (isAdmin(auth.user) && u.role === 'teacher' && u.status === 'active' && !u.manager)}
-											<RowMenu hint="More actions for {u.name}" actions={[
+											<RowMenu hint={tr("More actions for {0}", [u.name])} actions={[
 												...(isAdmin(auth.user) && u.role === 'teacher' && u.status === 'active' && !u.manager ? [{ label: 'Make manager', icon: 'users' as const, onclick: () => makeManager(u) }] : []),
 												...roleActions(u),
 												...(canActOn(auth.user, u)
@@ -260,48 +261,48 @@
 									</div>
 								</td>
 							</tr>
-						{:else}<tr><td colspan="5" class="muted">{users.loaded ? (users.q ? `No users match “${users.q}”.` : 'No users.') : 'Loading…'}</td></tr>
+						{:else}<tr><td colspan="5" class="muted">{users.loaded ? (users.q ? tr("No users match “{0}”.", [users.q]) : tr("No users.")) : tr("Loading…")}</td></tr>
 						{/each}
 					</tbody></table>
 				</div>
-				<Pager list={users} label="Users" />
+				<Pager list={users} label={tr("Users")} />
 			{:else if tab === 'usage' && usage}
 				<div class="auto-grid">
 					{#each [['Teachers', usage.users_by_role.teacher ?? 0], ['Students', usage.users_by_role.student ?? 0], ['Classrooms', usage.classrooms], ['Quizzes', usage.quizzes], ['Sessions (30 days)', usage.sessions_30d], ['Live now', usage.live_sessions], ['Attempts (30 days)', usage.attempts_30d], ['Violations (30 days)', usage.violations_30d], ['Teachers with LLM keys', usage.teachers_with_llm_keys]] as [l, v] (l)}
 						<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><div class="small muted">{l}</div><div style="font-size:1.5rem;font-weight:700">{v}</div></div>
 					{/each}
 				</div>
-				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 small"><strong>Background jobs</strong><br />{Object.entries(usage.jobs_by_queue_state).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'none'}</div>
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 small"><strong>{tr("Background jobs")}</strong><br />{Object.entries(usage.jobs_by_queue_state).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'none'}</div>
 			{:else if tab === 'settings'}
 				{#if can(auth.user, 'approval_policy')}
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-						<label class="row" style="font-weight:400"><input class="checkbox" type="checkbox" bind:checked={policy.require_teacher_approval} /> New teacher accounts need approval</label>
-						<div><button class="btn" onclick={savePolicy}>Save</button></div>
+						<label class="row" style="font-weight:400"><input class="checkbox" type="checkbox" bind:checked={policy.require_teacher_approval} /> {tr("New teacher accounts need approval")}</label>
+						<div><button class="btn" onclick={savePolicy}>{tr("Save")}</button></div>
 					</div>
 				{/if}
 				{#if can(auth.user, 'settings')}
-					<h2>Platform defaults</h2>
+					<h2>{tr("Platform defaults")}</h2>
 					<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="platform" value={platform.overrides} effective={platform.effective} onsave={savePlatform} {errors} /></div>
 					<MeetingLimits />
 				{/if}
 				{#if isAdmin(auth.user)}<SignInLimits />{/if}
 			{:else if tab === 'audit'}
 				<div class="row">
-					<ListSearch list={events} placeholder="Search action, target or person" label="Search the audit log" />
-					<select class="select select-sm w-full" style="width:10rem" bind:value={actorRole} onchange={() => events.refilter()} aria-label="Acting as"><option value="">Anyone</option><option value="admin">Admins</option><option value="manager">Managers</option></select>
+					<ListSearch list={events} placeholder={tr("Search action, target or person")} label={tr("Search the audit log")} />
+					<select class="select select-sm w-full" style="width:10rem" bind:value={actorRole} onchange={() => events.refilter()} aria-label={tr("Acting as")}><option value="">{tr("Anyone")}</option><option value="admin">{tr("Admins")}</option><option value="manager">{tr("Managers")}</option></select>
 				</div>
 				{#if actor}
-					<p class="m-0 small">Showing what <strong>{actorName || 'one person'}</strong> did. <button class="btn btn-xs btn-ghost" onclick={clearActor}>Show everyone</button></p>
+					<p class="m-0 small">{tr("Showing what")} <strong>{actorName || tr("one person")}</strong> {tr("did.")} <button class="btn btn-xs btn-ghost" onclick={clearActor}>{tr("Show everyone")}</button></p>
 				{/if}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
-					<table class="table"><thead><tr><th><SortHeader list={events} key="time" label="When" desc /></th><th>Who</th><th>Action</th><th>Target</th></tr></thead><tbody>
+					<table class="table"><thead><tr><th><SortHeader list={events} key="time" label={tr("When")} desc /></th><th>{tr("Who")}</th><th>{tr("Action")}</th><th>{tr("Target")}</th></tr></thead><tbody>
 						{#each events.rows as e (e.id)}
-							<tr><td class="small">{new Date(e.created_at).toLocaleString()}</td><td>{e.actor_name || 'system'}{#if e.actor_role === 'manager'}{' '}<span class="badge badge-soft badge-sm">manager</span>{/if}</td><td>{e.action.replaceAll('_', ' ')}</td><td class="small">{e.target_type} {e.target_id}</td></tr>
-						{:else}<tr><td colspan="4" class="muted">{events.loaded ? 'No events.' : 'Loading…'}</td></tr>
+							<tr><td class="small">{new Date(e.created_at).toLocaleString(localeTag())}</td><td>{e.actor_name || 'system'}{#if e.actor_role === 'manager'}{' '}<span class="badge badge-soft badge-sm">{tr("manager")}</span>{/if}</td><td>{e.action.replaceAll('_', ' ')}</td><td class="small">{e.target_type} {e.target_id}</td></tr>
+						{:else}<tr><td colspan="4" class="muted">{events.loaded ? tr("No events.") : tr("Loading…")}</td></tr>
 						{/each}
 					</tbody></table>
 				</div>
-				<Pager list={events} label="Audit log" />
+				<Pager list={events} label={tr("Audit log")} />
 			{:else if tab === 'storage'}
 				<StoragePanel canStorage={can(auth.user, 'storage')} canCleanup={can(auth.user, 'cleanup')} />
 			{:else if tab === 'backups'}
@@ -320,8 +321,8 @@
 				<CapacityPanel />
 			{:else if tab === 'signin'}
 				<div class="vstack">
-					<section class="vstack" aria-labelledby="sso-h"><h2 id="sso-h" class="m-0 text-lg">Other accounts (OpenID Connect)</h2><SsoPanel /></section>
-					<section class="vstack" aria-labelledby="dir-h"><h2 id="dir-h" class="m-0 mt-4 text-lg">School directory (Active Directory, LDAP)</h2><DirectoryPanel /></section>
+					<section class="vstack" aria-labelledby="sso-h"><h2 id="sso-h" class="m-0 text-lg">{tr("Other accounts (OpenID Connect)")}</h2><SsoPanel /></section>
+					<section class="vstack" aria-labelledby="dir-h"><h2 id="dir-h" class="m-0 mt-4 text-lg">{tr("School directory (Active Directory, LDAP)")}</h2><DirectoryPanel /></section>
 				</div>
 			{:else if tab === 'drive'}
 				<DrivePanel />

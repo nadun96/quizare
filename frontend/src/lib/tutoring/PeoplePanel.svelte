@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The teacher's people panel: the waiting room (TS-FR-03), raised hands
 	// (TS-FR-24), what each student may share (TS-FR-21) and muting
 	// (TS-FR-23). The server applies every change; this only asks.
@@ -27,7 +28,7 @@
 		emailError = '';
 		try {
 			await client.post(path + '/coteachers', { email });
-			toast('Co-teacher added: send them the session link');
+			toast(tr("Co-teacher added: send them the session link"));
 			email = '';
 		} catch (err) {
 			emailError = err instanceof ApiError ? (err.fields.email ?? err.message) : 'That didn’t work';
@@ -43,7 +44,7 @@
 			await f();
 			if (ok) toast(ok);
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'That didn’t work', 'error');
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work"), 'error');
 		}
 	}
 	const admit = (ids: string[], yes: boolean) => act(() => client.post(path + '/admit', { user_ids: ids, admit: yes }));
@@ -52,7 +53,7 @@
 	const mute = (target: string | 'all', what: { mic?: boolean; camera?: boolean; screen?: boolean }) =>
 		act(() => client.post(path + '/mute', { ...(target === 'all' ? { all: true } : { user_id: target }), ...what }), 'Muted');
 	async function remove(p: TutoringParticipant) {
-		if (!(await confirmDialog({ title: `Remove ${p.name}?`, body: 'They leave the session and can’t rejoin it.', confirm: 'Remove', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Remove {0}?", [p.name]), body: tr("They leave the session and can’t rejoin it."), confirm: tr("Remove"), danger: true }))) return;
 		act(() => client.del(path + '/participants/' + p.user_id));
 	}
 	const perms = [
@@ -69,19 +70,19 @@
 	});
 </script>
 
-<section class="vstack" aria-label="People">
+<section class="vstack" aria-label={tr("People")}>
 	{#if someoneElse}
 		<div class="alert alert-soft alert-info small py-2">
-			<span><strong>{broadcasterName(view)}</strong> is broadcasting. Your microphone still reaches everyone.</span>
-			{#if lead}<button class="btn btn-xs btn-primary" onclick={() => broadcast(null)}>Take the broadcast back</button>{/if}
+			<span><strong>{broadcasterName(view)}</strong> {tr("is broadcasting. Your microphone still reaches everyone.")}</span>
+			{#if lead}<button class="btn btn-xs btn-primary" onclick={() => broadcast(null)}>{tr("Take the broadcast back")}</button>{/if}
 		</div>
 	{/if}
 	{#if waiting.length}
 		<div class="vstack gap-1">
-			<div class="row"><h3 class="m-0 text-sm">Waiting ({waiting.length})</h3><span class="spacer"></span><button class="btn btn-xs btn-primary" onclick={() => admit(waiting.map((p) => p.user_id), true)}>Admit all</button></div>
+			<div class="row"><h3 class="m-0 text-sm">{tr("Waiting ({0})", [waiting.length])}</h3><span class="spacer"></span><button class="btn btn-xs btn-primary" onclick={() => admit(waiting.map((p) => p.user_id), true)}>{tr("Admit all")}</button></div>
 			<ul class="list">
 				{#each waiting as p (p.user_id)}
-					<li><span class="truncate">{p.name}</span><span class="spacer"></span><button class="btn btn-xs" onclick={() => admit([p.user_id], true)}>Admit</button><button class="btn btn-xs btn-ghost" onclick={() => admit([p.user_id], false)}>Refuse</button></li>
+					<li><span class="truncate">{p.name}</span><span class="spacer"></span><button class="btn btn-xs" onclick={() => admit([p.user_id], true)}>{tr("Admit")}</button><button class="btn btn-xs btn-ghost" onclick={() => admit([p.user_id], false)}>{tr("Refuse")}</button></li>
 				{/each}
 			</ul>
 		</div>
@@ -89,15 +90,15 @@
 
 	{#if hands.length}
 		<div class="vstack gap-1">
-			<h3 class="m-0 text-sm">Hands raised ({hands.length})</h3>
+			<h3 class="m-0 text-sm">{tr("Hands raised ({0})", [hands.length])}</h3>
 			<ol class="list">
 				{#each hands as p (p.user_id)}
 					<li>
 						<span class="truncate">✋ {p.name}</span>
 						<span class="small muted tabular">{tick >= 0 ? fmtWait(wait(p.hand_at)) : ''}</span>
 						<span class="spacer"></span>
-						<button class="btn btn-xs btn-primary" onclick={() => allow([p.user_id], { mic: true }, true, true)}>Allow mic</button>
-						<button class="btn btn-xs btn-ghost" onclick={() => act(() => client.del(path + '/participants/' + p.user_id + '/hand'))}>Lower</button>
+						<button class="btn btn-xs btn-primary" onclick={() => allow([p.user_id], { mic: true }, true, true)}>{tr("Allow mic")}</button>
+						<button class="btn btn-xs btn-ghost" onclick={() => act(() => client.del(path + '/participants/' + p.user_id + '/hand'))}>{tr("Lower")}</button>
 					</li>
 				{/each}
 			</ol>
@@ -105,67 +106,67 @@
 	{/if}
 
 	<div class="vstack gap-1">
-		<h3 class="m-0 text-sm">Co-teachers</h3>
+		<h3 class="m-0 text-sm">{tr("Co-teachers")}</h3>
 		<ul class="list">
 			{#each coteachers as c (c.user_id)}
 				<li>
-					<span class="dot" class:on={c.online}></span><span class="truncate name">{c.name}</span>{#if live(c)}{' '}<span class="badge badge-soft badge-xs">broadcasting</span>{/if}
+					<span class="dot" class:on={c.online}></span><span class="truncate name">{c.name}</span>{#if live(c)}{' '}<span class="badge badge-soft badge-xs">{tr("broadcasting")}</span>{/if}
 					<span class="spacer"></span>
 					{#if lead}
-						{#if live(c)}<button class="btn btn-xs" onclick={() => broadcast(null)}>Take back</button>
-						{:else}<button class="btn btn-xs" onclick={() => broadcast(c)} disabled={!c.online}>{offered(c) ? 'Asked…' : 'Make broadcaster'}</button>{/if}
-						<button class="btn btn-xs btn-ghost" onclick={() => act(() => client.del(path + '/coteachers/' + c.user_id))}>Remove</button>
+						{#if live(c)}<button class="btn btn-xs" onclick={() => broadcast(null)}>{tr("Take back")}</button>
+						{:else}<button class="btn btn-xs" onclick={() => broadcast(c)} disabled={!c.online}>{offered(c) ? tr("Asked…") : tr("Make broadcaster")}</button>{/if}
+						<button class="btn btn-xs btn-ghost" onclick={() => act(() => client.del(path + '/coteachers/' + c.user_id))}>{tr("Remove")}</button>
 					{/if}
 				</li>
 			{:else}
-				<li class="small muted">None yet.</li>
+				<li class="small muted">{tr("None yet.")}</li>
 			{/each}
 		</ul>
 		{#if lead}
 			<form class="flex gap-2" onsubmit={addCoteacher}>
-				<label class="sr-only" for="co-email">Co-teacher's email</label>
-				<input id="co-email" class="input input-sm w-full" type="email" placeholder="Another teacher's email" bind:value={email} required aria-invalid={!!emailError} />
-				<button class="btn btn-sm">Add</button>
+				<label class="sr-only" for="co-email">{tr("Co-teacher's email")}</label>
+				<input id="co-email" class="input input-sm w-full" type="email" placeholder={tr("Another teacher's email")} bind:value={email} required aria-invalid={!!emailError} />
+				<button class="btn btn-sm">{tr("Add")}</button>
 			</form>
 			{#if emailError}<p class="field-error m-0">{emailError}</p>{/if}
-			<p class="small muted m-0">Co-teachers admit, allow, mute and moderate. Only you choose the broadcaster, remove students and end the session.</p>
+			<p class="small muted m-0">{tr("Co-teachers admit, allow, mute and moderate. Only you choose the broadcaster, remove students and end the session.")}</p>
 		{/if}
 	</div>
 
 	<div class="vstack gap-1">
-		<div class="row"><h3 class="m-0 text-sm">Students ({online} here of {students.length})</h3></div>
+		<div class="row"><h3 class="m-0 text-sm">{tr("Students ({0} here of {1})", [online, students.length])}</h3></div>
 		<div class="row small gap-1">
-			<span class="muted">Everyone:</span>
-			<button class="btn btn-xs" onclick={() => allow('all', { mic: true })}>Allow mics</button>
-			<button class="btn btn-xs" onclick={() => allow('all', { mic: false, camera: false, screen: false })}>Forbid all</button>
-			<button class="btn btn-xs btn-ghost" onclick={() => mute('all', { mic: true })}>Mute everyone</button>
+			<span class="muted">{tr("Everyone:")}</span>
+			<button class="btn btn-xs" onclick={() => allow('all', { mic: true })}>{tr("Allow mics")}</button>
+			<button class="btn btn-xs" onclick={() => allow('all', { mic: false, camera: false, screen: false })}>{tr("Forbid all")}</button>
+			<button class="btn btn-xs btn-ghost" onclick={() => mute('all', { mic: true })}>{tr("Mute everyone")}</button>
 		</div>
 		<ul class="list people">
 			{#each students as p (p.user_id)}
 				<li>
-					<span class="dot" class:on={p.online} title={p.online ? 'Here' : 'Not connected'} aria-label={p.online ? 'Here' : 'Not connected'}></span>
-					<span class="truncate name">{p.name}{#if live(p)}{' '}<span class="badge badge-soft badge-xs">broadcasting</span>{/if}{#if p.chat_muted}{' '}<span class="badge badge-soft badge-xs">chat muted</span>{/if}</span>
+					<span class="dot" class:on={p.online} title={p.online ? tr("Here") : tr("Not connected")} aria-label={p.online ? tr("Here") : tr("Not connected")}></span>
+					<span class="truncate name">{p.name}{#if live(p)}{' '}<span class="badge badge-soft badge-xs">{tr("broadcasting")}</span>{/if}{#if p.chat_muted}{' '}<span class="badge badge-soft badge-xs">{tr("chat muted")}</span>{/if}</span>
 					<!-- What they may share, as three switches that fit beside the name (D-116). -->
 					{#each perms as k (k.key)}
 						{@const on = p[k.field]}
-						<button type="button" class="perm" class:on aria-pressed={on} title="{k.label}: {on ? 'allowed' : 'not allowed'}" aria-label="Allow {p.name}’s {k.label.toLowerCase()}" onclick={() => allow([p.user_id], { [k.key]: !on })}><Icon name={on ? k.icon : k.off} size={15} /></button>
+						<button type="button" class="perm" class:on aria-pressed={on} title="{k.label}: {on ? 'allowed' : 'not allowed'}" aria-label={tr("Allow {0}’s {1}", [p.name, k.label.toLowerCase()])} onclick={() => allow([p.user_id], { [k.key]: !on })}><Icon name={on ? k.icon : k.off} size={15} /></button>
 					{/each}
 					<details class="dropdown dropdown-end">
-						<summary class="btn btn-xs btn-ghost" aria-label="More for {p.name}">⋯</summary>
+						<summary class="btn btn-xs btn-ghost" aria-label={tr("More for {0}", [p.name])}>⋯</summary>
 						<ul class="menu dropdown-content z-40 w-48 rounded-box border border-base-300 bg-base-100 p-1 shadow">
 							{#if lead}
-								{#if live(p)}<li><button onclick={() => broadcast(null)}>Take the broadcast back</button></li>
-								{:else}<li><button onclick={() => broadcast(p)} disabled={!p.online}>{offered(p) ? 'Asked to broadcast…' : 'Make broadcaster'}</button></li>{/if}
+								{#if live(p)}<li><button onclick={() => broadcast(null)}>{tr("Take the broadcast back")}</button></li>
+								{:else}<li><button onclick={() => broadcast(p)} disabled={!p.online}>{offered(p) ? tr("Asked to broadcast…") : tr("Make broadcaster")}</button></li>{/if}
 							{/if}
-							<li><button onclick={() => mute(p.user_id, { mic: true, camera: true, screen: true })}>Mute and stop sharing</button></li>
-							<li><button onclick={() => allow([p.user_id], { mic: p.allow_mic, camera: p.allow_camera, screen: p.allow_screen }, true)}>Ask to turn on</button></li>
-							<li><button onclick={() => act(() => client.put(path + '/participants/' + p.user_id + '/chat-muted', { muted: !p.chat_muted }))}>{p.chat_muted ? 'Let write in chat' : 'Mute in chat'}</button></li>
-							{#if lead}<li><button class="text-error" onclick={() => remove(p)}>Remove from session</button></li>{/if}
+							<li><button onclick={() => mute(p.user_id, { mic: true, camera: true, screen: true })}>{tr("Mute and stop sharing")}</button></li>
+							<li><button onclick={() => allow([p.user_id], { mic: p.allow_mic, camera: p.allow_camera, screen: p.allow_screen }, true)}>{tr("Ask to turn on")}</button></li>
+							<li><button onclick={() => act(() => client.put(path + '/participants/' + p.user_id + '/chat-muted', { muted: !p.chat_muted }))}>{p.chat_muted ? tr("Let write in chat") : tr("Mute in chat")}</button></li>
+							{#if lead}<li><button class="text-error" onclick={() => remove(p)}>{tr("Remove from session")}</button></li>{/if}
 						</ul>
 					</details>
 				</li>
 			{:else}
-				<li class="muted small">No students yet. Share the code or link.</li>
+				<li class="muted small">{tr("No students yet. Share the code or link.")}</li>
 			{/each}
 		</ul>
 	</div>

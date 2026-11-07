@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The device check (TS-FR-05): choose speakers and hear a test sound;
 	// people who may share also choose a microphone and camera and see a
 	// preview. Nothing turns on by itself: the preview starts only on the
@@ -76,7 +77,7 @@
 				video: choice.camera ? { deviceId: { exact: choice.camera } } : true
 			});
 		} catch (e) {
-			problem = e instanceof DOMException && e.name === 'NotAllowedError' ? 'The browser wasn’t allowed to use them. Allow the camera and microphone for this site, then try again.' : 'They couldn’t start. Another app may be using them.';
+			problem = e instanceof DOMException && e.name === 'NotAllowedError' ? tr("The browser wasn’t allowed to use them. Allow the camera and microphone for this site, then try again.") : tr("They couldn’t start. Another app may be using them.");
 			return;
 		}
 		previewing = true;
@@ -118,33 +119,33 @@
 
 <dialog bind:this={dialog} class="modal" onclose={() => open && close(false)} aria-labelledby="devcheck-h">
 	<div class="modal-box vstack max-w-lg">
-		<h2 id="devcheck-h" class="m-0 text-lg">Check your devices</h2>
+		<h2 id="devcheck-h" class="m-0 text-lg">{tr("Check your devices")}</h2>
 
-		<section class="vstack" aria-label="Speakers">
+		<section class="vstack" aria-label={tr("Speakers")}>
 			{#if canChooseSpeaker && speakers.length}
-				<label for="dc-speaker" class="font-semibold">Speakers</label>
+				<label for="dc-speaker" class="font-semibold">{tr("Speakers")}</label>
 				<select id="dc-speaker" class="select select-sm w-full" bind:value={choice.speaker}>
 					{#each speakers as d, i (d.deviceId)}<option value={d.deviceId}>{deviceName(d, i)}</option>{/each}
 				</select>
 			{:else}
-				<p class="m-0 small muted">Sound plays through your system's speakers or headphones; this browser can't choose them here.</p>
+				<p class="m-0 small muted">{tr("Sound plays through your system's speakers or headphones; this browser can't choose them here.")}</p>
 			{/if}
-			<div><button class="btn btn-sm" onclick={testSound}>Play a test sound</button></div>
+			<div><button class="btn btn-sm" onclick={testSound}>{tr("Play a test sound")}</button></div>
 		</section>
 
 		{#if canPublish}
-			<section class="vstack" aria-label="Microphone and camera">
+			<section class="vstack" aria-label={tr("Microphone and camera")}>
 				<div class="flex flex-wrap gap-3">
 					<div class="grow">
-						<label for="dc-mic" class="font-semibold">Microphone</label>
+						<label for="dc-mic" class="font-semibold">{tr("Microphone")}</label>
 						<select id="dc-mic" class="select select-sm w-full" bind:value={choice.mic} onchange={() => previewing && preview()}>
-							{#each mics as d, i (d.deviceId)}<option value={d.deviceId}>{deviceName(d, i)}</option>{:else}<option value="">Default</option>{/each}
+							{#each mics as d, i (d.deviceId)}<option value={d.deviceId}>{deviceName(d, i)}</option>{:else}<option value="">{tr("Default")}</option>{/each}
 						</select>
 					</div>
 					<div class="grow">
-						<label for="dc-cam" class="font-semibold">Camera</label>
+						<label for="dc-cam" class="font-semibold">{tr("Camera")}</label>
 						<select id="dc-cam" class="select select-sm w-full" bind:value={choice.camera} onchange={() => previewing && preview()}>
-							{#each cameras as d, i (d.deviceId)}<option value={d.deviceId}>{deviceName(d, i)}</option>{:else}<option value="">Default</option>{/each}
+							{#each cameras as d, i (d.deviceId)}<option value={d.deviceId}>{deviceName(d, i)}</option>{:else}<option value="">{tr("Default")}</option>{/each}
 						</select>
 					</div>
 				</div>
@@ -152,21 +153,21 @@
 					<!-- svelte-ignore a11y_media_has_caption -->
 					<video bind:this={video} autoplay playsinline muted class="w-full rounded-box bg-black aspect-video object-cover"></video>
 					<div class="flex items-center gap-2">
-						<span class="small">Microphone</span>
-						<progress class="progress progress-success w-full" value={Math.round(mic * 100)} max="100" aria-label="Microphone level"></progress>
+						<span class="small">{tr("Microphone")}</span>
+						<progress class="progress progress-success w-full" value={Math.round(mic * 100)} max="100" aria-label={tr("Microphone level")}></progress>
 					</div>
-					<div><button class="btn btn-sm" onclick={stopPreview}>Stop the preview</button></div>
+					<div><button class="btn btn-sm" onclick={stopPreview}>{tr("Stop the preview")}</button></div>
 				{:else}
-					<p class="m-0 small muted">They stay off until you ask: the browser asks for permission first.</p>
-					<div><button class="btn btn-sm" onclick={preview}>Try my microphone and camera</button></div>
+					<p class="m-0 small muted">{tr("They stay off until you ask: the browser asks for permission first.")}</p>
+					<div><button class="btn btn-sm" onclick={preview}>{tr("Try my microphone and camera")}</button></div>
 				{/if}
 				{#if problem}<p class="m-0 small text-error" role="alert">{problem}</p>{/if}
 			</section>
 		{/if}
 
 		<div class="modal-action">
-			<button class="btn btn-ghost" onclick={() => close(false)}>Cancel</button>
-			<button class="btn btn-primary" onclick={() => close(true)}>Use these</button>
+			<button class="btn btn-ghost" onclick={() => close(false)}>{tr("Cancel")}</button>
+			<button class="btn btn-primary" onclick={() => close(true)}>{tr("Use these")}</button>
 		</div>
 	</div>
 </dialog>

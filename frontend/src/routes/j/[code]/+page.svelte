@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// QR landing page (FR-SS-03, FR-ACC-06): log in or register if needed,
 	// give the classroom student ID if required, then go to the waiting room.
 	import { goto } from '$app/navigation';
@@ -26,7 +27,7 @@
 			return;
 		}
 		if (auth.user.role !== 'student') {
-			error = 'Only student accounts can join a quiz. Log in with your student account.';
+			error = tr("Only student accounts can join a quiz. Log in with your student account.");
 			return;
 		}
 		load();
@@ -38,7 +39,7 @@
 			if (preview.attempt) goto('/attempt/' + preview.attempt.id, { replaceState: true });
 			else if (!preview.student_id_required && !(preview.team_mode === 'self' && preview.teams?.length)) join();
 		} catch (e) {
-			error = e instanceof ApiError ? (e.status === 404 ? 'No quiz session has this code.' : e.message) : 'Could not load the session';
+			error = e instanceof ApiError ? (e.status === 404 ? tr("No quiz session has this code.") : e.message) : tr("Could not load the session");
 		}
 	}
 
@@ -52,7 +53,7 @@
 		} catch (err) {
 			if (err instanceof ApiError && err.fields.student_number) fieldError = err.fields.student_number;
 			else if (err instanceof ApiError && err.fields.team_id) fieldError = err.fields.team_id;
-			else error = err instanceof ApiError ? err.message : 'Could not join';
+			else error = err instanceof ApiError ? err.message : tr("Could not join");
 		} finally {
 			busy = false;
 		}
@@ -62,22 +63,22 @@
 <div class="narrow">
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 		{#if error}
-			<h1>Can't join</h1>
+			<h1>{tr("Can't join")}</h1>
 			<p class="alert alert-soft alert-error">{error}</p>
-			<a href="/join">Enter a different code</a>
+			<a href="/join">{tr("Enter a different code")}</a>
 		{:else if preview && (preview.student_id_required || chooseTeam)}
 			<h1>{preview.title}</h1>
 			<form class="vstack" onsubmit={join}>
 				{#if preview.student_id_required}
 					<div>
-						<label for="sid">Your student ID for this class</label>
+						<label for="sid">{tr("Your student ID for this class")}</label>
 						<input class="input w-full" id="sid" bind:value={studentNumber} required autocomplete="off" />
-						<p class="small muted">Your teacher attaches this ID to your answers. You only enter it once per class.</p>
+						<p class="small muted">{tr("Your teacher attaches this ID to your answers. You only enter it once per class.")}</p>
 					</div>
 				{/if}
 				{#if chooseTeam}
 					<fieldset class="m-0 border-0 p-0">
-						<legend class="font-semibold mb-1">Choose your team</legend>
+						<legend class="font-semibold mb-1">{tr("Choose your team")}</legend>
 						<div class="team-pick">
 							{#each preview.teams ?? [] as t (t.id)}
 								<label class="topt" class:on={teamId === t.id}>
@@ -87,14 +88,14 @@
 								</label>
 							{/each}
 						</div>
-						<p class="small muted m-0 mt-1">You still answer the quiz on your own; your marks count towards your team.</p>
+						<p class="small muted m-0 mt-1">{tr("You still answer the quiz on your own; your marks count towards your team.")}</p>
 					</fieldset>
 				{/if}
 				{#if fieldError}<p class="field-error">{fieldError}</p>{/if}
-				<button class="btn btn-primary" disabled={busy || (chooseTeam && !teamId)}>Join the quiz</button>
+				<button class="btn btn-primary" disabled={busy || (chooseTeam && !teamId)}>{tr("Join the quiz")}</button>
 			</form>
 		{:else}
-			<p>Joining…</p>
+			<p>{tr("Joining…")}</p>
 		{/if}
 	</div>
 </div>

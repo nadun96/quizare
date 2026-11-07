@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Presenter screen for a poll (D-40): big, live results for the room.
 	// Keys: ← → question, R reveal (presenter-led), A answer and L leaderboard
 	// (scored polls, D-42), N add a question while live (V2-05), B whiteboard
@@ -59,14 +60,14 @@
 		showBoard = !showBoard;
 		if (showBoard) {
 			showCode = board = false;
-			await loadBoard().catch(() => toast('Could not load the board', 'error'));
+			await loadBoard().catch(() => toast(tr("Could not load the board"), 'error'));
 		}
 	}
 	async function saveAccess(patch: Partial<BoardAccess>) {
 		try {
 			access = await tb.access({ ...access, ...patch });
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not save', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not save"), 'error');
 		}
 	}
 	async function loadPeople() {
@@ -146,7 +147,7 @@
 			const p = await api.post<Poll>('/api/teacher/polls/' + id + '/present', { index: i, revealed, answers_revealed: answersRevealed });
 			if (data) data.poll = { ...data.poll, current_index: p.current_index, revealed: p.revealed, answers_revealed: p.answers_revealed, question_started_at: p.question_started_at };
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not move on', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not move on"), 'error');
 		}
 	}
 	const reveal = () => poll && go(cur, !poll.revealed, poll.answers_revealed);
@@ -168,9 +169,9 @@
 	async function openPoll() {
 		try {
 			await api.post('/api/teacher/polls/' + id + '/status', { status: 'open' });
-			toast('Poll is open');
+			toast(tr("Poll is open"));
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not open', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not open"), 'error');
 		}
 	}
 	function openAdd() {
@@ -185,7 +186,7 @@
 		closeAdd();
 		showCode = board = false;
 		if (addShow) jumpTo = q.id; // self-paced: this screen moves once the new question arrives
-		toast(addShow && presenter ? 'Question added and shown to everyone' : 'Question added');
+		toast(addShow && presenter ? tr("Question added and shown to everyone") : tr("Question added"));
 	}
 	$effect(() => {
 		if (!jumpTo) return;
@@ -213,7 +214,7 @@
 </script>
 
 <svelte:window onkeydown={key} />
-<svelte:head><title>{poll ? poll.title + ' · Presenting' : 'Presenting'}</title></svelte:head>
+<svelte:head><title>{poll ? tr("{0} · Presenting", [poll.title]) : tr("Presenting")}</title></svelte:head>
 
 <div class="stage toon" data-theme="quiz" style={toonVars}>
 	<svg class="sky" viewBox="0 0 1200 500" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
@@ -228,26 +229,26 @@
 		<header class="bar">
 			<strong class="truncate text-lg">{poll.title}</strong>
 			<span class="spacer"></span>
-			<span class="join-hint">Join at <strong>{host}/join</strong> with <strong class="tabular code-inline">{poll.join_code}</strong></span>
+			<span class="join-hint">{tr("Join at")} <strong>{tr("{0}/join", [host])}</strong> {tr("with")} <strong class="tabular code-inline">{poll.join_code}</strong></span>
 			<span class="badge badge-soft badge-lg gap-1 tabular" aria-live="polite"><Icon name="users" size={16} />{Math.round(joined.current)}</span>
-			{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={14} />Reconnecting</span>{/if}
-			<IconBtn icon="qr" label="Join code" hint="Show the join code (Q)" size={18} tip="left" onclick={() => (showCode = !showCode)} />
+			{#if !connected}<span class="badge badge-soft badge-warning gap-1"><Icon name="wifi-off" size={14} />{tr("Reconnecting")}</span>{/if}
+			<IconBtn icon="qr" label={tr("Join code")} hint={tr("Show the join code (Q)")} size={18} tip="left" onclick={() => (showCode = !showCode)} />
 		</header>
 
 		{#if poll.status !== 'open'}
 			<div class="alert alert-soft alert-warning mx-auto mt-4 max-w-3xl">
-				<Icon name="info" /><span>The poll is {poll.status}. Participants can't answer until it's open.</span>
-				<button class="btn btn-sm btn-primary" onclick={openPoll}>Open now</button>
+				<Icon name="info" /><span>{tr("The poll is {0}. Participants can't answer until it's open.", [poll.status])}</span>
+				<button class="btn btn-sm btn-primary" onclick={openPoll}>{tr("Open now")}</button>
 			</div>
 		{/if}
 
 		<div class="layout" class:wide={!showCode && !showBoard}>
 		{#if !showCode && !showBoard}
-			<aside class="toon-panel join-card" aria-label="How to join">
-				<strong class="side-title">Join</strong>
+			<aside class="toon-panel join-card" aria-label={tr("How to join")}>
+				<strong class="side-title">{tr("Join")}</strong>
 				<div class="mini-qr"><QrCode text={poll.join_url} size={150} /></div>
 				<p class="mini-code tabular m-0">{poll.join_code}</p>
-				<p class="small m-0">Go to <strong>{host}/join</strong> or scan the code</p>
+				<p class="small m-0">{tr("Go to")} <strong>{tr("{0}/join", [host])}</strong> {tr("or scan the code")}</p>
 			</aside>
 		{/if}
 		<main class="main">
@@ -255,23 +256,23 @@
 				<section class="lobby" in:flyIn>
 					<div class="qr-box"><QrCode text={poll.join_url} size={320} /></div>
 					<div>
-						<p class="muted m-0 text-xl">Go to <strong>{host}/join</strong> and enter</p>
+						<p class="muted m-0 text-xl">{tr("Go to")} <strong>{tr("{0}/join", [host])}</strong> {tr("and enter")}</p>
 						<p class="big-code tabular m-0">{poll.join_code}</p>
-						<p class="muted m-0 text-xl">{poll.identity === 'identified' ? 'Log in to take part.' : poll.identity === 'optional' ? 'Log in if you want your name on your answers.' : 'No login needed — answers are anonymous.'}</p>
-						<button class="btn btn-primary btn-lg mt-6" onclick={() => (showCode = false)}>Show the question<Icon name="arrow-right" size={18} /></button>
+						<p class="muted m-0 text-xl">{poll.identity === 'identified' ? tr("Log in to take part.") : poll.identity === 'optional' ? tr("Log in if you want your name on your answers.") : tr("No login needed — answers are anonymous.")}</p>
+						<button class="btn btn-primary btn-lg mt-6" onclick={() => (showCode = false)}>{tr("Show the question")}<Icon name="arrow-right" size={18} /></button>
 					</div>
 				</section>
 			{:else if showBoard}
-				<section class="board-view" in:flyIn aria-label="Whiteboard">
+				<section class="board-view" in:flyIn aria-label={tr("Whiteboard")}>
 					<div class="board-controls">
-						<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={access.open} onchange={(e) => saveAccess({ open: e.currentTarget.checked })} />Show the board to participants</label>
-						<label class="m-0 flex items-center gap-2 font-normal" for="bd-mode">Who may draw</label>
+						<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={access.open} onchange={(e) => saveAccess({ open: e.currentTarget.checked })} />{tr("Show the board to participants")}</label>
+						<label class="m-0 flex items-center gap-2 font-normal" for="bd-mode">{tr("Who may draw")}</label>
 						<select id="bd-mode" class="select select-sm w-48" value={access.mode} onchange={(e) => saveAccess({ mode: e.currentTarget.value as BoardAccess['mode'] })}>
-							<option value="teacher">Only me</option>
-							<option value="everyone">Everyone</option>
-							<option value="selected">Selected people or groups</option>
+							<option value="teacher">{tr("Only me")}</option>
+							<option value="everyone">{tr("Everyone")}</option>
+							<option value="selected">{tr("Selected people or groups")}</option>
 						</select>
-						{#if !access.open}<span class="small muted">Participants don't see the board yet.</span>{/if}
+						{#if !access.open}<span class="small muted">{tr("Participants don't see the board yet.")}</span>{/if}
 					</div>
 					{#if access.mode === 'selected'}
 						<div class="pick small">
@@ -282,20 +283,20 @@
 								{/each}
 								{#each [...people.groups.flatMap((g) => g.members ?? []), ...people.ungrouped] as m (m.participant_id)}
 									<label class="badge badge-outline badge-lg m-0 cursor-pointer gap-1.5 font-normal"><input type="checkbox" class="checkbox checkbox-xs" checked={access.participants.includes(m.participant_id)} onchange={() => saveAccess({ participants: toggleIn(access.participants, m.participant_id) })} />{m.name}</label>
-								{:else}<span class="muted">Nobody has joined yet.</span>{/each}
-								<button type="button" class="btn btn-ghost btn-xs" onclick={loadPeople}>Refresh</button>
+								{:else}<span class="muted">{tr("Nobody has joined yet.")}</span>{/each}
+								<button type="button" class="btn btn-ghost btn-xs" onclick={loadPeople}>{tr("Refresh")}</button>
 							{/if}
 						</div>
 					{/if}
-					<Whiteboard board={wb} client={tb} teacher title={poll.title + ' whiteboard'} />
+					<Whiteboard board={wb} client={tb} teacher title={tr("{0} whiteboard", [poll.title])} />
 				</section>
 			{:else if board && poll.scoring}
 				<section class="question" in:flyIn>
-					<h1 class="q-title m-0 mb-6 flex items-center gap-3"><Icon name="trophy" size={36} />Leaderboard</h1>
+					<h1 class="q-title m-0 mb-6 flex items-center gap-3"><Icon name="trophy" size={36} />{tr("Leaderboard")}</h1>
 					{#if data?.group_leaderboard?.length}
 						<div class="boards">
-							<div><h2 class="m-0 mb-3 text-2xl">Groups</h2><Leaderboard ranks={groupRanks(data.group_leaderboard)} big /></div>
-							<div><h2 class="m-0 mb-3 text-2xl">Individuals</h2><Leaderboard ranks={data.leaderboard ?? []} /></div>
+							<div><h2 class="m-0 mb-3 text-2xl">{tr("Groups")}</h2><Leaderboard ranks={groupRanks(data.group_leaderboard)} big /></div>
+							<div><h2 class="m-0 mb-3 text-2xl">{tr("Individuals")}</h2><Leaderboard ranks={data.leaderboard ?? []} /></div>
 						</div>
 					{:else}
 						<Leaderboard ranks={data?.leaderboard ?? []} big />
@@ -306,67 +307,67 @@
 					<section class="question" in:flyIn={{ x: 30, y: 0, duration: 260 }}>
 						<div class="toon-panel q-banner">
 							<div class="flex flex-wrap items-center gap-3">
-							<p class="muted m-0 text-lg">Question {cur + 1} of {questions.length} · {TYPE_META[q.type].label}{poll.scoring && q.key ? ` · ${q.points ?? 100} points` : ''}</p>
-							{#if secs !== null && !answerShown}<span class="timer tabular" class:low={secs <= 5} role="timer"><Icon name="clock" size={22} />{secs === 0 ? "Time's up" : secs}</span>{/if}
+							<p class="muted m-0 text-lg">{tr("Question {0} of {1} · {2}{3}", [cur + 1, questions.length, tr(TYPE_META[q.type].label), poll.scoring && q.key ? tr(" · {0} points", [q.points ?? 100]) : ''])}</p>
+							{#if secs !== null && !answerShown}<span class="timer tabular" class:low={secs <= 5} role="timer"><Icon name="clock" size={22} />{secs === 0 ? tr("Time's up") : secs}</span>{/if}
 						</div>
 						<RichText text={q.text} format={q.body.format} blanks="line" class="q-title" />
 							</div>
 						{#if presenter && poll.show_results === 'presenter' && !poll.revealed}
-							<p class="hidden-note muted"><Icon name="eye-off" size={18} /> Results are hidden from participants. Press <kbd class="kbd kbd-sm">R</kbd> to reveal them.</p>
+							<p class="hidden-note muted"><Icon name="eye-off" size={18} /> {tr("Results are hidden from participants. Press")} <kbd class="kbd kbd-sm">R</kbd> {tr("to reveal them.")}</p>
 						{/if}
 						<PollResults question={q} result={data?.results[q.id]} teacher big toon pollId={id} answerKey={answerShown || poll.status === 'closed' ? q.key : null} />
 					</section>
 				{/key}
 			{:else}
-				<p class="muted p-8 text-center text-xl">Add questions to this poll first.</p>
+				<p class="muted p-8 text-center text-xl">{tr("Add questions to this poll first.")}</p>
 			{/if}
 		</main>
 		{#if !showCode && !showBoard && !board}
-			<aside class="toon-panel people-card" aria-label="Who's taking part">
-				<strong class="side-title">Participants ({data?.participants ?? 0})</strong>
+			<aside class="toon-panel people-card" aria-label={tr("Who's taking part")}>
+				<strong class="side-title">{tr("Participants ({0})", [data?.participants ?? 0])}</strong>
 				{#if poll.scoring}
 					<Leaderboard ranks={data?.leaderboard ?? []} limit={8} />
 				{:else if q}
 					<p class="answers-in tabular m-0">{data?.results[q.id]?.responses ?? 0}</p>
-					<p class="small m-0">answered this question</p>
+					<p class="small m-0">{tr("answered this question")}</p>
 				{/if}
 			</aside>
 		{/if}
 		</div>
 
 		<footer class="controls">
-			<button class="btn" disabled={cur === 0} onclick={() => go(cur - 1)}><Icon name="arrow-left" size={18} />Previous</button>
-			<div class="dots" aria-label="Questions">
+			<button class="btn" disabled={cur === 0} onclick={() => go(cur - 1)}><Icon name="arrow-left" size={18} />{tr("Previous")}</button>
+			<div class="dots" aria-label={tr("Questions")}>
 				{#each questions as qq, i (qq.id)}
-					<button class="dot" class:on={i === cur} aria-label="Question {i + 1}" aria-current={i === cur ? 'step' : undefined} onclick={() => go(i)}></button>
+					<button class="dot" class:on={i === cur} aria-label={tr("Question {0}", [i + 1])} aria-current={i === cur ? 'step' : undefined} onclick={() => go(i)}></button>
 				{/each}
 			</div>
 			{#if presenter && poll.show_results === 'presenter'}
-				<button class="btn" class:btn-primary={!poll.revealed} onclick={reveal}><Icon name={poll.revealed ? 'eye-off' : 'eye'} size={18} />{poll.revealed ? 'Hide results' : 'Reveal results'}</button>
+				<button class="btn" class:btn-primary={!poll.revealed} onclick={reveal}><Icon name={poll.revealed ? 'eye-off' : 'eye'} size={18} />{poll.revealed ? tr("Hide results") : tr("Reveal results")}</button>
 			{/if}
 			{#if poll.scoring}
-				{#if q?.key && !board}<span class="tooltip" data-tip="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><button class="btn" aria-pressed={answerShown} onclick={toggleAnswer}><Icon name="check-circle" size={18} />{answerShown ? 'Hide answer' : 'Show answer'}</button></span>{/if}
-				<span class="tooltip" data-tip="Leaderboard (L)"><button class="btn" aria-pressed={board} onclick={() => (board = !board)}><Icon name="trophy" size={18} />{board ? 'Question' : 'Leaderboard'}</button></span>
+				{#if q?.key && !board}<span class="tooltip" data-tip="{sharedReveal ? 'Shows participants too' : 'This screen only'} (A)"><button class="btn" aria-pressed={answerShown} onclick={toggleAnswer}><Icon name="check-circle" size={18} />{answerShown ? tr("Hide answer") : tr("Show answer")}</button></span>{/if}
+				<span class="tooltip" data-tip={tr("Leaderboard (L)")}><button class="btn" aria-pressed={board} onclick={() => (board = !board)}><Icon name="trophy" size={18} />{board ? tr("Question") : tr("Leaderboard")}</button></span>
 			{/if}
-			<span class="tooltip" data-tip="Whiteboard (B)"><button class="btn" aria-pressed={showBoard} onclick={toggleBoard}><Icon name="brush" size={18} />{showBoard ? 'Questions' : 'Board'}</button></span>
-			<span class="tooltip" data-tip="Add a question now (N)"><button class="btn" onclick={openAdd}><Icon name="plus" size={18} />Add question</button></span>
-			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>Next<Icon name="arrow-right" size={18} /></button>
+			<span class="tooltip" data-tip={tr("Whiteboard (B)")}><button class="btn" aria-pressed={showBoard} onclick={toggleBoard}><Icon name="brush" size={18} />{showBoard ? tr("Questions") : tr("Board")}</button></span>
+			<span class="tooltip" data-tip={tr("Add a question now (N)")}><button class="btn" onclick={openAdd}><Icon name="plus" size={18} />{tr("Add question")}</button></span>
+			<button class="btn btn-primary" disabled={cur >= questions.length - 1} onclick={() => go(cur + 1)}>{tr("Next")}<Icon name="arrow-right" size={18} /></button>
 		</footer>
 		<dialog bind:this={addDialog} class="modal" aria-labelledby="add-h" oncancel={(e) => { e.preventDefault(); closeAdd(); }}>
 			{#if adding}
 				<div class="modal-box add-box">
 					<div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-						<h2 id="add-h" class="m-0 text-lg">Add a question now</h2>
+						<h2 id="add-h" class="m-0 text-lg">{tr("Add a question now")}</h2>
 						<span class="spacer"></span>
-						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addNext} />Put it next</label>
-						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addShow} />{presenter ? 'Show it to everyone now' : 'Show it on this screen'}</label>
+						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addNext} />{tr("Put it next")}</label>
+						<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={addShow} />{presenter ? tr("Show it to everyone now") : tr("Show it on this screen")}</label>
 					</div>
 					<PollQuestionEditor pollId={id} scoring={poll.scoring} pacing={poll.pacing} extra={{ after_id: addNext && q ? q.id : '', present: addShow && presenter }} onsaved={added} oncancel={closeAdd} />
 				</div>
-				<div class="modal-backdrop"><button tabindex="-1" aria-label="Close" onclick={closeAdd}>close</button></div>
+				<div class="modal-backdrop"><button tabindex="-1" aria-label={tr("Close")} onclick={closeAdd}>{tr("close")}</button></div>
 			{/if}
 		</dialog>
-		<p class="keys small muted">← → move · {presenter ? 'R reveal · ' : ''}{poll.scoring ? 'A answer · L leaderboard · ' : ''}N add · B board · Q code · F full screen{presenter ? ' · participants follow this screen' : ''}</p>
+		<p class="keys small muted">{tr("← → move · {0}{1}N add · B board · Q code · F full screen{2}", [presenter ? tr("R reveal · ") : '', poll.scoring ? tr("A answer · L leaderboard · ") : '', presenter ? tr(" · participants follow this screen") : ''])}</p>
 	{/if}
 </div>
 

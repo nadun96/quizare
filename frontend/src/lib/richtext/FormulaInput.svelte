@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A one-line field that can hold formulas (D-112): options, matching
 	// pairs, drag items and boxes. Σ wraps the selection in $…$ (or starts an
 	// empty formula at the caret); what's between dollar signs shows typeset
@@ -27,7 +28,7 @@
 <span class="ff">
 	<span class="ff-row">
 		<input class="input w-full" bind:this={input} bind:value aria-label={label} {required} {placeholder} />
-		<button type="button" class="btn btn-sm btn-ghost btn-square" title="Formula: wrap in $…$" aria-label="Insert a formula in {label}" onclick={formula}><Icon name="sigma" size={16} /></button>
+		<button type="button" class="btn btn-sm btn-ghost btn-square" title={tr("Formula: wrap in $…$")} aria-label={tr("Insert a formula in {0}", [label])} onclick={formula}><Icon name="sigma" size={16} /></button>
 	</span>
 	{#if textHasMath(value)}<span class="ff-preview small"><MathText text={value} /></span>{/if}
 </span>

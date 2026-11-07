@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A classroom's or topic's polls, meetings and tutoring sessions (D-147),
 	// listed and created beside its quizzes, tutorials and presentations.
 	import { goto } from '$app/navigation';
@@ -24,7 +25,7 @@
 
 	const where = $derived(topicId ? `topic_id=${topicId}` : `classroom_id=${classroomId}`);
 	const body = $derived({ classroom_id: classroomId, topic_id: topicId });
-	const when = (s?: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+	const when = (s?: string | null) => (s ? new Date(s).toLocaleDateString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 	// Each is its own service or list: one failing leaves the others showing.
 	async function load() {
@@ -68,11 +69,11 @@
 {/snippet}
 
 {@render title('Polls', 'chart')}
-<p class="m-0 small muted">Quick questions the classroom’s students answer by name, with results that update live.</p>
+<p class="m-0 small muted">{tr("Quick questions the classroom’s students answer by name, with results that update live.")}</p>
 {#if polls.length}
 	<div class="card card-border bg-base-100 shadow-sm overflow-x-auto">
 		<table class="table table-sm">
-			<thead><tr><th>Poll</th><th>Answers</th><th>Status</th><th>Created</th></tr></thead>
+			<thead><tr><th>{tr("Poll")}</th><th>{tr("Answers")}</th><th>{tr("Status")}</th><th>{tr("Created")}</th></tr></thead>
 			<tbody>
 				{#each polls as p (p.id)}
 					<tr><td><a href={'/t/polls/' + p.id}>{p.title}</a></td><td class="tabular">{p.participants}</td><td>{p.status}</td><td class="whitespace-nowrap">{when(p.created_at)}</td></tr>
@@ -82,16 +83,16 @@
 	</div>
 {/if}
 <form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={makePoll}>
-	<input class="input w-full" style="flex:1" bind:value={pollTitle} placeholder="New poll title" required maxlength="200" aria-label="Poll title" />
-	<button class="btn btn-primary" disabled={busy}>Create poll</button>
+	<input class="input w-full" style="flex:1" bind:value={pollTitle} placeholder={tr("New poll title")} required maxlength="200" aria-label={tr("Poll title")} />
+	<button class="btn btn-primary" disabled={busy}>{tr("Create poll")}</button>
 </form>
 
 {@render title('Meetings', 'video')}
-<p class="m-0 small muted">A video call for you and the classroom’s students.</p>
+<p class="m-0 small muted">{tr("A video call for you and the classroom’s students.")}</p>
 {#if meetings.length}
 	<div class="card card-border bg-base-100 shadow-sm overflow-x-auto">
 		<table class="table table-sm">
-			<thead><tr><th>Meeting</th><th>Status</th><th>Created</th></tr></thead>
+			<thead><tr><th>{tr("Meeting")}</th><th>{tr("Status")}</th><th>{tr("Created")}</th></tr></thead>
 			<tbody>
 				{#each meetings as m (m.id)}
 					<tr><td>{#if m.status === 'open'}<a href={'/m/' + m.code}>{m.title}</a>{:else}{m.title}{/if}</td><td>{m.status}</td><td class="whitespace-nowrap">{when(m.created_at)}</td></tr>
@@ -101,17 +102,17 @@
 	</div>
 {/if}
 <form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={makeMeeting}>
-	<input class="input w-full" style="flex:1" bind:value={meetingTitle} placeholder="New meeting title" required maxlength="120" aria-label="Meeting title" />
-	<button class="btn btn-primary" disabled={busy}>Open meeting</button>
+	<input class="input w-full" style="flex:1" bind:value={meetingTitle} placeholder={tr("New meeting title")} required maxlength="120" aria-label={tr("Meeting title")} />
+	<button class="btn btn-primary" disabled={busy}>{tr("Open meeting")}</button>
 </form>
 
 {#if tutoring}
 	{@render title('Tutoring', 'monitor')}
-	<p class="m-0 small muted">A live lesson with a shared screen, board and groups, now or scheduled.</p>
+	<p class="m-0 small muted">{tr("A live lesson with a shared screen, board and groups, now or scheduled.")}</p>
 	{#if sessions.length}
 		<div class="card card-border bg-base-100 shadow-sm overflow-x-auto">
 			<table class="table table-sm">
-				<thead><tr><th>Session</th><th>Status</th><th>When</th></tr></thead>
+				<thead><tr><th>{tr("Session")}</th><th>{tr("Status")}</th><th>{tr("When")}</th></tr></thead>
 				<tbody>
 					{#each sessions as s (s.id)}
 						<tr><td>{#if s.status === 'ended' || s.status === 'cancelled'}{s.title}{:else}<a href={'/tutor/' + s.join_code}>{s.title}</a>{/if}</td><td>{s.status}</td><td class="whitespace-nowrap">{when(s.scheduled_at ?? s.created_at)}</td></tr>
@@ -121,8 +122,8 @@
 		</div>
 	{/if}
 	<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={makeSession}>
-		<input class="input w-full" style="flex:1" bind:value={sessionTitle} placeholder="New tutoring session title" required maxlength="200" aria-label="Tutoring session title" />
-		<button class="btn btn-primary" disabled={busy}>Start session</button>
-		<a class="btn" href={scheduleLink}>Schedule</a>
+		<input class="input w-full" style="flex:1" bind:value={sessionTitle} placeholder={tr("New tutoring session title")} required maxlength="200" aria-label={tr("Tutoring session title")} />
+		<button class="btn btn-primary" disabled={busy}>{tr("Start session")}</button>
+		<a class="btn" href={scheduleLink}>{tr("Schedule")}</a>
 	</form>
 {/if}

@@ -1,3 +1,4 @@
+import { tr } from './i18n/i18n.svelte';
 // Thin fetch wrapper for the Go API. Cookies are HttpOnly (__Host-sid), so
 // no token is ever stored in JavaScript (ADR-13: no tokens in localStorage).
 
@@ -8,7 +9,8 @@ export class ApiError extends Error {
 		message: string,
 		public fields: Record<string, string> = {}
 	) {
-		super(message);
+		super(tr(message));
+		for (const k of Object.keys(fields)) this.fields[k] = tr(fields[k]);
 	}
 }
 

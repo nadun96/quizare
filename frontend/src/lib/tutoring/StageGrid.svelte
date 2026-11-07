@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The teacher's grid of what students share backstage (TS-FR-35): pages
 	// of 25, any tile enlarged. Only the visible page and the enlarged tile
 	// are received, small or large as their tiles are.
@@ -28,20 +29,20 @@
 </script>
 
 {#if list.length}
-	<section class="vstack" aria-label="Shared with the teachers">
+	<section class="vstack" aria-label={tr("Shared with the teachers")}>
 		<div class="flex flex-wrap items-center gap-2">
-			<h2 class="m-0 text-sm grow">Shared with the teachers only · {list.length}</h2>
+			<h2 class="m-0 text-sm grow">{tr("Shared with the teachers only · {0}", [list.length])}</h2>
 			{#if count > 1}
-				<IconBtn icon="chevron-left" label="Previous page" class="btn-xs" disabled={page === 0} onclick={() => page--} />
-				<span class="small" aria-live="polite">Page {page + 1} of {count}</span>
-				<IconBtn icon="chevron-right" label="Next page" class="btn-xs" disabled={page >= count - 1} onclick={() => page++} />
+				<IconBtn icon="chevron-left" label={tr("Previous page")} class="btn-xs" disabled={page === 0} onclick={() => page--} />
+				<span class="small" aria-live="polite">{tr("Page {0} of {1}", [page + 1, count])}</span>
+				<IconBtn icon="chevron-right" label={tr("Next page")} class="btn-xs" disabled={page >= count - 1} onclick={() => page++} />
 			{/if}
 		</div>
 		{#if big}
 			{@const t = tile(big)}
 			<div class="vstack">
-				{#if t}<TrackView tile={t} big />{:else}<div class="placeholder big">Loading {big.name}’s {big.label.toLowerCase()}…</div>{/if}
-				<div><button class="btn btn-xs" onclick={() => (enlarged = null)}>Back to the grid</button></div>
+				{#if t}<TrackView tile={t} big />{:else}<div class="placeholder big">{tr("Loading {0}’s {1}…", [big.name, big.label.toLowerCase()])}</div>{/if}
+				<div><button class="btn btn-xs" onclick={() => (enlarged = null)}>{tr("Back to the grid")}</button></div>
 			</div>
 		{/if}
 		<div class="stage-grid" style:--per-page={PAGE_SIZE}>
@@ -49,7 +50,7 @@
 				{@const t = tile(e)}
 				<div class="cell" class:active={e.key === enlarged}>
 					{#if t}<TrackView tile={t} />{:else}<div class="placeholder">{e.name}</div>{/if}
-					<button class="btn btn-xs enlarge" onclick={() => (enlarged = enlarged === e.key ? null : e.key)} aria-pressed={e.key === enlarged} aria-label="Enlarge {e.name}’s {e.label.toLowerCase()}">{e.key === enlarged ? 'Shown above' : 'Enlarge'}</button>
+					<button class="btn btn-xs enlarge" onclick={() => (enlarged = enlarged === e.key ? null : e.key)} aria-pressed={e.key === enlarged} aria-label={tr("Enlarge {0}’s {1}", [e.name, e.label.toLowerCase()])}>{e.key === enlarged ? tr("Shown above") : tr("Enlarge")}</button>
 				</div>
 			{/each}
 		</div>

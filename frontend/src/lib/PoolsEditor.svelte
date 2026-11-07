@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A quiz's question pools (D-66): how many questions each student draws
 	// from each category of the quiz, of the teacher's question bank, or of
 	// the classroom's question pool (D-123).
@@ -68,11 +69,11 @@
 		try {
 			info = await api.put<PoolInfo>('/api/teacher/quizzes/' + quizId + '/pools', { pools: rules });
 			rules = info.pools.map((r) => ({ ...r }));
-			toast(rules.length ? 'Pools saved' : 'Pools removed: every student gets every question');
+			toast(rules.length ? tr("Pools saved") : tr("Pools removed: every student gets every question"));
 			onchange?.();
 		} catch (e) {
 			if (e instanceof ApiError) errors = e.fields;
-			toast(e instanceof ApiError ? e.message : 'Could not save the pools', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not save the pools"), 'error');
 		} finally {
 			saving = false;
 		}
@@ -84,19 +85,19 @@
 {:else}
 	<div class="vstack">
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-			<p class="m-0 font-semibold">{rules.length ? `Each student gets ${words(total, 'question')}` : 'No pools: every student gets every question'}</p>
+			<p class="m-0 font-semibold">{rules.length ? tr("Each student gets {0}", [words(total, 'question')]) : tr("No pools: every student gets every question")}</p>
 			<p class="small muted m-0">
 				{#if rules.length}
-					{fixedCount ? `${words(fixedCount, 'question')} always asked, plus the draws below.` : 'All drawn from the pools below.'} Each student's are picked at random when they join.
+					{tr("{0} Each student's are picked at random when they join.", [fixedCount ? tr("{0} always asked, plus the draws below.", [words(fixedCount, 'question')]) : tr("All drawn from the pools below.")])}
 				{:else}
-					Give questions a category (Easy, Hard, Plants…) in the editor or the CSV, then choose how many each student draws from each.
+					{tr("Give questions a category (Easy, Hard, Plants…) in the editor or the CSV, then choose how many each student draws from each.")}
 				{/if}
 			</p>
 		</div>
 
 		{#if rules.length}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-				<h3 class="b-title"><Icon name="shuffle" size={16} />Drawn at random</h3>
+				<h3 class="b-title"><Icon name="shuffle" size={16} />{tr("Drawn at random")}</h3>
 				{#each rules as r, i (key(r))}
 					<div class="prow">
 						<span class="pname">
@@ -105,37 +106,37 @@
 							<span class="small muted">{words(sizeOf(r), 'question')}</span>
 						</span>
 						<span class="flex flex-wrap items-center gap-2">
-							<OptionGroup label="How many from {label(r.category)}" value={r.count === 0 ? 'all' : 'some'} onchange={(v) => (r.count = v === 'all' ? 0 : Math.max(1, Math.min(sizeOf(r), r.count || 1)))} options={[
+							<OptionGroup label={tr("How many from {0}", [label(r.category)])} value={r.count === 0 ? 'all' : 'some'} onchange={(v) => (r.count = v === 'all' ? 0 : Math.max(1, Math.min(sizeOf(r), r.count || 1)))} options={[
 								{ v: 'some', label: 'Some', icon: 'shuffle' },
 								{ v: 'all', label: 'All of them', icon: 'check' }
 							]} />
 							{#if r.count !== 0}
 								<!-- Shown while the box is empty too, so the teacher can clear it and type another number. -->
 								<label class="input input-sm w-28" class:input-error={errors['pools.' + i] || r.count > sizeOf(r) || blank(r)}>
-									<input type="number" min="1" max={sizeOf(r)} bind:value={r.count} aria-label="How many from {label(r.category)}" />
-									<span class="muted">of {sizeOf(r)}</span>
+									<input type="number" min="1" max={sizeOf(r)} bind:value={r.count} aria-label={tr("How many from {0}", [label(r.category)])} />
+									<span class="muted">{tr("of {0}", [sizeOf(r)])}</span>
 								</label>
 							{/if}
-							<button type="button" class="btn btn-sm btn-ghost btn-square" aria-label="Remove the pool {label(r.category)}" title="Remove" onclick={() => remove(i)}><Icon name="x" size={16} /></button>
+							<button type="button" class="btn btn-sm btn-ghost btn-square" aria-label={tr("Remove the pool {0}", [label(r.category)])} title={tr("Remove")} onclick={() => remove(i)}><Icon name="x" size={16} /></button>
 						</span>
 					</div>
-					{#if errors['pools.' + i]}<p class="field-error m-0">{errors['pools.' + i]}</p>{:else if r.count > sizeOf(r)}<p class="field-error m-0">Only {sizeOf(r)} in this pool.</p>{:else if blank(r)}<p class="field-error m-0">How many? 1 to {sizeOf(r)}.</p>{/if}
+					{#if errors['pools.' + i]}<p class="field-error m-0">{errors['pools.' + i]}</p>{:else if r.count > sizeOf(r)}<p class="field-error m-0">{tr("Only {0} in this pool.", [sizeOf(r)])}</p>{:else if blank(r)}<p class="field-error m-0">{tr("How many? 1 to {0}.", [sizeOf(r)])}</p>{/if}
 				{/each}
 			</div>
 		{/if}
 
 		{#if fixed.length && rules.length}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-				<h3 class="b-title"><Icon name="check" size={16} />Always asked</h3>
-				<p class="small muted m-0">These categories have no pool, so every student gets all of their questions.</p>
+				<h3 class="b-title"><Icon name="check" size={16} />{tr("Always asked")}</h3>
+				<p class="small muted m-0">{tr("These categories have no pool, so every student gets all of their questions.")}</p>
 				<div class="flex flex-wrap gap-2 mt-2">{#each fixed as c (c.category)}<span class="badge badge-soft">{label(c.category)} · {c.count}</span>{/each}</div>
 			</div>
 		{/if}
 
 		<div class="card card-border bg-base-100 shadow-sm">
 			<div class="px-4 pt-4 sm:px-5">
-				<h3 class="b-title"><Icon name="plus" size={16} />Add a pool</h3>
-				<p class="small muted m-0">Open where the questions come from, then add a category.</p>
+				<h3 class="b-title"><Icon name="plus" size={16} />{tr("Add a pool")}</h3>
+				<p class="small muted m-0">{tr("Open where the questions come from, then add a category.")}</p>
 			</div>
 			<div class="srcs">
 				{#each SOURCES as s (s.key)}
@@ -147,8 +148,8 @@
 							<Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />
 							<Icon name={s.icon} size={16} />
 							<span class="font-semibold">{s.name}</span>
-							<span class="small muted grow">{cats.length ? `${words(cats.reduce((n, c) => n + c.count, 0), 'question')} in ${words(cats.length, 'category', 'categories')}` : 'empty'}</span>
-							{#if free.length}<span class="badge badge-soft badge-primary badge-sm">{free.length} to add</span>{/if}
+							<span class="small muted grow">{cats.length ? tr("{0} in {1}", [words(cats.reduce((n, c) => n + c.count, 0), 'question'), words(cats.length, 'category', 'categories')]) : 'empty'}</span>
+							{#if free.length}<span class="badge badge-soft badge-primary badge-sm">{tr("{0} to add", [free.length])}</span>{/if}
 						</button>
 						{#if isOpen}
 							<ul class="cats">
@@ -156,21 +157,21 @@
 									<li>
 										<span class="truncate">{label(c.category)}</span>
 										<span class="small muted tabular grow">{words(c.count, 'question')}</span>
-										<button type="button" class="btn btn-xs" onclick={() => add(s.key, c)}><Icon name="plus" size={13} />Add</button>
+										<button type="button" class="btn btn-xs" onclick={() => add(s.key, c)}><Icon name="plus" size={13} />{tr("Add")}</button>
 									</li>
 								{:else}
-									<li class="small muted">{cats.length ? 'Every category here already has a pool above.' : s.empty}</li>
+									<li class="small muted">{cats.length ? tr("Every category here already has a pool above.") : s.empty}</li>
 								{/each}
 							</ul>
 							{#if s.key === 'class' && info.class.length > 1}
 								<div class="flex flex-wrap items-center gap-2 px-4 pb-3 sm:pl-12">
-									<span class="small">Or take</span>
-									<label class="input input-sm w-24"><input type="number" min="1" bind:value={each} aria-label="Questions from each category" /></label>
-									<button type="button" class="btn btn-sm" onclick={addAllClass}>from every category</button>
-									<span class="small muted">({words(info.class.reduce((n, c) => n + Math.min(each, c.count), 0), 'question')} in all)</span>
+									<span class="small">{tr("Or take")}</span>
+									<label class="input input-sm w-24"><input type="number" min="1" bind:value={each} aria-label={tr("Questions from each category")} /></label>
+									<button type="button" class="btn btn-sm" onclick={addAllClass}>{tr("from every category")}</button>
+									<span class="small muted">{tr("({0} in all)", [words(info.class.reduce((n, c) => n + Math.min(each, c.count), 0), 'question')])}</span>
 								</div>
 							{/if}
-							{#if s.key === 'bank'}<p class="small m-0 px-4 pb-3 sm:pl-12"><a href="/t/bank">Manage your question pools</a></p>{/if}
+							{#if s.key === 'bank'}<p class="small m-0 px-4 pb-3 sm:pl-12"><a href="/t/bank">{tr("Manage your question pools")}</a></p>{/if}
 						{/if}
 					</section>
 				{/each}
@@ -178,10 +179,10 @@
 		</div>
 
 		<div class="row">
-			<button class="btn btn-primary" disabled={saving || rules.some(blank)} onclick={save}>Save pools</button>
-			{#if rules.length}<button class="btn btn-ghost" disabled={saving} onclick={() => { rules = []; save(); }}>Remove all pools</button>{/if}
+			<button class="btn btn-primary" disabled={saving || rules.some(blank)} onclick={save}>{tr("Save pools")}</button>
+			{#if rules.length}<button class="btn btn-ghost" disabled={saving} onclick={() => { rules = []; save(); }}>{tr("Remove all pools")}</button>{/if}
 		</div>
-		<p class="small muted m-0">With pools, “Questions per student” in Settings doesn't apply. Running sessions keep the questions they started with.</p>
+		<p class="small muted m-0">{tr("With pools, “Questions per student” in Settings doesn't apply. Running sessions keep the questions they started with.")}</p>
 	</div>
 {/if}
 

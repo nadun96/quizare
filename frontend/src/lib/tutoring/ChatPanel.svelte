@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The session's chat (TS-FR-40 to TS-FR-45), and while breakout groups are
 	// open, each group's own chat (TS-FR-46, D-79). Text is shown as text with
 	// clickable links, never as HTML (TS-FR-43).
@@ -47,13 +48,13 @@
 			await client.post(path + '/chat', { text, ...target });
 			text = '';
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'Not sent', 'error');
+			toast(err instanceof ApiError ? err.message : tr("Not sent"), 'error');
 		} finally {
 			sending = false;
 		}
 	}
 	async function remove(m: ChatMessage) {
-		if (!(await confirmDialog({ title: 'Delete this message for everyone?', confirm: 'Delete', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete this message for everyone?"), confirm: tr("Delete"), danger: true }))) return;
 		await client.del(path + '/chat/' + m.id);
 	}
 	const pin = (m: ChatMessage | null) => client.put(path + '/pin', { id: m?.id ?? 0 });
@@ -61,55 +62,55 @@
 	const nameOf = (id?: string) => students.find((s) => s.user_id === id)?.name ?? 'a student';
 </script>
 
-<section class="chat vstack" aria-label="Chat">
+<section class="chat vstack" aria-label={tr("Chat")}>
 	{#if inGroup}
-		<div class="join" role="tablist" aria-label="Which chat">
-			<button class="btn btn-xs join-item" role="tab" aria-selected={room === 'class'} class:btn-primary={room === 'class'} onclick={() => (room = 'class')}>Class</button>
+		<div class="join" role="tablist" aria-label={tr("Which chat")}>
+			<button class="btn btn-xs join-item" role="tab" aria-selected={room === 'class'} class:btn-primary={room === 'class'} onclick={() => (room = 'class')}>{tr("Class")}</button>
 			<button class="btn btn-xs join-item" role="tab" aria-selected={room === 'group'} class:btn-primary={room === 'group'} onclick={() => (room = 'group')}>{groupName(view.me.group)}</button>
 		</div>
 	{/if}
 	{#if room === 'group'}
-		<p class="small muted m-0">{view.session.group_chat ? 'Your group sees these messages, and so do your teachers.' : 'Chat in groups is off.'}</p>
+		<p class="small muted m-0">{view.session.group_chat ? tr("Your group sees these messages, and so do your teachers.") : tr("Chat in groups is off.")}</p>
 	{:else}
-	<p class="small muted m-0">{teacher ? `Chat: ${mode?.label}` : mode?.student}{#if view.session.slow_seconds}{' · '}slow mode, one message every {view.session.slow_seconds} s{/if}{#if view.me.chat_muted}{' · '}the teacher has muted you in the chat{/if}</p>
+	<p class="small muted m-0">{teacher ? tr("Chat: {0}", [mode?.label]) : mode?.student}{#if view.session.slow_seconds}{tr(" · slow mode, one message every {0} s", [view.session.slow_seconds])}{/if}{#if view.me.chat_muted}{tr(" · the teacher has muted you in the chat")}{/if}</p>
 	{/if}
 	{#if view.pinned}
 		<div class="alert alert-soft alert-info small py-2" role="note">
-			<span><strong>Pinned:</strong> {#each linkParts(view.pinned.text) as p, i (i)}{#if p.href}<a href={p.href} target="_blank" rel="noopener noreferrer nofollow">{p.text}</a>{:else}{p.text}{/if}{/each}</span>
-			{#if teacher}<button class="btn btn-xs btn-ghost" onclick={() => pin(null)}>Unpin</button>{/if}
+			<span><strong>{tr("Pinned:")}</strong> {#each linkParts(view.pinned.text) as p, i (i)}{#if p.href}<a href={p.href} target="_blank" rel="noopener noreferrer nofollow">{p.text}</a>{:else}{p.text}{/if}{/each}</span>
+			{#if teacher}<button class="btn btn-xs btn-ghost" onclick={() => pin(null)}>{tr("Unpin")}</button>{/if}
 		</div>
 	{/if}
 	<ol class="msgs" bind:this={list} aria-live="polite">
 		{#each shown as m (m.id)}
 			<li class:mine={m.user_id === view.me.user_id} class:teacher={m.from_teacher}>
-				<div class="small"><strong>{m.name}</strong>{#if m.from_teacher}{' '}<span class="badge badge-soft badge-xs">teacher</span>{/if} <span class="muted">{time(m.created_at)}{#if audienceLabel(m, view.me.user_id)}{' · '}{audienceLabel(m, view.me.user_id)}{/if}{#if teacher && m.audience === 'one'}{' '}to {nameOf(m.to_user)}{/if}{#if teacher && m.audience === 'group'}{' '}in {groupName(m.group_id)}{/if}</span></div>
+				<div class="small"><strong>{m.name}</strong>{#if m.from_teacher}{' '}<span class="badge badge-soft badge-xs">{tr("teacher")}</span>{/if} <span class="muted">{time(m.created_at)}{#if audienceLabel(m, view.me.user_id)}{' · '}{audienceLabel(m, view.me.user_id)}{/if}{#if teacher && m.audience === 'one'}{tr(" to {0}", [nameOf(m.to_user)])}{/if}{#if teacher && m.audience === 'group'}{tr(" in {0}", [groupName(m.group_id)])}{/if}</span></div>
 				<p class="m-0 text">{#each linkParts(m.text) as p, i (i)}{#if p.href}<a href={p.href} target="_blank" rel="noopener noreferrer nofollow">{p.text}</a>{:else}{p.text}{/if}{/each}</p>
 				{#if teacher}
 					<div class="acts">
-						{#if !m.from_teacher}<button class="btn btn-xs btn-ghost" onclick={() => { to = m.user_id; onreply?.(m); }}>Reply privately</button>{/if}
-						{#if m.audience === 'everyone'}<button class="btn btn-xs btn-ghost" onclick={() => pin(m)}>Pin</button>{/if}
-						<button class="btn btn-xs btn-ghost" onclick={() => remove(m)}>Delete</button>
+						{#if !m.from_teacher}<button class="btn btn-xs btn-ghost" onclick={() => { to = m.user_id; onreply?.(m); }}>{tr("Reply privately")}</button>{/if}
+						{#if m.audience === 'everyone'}<button class="btn btn-xs btn-ghost" onclick={() => pin(m)}>{tr("Pin")}</button>{/if}
+						<button class="btn btn-xs btn-ghost" onclick={() => remove(m)}>{tr("Delete")}</button>
 					</div>
 				{/if}
 			</li>
 		{:else}
-			<li class="muted small">No messages yet.</li>
+			<li class="muted small">{tr("No messages yet.")}</li>
 		{/each}
 	</ol>
 	{#if canWrite}
 		<form class="vstack gap-1" onsubmit={send}>
 			{#if teacher}
-				<label class="small" for="chat-to">To</label>
+				<label class="small" for="chat-to">{tr("To")}</label>
 				<select id="chat-to" class="select select-sm w-full" bind:value={to}>
-					<option value="">Everyone</option>
-					{#if view.session.groups_open}{#each view.groups as g (g.id)}<option value={'g:' + g.id}>{g.name} (its chat)</option>{/each}{/if}
-					{#each students as s (s.user_id)}<option value={s.user_id}>{s.name} (private)</option>{/each}
+					<option value="">{tr("Everyone")}</option>
+					{#if view.session.groups_open}{#each view.groups as g (g.id)}<option value={'g:' + g.id}>{tr("{0} (its chat)", [g.name])}</option>{/each}{/if}
+					{#each students as s (s.user_id)}<option value={s.user_id}>{tr("{0} (private)", [s.name])}</option>{/each}
 				</select>
 			{/if}
 			<div class="flex gap-2">
-				<label class="sr-only" for="chat-text">Message</label>
-				<input id="chat-text" class="input input-sm w-full" bind:value={text} maxlength="1000" placeholder={teacher ? 'Write to the class…' : view.session.chat_mode === 'to_teacher' ? 'Ask the teacher…' : 'Write a message…'} autocomplete="off" />
-				<button class="btn btn-sm btn-primary" disabled={sending || !text.trim()}>Send</button>
+				<label class="sr-only" for="chat-text">{tr("Message")}</label>
+				<input id="chat-text" class="input input-sm w-full" bind:value={text} maxlength="1000" placeholder={teacher ? tr("Write to the class…") : view.session.chat_mode === 'to_teacher' ? tr("Ask the teacher…") : tr("Write a message…")} autocomplete="off" />
+				<button class="btn btn-sm btn-primary" disabled={sending || !text.trim()}>{tr("Send")}</button>
 			</div>
 		</form>
 	{/if}

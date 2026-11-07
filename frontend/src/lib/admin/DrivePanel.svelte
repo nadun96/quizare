@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The Google Cloud app teachers connect their Drive through (D-71).
 	import { api, ApiError } from '../api';
 	import Icon from '../ui/Icon.svelte';
@@ -27,11 +28,11 @@
 		try {
 			const saved = await api.put<Config>('/api/admin/drive', { ...c, enabled });
 			c = { ...saved, client_secret: '' };
-			toast(enabled ? 'Teachers can connect Google Drive' : 'Settings saved');
+			toast(enabled ? tr("Teachers can connect Google Drive") : tr("Settings saved"));
 		} catch (e) {
 			if (e instanceof ApiError) {
 				errors = e.fields;
-				toast(Object.keys(e.fields).length ? 'Check the highlighted settings' : e.message, 'error');
+				toast(Object.keys(e.fields).length ? tr("Check the highlighted settings") : e.message, 'error');
 			}
 		} finally {
 			saving = false;
@@ -40,7 +41,7 @@
 	async function copy(v: string) {
 		try {
 			await navigator.clipboard.writeText(v);
-			toast('Copied');
+			toast(tr("Copied"));
 		} catch {
 			toast(v);
 		}
@@ -66,32 +67,32 @@
 			<div class="flex flex-wrap items-center gap-3">
 				<span class="s-icon" aria-hidden="true"><Icon name="cloud" size={18} /></span>
 				<div class="min-w-0 flex-1">
-					<p class="m-0 font-semibold">Google Drive is {c.enabled ? 'on' : 'off'}</p>
-					<p class="small muted m-0">{c.enabled ? 'Teachers connect their own Drive from their settings. The platform only reaches files they pick or it makes.' : 'Create a Google Cloud app (see below), fill in its details, then turn Drive on.'}</p>
+					<p class="m-0 font-semibold">{tr("Google Drive is {0}", [c.enabled ? 'on' : 'off'])}</p>
+					<p class="small muted m-0">{c.enabled ? tr("Teachers connect their own Drive from their settings. The platform only reaches files they pick or it makes.") : tr("Create a Google Cloud app (see below), fill in its details, then turn Drive on.")}</p>
 				</div>
-				{#if c.enabled}<button class="btn btn-sm" disabled={saving} onclick={() => save(false)}>Turn off</button>
-				{:else}<button class="btn btn-sm btn-primary" disabled={saving} onclick={() => save(true)}><Icon name="check" size={15} />Turn on</button>{/if}
+				{#if c.enabled}<button class="btn btn-sm" disabled={saving} onclick={() => save(false)}>{tr("Turn off")}</button>
+				{:else}<button class="btn btn-sm btn-primary" disabled={saving} onclick={() => save(true)}><Icon name="check" size={15} />{tr("Turn on")}</button>{/if}
 			</div>
 		</div>
 
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-			<h3 class="b-title"><Icon name="info" size={16} />In the Google Cloud console</h3>
+			<h3 class="b-title"><Icon name="info" size={16} />{tr("In the Google Cloud console")}</h3>
 			<ol class="small steps-list">
-				<li>Turn on the <strong>Google Drive API</strong> and the <strong>Google Picker API</strong>.</li>
-				<li>On the <strong>OAuth consent screen</strong>, add the scope <code>…/auth/drive.file</code> (it needs no Google review).</li>
-				<li>Create an <strong>OAuth client ID</strong> of type <em>Web application</em>, with this redirect URI and JavaScript origin:
-					<div class="copy"><code>{redirect}</code><button class="btn btn-xs" onclick={() => copy(redirect)}><Icon name="copy" size={13} />Copy</button></div>
-					<div class="copy"><code>{origin}</code><button class="btn btn-xs" onclick={() => copy(origin)}><Icon name="copy" size={13} />Copy</button></div>
+				<li>{tr("Turn on the")} <strong>{tr("Google Drive API")}</strong> {tr("and the")} <strong>{tr("Google Picker API")}</strong>.</li>
+				<li>{tr("On the")} <strong>{tr("OAuth consent screen")}</strong>{tr(", add the scope")} <code>…/auth/drive.file</code> {tr("(it needs no Google review).")}</li>
+				<li>{tr("Create an")} <strong>{tr("OAuth client ID")}</strong> {tr("of type")} <em>{tr("Web application")}</em>{tr(", with this redirect URI and JavaScript origin:")}
+					<div class="copy"><code>{redirect}</code><button class="btn btn-xs" onclick={() => copy(redirect)}><Icon name="copy" size={13} />{tr("Copy")}</button></div>
+					<div class="copy"><code>{origin}</code><button class="btn btn-xs" onclick={() => copy(origin)}><Icon name="copy" size={13} />{tr("Copy")}</button></div>
 				</li>
-				<li>Create an <strong>API key</strong>, restricted to the Picker API and to this site.</li>
+				<li>{tr("Create an")} <strong>{tr("API key")}</strong>{tr(", restricted to the Picker API and to this site.")}</li>
 			</ol>
 		</div>
 
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-5">
-			<h3 class="b-title"><Icon name="link" size={16} />The app</h3>
+			<h3 class="b-title"><Icon name="link" size={16} />{tr("The app")}</h3>
 			{@render field('client_id', 'OAuth client ID', 'Ends in .apps.googleusercontent.com.', '1234567890-abc.apps.googleusercontent.com')}
 			<div class="srow">
-				<div class="slabel"><label class="font-semibold" for="g-secret">OAuth client secret</label><span class="small muted">{c.client_secret_set ? 'Stored, encrypted. Leave empty to keep it.' : 'Stored encrypted with the master key.'}</span></div>
+				<div class="slabel"><label class="font-semibold" for="g-secret">{tr("OAuth client secret")}</label><span class="small muted">{c.client_secret_set ? tr("Stored, encrypted. Leave empty to keep it.") : tr("Stored encrypted with the master key.")}</span></div>
 				<div class="scontrol">
 					<input class="input input-sm w-full max-w-md" class:input-error={errors.client_secret} id="g-secret" type="password" autocomplete="new-password" placeholder={c.client_secret_set ? '••••••••' : ''} bind:value={c.client_secret} />
 					{#if errors.client_secret}<p class="field-error m-0">{errors.client_secret}</p>{/if}
@@ -99,7 +100,7 @@
 			</div>
 			{@render field('api_key', 'API key', 'For Google’s file picker, in teachers’ browsers.', 'AIza…')}
 			{@render field('app_id', 'Project number', 'On the Cloud console’s dashboard.', '1234567890')}
-			<div class="mt-3"><button class="btn btn-sm btn-primary" disabled={saving} onclick={() => save()}>Save</button></div>
+			<div class="mt-3"><button class="btn btn-sm btn-primary" disabled={saving} onclick={() => save()}>{tr("Save")}</button></div>
 		</div>
 	</div>
 {/if}

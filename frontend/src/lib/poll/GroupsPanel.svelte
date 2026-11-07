@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The teacher's groups for a poll (V2-06, D-43): make them at random or
 	// from classroom categories, move people between them, pick captains.
 	import { api, ApiError } from '../api';
@@ -21,7 +22,7 @@
 		try {
 			view = await api.get<GroupsView>('/api/teacher/polls/' + pollId + '/groups');
 		} catch {
-			toast('Could not load the groups', 'error');
+			toast(tr("Could not load the groups"), 'error');
 		}
 	}
 	// Reload when people join or leave.
@@ -37,7 +38,7 @@
 			if (ok) toast(ok);
 			await load();
 		} catch (e) {
-			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : 'Something went wrong', 'error');
+			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : tr("Something went wrong"), 'error');
 		} finally {
 			busy = false;
 		}
@@ -51,12 +52,12 @@
 	});
 	const makeCaptain = (m: GroupMember) => run(() => api.post('/api/teacher/polls/' + pollId + '/groups/members', { participant_ids: [m.participant_id], captain: !m.captain }));
 	async function rename(id: string, name: string) {
-		const n = await promptDialog({ title: 'Rename group', label: 'Group name', value: name, maxlength: 40 });
+		const n = await promptDialog({ title: tr("Rename group"), label: tr("Group name"), value: name, maxlength: 40 });
 		if (n?.trim() && n !== name) await run(() => api.patch('/api/teacher/poll-groups/' + id, { name: n }));
 	}
 	const recolour = (id: string, color: number) => run(() => api.patch('/api/teacher/poll-groups/' + id, { color }));
 	async function remove(id: string, name: string) {
-		if (await confirmDialog({ title: `Delete ${name}?`, body: 'Its members stay in the poll without a group. Their answers are kept.', confirm: 'Delete group', danger: true }))
+		if (await confirmDialog({ title: tr("Delete {0}?", [name]), body: tr("Its members stay in the poll without a group. Their answers are kept."), confirm: tr("Delete group"), danger: true }))
 			await run(() => api.del('/api/teacher/poll-groups/' + id), 'Group deleted');
 	}
 	function toggle(id: string, on: boolean) {
@@ -70,16 +71,16 @@
 
 {#snippet member(m: GroupMember, groupId: string)}
 	<li class="member">
-		<input type="checkbox" class="checkbox checkbox-xs" aria-label="Select {m.name}" checked={selected.has(m.participant_id)} onchange={(e) => toggle(m.participant_id, e.currentTarget.checked)} />
+		<input type="checkbox" class="checkbox checkbox-xs" aria-label={tr("Select {0}", [m.name])} checked={selected.has(m.participant_id)} onchange={(e) => toggle(m.participant_id, e.currentTarget.checked)} />
 		<span class="min-w-0 flex-1">
 			<span class="block truncate">{m.name}</span>
 			{#if m.real_name && m.real_name !== m.name}<span class="small muted block truncate">{m.real_name}</span>{/if}
 		</span>
 		{#if groupId}
-			<IconBtn icon="star" label={m.captain ? 'Captain' : 'Make captain'} hint={m.captain ? `${m.name} is captain` : `Make ${m.name} captain`} class="btn-ghost btn-xs {m.captain ? 'text-warning' : ''}" size={14} aria-pressed={m.captain} disabled={busy} onclick={() => makeCaptain(m)} />
+			<IconBtn icon="star" label={m.captain ? tr("Captain") : tr("Make captain")} hint={m.captain ? tr("{0} is captain", [m.name]) : tr("Make {0} captain", [m.name])} class="btn-ghost btn-xs {m.captain ? 'text-warning' : ''}" size={14} aria-pressed={m.captain} disabled={busy} onclick={() => makeCaptain(m)} />
 		{/if}
-		<select class="select select-xs w-28" aria-label="Move {m.name} to" value={groupId} disabled={busy} onchange={(e) => move([m.participant_id], e.currentTarget.value)}>
-			<option value="">No group</option>
+		<select class="select select-xs w-28" aria-label={tr("Move {0} to", [m.name])} value={groupId} disabled={busy} onchange={(e) => move([m.participant_id], e.currentTarget.value)}>
+			<option value="">{tr("No group")}</option>
 			{#each view?.groups ?? [] as g (g.id)}<option value={g.id}>{g.name}</option>{/each}
 		</select>
 	</li>
@@ -88,22 +89,22 @@
 <div class="vstack">
 	<div class="card card-border bg-base-100 p-4 shadow-sm">
 		<div class="flex flex-wrap items-end gap-2">
-			<div class="w-24"><label for="gp-n">Groups</label><input id="gp-n" class="input input-sm w-full" type="number" min="2" max="50" bind:value={count} /></div>
-			<button class="btn btn-sm btn-primary" disabled={busy} onclick={() => generate('random')}><Icon name="shuffle" size={14} />Make random groups</button>
-			{#if hasClassroom && settings.identity !== 'anonymous'}<button class="btn btn-sm" disabled={busy} onclick={() => generate('categories')}><Icon name="users" size={14} />From categories</button>{/if}
-			<button class="btn btn-sm" disabled={busy} onclick={add}><Icon name="plus" size={14} />Add a group</button>
-			<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={reassign} />Also move people who have a group</label>
+			<div class="w-24"><label for="gp-n">{tr("Groups")}</label><input id="gp-n" class="input input-sm w-full" type="number" min="2" max="50" bind:value={count} /></div>
+			<button class="btn btn-sm btn-primary" disabled={busy} onclick={() => generate('random')}><Icon name="shuffle" size={14} />{tr("Make random groups")}</button>
+			{#if hasClassroom && settings.identity !== 'anonymous'}<button class="btn btn-sm" disabled={busy} onclick={() => generate('categories')}><Icon name="users" size={14} />{tr("From categories")}</button>{/if}
+			<button class="btn btn-sm" disabled={busy} onclick={add}><Icon name="plus" size={14} />{tr("Add a group")}</button>
+			<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={reassign} />{tr("Also move people who have a group")}</label>
 		</div>
-		<p class="small muted m-0 mt-2">Groups {settings.groups === 'self' ? 'are chosen by participants when they join' : settings.groups === 'random' ? 'fill up at random as people join' : settings.groups === 'categories' ? "follow students' classroom categories" : 'are up to you'}; {ACCEPT[settings.group_acceptance]}.</p>
+		<p class="small muted m-0 mt-2">{tr("Groups {0}; {1}.", [settings.groups === 'self' ? tr("are chosen by participants when they join") : settings.groups === 'random' ? tr("fill up at random as people join") : settings.groups === 'categories' ? tr("follow students' classroom categories") : tr("are up to you"), ACCEPT[settings.group_acceptance]])}</p>
 		{#if selected.size}
 			<div class="mt-3 flex flex-wrap items-center gap-2" in:flyIn>
-				<span class="small font-semibold">{selected.size} selected</span>
-				<select class="select select-sm w-40" aria-label="Move selected to" disabled={busy} onchange={(e) => e.currentTarget.value !== '-' && move([...selected], e.currentTarget.value)}>
-					<option value="-">Move to…</option>
-					<option value="">No group</option>
+				<span class="small font-semibold">{tr("{0} selected", [selected.size])}</span>
+				<select class="select select-sm w-40" aria-label={tr("Move selected to")} disabled={busy} onchange={(e) => e.currentTarget.value !== '-' && move([...selected], e.currentTarget.value)}>
+					<option value="-">{tr("Move to…")}</option>
+					<option value="">{tr("No group")}</option>
 					{#each view?.groups ?? [] as g (g.id)}<option value={g.id}>{g.name}</option>{/each}
 				</select>
-				<button class="btn btn-ghost btn-sm" onclick={() => (selected = new Set())}>Clear</button>
+				<button class="btn btn-ghost btn-sm" onclick={() => (selected = new Set())}>{tr("Clear")}</button>
 			</div>
 		{/if}
 	</div>
@@ -119,31 +120,31 @@
 						<h3 id="g-{g.id}" class="m-0 min-w-0 flex-1 truncate text-base">{g.name}</h3>
 						<span class="badge badge-soft badge-sm tabular">{g.members?.length ?? 0}</span>
 						<div class="dropdown dropdown-end">
-							<IconBtn icon="pencil" label="Edit" hint="Edit {g.name}" class="btn-ghost btn-xs" size={14} />
+							<IconBtn icon="pencil" label={tr("Edit")} hint={tr("Edit {0}", [g.name])} class="btn-ghost btn-xs" size={14} />
 							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 							<div tabindex="0" class="dropdown-content z-10 w-52 rounded-box bg-base-100 p-2 shadow-lg">
-								<button class="btn btn-ghost btn-sm w-full justify-start" onclick={() => rename(g.id, g.name)}>Rename</button>
-								<p class="small muted m-0 px-3 pt-1">Colour</p>
+								<button class="btn btn-ghost btn-sm w-full justify-start" onclick={() => rename(g.id, g.name)}>{tr("Rename")}</button>
+								<p class="small muted m-0 px-3 pt-1">{tr("Colour")}</p>
 								<div class="flex flex-wrap gap-1 px-2 py-1">
 									{#each [1, 2, 3, 4, 5, 6, 7, 8] as c (c)}
-										<button type="button" class="swatch" class:on={g.color === c} style:background="var(--cat-{c})" aria-label="Colour {c}" aria-pressed={g.color === c} onclick={() => recolour(g.id, c)}></button>
+										<button type="button" class="swatch" class:on={g.color === c} style:background="var(--cat-{c})" aria-label={tr("Colour {0}", [c])} aria-pressed={g.color === c} onclick={() => recolour(g.id, c)}></button>
 									{/each}
 								</div>
-								<button class="btn btn-ghost btn-sm w-full justify-start text-error" onclick={() => remove(g.id, g.name)}>Delete group</button>
+								<button class="btn btn-ghost btn-sm w-full justify-start text-error" onclick={() => remove(g.id, g.name)}>{tr("Delete group")}</button>
 							</div>
 						</div>
 					</div>
 					<ul class="members">
-						{#each g.members ?? [] as m (m.participant_id)}{@render member(m, g.id)}{:else}<li class="small muted py-1">Nobody yet</li>{/each}
+						{#each g.members ?? [] as m (m.participant_id)}{@render member(m, g.id)}{:else}<li class="small muted py-1">{tr("Nobody yet")}</li>{/each}
 					</ul>
 				</section>
 			{/each}
 		</div>
-		{#if !view.groups.length}<p class="muted m-0">No groups yet. Make random groups or add one.</p>{/if}
+		{#if !view.groups.length}<p class="muted m-0">{tr("No groups yet. Make random groups or add one.")}</p>{/if}
 		{#if view.ungrouped.length}
 			<section class="card card-border bg-base-100 p-3 shadow-sm" aria-labelledby="g-none">
-				<h3 id="g-none" class="m-0 text-base">Not in a group <span class="badge badge-soft badge-sm tabular">{view.ungrouped.length}</span></h3>
-				<p class="small muted m-0">They answer for themselves only.</p>
+				<h3 id="g-none" class="m-0 text-base">{tr("Not in a group")} <span class="badge badge-soft badge-sm tabular">{view.ungrouped.length}</span></h3>
+				<p class="small muted m-0">{tr("They answer for themselves only.")}</p>
 				<ul class="members">{#each view.ungrouped as m (m.participant_id)}{@render member(m, '')}{/each}</ul>
 			</section>
 		{/if}

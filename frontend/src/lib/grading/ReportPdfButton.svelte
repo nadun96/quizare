@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A classroom report for paper: Print, Download PDF (locked, D-141), both
 	// with the classroom's saved header and footer, logo and colour (D-143),
 	// which the form beside them changes.
@@ -31,7 +32,7 @@
 	// The window must open in the click itself, or the browser blocks it.
 	async function print() {
 		const w = window.open('', '_blank');
-		if (!w) return toast('Allow pop-ups for this site to print', 'error');
+		if (!w) return toast(tr("Allow pop-ups for this site to print"), 'error');
 		try {
 			const header = await saved();
 			w.document.write(printReportHTML(sheets().map(numberSheet), header, title));
@@ -43,7 +44,7 @@
 			w.print();
 		} catch (e) {
 			w.close();
-			toast(e instanceof ApiError ? e.message : 'The report couldn’t be printed. Try again.', 'error');
+			toast(e instanceof ApiError ? e.message : tr("The report couldn’t be printed. Try again."), 'error');
 		}
 	}
 	async function download() {
@@ -51,9 +52,9 @@
 		try {
 			const header = await saved();
 			await exportPdf(sheets().map(numberSheet), header, title, fileName);
-			toast('PDF downloaded');
+			toast(tr("PDF downloaded"));
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'The PDF couldn’t be made. Try again.', 'error');
+			toast(e instanceof ApiError ? e.message : tr("The PDF couldn’t be made. Try again."), 'error');
 		} finally {
 			busy = false;
 		}
@@ -64,7 +65,7 @@
 			h = await api.get<ReportHeader>(url);
 			dialog?.showModal();
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'The report’s header didn’t load', 'error');
+			toast(e instanceof ApiError ? e.message : tr("The report’s header didn’t load"), 'error');
 		}
 	}
 	async function chooseLogo(e: Event) {
@@ -76,7 +77,7 @@
 		try {
 			h.logo = await logoDataUrl(file);
 		} catch {
-			error = 'That file isn’t a picture that can be read. Try a PNG or JPEG.';
+			error = tr("That file isn’t a picture that can be read. Try a PNG or JPEG.");
 		}
 	}
 	// Saves, and downloads too unless the teacher only wanted to save.
@@ -91,70 +92,70 @@
 			onbands?.(bandsOf(header));
 			if (andDownload) await exportPdf(sheets().map(numberSheet), header, title, fileName);
 			dialog?.close();
-			toast(andDownload ? 'PDF downloaded' : 'Header and footer saved');
+			toast(andDownload ? tr("PDF downloaded") : tr("Header and footer saved"));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'The PDF couldn’t be made. Try again.';
+			error = err instanceof ApiError ? err.message : tr("The PDF couldn’t be made. Try again.");
 		} finally {
 			busy = false;
 		}
 	}
 </script>
 
-<button class="btn btn-sm" {disabled} onclick={print}><Icon name="table" size={15} />Print</button>
-<button class="btn btn-sm" disabled={disabled || busy} onclick={download}><Icon name="download" size={15} />{busy ? 'Making the PDF…' : 'Download PDF'}</button>
-<button class="btn btn-sm" onclick={openForm}><Icon name="settings" size={15} />Header and footer</button>
+<button class="btn btn-sm" {disabled} onclick={print}><Icon name="table" size={15} />{tr("Print")}</button>
+<button class="btn btn-sm" disabled={disabled || busy} onclick={download}><Icon name="download" size={15} />{busy ? tr("Making the PDF…") : tr("Download PDF")}</button>
+<button class="btn btn-sm" onclick={openForm}><Icon name="settings" size={15} />{tr("Header and footer")}</button>
 
 <dialog bind:this={dialog} class="modal" aria-labelledby="pdf-title">
 	{#if h}
 		<form class="modal-box vstack gap-2 max-w-lg" onsubmit={submit}>
-			<h2 id="pdf-title" class="m-0 text-lg">Header and footer</h2>
-			<p class="m-0 small muted">Saved for this classroom’s reports, printed or downloaded. In a downloaded PDF each page is a picture and the file is locked against editing, so its text can’t be selected.</p>
+			<h2 id="pdf-title" class="m-0 text-lg">{tr("Header and footer")}</h2>
+			<p class="m-0 small muted">{tr("Saved for this classroom’s reports, printed or downloaded. In a downloaded PDF each page is a picture and the file is locked against editing, so its text can’t be selected.")}</p>
 			<div class="flex flex-wrap items-center gap-2">
-				{#if h.logo}<img class="logo" src={h.logo} alt="The report’s logo" />{/if}
-				<label class="btn btn-sm">{h.logo ? 'Change logo' : 'Add a logo'}<input class="sr-only" type="file" accept="image/*" onchange={chooseLogo} /></label>
-				{#if h.logo}<button type="button" class="btn btn-ghost btn-sm" onclick={() => h && (h.logo = '')}>Remove</button>{/if}
+				{#if h.logo}<img class="logo" src={h.logo} alt={tr("The report’s logo")} />{/if}
+				<label class="btn btn-sm">{h.logo ? tr("Change logo") : tr("Add a logo")}<input class="sr-only" type="file" accept="image/*" onchange={chooseLogo} /></label>
+				{#if h.logo}<button type="button" class="btn btn-ghost btn-sm" onclick={() => h && (h.logo = '')}>{tr("Remove")}</button>{/if}
 			</div>
-			<label class="vstack gap-1 small">Title<input class="input w-full" bind:value={h.title} maxlength="300" placeholder={title} /></label>
-			<label class="vstack gap-1 small">Subtitle<input class="input w-full" bind:value={h.subtitle} maxlength="300" placeholder="Term 1, 2026" /></label>
-			<label class="vstack gap-1 small">Institution<input class="input w-full" bind:value={h.institution} maxlength="300" /></label>
+			<label class="vstack gap-1 small">{tr("Title")}<input class="input w-full" bind:value={h.title} maxlength="300" placeholder={title} /></label>
+			<label class="vstack gap-1 small">{tr("Subtitle")}<input class="input w-full" bind:value={h.subtitle} maxlength="300" placeholder={tr("Term 1, 2026")} /></label>
+			<label class="vstack gap-1 small">{tr("Institution")}<input class="input w-full" bind:value={h.institution} maxlength="300" /></label>
 			<fieldset class="vstack gap-1 small">
-				<legend class="mb-1">Report colour</legend>
+				<legend class="mb-1">{tr("Report colour")}</legend>
 				<div class="flex flex-wrap items-center gap-2">
 					{#each ACCENTS as a (a.v)}
-						<label class="swatch" style:background={a.v} class:chosen={h.accent === a.v} title={a.label}><input class="sr-only" type="radio" name="accent" value={a.v} bind:group={h.accent} aria-label={a.label} /></label>
+						<label class="swatch" style:background={a.v} class:chosen={h.accent === a.v} title={tr(a.label)}><input class="sr-only" type="radio" name="accent" value={a.v} bind:group={h.accent} aria-label={tr(a.label)} /></label>
 					{/each}
-					<label class="flex items-center gap-1">Other <input class="picker" type="color" bind:value={h.accent} aria-label="Another colour" /></label>
+					<label class="flex items-center gap-1">{tr("Other")} <input class="picker" type="color" bind:value={h.accent} aria-label={tr("Another colour")} /></label>
 				</div>
 			</fieldset>
-			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.color_marks} />Colour marks by how high they are in printed and downloaded reports</label>
+			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.color_marks} />{tr("Colour marks by how high they are in printed and downloaded reports")}</label>
 			<fieldset class="vstack gap-2 small">
-				<legend class="mb-1">Mark colours</legend>
+				<legend class="mb-1">{tr("Mark colours")}</legend>
 				{#each h.color_ranges as r, i (i)}
 					{@const last = i === h.color_ranges.length - 1}
 					<div class="flex flex-wrap items-center gap-2">
-						<input class="picker" type="color" bind:value={r.color} aria-label={`Colour of range ${i + 1}`} />
-						<label class="flex items-center gap-1">From <input class="input input-sm w-20 tabular" type="number" min="0" max="100" step="1" bind:value={r.from} readonly={last} required aria-label={`Where range ${i + 1} starts, in percent`} />%</label>
+						<input class="picker" type="color" bind:value={r.color} aria-label={tr("Colour of range {0}", [i + 1])} />
+						<label class="flex items-center gap-1">{tr("From")} <input class="input input-sm w-20 tabular" type="number" min="0" max="100" step="1" bind:value={r.from} readonly={last} required aria-label={tr("Where range {0} starts, in percent", [i + 1])} />%</label>
 						<span class="muted grow">{bandsProblem ? '' : rangeLabel(h.color_ranges, i)}</span>
-						{#if !last}<button type="button" class="btn btn-ghost btn-xs" aria-label={`Remove range ${i + 1}`} onclick={() => h && h.color_ranges.splice(i, 1)}><Icon name="x" size={14} /></button>{/if}
+						{#if !last}<button type="button" class="btn btn-ghost btn-xs" aria-label={tr("Remove range {0}", [i + 1])} onclick={() => h && h.color_ranges.splice(i, 1)}><Icon name="x" size={14} /></button>{/if}
 					</div>
 				{/each}
-				<div><button type="button" class="btn btn-xs" disabled={!canAdd} title={canAdd ? '' : `At most ${MAX_RANGES} ranges`} onclick={() => h && (h.color_ranges = addRange(h.color_ranges))}>Add a range</button></div>
+				<div><button type="button" class="btn btn-xs" disabled={!canAdd} title={canAdd ? '' : tr("At most {0} ranges", [MAX_RANGES])} onclick={() => h && (h.color_ranges = addRange(h.color_ranges))}>{tr("Add a range")}</button></div>
 			</fieldset>
 			{#if bandsProblem}<p class="m-0 small text-error" role="alert">{bandsProblem}</p>{/if}
 			<div class="flex flex-wrap gap-2 items-end">
-				<label class="vstack gap-1 small">Date
-					<select class="select" bind:value={h.date_mode}><option value="today">The day it’s made</option><option value="custom">A date I choose</option><option value="none">No date</option></select>
+				<label class="vstack gap-1 small">{tr("Date")}
+					<select class="select" bind:value={h.date_mode}><option value="today">{tr("The day it’s made")}</option><option value="custom">{tr("A date I choose")}</option><option value="none">{tr("No date")}</option></select>
 				</label>
-				{#if h.date_mode === 'custom'}<label class="vstack gap-1 small">On<input class="input" type="date" bind:value={h.date_value} required /></label>{/if}
+				{#if h.date_mode === 'custom'}<label class="vstack gap-1 small">{tr("On")}<input class="input" type="date" bind:value={h.date_value} required /></label>{/if}
 			</div>
-			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.show_teacher} />Show the teacher{#if h.teacher}: {h.teacher}{/if}</label>
-			<label class="vstack gap-1 small">Footer<input class="input w-full" bind:value={h.footer} maxlength="300" placeholder="© 2026 Your institution. All rights reserved." /></label>
-			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.page_numbers} />Page numbers</label>
+			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.show_teacher} />{tr("Show the teacher")}{#if h.teacher}: {h.teacher}{/if}</label>
+			<label class="vstack gap-1 small">{tr("Footer")}<input class="input w-full" bind:value={h.footer} maxlength="300" placeholder={tr("© 2026 Your institution. All rights reserved.")} /></label>
+			<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={h.page_numbers} />{tr("Page numbers")}</label>
 			{#if error}<p class="m-0 small text-error" role="alert">{error}</p>{/if}
 			<div class="flex flex-wrap justify-end gap-2">
-				<button type="button" class="btn" onclick={() => dialog?.close()}>Cancel</button>
-				<button class="btn" value="save" disabled={busy || !!bandsProblem}>Save</button>
-				<button class="btn btn-primary" value="download" disabled={busy || disabled || !!bandsProblem}>{busy ? 'Making the PDF…' : 'Save and download'}</button>
+				<button type="button" class="btn" onclick={() => dialog?.close()}>{tr("Cancel")}</button>
+				<button class="btn" value="save" disabled={busy || !!bandsProblem}>{tr("Save")}</button>
+				<button class="btn btn-primary" value="download" disabled={busy || disabled || !!bandsProblem}>{busy ? tr("Making the PDF…") : tr("Save and download")}</button>
 			</div>
 		</form>
 	{/if}

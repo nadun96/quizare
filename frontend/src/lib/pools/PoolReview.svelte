@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Reviewing a pool's questions (D-132): one at a time as a student would
 	// read it, with the right answer marked, to check it's correct. Marking
 	// is optional (unreviewed questions are still asked) and fast from the
@@ -62,7 +63,7 @@
 				}
 			}
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'That didn’t save', 'error');
+			toast(e instanceof ApiError ? e.message : tr("That didn’t save"), 'error');
 		} finally {
 			busy = false;
 		}
@@ -70,9 +71,9 @@
 	async function markAllShown() {
 		const ids = list.filter((x) => !x.reviewed_at).map((x) => x.id);
 		if (!ids.length) return;
-		if (!(await confirmDialog({ title: `Mark ${ids.length} ${ids.length === 1 ? 'question' : 'questions'} reviewed?`, body: 'Only do this for questions you’ve checked another way, such as in the import preview.', confirm: 'Mark reviewed' }))) return;
+		if (!(await confirmDialog({ title: tr("Mark {0} {1} reviewed?", [ids.length, ids.length === 1 ? 'question' : 'questions']), body: tr("Only do this for questions you’ve checked another way, such as in the import preview."), confirm: tr("Mark reviewed") }))) return;
 		await mark(true, ids, false);
-		toast(`${ids.length} marked reviewed`);
+		toast(tr("{0} marked reviewed", [ids.length]));
 	}
 	function edit() {
 		if (!q) return;
@@ -101,37 +102,37 @@
 {#if !all}
 	<Skeleton lines={6} />
 {:else if !all.length}
-	<p class="muted m-0">No questions to review yet. Import some first.</p>
+	<p class="muted m-0">{tr("No questions to review yet. Import some first.")}</p>
 {:else}
 	<div class="vstack gap-3">
 		<div class="card card-border bg-base-100 p-3 sm:p-4 vstack gap-2">
 			<div class="flex flex-wrap items-center gap-2">
-				<div class="join" role="group" aria-label="Show">
+				<div class="join" role="group" aria-label={tr("Show")}>
 					{#each [['todo', 'Not reviewed'], ['done', 'Reviewed'], ['all', 'All']] as [k, l] (k)}
 						<button class="btn btn-sm join-item" class:btn-primary={filter === k} aria-pressed={filter === k} onclick={() => ((filter = k as ReviewFilter), (at = 0))}>{l}</button>
 					{/each}
 				</div>
 				{#if categories.length > 1}
-					<select class="select select-sm w-auto" aria-label="Category" value={category ?? '*'} onchange={(e) => ((category = e.currentTarget.value === '*' ? null : e.currentTarget.value), (at = 0))}>
-						<option value="*">Every category</option>
-						{#each categories as c (c)}<option value={c}>{c || 'No category'}</option>{/each}
+					<select class="select select-sm w-auto" aria-label={tr("Category")} value={category ?? '*'} onchange={(e) => ((category = e.currentTarget.value === '*' ? null : e.currentTarget.value), (at = 0))}>
+						<option value="*">{tr("Every category")}</option>
+						{#each categories as c (c)}<option value={c}>{c || tr("No category")}</option>{/each}
 					</select>
 				{/if}
 				<span class="grow"></span>
-				{#if list.some((x) => !x.reviewed_at)}<button class="btn btn-sm btn-ghost" onclick={markAllShown}>Mark all shown reviewed</button>{/if}
+				{#if list.some((x) => !x.reviewed_at)}<button class="btn btn-sm btn-ghost" onclick={markAllShown}>{tr("Mark all shown reviewed")}</button>{/if}
 			</div>
 			<div class="flex items-center gap-3">
-				<progress class="progress progress-success grow" value={done} max={scope.length || 1} aria-label="Reviewed"></progress>
-				<span class="small tabular whitespace-nowrap"><strong>{done}</strong> of {scope.length} reviewed · {pct}%</span>
+				<progress class="progress progress-success grow" value={done} max={scope.length || 1} aria-label={tr("Reviewed")}></progress>
+				<span class="small tabular whitespace-nowrap"><strong>{done}</strong> {tr("of {0} reviewed · {1}%", [scope.length, pct])}</span>
 			</div>
-			<p class="m-0 small muted">Optional: questions are asked whether reviewed or not. Keys: <kbd class="kbd kbd-xs">R</kbd> reviewed, next · <kbd class="kbd kbd-xs">U</kbd> not reviewed · <kbd class="kbd kbd-xs">←</kbd> <kbd class="kbd kbd-xs">→</kbd> move · <kbd class="kbd kbd-xs">E</kbd> edit</p>
+			<p class="m-0 small muted">{tr("Optional: questions are asked whether reviewed or not. Keys:")} <kbd class="kbd kbd-xs">R</kbd> {tr("reviewed, next ·")} <kbd class="kbd kbd-xs">U</kbd> {tr("not reviewed ·")} <kbd class="kbd kbd-xs">←</kbd> <kbd class="kbd kbd-xs">→</kbd> {tr("move ·")} <kbd class="kbd kbd-xs">E</kbd> {tr("edit")}</p>
 		</div>
 
 		{#if !q}
 			<div class="card card-border bg-base-100 p-6 text-center vstack gap-2">
 				<Icon name="check-circle" size={34} />
-				<p class="m-0 font-semibold">{filter === 'todo' ? 'Everything here is reviewed.' : 'Nothing to show.'}</p>
-				{#if filter === 'todo'}<div><button class="btn btn-sm" onclick={() => (filter = 'all')}>Show all</button></div>{/if}
+				<p class="m-0 font-semibold">{filter === 'todo' ? tr("Everything here is reviewed.") : tr("Nothing to show.")}</p>
+				{#if filter === 'todo'}<div><button class="btn btn-sm" onclick={() => (filter = 'all')}>{tr("Show all")}</button></div>{/if}
 			</div>
 		{:else}
 			<article class="qcard card card-border bg-base-100" class:ok={q.reviewed_at}>
@@ -141,7 +142,7 @@
 					{#if q.category}<span class="badge badge-soft badge-primary badge-sm">{q.category}</span>{/if}
 					<span class="small muted">{q.marks} {q.marks === 1 ? 'mark' : 'marks'}{#if q.settings?.question_time_limit_sec}{' · '}{q.settings.question_time_limit_sec}s{/if}</span>
 					<span class="grow"></span>
-					{#if q.reviewed_at}<span class="badge badge-success badge-sm gap-1"><Icon name="check" size={12} />Reviewed</span>{:else}<span class="badge badge-ghost badge-sm">Not reviewed</span>{/if}
+					{#if q.reviewed_at}<span class="badge badge-success badge-sm gap-1"><Icon name="check" size={12} />{tr("Reviewed")}</span>{:else}<span class="badge badge-ghost badge-sm">{tr("Not reviewed")}</span>{/if}
 					<span class="small muted tabular">{at + 1} / {list.length}</span>
 				</header>
 				<div class="px-4 py-3 sm:px-6 vstack gap-3">
@@ -152,34 +153,34 @@
 								<li class:right={isRight(o.id)}>
 									<span class="pos">{letter(i)}</span>
 									<span class="grow"><MathText text={o.text} /></span>
-									{#if isRight(o.id)}<span class="flex items-center gap-1 small font-semibold"><Icon name="check" size={15} />Right answer</span>{/if}
+									{#if isRight(o.id)}<span class="flex items-center gap-1 small font-semibold"><Icon name="check" size={15} />{tr("Right answer")}</span>{/if}
 								</li>
 							{/each}
 						</ul>
 					{:else}
-						<p class="m-0 answer"><span class="small muted">Answer:</span> <MathText text={describeKey(q.type, q.body, q.key) || '(marked by the teacher or AI)'} /></p>
+						<p class="m-0 answer"><span class="small muted">{tr("Answer:")}</span> <MathText text={describeKey(q.type, q.body, q.key) || '(marked by the teacher or AI)'} /></p>
 					{/if}
 					{#if q.feedback?.correct || q.feedback?.incorrect}
 						<div class="small vstack gap-1">
-							{#if q.feedback.correct}<p class="m-0"><span class="muted">When right:</span> {q.feedback.correct}</p>{/if}
-							{#if q.feedback.incorrect}<p class="m-0"><span class="muted">When wrong:</span> {q.feedback.incorrect}</p>{/if}
+							{#if q.feedback.correct}<p class="m-0"><span class="muted">{tr("When right:")}</span> {q.feedback.correct}</p>{/if}
+							{#if q.feedback.incorrect}<p class="m-0"><span class="muted">{tr("When wrong:")}</span> {q.feedback.incorrect}</p>{/if}
 						</div>
 					{/if}
 				</div>
 				<footer class="flex flex-wrap items-center gap-2 px-4 pb-4 sm:px-6">
-					<button class="btn btn-sm btn-ghost" disabled={at === 0} onclick={() => (at = Math.max(0, at - 1))} aria-label="Previous question"><Icon name="arrow-left" size={16} /></button>
-					<button class="btn btn-sm btn-ghost" disabled={at >= list.length - 1} onclick={() => (at = Math.min(list.length - 1, at + 1))} aria-label="Next question"><Icon name="arrow-right" size={16} /></button>
-					<button class="btn btn-sm" onclick={edit}><Icon name="pencil" size={14} />Edit</button>
+					<button class="btn btn-sm btn-ghost" disabled={at === 0} onclick={() => (at = Math.max(0, at - 1))} aria-label={tr("Previous question")}><Icon name="arrow-left" size={16} /></button>
+					<button class="btn btn-sm btn-ghost" disabled={at >= list.length - 1} onclick={() => (at = Math.min(list.length - 1, at + 1))} aria-label={tr("Next question")}><Icon name="arrow-right" size={16} /></button>
+					<button class="btn btn-sm" onclick={edit}><Icon name="pencil" size={14} />{tr("Edit")}</button>
 					<span class="grow"></span>
-					{#if q.reviewed_at}<button class="btn btn-sm btn-ghost" disabled={busy} onclick={() => mark(false, [q.id], false)}>Mark not reviewed</button>{/if}
-					<button class="btn btn-success" disabled={busy} onclick={() => mark(true)}><Icon name="check" size={16} />{q.reviewed_at ? 'Reviewed · next' : 'Looks right · next'}</button>
+					{#if q.reviewed_at}<button class="btn btn-sm btn-ghost" disabled={busy} onclick={() => mark(false, [q.id], false)}>{tr("Mark not reviewed")}</button>{/if}
+					<button class="btn btn-success" disabled={busy} onclick={() => mark(true)}><Icon name="check" size={16} />{q.reviewed_at ? tr("Reviewed · next") : tr("Looks right · next")}</button>
 				</footer>
 			</article>
 		{/if}
 	</div>
 {/if}
 
-<dialog bind:this={dialog} class="modal" onclose={() => (editing = null)} aria-label="Edit a question">
+<dialog bind:this={dialog} class="modal" onclose={() => (editing = null)} aria-label={tr("Edit a question")}>
 	<div class="modal-box max-w-4xl">
 		{#if editing}
 			<QuestionEditor {quizId} categories={categories.filter(Boolean)} question={editing} onsaved={(saved) => { toast(`Question ${saved.code} saved; mark it reviewed when you’re happy`); dialog?.close(); editing = null; load(); onchange?.(); }} oncancel={() => { dialog?.close(); editing = null; }} />

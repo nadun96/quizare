@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import MathText from '$lib/richtext/MathText.svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
@@ -27,7 +28,7 @@
 						if (progress.current) celebrate = news(progress.current);
 					});
 			})
-			.catch((e) => (error = e instanceof ApiError ? e.message : 'Could not load results'));
+			.catch((e) => (error = e instanceof ApiError ? e.message : tr("Could not load results")));
 	});
 </script>
 
@@ -36,38 +37,38 @@
 	{#if res}
 		<h1>{res.session_title}</h1>
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row">
-			<div><div class="muted small">Score</div><strong style="font-size:1.6rem">{res.score} / {res.max_score}</strong></div>
-			<div><div class="muted small">Percent</div><strong style="font-size:1.6rem">{res.pct}%</strong></div>
+			<div><div class="muted small">{tr("Score")}</div><strong style="font-size:1.6rem">{res.score} / {res.max_score}</strong></div>
+			<div><div class="muted small">{tr("Percent")}</div><strong style="font-size:1.6rem">{res.pct}%</strong></div>
 			<span class="spacer"></span>
-			{#if res.state === 'invalidated'}<span class="badge badge-soft badge-error">Attempt invalidated</span>
-			{:else if !res.complete}<span class="badge badge-soft badge-warning">Marking in progress</span>
-			{:else}<span class="badge badge-soft {res.passed ? 'ok' : 'danger'}">{res.passed ? 'Passed' : 'Not passed'} (pass mark {res.pass_mark_pct}%)</span>
-				<a class="xp-gain" href="/my" title="XP: 10 for taking part, your percentage, and 20 for passing">+{quizXP(res.pct, res.passed)} XP</a>{/if}
+			{#if res.state === 'invalidated'}<span class="badge badge-soft badge-error">{tr("Attempt invalidated")}</span>
+			{:else if !res.complete}<span class="badge badge-soft badge-warning">{tr("Marking in progress")}</span>
+			{:else}<span class="badge badge-soft {res.passed ? 'ok' : 'danger'}">{tr("{0} (pass mark {1}%)", [res.passed ? tr("Passed") : tr("Not passed"), res.pass_mark_pct])}</span>
+				<a class="xp-gain" href="/my" title={tr("XP: 10 for taking part, your percentage, and 20 for passing")}>{tr("+{0} XP", [quizXP(res.pct, res.passed)])}</a>{/if}
 		</div>
 		{#if res.team}
-			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" aria-label="Your team">
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" aria-label={tr("Your team")}>
 				<span class="team-dot" style:background="var(--cat-{res.team.color})" aria-hidden="true"></span>
-				<div><div class="muted small">Your team</div><strong style="font-size:1.25rem">{res.team.name}</strong></div>
+				<div><div class="muted small">{tr("Your team")}</div><strong style="font-size:1.25rem">{res.team.name}</strong></div>
 				<span class="spacer"></span>
-				<div class="text-right"><div class="muted small">Team place</div><strong style="font-size:1.25rem">{res.team.rank} of {res.team.of}</strong><div class="small muted">{res.team.pct}%{res.team.finished < res.team.members || !res.team.complete ? ' so far' : ''}</div></div>
+				<div class="text-right"><div class="muted small">{tr("Team place")}</div><strong style="font-size:1.25rem">{tr("{0} of {1}", [res.team.rank, res.team.of])}</strong><div class="small muted">{res.team.pct}%{res.team.finished < res.team.members || !res.team.complete ? tr(" so far") : ''}</div></div>
 			</div>
 		{/if}
 		{#if reviewNote(res.review)}<p class="alert alert-soft alert-info m-0" role="status"><Icon name="info" size={18} />{reviewNote(res.review)}</p>{/if}
 		{#each res.questions as q, i (q.question.id)}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 				<div class="row">
-					<strong>Question {i + 1}</strong>
+					<strong>{tr("Question {0}", [i + 1])}</strong>
 					<span class="spacer"></span>
-					{#if q.ai_marked}<span class="tooltip" data-tip="Marked by AI; your teacher can review it"><span class="badge badge-soft">AI-marked</span></span>{/if}
+					{#if q.ai_marked}<span class="tooltip" data-tip={tr("Marked by AI; your teacher can review it")}><span class="badge badge-soft">{tr("AI-marked")}</span></span>{/if}
 					{#if q.score != null}
 						<span class="badge badge-soft {q.correct ? 'ok' : q.score > 0 ? 'warn' : 'danger'}">{q.score} / {q.max_score}</span>
-					{:else}<span class="badge badge-soft badge-warning">Being marked</span>{/if}
+					{:else}<span class="badge badge-soft badge-warning">{tr("Being marked")}</span>{/if}
 				</div>
 				<RichText text={q.question.text} format={q.question.body.format} />
-				{#if q.response !== undefined}<p><span class="muted small">Your answer</span><br /><MathText text={describeResponse(q.question.type, q.question.body, q.response)} /></p>{/if}
-				{#if q.correct_answer}<p><span class="muted small">{q.question.type === 'ESSAY' ? 'Model answer' : 'Correct answer'}</span><br /><MathText text={describeKey(q.question.type, q.question.body, q.correct_answer)} /></p>{/if}
+				{#if q.response !== undefined}<p><span class="muted small">{tr("Your answer")}</span><br /><MathText text={describeResponse(q.question.type, q.question.body, q.response)} /></p>{/if}
+				{#if q.correct_answer}<p><span class="muted small">{q.question.type === 'ESSAY' ? tr("Model answer") : tr("Correct answer")}</span><br /><MathText text={describeKey(q.question.type, q.question.body, q.correct_answer)} /></p>{/if}
 				{#if q.feedback}<div class="alert alert-soft alert-success"><RichText text={q.feedback} format={q.question.body.format} /></div>{/if}
-				{#if q.ai_feedback}<p class="alert alert-soft alert-success" style="white-space:pre-wrap"><strong>Feedback:</strong> {q.ai_feedback}</p>{/if}
+				{#if q.ai_feedback}<p class="alert alert-soft alert-success" style="white-space:pre-wrap"><strong>{tr("Feedback:")}</strong> {q.ai_feedback}</p>{/if}
 				{#each q.feedback_resources ?? [] as r (r.id)}<img src={r.url} alt={r.alt_text} style="max-width:100%" referrerpolicy="no-referrer" />{/each}
 			</div>
 		{/each}

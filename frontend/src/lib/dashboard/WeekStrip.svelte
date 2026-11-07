@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Twelve weeks of activity (D-105): a cell a week, darker for more (a
 	// five-step ordinal blue ramp; an empty week stays the surface's gray).
 	// Each cell says its week and counts on hover and focus; a Less–More key
@@ -40,7 +41,7 @@
 	<details class="small">
 		<summary>{t('common.showTable')}</summary>
 		<table class="table table-sm">
-			<thead><tr><th>Week of</th><th>Count</th><th>Details</th></tr></thead>
+			<thead><tr><th>{tr("Week of")}</th><th>{tr("Count")}</th><th>{tr("Details")}</th></tr></thead>
 			<tbody>{#each weeks as w (w.week)}<tr><td>{weekLabel(w.week)}</td><td class="tabular">{measure(w)}</td><td>{detail(w)}</td></tr>{/each}</tbody>
 		</table>
 	</details>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/session.svelte';
 	import { flyIn } from '$lib/ui/motion';
@@ -37,7 +38,7 @@
 	]);
 </script>
 
-<svelte:head><title>Classroom Quiz: live quizzes, tutorials and polls for every classroom</title><meta name="description" content="Put a code on the board and every phone in the room takes the quiz. Live quizzes, newspaper-style tutorials, polls, meetings and progress dashboards, in English, Sinhala and Tamil." /></svelte:head>
+<svelte:head><title>{tr("Classroom Quiz: live quizzes, tutorials and polls for every classroom")}</title><meta name="description" content="Put a code on the board and every phone in the room takes the quiz. Live quizzes, newspaper-style tutorials, polls, meetings and progress dashboards, in English, Sinhala and Tamil." /></svelte:head>
 
 
 <section class="page-container landing">
@@ -52,17 +53,17 @@
 			<p class="small muted mt-4 mb-0">{t('home.gotCode')} <a href="/join">{t('home.joinQuiz')}</a></p>
 		</div>
 
-		<div class="scene" role="img" aria-label="A projector shows the join code K7Q2XM with a QR code and 24 students joined; a phone shows question 3 of 8 with “Carbon dioxide” chosen.">
+		<div class="scene" role="img" aria-label={tr("A projector shows the join code K7Q2XM with a QR code and 24 students joined; a phone shows question 3 of 8 with “Carbon dioxide” chosen.")}>
 			<div class="board" aria-hidden="true">
-				<div class="board-bar"><span>Science check-in</span><span class="joined"><i></i>24 joined</span></div>
+				<div class="board-bar"><span>{tr("Science check-in")}</span><span class="joined"><i></i>{tr("24 joined")}</span></div>
 				<div class="board-body">
 					<svg class="qr" viewBox="-1 -1 {N + 2} {N + 2}" shape-rendering="crispEdges">
 						<rect x="-1" y="-1" width={N + 2} height={N + 2} fill="var(--color-base-100)" />
 						{#each cells as [x, y] (x + ',' + y)}<rect {x} {y} width="1" height="1" />{/each}
 					</svg>
 					<div class="code-block">
-						<span class="code-label">Scan, or enter the code</span>
-						<span class="code">K7Q2XM</span>
+						<span class="code-label">{tr("Scan, or enter the code")}</span>
+						<span class="code">{tr("K7Q2XM")}</span>
 					</div>
 				</div>
 				<div class="board-foot">
@@ -70,15 +71,15 @@
 				</div>
 			</div>
 			<div class="phone" aria-hidden="true" in:flyIn={{ delay: 180, y: 24 }}>
-				<div class="phone-top"><span>Question 3 of 8</span><span class="timer">0:42</span></div>
+				<div class="phone-top"><span>{tr("Question 3 of 8")}</span><span class="timer">0:42</span></div>
 				<div class="phone-bar"><i></i></div>
-				<p class="phone-q">Which gas do plants take in for photosynthesis?</p>
+				<p class="phone-q">{tr("Which gas do plants take in for photosynthesis?")}</p>
 				<ul class="opts">
-					<li><b>A</b>Oxygen</li>
-					<li class="picked"><b>B</b>Carbon dioxide</li>
-					<li><b>C</b>Nitrogen</li>
+					<li><b>A</b>{tr("Oxygen")}</li>
+					<li class="picked"><b>B</b>{tr("Carbon dioxide")}</li>
+					<li><b>C</b>{tr("Nitrogen")}</li>
 				</ul>
-				<span class="phone-next">Next</span>
+				<span class="phone-next">{tr("Next")}</span>
 			</div>
 		</div>
 	</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Live ranking (V2-02, D-42). Rows slide to their new place as scores
 	// change; the viewer's own row is highlighted and, when they are outside
 	// the top 10, pinned underneath.
@@ -29,28 +30,28 @@
 
 <div class="lb" class:big>
 	{#if !shown.length}
-		<p class="muted small m-0">Nobody has joined yet.</p>
+		<p class="muted small m-0">{tr("Nobody has joined yet.")}</p>
 	{:else}
-		<ol class="rows" aria-label="Leaderboard">
+		<ol class="rows" aria-label={tr("Leaderboard")}>
 			{#each shown as r (r.key)}
 				<li class="row" class:me={r.key === meKey} animate:flip={{ duration: flipMs() }} in:flyIn>
 					<span class="pos tabular {medal(r.rank)}" aria-label={ordinal(r.rank)}>{r.rank}</span>
 					<span class="who min-w-0">
-						<span class="name truncate">{#if r.color}<span class="gdot" style:background="var(--cat-{r.color})" aria-hidden="true"></span>{/if}{r.name}{#if r.key === meKey}<span class="badge badge-primary badge-xs ml-2">you</span>{/if}</span>
+						<span class="name truncate">{#if r.color}<span class="gdot" style:background="var(--cat-{r.color})" aria-hidden="true"></span>{/if}{r.name}{#if r.key === meKey}<span class="badge badge-primary badge-xs ml-2">{tr("you")}</span>{/if}</span>
 						{#if teacher && r.real_name && r.real_name !== r.name}<span class="small muted truncate block">{r.real_name}</span>{/if}
 						<span class="track" aria-hidden="true"><span class="fill" style:width="{(r.score / top) * 100}%"></span></span>
 					</span>
-					<span class="pts tabular"><strong>{fmtPoints(r.score)}{unit === 'percent' ? '%' : ''}</strong><span class="small muted block">{r.detail ?? (r.members !== undefined ? `${r.members} ${r.members === 1 ? 'member' : 'members'}` : `${r.correct} right`)}</span></span>
+					<span class="pts tabular"><strong>{fmtPoints(r.score)}{unit === 'percent' ? '%' : ''}</strong><span class="small muted block">{r.detail ?? (r.members !== undefined ? `${r.members} ${r.members === 1 ? 'member' : 'members'}` : tr("{0} right", [r.correct]))}</span></span>
 					{#if teacher && onrename}
-						<IconBtn icon="pencil" label="Rename" hint="Rename {r.name}" class="btn-ghost btn-xs" size={14} tip="left" onclick={() => onrename(r)} />
+						<IconBtn icon="pencil" label={tr("Rename")} hint={tr("Rename {0}", [r.name])} class="btn-ghost btn-xs" size={14} tip="left" onclick={() => onrename(r)} />
 					{/if}
 				</li>
 			{/each}
 		</ol>
 		{#if meOutside && me}
-			<p class="you-row small m-0"><Icon name="trophy" size={14} />You're <strong>{ordinal(me.rank)}</strong> with <strong class="tabular">{fmtPoints(me.score)}</strong> points</p>
+			<p class="you-row small m-0"><Icon name="trophy" size={14} />{tr("You're")} <strong>{ordinal(me.rank)}</strong> {tr("with")} <strong class="tabular">{fmtPoints(me.score)}</strong> {tr("points")}</p>
 		{/if}
-		{#if ranks.length > limit}<p class="small muted m-0">and {ranks.length - limit} more</p>{/if}
+		{#if ranks.length > limit}<p class="small muted m-0">{tr("and {0} more", [ranks.length - limit])}</p>{/if}
 	{/if}
 </div>
 

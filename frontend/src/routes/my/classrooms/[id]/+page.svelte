@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A student's one classroom (D-138): what's on now, what's due, what's
 	// coming and everything they've completed, with its files.
 	import { page } from '$app/state';
@@ -25,7 +26,7 @@
 			work = w;
 			if (w.status === 'active') addTutoring(w);
 		} catch (e) {
-			error = e instanceof ApiError && e.status === 404 ? 'You aren’t enrolled in this classroom.' : 'This classroom didn’t load. Try again.';
+			error = e instanceof ApiError && e.status === 404 ? tr("You aren’t enrolled in this classroom.") : tr("This classroom didn’t load. Try again.");
 		}
 	}
 	// Tutoring is a separate service: the page shows without it.
@@ -61,58 +62,58 @@
 	{@const s = statusOf(it.status)}
 	{@const act = it.href ? action(it) : ''}
 	<li class="item">
-		<span class="kind" title={k.label}><Icon name={k.icon} size={17} /></span>
+		<span class="kind" title={tr(k.label)}><Icon name={k.icon} size={17} /></span>
 		<div class="grow min-w-0">
 			<p class="m-0 font-semibold truncate">{it.title}</p>
-			<p class="m-0 small muted">{k.label}{#if dateLine(it)}{' · '}{dateLine(it)}{/if}{#if it.detail && it.status !== 'live' && it.status !== 'missed'}{' · '}{it.detail}{/if}</p>
+			<p class="m-0 small muted">{tr(k.label)}{#if dateLine(it)}{' · '}{dateLine(it)}{/if}{#if it.detail && it.status !== 'live' && it.status !== 'missed'}{' · '}{it.detail}{/if}</p>
 		</div>
-		<span class="badge badge-soft badge-sm whitespace-nowrap {s.tone}">{s.label}</span>
+		<span class="badge badge-soft badge-sm whitespace-nowrap {s.tone}">{tr(s.label)}</span>
 		{#if act}<a class="btn btn-sm" class:btn-primary={it.status === 'live' || it.status === 'overdue' || it.status === 'due_soon'} href={it.href}>{act}</a>{/if}
 	</li>
 {/snippet}
 
-<svelte:head><title>{work?.name ?? 'Classroom'} · Classroom Quiz</title></svelte:head>
+<svelte:head><title>{tr("{0} · Classroom Quiz", [work?.name ?? tr("Classroom")])}</title></svelte:head>
 
 <div class="page-container vstack">
-	<p class="small m-0"><a href="/my">← My quizzes</a></p>
+	<p class="small m-0"><a href="/my">{tr("← My quizzes")}</a></p>
 	{#if error}
-		<div class="card card-border bg-base-100"><EmptyState icon="book" title={error}><a href="/my">Back to your classrooms</a></EmptyState></div>
+		<div class="card card-border bg-base-100"><EmptyState icon="book" title={error}><a href="/my">{tr("Back to your classrooms")}</a></EmptyState></div>
 	{:else if !work}
 		<Skeleton lines={6} />
 	{:else}
 		<div>
 			<h1 class="m-0">{work.name}</h1>
-			<p class="m-0 small muted">{#if work.teacher}Teacher: {work.teacher}{/if}{#if work.student_number}{' · '}Your student ID: <strong class="tabular">{work.student_number}</strong>{/if}</p>
+			<p class="m-0 small muted">{#if work.teacher}{tr("Teacher: {0}", [work.teacher])}{/if}{#if work.student_number}{tr(" · Your student ID:")} <strong class="tabular">{work.student_number}</strong>{/if}</p>
 			{#if work.description}<p class="m-0 mt-1">{work.description}</p>{/if}
 		</div>
 
 		{#if work.status !== 'active'}
-			<div class="alert alert-soft alert-warning" role="status"><Icon name="clock" size={18} />Your teacher hasn’t approved your enrolment yet. Your work appears here once they do.</div>
+			<div class="alert alert-soft alert-warning" role="status"><Icon name="clock" size={18} />{tr("Your teacher hasn’t approved your enrolment yet. Your work appears here once they do.")}</div>
 		{:else}
-			<div class="join self-start" role="group" aria-label="Show">
-				<button class="btn btn-sm join-item" class:btn-primary={view === 'all'} aria-pressed={view === 'all'} onclick={() => (view = 'all')}>All</button>
-				<button class="btn btn-sm join-item" class:btn-primary={view === 'todo'} aria-pressed={view === 'todo'} onclick={() => (view = 'todo')}>To do ({todoCount})</button>
-				<button class="btn btn-sm join-item" class:btn-primary={view === 'done'} aria-pressed={view === 'done'} onclick={() => (view = 'done')}>Completed ({work.completed.length})</button>
+			<div class="join self-start" role="group" aria-label={tr("Show")}>
+				<button class="btn btn-sm join-item" class:btn-primary={view === 'all'} aria-pressed={view === 'all'} onclick={() => (view = 'all')}>{tr("All")}</button>
+				<button class="btn btn-sm join-item" class:btn-primary={view === 'todo'} aria-pressed={view === 'todo'} onclick={() => (view = 'todo')}>{tr("To do ({0})", [todoCount])}</button>
+				<button class="btn btn-sm join-item" class:btn-primary={view === 'done'} aria-pressed={view === 'done'} onclick={() => (view = 'done')}>{tr("Completed ({0})", [work.completed.length])}</button>
 			</div>
 
 			{#if showTodo}
 				{#if work.live.length}
 					<section aria-labelledby="live-h" class="vstack gap-2">
-						<h2 id="live-h" class="m-0 text-base">On now</h2>
+						<h2 id="live-h" class="m-0 text-base">{tr("On now")}</h2>
 						<ul class="list card card-border bg-base-100">{#each work.live as it (it.kind + it.id)}{@render row(it)}{/each}</ul>
 					</section>
 				{/if}
 				<section aria-labelledby="due-h" class="vstack gap-2">
-					<h2 id="due-h" class="m-0 text-base">To do</h2>
+					<h2 id="due-h" class="m-0 text-base">{tr("To do")}</h2>
 					{#if todo.length}
 						<ul class="list card card-border bg-base-100">{#each todo as it (it.kind + it.id)}{@render row(it)}{/each}</ul>
 					{:else}
-						<p class="m-0 small muted">Nothing due. You’re up to date.</p>
+						<p class="m-0 small muted">{tr("Nothing due. You’re up to date.")}</p>
 					{/if}
 				</section>
 				{#if work.upcoming.length}
 					<section aria-labelledby="up-h" class="vstack gap-2">
-						<h2 id="up-h" class="m-0 text-base">Coming up</h2>
+						<h2 id="up-h" class="m-0 text-base">{tr("Coming up")}</h2>
 						<ul class="list card card-border bg-base-100">{#each work.upcoming as it (it.kind + it.id)}{@render row(it)}{/each}</ul>
 					</section>
 				{/if}
@@ -120,34 +121,34 @@
 
 			{#if view !== 'todo' && missed.length}
 				<section aria-labelledby="missed-h" class="vstack gap-2">
-					<h2 id="missed-h" class="m-0 text-base">Missed</h2>
-					<p class="m-0 small muted">Quizzes that ended without you, in the last 60 days. Ask your teacher if you were away.</p>
+					<h2 id="missed-h" class="m-0 text-base">{tr("Missed")}</h2>
+					<p class="m-0 small muted">{tr("Quizzes that ended without you, in the last 60 days. Ask your teacher if you were away.")}</p>
 					<ul class="list card card-border bg-base-100">{#each missed as it (it.kind + it.id)}{@render row(it)}{/each}</ul>
 				</section>
 			{/if}
 
 			{#if showDone}
 				<section aria-labelledby="done-h" class="vstack gap-2">
-					<h2 id="done-h" class="m-0 text-base">Completed</h2>
+					<h2 id="done-h" class="m-0 text-base">{tr("Completed")}</h2>
 					{#if work.completed.length}
 						<ul class="list card card-border bg-base-100">
 							{#each work.completed as d (d.kind + d.id)}
 								{@const k = kindOf(d.kind)}
 								{@const s = statusOf(d.status)}
 								<li class="item">
-									<span class="kind" title={k.label}><Icon name={k.icon} size={17} /></span>
+									<span class="kind" title={tr(k.label)}><Icon name={k.icon} size={17} /></span>
 									<div class="grow min-w-0">
 										<p class="m-0 font-semibold truncate">{d.title}</p>
-										<p class="m-0 small muted">{k.label}{#if d.at}{' · '}{dateLine(d)}{/if}{#if (d.tries ?? 0) > 1}{' · '}best of {d.tries} tries{/if}</p>
+										<p class="m-0 small muted">{tr(k.label)}{#if d.at}{' · '}{dateLine(d)}{/if}{#if (d.tries ?? 0) > 1}{tr(" · best of {0} tries", [d.tries])}{/if}</p>
 									</div>
 									{#if markLine(d)}<span class="small tabular whitespace-nowrap" class:font-semibold={d.score != null}>{markLine(d)}</span>{/if}
-									{#if d.passed != null}<span class="badge badge-soft badge-sm {d.passed ? 'badge-success' : 'badge-warning'}">{d.passed ? 'Passed' : 'Not passed'}</span>{:else}<span class="badge badge-soft badge-sm whitespace-nowrap {s.tone}">{s.label}</span>{/if}
-									{#if d.href}<a class="btn btn-sm btn-ghost" href={d.href}>{d.kind === 'quiz' ? 'Results' : 'View'}</a>{/if}
+									{#if d.passed != null}<span class="badge badge-soft badge-sm {d.passed ? 'badge-success' : 'badge-warning'}">{d.passed ? tr("Passed") : tr("Not passed")}</span>{:else}<span class="badge badge-soft badge-sm whitespace-nowrap {s.tone}">{tr(s.label)}</span>{/if}
+									{#if d.href}<a class="btn btn-sm btn-ghost" href={d.href}>{d.kind === 'quiz' ? tr("Results") : tr("View")}</a>{/if}
 								</li>
 							{/each}
 						</ul>
 					{:else}
-						<p class="m-0 small muted">Nothing completed yet.</p>
+						<p class="m-0 small muted">{tr("Nothing completed yet.")}</p>
 					{/if}
 				</section>
 			{/if}

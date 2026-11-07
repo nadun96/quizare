@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A plain code editor: monospace, line numbers, Tab indents. Esc releases
 	// the Tab key so keyboard users can still move on (WCAG 2.1.2 no keyboard trap).
 	let { value = '', language = '', maxLength = 10000, disabled = false, label, onchange }: { value?: string; language?: string; maxLength?: number; disabled?: boolean; label: string; onchange: (v: string) => void } = $props();
@@ -44,9 +45,9 @@
 
 <div class="code-box" class:disabled>
 	<div class="code-bar small">
-		<span class="font-semibold">{language || 'Code'}</span>
+		<span class="font-semibold">{language || tr("Code")}</span>
 		<span class="spacer"></span>
-		<span class="muted tabular">{text.length.toLocaleString()} / {maxLength.toLocaleString()}</span>
+		<span class="muted tabular">{text.length.toLocaleString(localeTag())} / {maxLength.toLocaleString(localeTag())}</span>
 	</div>
 	<div class="code-wrap">
 		<pre class="gutter" aria-hidden="true" bind:this={gutter}>{Array.from({ length: lines }, (_, i) => i + 1).join('\n')}</pre>
@@ -68,7 +69,7 @@
 			aria-describedby="code-help"
 		></textarea>
 	</div>
-	<p id="code-help" class="small muted m-0 px-3 py-1">Tab indents · Shift+Tab outdents · Esc, then Tab, to leave the editor</p>
+	<p id="code-help" class="small muted m-0 px-3 py-1">{tr("Tab indents · Shift+Tab outdents · Esc, then Tab, to leave the editor")}</p>
 </div>
 
 <style>

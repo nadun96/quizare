@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The account's sign-ins with other providers (D-70): connect one, so it
 	// opens this account whatever its email, or disconnect it.
 	import { onMount } from 'svelte';
@@ -24,7 +25,7 @@
 	// Coming back from the provider: once, not as an effect (a toast changes state an effect would track).
 	onMount(() => {
 		const q = page.url.searchParams;
-		if (q.get('sso') === 'linked') toast('Sign-in connected');
+		if (q.get('sso') === 'linked') toast(tr("Sign-in connected"));
 		else if (q.get('sso_error')) toast(ssoError(q.get('sso_error')), 'error');
 		if (q.has('sso') || q.has('sso_error')) history.replaceState(history.state, '', page.url.pathname);
 	});
@@ -32,34 +33,34 @@
 	const connected = (id: string) => identities?.some((i) => i.provider_id === id);
 
 	async function disconnect(i: Identity) {
-		if (!(await confirmDialog({ title: `Disconnect ${i.name || 'this sign-in'}?`, body: 'You won’t be able to sign in with it until you connect it again.', confirm: 'Disconnect' }))) return;
+		if (!(await confirmDialog({ title: tr("Disconnect {0}?", [i.name || tr("this sign-in")]), body: tr("You won’t be able to sign in with it until you connect it again."), confirm: tr("Disconnect") }))) return;
 		try {
 			await api.del('/api/auth/oidc/identities/' + i.provider_id);
-			toast('Disconnected');
+			toast(tr("Disconnected"));
 			await load();
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not disconnect', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not disconnect"), 'error');
 		}
 	}
 </script>
 
 {#if identities && (identities.length || available.length)}
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-		<h2 class="mt-0">Sign-in with other accounts</h2>
-		<p class="small muted m-0">Sign in here with an account you already have elsewhere.</p>
+		<h2 class="mt-0">{tr("Sign-in with other accounts")}</h2>
+		<p class="small muted m-0">{tr("Sign in here with an account you already have elsewhere.")}</p>
 		<ul class="ids">
 			{#each identities as i (i.provider_id)}
 				<li>
 					<Icon name="check-circle" size={18} />
-					<span class="min-w-0 flex-1"><strong>{i.name || 'A removed provider'}</strong><br /><span class="small muted truncate">{i.email || 'Connected'}</span></span>
-					<button class="btn btn-sm" onclick={() => disconnect(i)}>Disconnect</button>
+					<span class="min-w-0 flex-1"><strong>{i.name || tr("A removed provider")}</strong><br /><span class="small muted truncate">{i.email || tr("Connected")}</span></span>
+					<button class="btn btn-sm" onclick={() => disconnect(i)}>{tr("Disconnect")}</button>
 				</li>
 			{/each}
 			{#each available.filter((o) => !connected(o.id)) as o (o.id)}
 				<li class="off">
 					<Icon name="link" size={18} />
-					<span class="min-w-0 flex-1"><strong>{o.name}</strong><br /><span class="small muted">Not connected</span></span>
-					<a class="btn btn-sm" href={'/api/auth/oidc/' + encodeURIComponent(o.id) + '/link'} data-sveltekit-reload>Connect</a>
+					<span class="min-w-0 flex-1"><strong>{o.name}</strong><br /><span class="small muted">{tr("Not connected")}</span></span>
+					<a class="btn btn-sm" href={'/api/auth/oidc/' + encodeURIComponent(o.id) + '/link'} data-sveltekit-reload>{tr("Connect")}</a>
 				</li>
 			{/each}
 		</ul>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Tutoring's bandwidth budget, for the admin (D-81, TS-FR-31, TS-FR-33,
 	// PO-9): how much upload all sessions may use together, the hard limit
 	// nothing goes above, one session's share, and how many screens, cameras
@@ -25,7 +26,7 @@
 		tutoringConfig().then((c) => {
 			enabled = c.enabled;
 			if (!c.enabled) return;
-			load().catch((e) => toast(e instanceof ApiError ? e.message : 'Tutoring didn’t answer', 'error'));
+			load().catch((e) => toast(e instanceof ApiError ? e.message : tr("Tutoring didn’t answer"), 'error'));
 			t = setInterval(() => load().catch(() => {}), 5000);
 		});
 		return () => clearInterval(t);
@@ -37,10 +38,10 @@
 			form = await client.put<Budget>('/api/admin/budget', form);
 			errors = {};
 			await load();
-			toast('Budget saved: it applies now');
+			toast(tr("Budget saved: it applies now"));
 		} catch (err) {
 			if (err instanceof ApiError) errors = err.fields;
-			toast(err instanceof ApiError ? err.message : 'Could not save', 'error');
+			toast(err instanceof ApiError ? err.message : tr("Could not save"), 'error');
 		}
 	}
 	const fields: { key: keyof Budget; label: string; hint: string; step?: string }[] = [
@@ -55,22 +56,22 @@
 
 {#if enabled === true && ov && form && m}
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack gap-3">
-		<h2 class="m-0 text-lg">Bandwidth</h2>
-		<p class="m-0">Live sessions send about <strong class="tabular">{mbps(ov.total_mbps)}</strong> of {mbps(ov.budget.total_mbps)} ({m.pct}%).{#if m.level === 'over'}{' '}<span class="text-error font-semibold">Over budget: the service is switching video off, starting with the busiest session.</span>{/if}</p>
-		<progress class="progress w-full" class:progress-warning={m.level === 'warn'} class:progress-error={m.level === 'over'} value={m.pct} max="100" aria-label="Tutoring against its budget"></progress>
+		<h2 class="m-0 text-lg">{tr("Bandwidth")}</h2>
+		<p class="m-0">{tr("Live sessions send about")} <strong class="tabular">{mbps(ov.total_mbps)}</strong> {tr("of {0} ({1}%).", [mbps(ov.budget.total_mbps), m.pct])}{#if m.level === 'over'}{' '}<span class="text-error font-semibold">{tr("Over budget: the service is switching video off, starting with the busiest session.")}</span>{/if}</p>
+		<progress class="progress w-full" class:progress-warning={m.level === 'warn'} class:progress-error={m.level === 'over'} value={m.pct} max="100" aria-label={tr("Tutoring against its budget")}></progress>
 		{#each ov.sessions.filter((s) => s.auto_off.length) as s (s.id)}
-			<p class="small m-0"><strong>{s.title}</strong> ({s.teacher_name}): switched off {s.auto_off.map((x) => STEP_LABELS[x].toLowerCase()).join(', ')}.</p>
+			<p class="small m-0"><strong>{s.title}</strong> {tr("({0}): switched off {1}.", [s.teacher_name, s.auto_off.map((x) => STEP_LABELS[x].toLowerCase()).join(', ')])}</p>
 		{/each}
 		<form class="budget" onsubmit={save}>
 			{#each fields as f (f.key)}
-				<label class="small">{f.label}
+				<label class="small">{tr(f.label)}
 					<input class="input input-sm" type="number" min="0" step={f.step ?? '1'} bind:value={form[f.key]} aria-invalid={!!errors[f.key]} aria-describedby={'hint-' + f.key} />
-					<span id={'hint-' + f.key} class={errors[f.key] ? 'text-error' : 'muted'}>{errors[f.key] ?? f.hint}</span>
+					<span id={'hint-' + f.key} class={errors[f.key] ? 'text-error' : 'muted'}>{errors[f.key] ?? tr(f.hint)}</span>
 				</label>
 			{/each}
-			<div class="self-end"><button class="btn btn-sm btn-primary">Save</button></div>
+			<div class="self-end"><button class="btn btn-sm btn-primary">{tr("Save")}</button></div>
 		</form>
-		<p class="small muted m-0">Figures are estimates: each screen, camera or voice times how many receive it, at typical rates (a readable screen about 1.2 Mbit/s, a camera 0.4).</p>
+		<p class="small muted m-0">{tr("Figures are estimates: each screen, camera or voice times how many receive it, at typical rates (a readable screen about 1.2 Mbit/s, a camera 0.4).")}</p>
 	</div>
 {/if}
 

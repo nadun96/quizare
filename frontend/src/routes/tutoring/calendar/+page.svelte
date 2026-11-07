@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// The tutoring calendar (D-84, TS-FR-86, TS-FR-88): teachers see the
 	// sessions they teach or co-teach, students those of their classrooms, by
 	// month, week or as a list. Each session can be added to one's own
@@ -35,8 +36,8 @@
 	});
 	const title = $derived(
 		view === 'list' ? 'The next 60 days'
-		: view === 'month' ? anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-		: `${days[0].toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${days[6].toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+		: view === 'month' ? anchor.toLocaleDateString(localeTag(), { month: 'long', year: 'numeric' })
+		: `${days[0].toLocaleDateString(localeTag(), { day: 'numeric', month: 'short' })} – ${days[6].toLocaleDateString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric' })}`
 	);
 
 	$effect(() => {
@@ -48,7 +49,7 @@
 		const [from, to] = range;
 		client.get<{ sessions: CalendarEntry[] }>(`/api/calendar?from=${from.toISOString()}&to=${to.toISOString()}`).then(
 			(r) => (list = r.sessions),
-			(e) => toast(e instanceof ApiError ? e.message : 'The calendar didn’t load', 'error')
+			(e) => toast(e instanceof ApiError ? e.message : tr("The calendar didn’t load"), 'error')
 		);
 	});
 	$effect(() => {
@@ -61,9 +62,9 @@
 		anchor = view === 'month' ? new Date(a.getFullYear(), a.getMonth() + step, 1) : new Date(a.getFullYear(), a.getMonth(), a.getDate() + 7 * step);
 	}
 	const on = (d: Date) => list.filter((e) => e.scheduled_at && sameDay(new Date(e.scheduled_at), d));
-	const time = (s: string) => new Date(s).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-	const short = (s: string) => new Date(s).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-	const full = (s: string) => new Date(s).toLocaleString(undefined, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+	const time = (s: string) => new Date(s).toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' });
+	const short = (s: string) => new Date(s).toLocaleString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+	const full = (s: string) => new Date(s).toLocaleString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 	const statusText: Record<CalendarEntry['status'], string> = { open: '', live: 'live', ended: 'ended', cancelled: 'cancelled' };
 	const today = new Date();
 
@@ -71,7 +72,7 @@
 		try {
 			await client.download(`/api/sessions/${e.id}/calendar.ics`, `tutoring-${e.join_code}.ics`);
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'Could not download', 'error');
+			toast(err instanceof ApiError ? err.message : tr("Could not download"), 'error');
 		}
 	}
 
@@ -82,41 +83,41 @@
 		if (enabled) client.get<{ active: boolean; created_at?: string }>('/api/my/feed').then((f) => (feed = f), () => {});
 	});
 	async function newFeed() {
-		if (feed?.active && !(await confirmDialog({ title: 'Make a new link?', body: 'The old link stops working; calendars using it stop updating.', confirm: 'Make a new link' }))) return;
+		if (feed?.active && !(await confirmDialog({ title: tr("Make a new link?"), body: tr("The old link stops working; calendars using it stop updating."), confirm: tr("Make a new link") }))) return;
 		const r = await client.post<{ path: string }>('/api/my/feed');
 		feedLink = client.base + r.path;
 		feed = { active: true, created_at: new Date().toISOString() };
 	}
 	async function revokeFeed() {
-		if (!(await confirmDialog({ title: 'Turn off the calendar link?', body: 'Calendars using it stop updating.', confirm: 'Turn off', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Turn off the calendar link?"), body: tr("Calendars using it stop updating."), confirm: tr("Turn off"), danger: true }))) return;
 		await client.del('/api/my/feed');
 		feed = { active: false };
 		feedLink = '';
 	}
 	async function copy() {
 		await navigator.clipboard.writeText(feedLink);
-		toast('Link copied');
+		toast(tr("Link copied"));
 	}
 </script>
 
-<svelte:head><title>Tutoring calendar · Classroom Quiz</title></svelte:head>
+<svelte:head><title>{tr("Tutoring calendar · Classroom Quiz")}</title></svelte:head>
 
 <div class="page-container vstack">
-	<h1 class="m-0">Tutoring calendar</h1>
+	<h1 class="m-0">{tr("Tutoring calendar")}</h1>
 	{#if enabled === false}
-		<p class="alert alert-soft alert-info">Tutoring isn't switched on for this platform.</p>
+		<p class="alert alert-soft alert-info">{tr("Tutoring isn't switched on for this platform.")}</p>
 	{:else if enabled}
 		<div class="row gap-2 flex-wrap">
-			<div class="join" role="group" aria-label="View">
+			<div class="join" role="group" aria-label={tr("View")}>
 				{#each [['month', 'Month'], ['week', 'Week'], ['list', 'List']] as [k, l] (k)}
 					<button class="btn btn-sm join-item" class:btn-active={view === k} aria-pressed={view === k} onclick={() => (view = k as typeof view)}>{l}</button>
 				{/each}
 			</div>
 			{#if view !== 'list'}
 				<div class="join">
-					<button class="btn btn-sm join-item" onclick={() => move(-1)} aria-label="Earlier">‹</button>
-					<button class="btn btn-sm join-item" onclick={() => (anchor = new Date())}>Today</button>
-					<button class="btn btn-sm join-item" onclick={() => move(1)} aria-label="Later">›</button>
+					<button class="btn btn-sm join-item" onclick={() => move(-1)} aria-label={tr("Earlier")}>‹</button>
+					<button class="btn btn-sm join-item" onclick={() => (anchor = new Date())}>{tr("Today")}</button>
+					<button class="btn btn-sm join-item" onclick={() => move(1)} aria-label={tr("Later")}>›</button>
 				</div>
 			{/if}
 			<h2 class="m-0 text-base" aria-live="polite">{title}</h2>
@@ -132,7 +133,7 @@
 							{#if statusText[e.status]}<span class="badge badge-soft badge-sm">{statusText[e.status]}</span>{/if}
 						</button></li>
 					{:else}
-						<li class="muted p-2">Nothing scheduled in the next 60 days.</li>
+						<li class="muted p-2">{tr("Nothing scheduled in the next 60 days.")}</li>
 					{/each}
 				</ul>
 			</div>
@@ -153,16 +154,16 @@
 		{/if}
 
 		<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack gap-2" aria-labelledby="feed-h">
-			<h2 id="feed-h" class="m-0 text-base">In your own calendar</h2>
-			<p class="small muted m-0">A private link your calendar app (Google Calendar, Outlook, Apple Calendar) can subscribe to: it keeps your tutoring sessions up to date. Anyone with the link can see them, so keep it to yourself.</p>
+			<h2 id="feed-h" class="m-0 text-base">{tr("In your own calendar")}</h2>
+			<p class="small muted m-0">{tr("A private link your calendar app (Google Calendar, Outlook, Apple Calendar) can subscribe to: it keeps your tutoring sessions up to date. Anyone with the link can see them, so keep it to yourself.")}</p>
 			{#if feedLink}
-				<div class="join w-full"><input class="input join-item flex-1" readonly value={feedLink} aria-label="Your calendar link" /><button class="btn join-item" onclick={copy}>Copy</button></div>
-				<p class="small m-0">Copy it now: it isn't shown again.</p>
+				<div class="join w-full"><input class="input join-item flex-1" readonly value={feedLink} aria-label={tr("Your calendar link")} /><button class="btn join-item" onclick={copy}>{tr("Copy")}</button></div>
+				<p class="small m-0">{tr("Copy it now: it isn't shown again.")}</p>
 			{/if}
 			<div class="row gap-2">
-				<button class="btn btn-sm" onclick={newFeed}>{feed?.active ? 'Make a new link' : 'Make a calendar link'}</button>
-				{#if feed?.active}<button class="btn btn-sm btn-ghost" onclick={revokeFeed}>Turn off</button>{/if}
-				{#if feed?.active && feed.created_at && !feedLink}<span class="small muted">A link is on (since {new Date(feed.created_at).toLocaleDateString()}).</span>{/if}
+				<button class="btn btn-sm" onclick={newFeed}>{feed?.active ? tr("Make a new link") : tr("Make a calendar link")}</button>
+				{#if feed?.active}<button class="btn btn-sm btn-ghost" onclick={revokeFeed}>{tr("Turn off")}</button>{/if}
+				{#if feed?.active && feed.created_at && !feedLink}<span class="small muted">{tr("A link is on (since {0}).", [new Date(feed.created_at).toLocaleDateString(localeTag())])}</span>{/if}
 			</div>
 		</section>
 	{/if}
@@ -173,18 +174,18 @@
 		{@const e = picked}
 		<div class="modal-box vstack gap-2">
 			<h2 id="ev-h" class="m-0 text-lg">{e.title}</h2>
-			<p class="m-0">{full(e.scheduled_at ?? e.started_at ?? '')}{e.scheduled_at ? `, ${e.duration_min} minutes` : ''}</p>
-			<p class="small muted m-0">{e.classroom_name} · {e.teacher_name}{e.role === 'coteacher' ? ' · you co-teach' : ''} · times in your time zone (planned in {e.time_zone})</p>
-			{#if e.status === 'cancelled'}<p class="alert alert-soft alert-warning py-2 m-0">This session was cancelled.</p>
-			{:else if e.status === 'ended'}<p class="small m-0">This session has ended.</p>
-			{:else if e.role === 'student' && !canJoin(e, now) && e.opens_at}<p class="small m-0">You can join from {time(e.opens_at)}.</p>{/if}
+			<p class="m-0">{full(e.scheduled_at ?? e.started_at ?? '')}{e.scheduled_at ? tr(", {0} minutes", [e.duration_min]) : ''}</p>
+			<p class="small muted m-0">{tr("{0} · {1}{2} · times in your time zone (planned in {3})", [e.classroom_name, e.teacher_name, e.role === 'coteacher' ? tr(" · you co-teach") : '', e.time_zone])}</p>
+			{#if e.status === 'cancelled'}<p class="alert alert-soft alert-warning py-2 m-0">{tr("This session was cancelled.")}</p>
+			{:else if e.status === 'ended'}<p class="small m-0">{tr("This session has ended.")}</p>
+			{:else if e.role === 'student' && !canJoin(e, now) && e.opens_at}<p class="small m-0">{tr("You can join from {0}.", [time(e.opens_at)])}</p>{/if}
 			<div class="modal-action">
-				{#if e.scheduled_at && e.status !== 'cancelled'}<button class="btn btn-ghost" onclick={() => addToCalendar(e)}>Add to my calendar</button>{/if}
-				<button class="btn" onclick={() => (picked = null)}>Close</button>
-				{#if canJoin(e, now)}<a class="btn btn-primary" href={'/tutor/' + e.join_code}>{e.role === 'student' ? 'Join' : 'Open'}</a>{/if}
+				{#if e.scheduled_at && e.status !== 'cancelled'}<button class="btn btn-ghost" onclick={() => addToCalendar(e)}>{tr("Add to my calendar")}</button>{/if}
+				<button class="btn" onclick={() => (picked = null)}>{tr("Close")}</button>
+				{#if canJoin(e, now)}<a class="btn btn-primary" href={'/tutor/' + e.join_code}>{e.role === 'student' ? tr("Join") : tr("Open")}</a>{/if}
 			</div>
 		</div>
-		<button class="modal-backdrop" aria-label="Close" onclick={() => (picked = null)}></button>
+		<button class="modal-backdrop" aria-label={tr("Close")} onclick={() => (picked = null)}></button>
 	{/if}
 </dialog>
 

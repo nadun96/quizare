@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A list's filters by details (D-128): term (classrooms), department,
 	// year, semester, course code and tags, from the values in use. Only
 	// filters with values to choose from show.
@@ -30,7 +31,7 @@
 <div class="vstack gap-2">
 	<div class="flex flex-wrap items-center gap-2">
 		{#if when}
-			<div class="join" role="group" aria-label="By term">
+			<div class="join" role="group" aria-label={tr("By term")}>
 				{#each WHEN as [k, l] (k)}
 					<button type="button" class="btn btn-sm join-item" class:btn-primary={value.when === k} aria-pressed={value.when === k} onclick={() => set('when', k)}>{l}</button>
 				{/each}
@@ -38,15 +39,15 @@
 		{/if}
 		{#each selects as [k, label, list] (k)}
 			<select class="select select-sm w-auto" class:select-primary={value[k]} aria-label={label} value={value[k]} onchange={(e) => set(k, e.currentTarget.value)}>
-				<option value="">{label}: any</option>
+				<option value="">{tr("{0}: any", [label])}</option>
 				{#each list as c (c.value)}<option value={c.value}>{c.value} ({c.count})</option>{/each}
 				{#if value[k] && !list.some((c) => c.value === value[k])}<option value={value[k]}>{value[k]}</option>{/if}
 			</select>
 		{/each}
-		{#if n}<button type="button" class="btn btn-sm btn-ghost" onclick={() => ((value = emptyFilter()), onchange())}><Icon name="x" size={14} />Clear {n} {n === 1 ? 'filter' : 'filters'}</button>{/if}
+		{#if n}<button type="button" class="btn btn-sm btn-ghost" onclick={() => ((value = emptyFilter()), onchange())}><Icon name="x" size={14} />{tr("Clear {0} {1}", [n, n === 1 ? 'filter' : 'filters'])}</button>{/if}
 	</div>
 	{#if facets.tags.length}
-		<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="By tag">
+		<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label={tr("By tag")}>
 			<Icon name="flag" size={14} />
 			{#each facets.tags.slice(0, 16) as t (t.value)}
 				{@const on = value.tags.some((x) => x.toLowerCase() === t.value.toLowerCase())}

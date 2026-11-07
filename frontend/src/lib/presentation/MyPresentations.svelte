@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A student's presentations (D-76): published in their classrooms, with how far they are.
 	import { api } from '../api';
 	import Icon from '../ui/Icon.svelte';
@@ -8,24 +9,24 @@
 	$effect(() => {
 		api.get<{ presentations: MyPresentation[] }>('/api/my/presentations').then((r) => (list = r.presentations), () => {});
 	});
-	const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+	const when = (iso: string) => new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 	const notYet = (p: MyPresentation) => !!p.opens_at && new Date(p.opens_at) > new Date();
 </script>
 
 {#if list.length}
-	<h2>Presentations</h2>
+	<h2>{tr("Presentations")}</h2>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
-		<ul class="items" aria-label="My presentations">
+		<ul class="items" aria-label={tr("My presentations")}>
 			{#each list as p (p.id)}
 				<li>
 					<span class="icon" aria-hidden="true"><Icon name={p.finished ? 'check-circle' : 'monitor'} size={18} /></span>
 					<div class="min-w-0 flex-1">
-						<p class="m-0 truncate font-semibold">{p.title}{#if p.live}<span class="badge badge-error badge-soft badge-sm ml-2">Live now</span>{/if}</p>
-						<p class="small muted m-0">{p.classroom} · {progressText(p)}{p.due_at && !p.finished ? ` · by ${when(p.due_at)}` : ''}</p>
+						<p class="m-0 truncate font-semibold">{p.title}{#if p.live}<span class="badge badge-error badge-soft badge-sm ml-2">{tr("Live now")}</span>{/if}</p>
+						<p class="small muted m-0">{p.classroom} · {progressText(p)}{p.due_at && !p.finished ? tr(" · by {0}", [when(p.due_at)]) : ''}</p>
 					</div>
-					{#if p.live}<a class="btn btn-sm btn-primary" href={`/slides/${p.id}/live`}>Join</a>
-					{:else if notYet(p)}<span class="small muted whitespace-nowrap">Opens {when(p.opens_at!)}</span>
-					{:else}<a class="btn btn-sm" class:btn-primary={!p.finished} href={'/slides/' + p.id}>{p.finished ? 'Look again' : p.started ? 'Continue' : 'Start'}</a>{/if}
+					{#if p.live}<a class="btn btn-sm btn-primary" href={`/slides/${p.id}/live`}>{tr("Join")}</a>
+					{:else if notYet(p)}<span class="small muted whitespace-nowrap">{tr("Opens {0}", [when(p.opens_at!)])}</span>
+					{:else}<a class="btn btn-sm" class:btn-primary={!p.finished} href={'/slides/' + p.id}>{p.finished ? tr("Look again") : p.started ? tr("Continue") : tr("Start")}</a>{/if}
 				</li>
 			{/each}
 		</ul>

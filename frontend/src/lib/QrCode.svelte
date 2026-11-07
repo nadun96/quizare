@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// QR codes are rendered in the browser; no server CPU is spent (stack sheet).
 	import QRCode from 'qrcode';
 	let { text, size = 320 }: { text: string; size?: number } = $props();
@@ -9,6 +10,6 @@
 	});
 </script>
 
-<figure aria-label={'QR code for ' + text} style="margin:0">
+<figure aria-label={tr("QR code for {0}", [text])} style="margin:0">
 	<canvas bind:this={canvas} aria-hidden="true" style="max-width:100%;height:auto;background:#fff;border-radius:8px"></canvas>
 </figure>

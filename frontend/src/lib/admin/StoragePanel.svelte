@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Storage (PL-FR-04 to PL-FR-06, D-57): the space the platform uses, its
 	// limits, and clean-ups. "Storage" shows the figures and limits;
 	// "Clean-up" deletes, always after a preview the admin confirms.
@@ -75,7 +76,7 @@
 		limitErrors = {};
 		try {
 			await api.put('/api/admin/storage/limits', { recording_limit_bytes: Math.round(Number(gbRec) * GB), backup_space_bytes: Math.round(Number(gbBak) * GB) });
-			toast('Limits saved');
+			toast(tr("Limits saved"));
 			load();
 		} catch (err) {
 			if (err instanceof ApiError) limitErrors = err.fields;
@@ -113,16 +114,16 @@
 	async function runCleanup() {
 		if (!preview || !preview.items) return;
 		const ok = await confirmDialog({
-			title: `Delete ${preview.items} ${preview.items === 1 ? 'item' : 'items'}?`,
-			body: `${areaLabel} (before ${before}). This frees about ${fmtBytes(preview.bytes)} and can't be undone.`,
-			confirm: 'Delete',
+			title: tr("Delete {0} {1}?", [preview.items, preview.items === 1 ? 'item' : 'items']),
+			body: tr("{0} (before {1}). This frees about {2} and can't be undone.", [areaLabel, before, fmtBytes(preview.bytes)]),
+			confirm: tr("Delete"),
 			danger: true
 		});
 		if (!ok) return;
 		busy = true;
 		try {
 			const f = await api.post<Freed>('/api/admin/storage/cleanup', { area, before });
-			toast(`Deleted ${f.items} ${f.items === 1 ? 'item' : 'items'}, freeing ${fmtBytes(f.bytes)}`);
+			toast(tr("Deleted {0} {1}, freeing {2}", [f.items, f.items === 1 ? 'item' : 'items', fmtBytes(f.bytes)]));
 			preview = null;
 			if (canStorage) load(true);
 		} finally {
@@ -134,27 +135,27 @@
 <div class="vstack">
 	{#if canStorage}
 		{#if !o}
-			<p class="muted">Measuring…</p>
+			<p class="muted">{tr("Measuring…")}</p>
 		{:else}
 			<div class="row">
-				<p class="small muted m-0">Measured {new Date(o.taken_at).toLocaleString()} · updated every hour</p>
+				<p class="small muted m-0">{tr("Measured {0} · updated every hour", [new Date(o.taken_at).toLocaleString(localeTag())])}</p>
 				<span class="spacer"></span>
-				<button class="btn btn-sm" onclick={() => load(true)} disabled={refreshing}>{refreshing ? 'Measuring…' : 'Refresh'}</button>
+				<button class="btn btn-sm" onclick={() => load(true)} disabled={refreshing}>{refreshing ? tr("Measuring…") : tr("Refresh")}</button>
 			</div>
 			<div class="auto-grid" role="list">
-				<div class="card card-border bg-base-100 shadow-sm p-4" role="listitem"><div class="small muted">Database</div><div class="figure tabular">{fmtBytes(o.db_bytes)}</div></div>
-				<div class="card card-border bg-base-100 shadow-sm p-4" role="listitem"><div class="small muted">Backups on the server</div><div class="figure tabular">{fmtBytes(o.backups_bytes)}</div><div class="small muted">of {fmtBytes(o.limits.backup_space_bytes)} kept</div></div>
-				<div class="card card-border bg-base-100 shadow-sm p-4" role="listitem"><div class="small muted">Recordings</div><div class="figure tabular">{fmtBytes(o.recordings_bytes)}</div><div class="small muted">of {fmtBytes(o.limits.recording_limit_bytes)} · arrive with tutoring</div></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4" role="listitem"><div class="small muted">{tr("Database")}</div><div class="figure tabular">{fmtBytes(o.db_bytes)}</div></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4" role="listitem"><div class="small muted">{tr("Backups on the server")}</div><div class="figure tabular">{fmtBytes(o.backups_bytes)}</div><div class="small muted">{tr("of {0} kept", [fmtBytes(o.limits.backup_space_bytes)])}</div></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4" role="listitem"><div class="small muted">{tr("Recordings")}</div><div class="figure tabular">{fmtBytes(o.recordings_bytes)}</div><div class="small muted">{tr("of {0} · arrive with tutoring", [fmtBytes(o.limits.recording_limit_bytes)])}</div></div>
 				<div class="card card-border bg-base-100 shadow-sm p-4" role="listitem">
-					<div class="small muted">Free disk space</div>
+					<div class="small muted">{tr("Free disk space")}</div>
 					<div class="figure tabular">{fmtBytes(o.disk_free)}</div>
-					<div class="small {lowDisk ? 'text-warning' : 'muted'}">{lowDisk ? 'Low: ' : ''}of {fmtBytes(o.disk_total)} on the backup folder's disk</div>
+					<div class="small {lowDisk ? 'text-warning' : 'muted'}">{tr("{0}of {1} on the backup folder's disk", [lowDisk ? tr("Low: ") : '', fmtBytes(o.disk_total)])}</div>
 				</div>
 			</div>
 
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-				<h2 class="m-0 text-base">Database by area</h2>
-				<ul class="bars" aria-label="Database size by area">
+				<h2 class="m-0 text-base">{tr("Database by area")}</h2>
+				<ul class="bars" aria-label={tr("Database size by area")}>
 					{#each areas as [k, v] (k)}
 						<li>
 							<span class="lbl small">{AREA_LABELS[k] ?? k}</span>
@@ -166,30 +167,30 @@
 			</div>
 
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-				<h2 class="m-0 text-base">Database size, last 30 days</h2>
+				<h2 class="m-0 text-base">{tr("Database size, last 30 days")}</h2>
 				<GrowthChart points={o.growth} />
 			</div>
 
 			<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={saveLimits}>
-				<h2 class="m-0 text-base">Limits</h2>
+				<h2 class="m-0 text-base">{tr("Limits")}</h2>
 				<div class="limits">
 					<div>
-						<label for="lim-rec">Recordings, all together (GB)</label>
+						<label for="lim-rec">{tr("Recordings, all together (GB)")}</label>
 						<input id="lim-rec" class="input w-full" type="number" min="0.1" step="0.1" bind:value={gbRec} aria-invalid={!!limitErrors.recording_limit_bytes} aria-describedby="lim-rec-h" />
-						<p id="lim-rec-h" class="small muted m-0">Tutoring recordings are kept 2 days within this limit (5 GB by default).</p>
+						<p id="lim-rec-h" class="small muted m-0">{tr("Tutoring recordings are kept 2 days within this limit (5 GB by default).")}</p>
 						{#if limitErrors.recording_limit_bytes}<p class="field-error">{limitErrors.recording_limit_bytes}</p>{/if}
 					</div>
 					<div>
-						<label for="lim-bak">Backups kept on the server (GB)</label>
+						<label for="lim-bak">{tr("Backups kept on the server (GB)")}</label>
 						<input id="lim-bak" class="input w-full" type="number" min="0.1" step="0.1" bind:value={gbBak} aria-invalid={!!limitErrors.backup_space_bytes} aria-describedby="lim-bak-h" />
-						<p id="lim-bak-h" class="small muted m-0">Past this, the oldest console backups are deleted. The newest is always kept.</p>
+						<p id="lim-bak-h" class="small muted m-0">{tr("Past this, the oldest console backups are deleted. The newest is always kept.")}</p>
 						{#if limitErrors.backup_space_bytes}<p class="field-error">{limitErrors.backup_space_bytes}</p>{/if}
 					</div>
 				</div>
-				<div><button class="btn">Save limits</button></div>
+				<div><button class="btn">{tr("Save limits")}</button></div>
 				<details class="small">
-					<summary>Fixed limits</summary>
-					<table class="table table-sm"><tbody>{#each o.fixed_limits as f (f.label)}<tr><td>{f.label}</td><td class="tabular">{f.value}</td></tr>{/each}</tbody></table>
+					<summary>{tr("Fixed limits")}</summary>
+					<table class="table table-sm"><tbody>{#each o.fixed_limits as f (f.label)}<tr><td>{tr(f.label)}</td><td class="tabular">{f.value}</td></tr>{/each}</tbody></table>
 				</details>
 			</form>
 		{/if}
@@ -197,25 +198,25 @@
 
 	{#if canCleanup}
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-			<h2 class="m-0 text-base">Clean up</h2>
-			<p class="small muted m-0">Nothing is deleted until you've seen what will go and confirmed. Answers whose files are removed stay, marked as removed.</p>
+			<h2 class="m-0 text-base">{tr("Clean up")}</h2>
+			<p class="small muted m-0">{tr("Nothing is deleted until you've seen what will go and confirmed. Answers whose files are removed stay, marked as removed.")}</p>
 			<div class="limits">
 				<div>
-					<label for="cl-area">What</label>
+					<label for="cl-area">{tr("What")}</label>
 					<select id="cl-area" class="select w-full" bind:value={area} onchange={() => (preview = null)}>
-						{#each cleanAreas as a (a.id)}<option value={a.id}>{a.label}</option>{/each}
+						{#each cleanAreas as a (a.id)}<option value={a.id}>{tr(a.label)}</option>{/each}
 					</select>
 				</div>
 				<div>
-					<label for="cl-before">From before</label>
+					<label for="cl-before">{tr("From before")}</label>
 					<input id="cl-before" class="input w-full" type="date" bind:value={before} max={new Date().toISOString().slice(0, 10)} onchange={() => (preview = null)} />
 				</div>
 			</div>
 			<div class="row">
-				<button class="btn" onclick={runPreview} disabled={!area || !before}>Preview</button>
+				<button class="btn" onclick={runPreview} disabled={!area || !before}>{tr("Preview")}</button>
 				{#if preview}
-					<span class="small" aria-live="polite">{preview.items ? `${preview.items} ${preview.items === 1 ? 'item' : 'items'}, about ${fmtBytes(preview.bytes)}` : 'Nothing to delete.'}</span>
-					{#if preview.items}<button class="btn btn-error btn-outline" onclick={runCleanup} disabled={busy}>Delete…</button>{/if}
+					<span class="small" aria-live="polite">{preview.items ? tr("{0} {1}, about {2}", [preview.items, preview.items === 1 ? 'item' : 'items', fmtBytes(preview.bytes)]) : tr("Nothing to delete.")}</span>
+					{#if preview.items}<button class="btn btn-error btn-outline" onclick={runCleanup} disabled={busy}>{tr("Delete…")}</button>{/if}
 				{/if}
 			</div>
 			{#if cleanError}<p class="field-error m-0">{cleanError}</p>{/if}

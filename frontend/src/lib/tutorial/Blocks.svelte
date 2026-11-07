@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A tutorial page's content (D-74): text, pictures, videos, documents in
 	// Google's viewer, and links. The server worked out each embed address,
 	// so only YouTube's privacy-enhanced player and Google's viewers are framed.
@@ -23,7 +24,7 @@
 		{:else if b.type === 'video' || b.type === 'document'}
 			<figure>
 				<div class="frame" class:doc={b.type === 'document'}>
-					<iframe src={b.embed} title={b.text || (b.type === 'video' ? 'Video' : 'Document')} loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
+					<iframe src={b.embed} title={b.text || (b.type === 'video' ? tr("Video") : tr("Document"))} loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
 						allow="fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>
 				</div>
 				{#if b.text}<figcaption><MathText text={b.text} /></figcaption>{/if}
@@ -32,7 +33,7 @@
 			<a class="link-card" href={b.url} target="_blank" rel="noopener noreferrer" onclick={() => onlink?.()} onauxclick={() => onlink?.()}>
 				<Icon name="link" size={18} />
 				<span class="min-w-0"><strong class="block truncate">{b.text}</strong><span class="small muted block truncate">{b.url}</span></span>
-				<span class="small muted ml-auto whitespace-nowrap newtab">Opens in a new tab</span>
+				<span class="small muted ml-auto whitespace-nowrap newtab">{tr("Opens in a new tab")}</span>
 			</a>
 		{/if}
 	{/each}

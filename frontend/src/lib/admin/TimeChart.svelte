@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Figures over time with one unit, so one axis (D-82). A legend names the
 	// series (each also labelled at its line's end); an optional reference
 	// line marks a limit. A crosshair and tooltip follow the pointer or the
@@ -69,14 +70,14 @@
 	}
 	const span = $derived(t1 - t0);
 	const when = (at: string) =>
-		new Date(at).toLocaleString(undefined, span > 36 * 3600_000 ? { weekday: 'short', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' });
+		new Date(at).toLocaleString(localeTag(), span > 36 * 3600_000 ? { weekday: 'short', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' });
 </script>
 
 <div class="vstack gap-1">
 	{#if series.length > 1}
-		<ul class="legend small" aria-label="Legend">
-			{#each series as s (s.key)}<li><span class="swatch" style="background: {s.color}"></span>{s.label}</li>{/each}
-			{#if ref}<li><span class="swatch ref"></span>{ref.label}</li>{/if}
+		<ul class="legend small" aria-label={tr("Legend")}>
+			{#each series as s (s.key)}<li><span class="swatch" style="background: {s.color}"></span>{tr(s.label)}</li>{/each}
+			{#if ref}<li><span class="swatch ref"></span>{tr(ref.label)}</li>{/if}
 		</ul>
 	{/if}
 	<div class="relative" bind:clientWidth={width}>
@@ -89,7 +90,7 @@
 			class="chart"
 			role="img"
 			tabindex="0"
-			aria-label="{label}. Use the arrow keys to read each point."
+			aria-label={tr("{0}. Use the arrow keys to read each point.", [label])}
 			onpointermove={onMove}
 			onpointerleave={() => (active = null)}
 			onkeydown={onKey}
@@ -115,7 +116,7 @@
 				{/each}
 			{/each}
 			{#each ends as e (e.key)}
-				<text x={pad.l + iw + 6} y={e.y} class="tick end" dominant-baseline="middle">{e.label}</text>
+				<text x={pad.l + iw + 6} y={e.y} class="tick end" dominant-baseline="middle">{tr(e.label)}</text>
 			{/each}
 			{#if active !== null && points[active]}
 				<line x1={x(points[active].at)} x2={x(points[active].at)} y1={pad.t} y2={pad.t + ih} class="cross" />
@@ -130,15 +131,15 @@
 				<span class="muted">{when(points[active].at)}</span>
 				{#each series as s (s.key)}
 					{@const v = points[active].values[s.key]}
-					{#if v != null}<br /><span class="swatch" style="background: {s.color}"></span>{s.label} <strong class="tabular">{fmt(v)}</strong>{/if}
+					{#if v != null}<br /><span class="swatch" style="background: {s.color}"></span>{tr(s.label)} <strong class="tabular">{fmt(v)}</strong>{/if}
 				{/each}
 			</div>
 		{/if}
 	</div>
 	<details class="small">
-		<summary>Show as a table</summary>
+		<summary>{tr("Show as a table")}</summary>
 		<table class="table table-sm">
-			<thead><tr><th>Time</th>{#each series as s (s.key)}<th class="text-right">{s.label}</th>{/each}</tr></thead>
+			<thead><tr><th>{tr("Time")}</th>{#each series as s (s.key)}<th class="text-right">{tr(s.label)}</th>{/each}</tr></thead>
 			<tbody>
 				{#each points as p (p.at)}
 					<tr><td>{when(p.at)}</td>{#each series as s (s.key)}<td class="tabular text-right">{p.values[s.key] == null ? '–' : fmt(p.values[s.key]!)}</td>{/each}</tr>

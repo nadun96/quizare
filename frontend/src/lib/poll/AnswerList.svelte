@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Every answer to one question, for moderation, one page at a time from
 	// the server (PL-FR-02). Live results show the newest 300 text answers;
 	// this reaches all of them, newest first, with search and a hidden/shown
@@ -29,27 +30,27 @@
 </script>
 
 <details class="answers mt-3" ontoggle={toggle}>
-	<summary class="small font-semibold">All answers, including hidden ones</summary>
+	<summary class="small font-semibold">{tr("All answers, including hidden ones")}</summary>
 	{#if opened}
 		<div class="vstack mt-2">
 			<div class="flex flex-wrap items-center gap-2">
-				<ListSearch {list} placeholder="Search answers or names" label="Search answers" />
-				<select class="select select-sm w-auto" bind:value={hidden} onchange={() => list.refilter()} aria-label="Show">
-					<option value="">All</option><option value="false">Shown</option><option value="true">Hidden</option>
+				<ListSearch {list} placeholder={tr("Search answers or names")} label={tr("Search answers")} />
+				<select class="select select-sm w-auto" bind:value={hidden} onchange={() => list.refilter()} aria-label={tr("Show")}>
+					<option value="">{tr("All")}</option><option value="false">{tr("Shown")}</option><option value="true">{tr("Hidden")}</option>
 				</select>
 			</div>
 			<ul class="rows">
 				{#each list.rows as r (r.participant_id)}
 					<li class:off={r.hidden}>
-						<span class="min-w-0 flex-1"><span class="small muted">{r.name}{r.real_name ? ` · ${r.real_name}` : ''} · {new Date(r.at).toLocaleTimeString()}</span><br /><span class="whitespace-pre-wrap">{r.text}</span></span>
-						{#if r.hidden}<button class="btn btn-ghost btn-xs" onclick={() => setHidden(r, false)}>Show</button>
-						{:else}<button class="btn btn-ghost btn-xs" onclick={() => setHidden(r, true)}>Hide</button>{/if}
+						<span class="min-w-0 flex-1"><span class="small muted">{r.name}{r.real_name ? ` · ${r.real_name}` : ''} · {new Date(r.at).toLocaleTimeString(localeTag())}</span><br /><span class="whitespace-pre-wrap">{r.text}</span></span>
+						{#if r.hidden}<button class="btn btn-ghost btn-xs" onclick={() => setHidden(r, false)}>{tr("Show")}</button>
+						{:else}<button class="btn btn-ghost btn-xs" onclick={() => setHidden(r, true)}>{tr("Hide")}</button>{/if}
 					</li>
 				{:else}
-					<li class="muted small">{list.loaded ? 'No answers match.' : 'Loading…'}</li>
+					<li class="muted small">{list.loaded ? tr("No answers match.") : tr("Loading…")}</li>
 				{/each}
 			</ul>
-			<Pager {list} label="Answers" />
+			<Pager {list} label={tr("Answers")} />
 		</div>
 	{/if}
 </details>

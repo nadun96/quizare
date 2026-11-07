@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The participant's input for any of the 20 poll question types (D-40).
 	// Quiz-style types reuse QuestionView; the rest have their own inputs.
 	// Every change is reported; text inputs debounce.
@@ -54,12 +55,12 @@
 <div class="poll-input vstack">
 	{#if quizStyle}
 		<QuestionView question={asStudent} value={(value ?? null) as Response | null} {disabled} onchange={(r) => onchange(r as PollAnswer)} />
-		{#if q.type === 'MULTI' && b.max_choices}<p class="small muted m-0">Choose up to {b.max_choices}.</p>{/if}
+		{#if q.type === 'MULTI' && b.max_choices}<p class="small muted m-0">{tr("Choose up to {0}.", [b.max_choices])}</p>{/if}
 	{:else}
 		<RichText class="qtext" text={q.text} format={b.format} />
 		{#if q.type === 'SINGLE'}
 			<select class="select w-full" {disabled} aria-label={label} value={value?.selected?.[0] ?? ''} onchange={(e) => onchange(e.currentTarget.value ? { selected: [e.currentTarget.value] } : {})}>
-				<option value="">Choose…</option>
+				<option value="">{tr("Choose…")}</option>
 				{#each b.options ?? [] as o (o.id)}<option value={o.id}>{o.text}</option>{/each}
 			</select>
 		{:else if q.type === 'SHORT_TEXT'}
@@ -67,7 +68,7 @@
 			<p class="small muted m-0 text-right tabular">{local.length} / {b.max_length ?? 200}</p>
 		{:else if q.type === 'ESSAY'}
 			<textarea class="textarea w-full" rows="6" {disabled} aria-label={label} value={local} oninput={(e) => { local = e.currentTarget.value; later({ text: local }); }} onblur={() => onchange({ text: local })}></textarea>
-			<p class="small m-0 text-right tabular" class:text-error={!!b.max_words && words > b.max_words} class:muted={!b.max_words || words <= b.max_words}>{words} word{words === 1 ? '' : 's'}{b.max_words ? ` of ${b.max_words}` : ''}</p>
+			<p class="small m-0 text-right tabular" class:text-error={!!b.max_words && words > b.max_words} class:muted={!b.max_words || words <= b.max_words}>{tr("{0} word{1}{2}", [words, words === 1 ? '' : 's', b.max_words ? tr(" of {0}", [b.max_words]) : ''])}</p>
 		{:else if q.type === 'CODE'}
 			<CodeInput value={value?.text ?? ''} language={b.language} maxLength={b.max_length ?? 10000} {disabled} {label} onchange={(t) => onchange({ text: t })} />
 		{:else if q.type === 'WORD_CLOUD'}
@@ -88,7 +89,7 @@
 				/>
 				{#if b.unit}<span class="join-item flex items-center border border-[var(--color-field)] bg-base-200 px-3">{b.unit}</span>{/if}
 			</div>
-			{#if b.min !== undefined || b.max !== undefined}<p class="small muted m-0">{b.min !== undefined && b.max !== undefined ? `Between ${b.min} and ${b.max}` : b.min !== undefined ? `At least ${b.min}` : `At most ${b.max}`}</p>{/if}
+			{#if b.min !== undefined || b.max !== undefined}<p class="small muted m-0">{b.min !== undefined && b.max !== undefined ? tr("Between {0} and {1}", [b.min, b.max]) : b.min !== undefined ? tr("At least {0}", [b.min]) : tr("At most {0}", [b.max])}</p>{/if}
 		{:else if q.type === 'DATE'}
 			<input class="input w-full max-w-xs" type="date" {disabled} aria-label={label} min={b.from} max={b.to} value={value?.date ?? ''} onchange={(e) => onchange(e.currentTarget.value ? { date: e.currentTarget.value } : {})} />
 		{:else if q.type === 'TIME'}

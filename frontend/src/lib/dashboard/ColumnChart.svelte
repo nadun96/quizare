@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Columns on a 0–100 % axis (D-105), one hue, ≤ 24 px wide with a 4 px
 	// rounded top and a square foot. Only the highest and the latest carry
 	// their value; every column has its own hover and focus tooltip, and the
@@ -56,7 +57,7 @@
 			{@const c = cols[active]}
 			<div class="tip small" style="left: {tipLeft}%" aria-hidden="true">
 				<p class="m-0"><strong class="text-base">{c.value}{unit}</strong></p>
-				<p class="m-0 font-semibold truncate">{c.label}</p>
+				<p class="m-0 font-semibold truncate">{tr(c.label)}</p>
 				<p class="m-0 muted">{c.sub}</p>
 				{#each c.lines as l (l)}<p class="m-0 muted">{l}</p>{/each}
 			</div>
@@ -66,8 +67,8 @@
 		<summary>{t('common.showTable')}</summary>
 		<div class="table-wrap">
 			<table class="table table-sm">
-				<thead><tr><th>Quiz</th><th>When</th><th>Average</th><th>Details</th></tr></thead>
-				<tbody>{#each cols as c, i (i)}<tr><td>{c.label}</td><td>{c.sub}</td><td class="tabular">{c.value}{unit}</td><td>{c.lines.join(' · ')}</td></tr>{/each}</tbody>
+				<thead><tr><th>{tr("Quiz")}</th><th>{tr("When")}</th><th>{tr("Average")}</th><th>{tr("Details")}</th></tr></thead>
+				<tbody>{#each cols as c, i (i)}<tr><td>{tr(c.label)}</td><td>{c.sub}</td><td class="tabular">{c.value}{unit}</td><td>{c.lines.join(' · ')}</td></tr>{/each}</tbody>
 			</table>
 		</div>
 	</details>

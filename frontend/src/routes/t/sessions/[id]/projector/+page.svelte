@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Classroom screen: big QR + code + link, with a live joined count (UC-02 step 2).
 	import { Tween } from 'svelte/motion';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
@@ -36,7 +37,7 @@
 		<QrCode text={d.session.join_url} {size} />
 		<p class="code">{d.session.join_code}</p>
 		<p class="url">{d.session.join_url.replace(/^https?:\/\//, '')}</p>
-		<p class="count" aria-live="polite"><span class="tabular">{Math.round(shown.current)}</span> joined</p>
+		<p class="count" aria-live="polite"><span class="tabular">{Math.round(shown.current)}</span> {tr("joined")}</p>
 	{:else}<Skeleton lines={4} />{/if}
 </div>
 

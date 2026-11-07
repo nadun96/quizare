@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// A percentage over a run of quizzes (D-105), 0–100 on one axis: the
 	// series that is the point in the accent hue with its dots, the context
 	// series (the class average) in gray: the emphasis form. A crosshair
@@ -61,7 +62,7 @@
 	<div class="relative" bind:clientWidth={width}>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 		<svg bind:this={svg} viewBox="0 0 {W} {H}" width={W} height={H} class="chart" role="img" tabindex="0"
-			aria-label="{title}: {points.length} {noun}{last ? `, latest ${last.value}%` : ''}. Use the arrow keys to read each one."
+			aria-label={tr("{0}: {1} {2}{3}. Use the arrow keys to read each one.", [title, points.length, noun, last ? tr(", latest {0}%", [last.value]) : ''])}
 			use:draw={points}
 			onpointermove={onMove} onpointerleave={() => (active = null)} onkeydown={onKey} onblur={() => (active = null)}>
 			{#each [0, 50, 100] as t (t)}
@@ -85,7 +86,7 @@
 		{#if active !== null && points[active]}
 			{@const p = points[active]}
 			<div class="tip small" style="left: {tipLeft}%" aria-live="polite">
-				<p class="m-0 font-semibold truncate">{p.label}</p>
+				<p class="m-0 font-semibold truncate">{tr(p.label)}</p>
 				<p class="m-0 muted">{p.sub}{p.note ? ' · ' + p.note : ''}</p>
 				<p class="m-0 row-k"><i class="key accent"></i><strong>{p.value}%</strong><span class="muted">{name}</span></p>
 				{#if p.context !== null}<p class="m-0 row-k"><i class="key context"></i><strong>{p.context}%</strong><span class="muted">{contextName}</span></p>{/if}
@@ -96,8 +97,8 @@
 		<summary>{t('common.showTable')}</summary>
 		<div class="table-wrap">
 			<table class="table table-sm">
-				<thead><tr><th>{rowName}</th><th>When</th><th>{name}</th>{#if hasContext}<th>{contextName}</th>{/if}</tr></thead>
-				<tbody>{#each points as p, i (i)}<tr><td>{p.label}</td><td>{p.sub}</td><td class="tabular">{p.value}%{p.note ? ' · ' + p.note : ''}</td>{#if hasContext}<td class="tabular">{p.context ?? '—'}{p.context !== null ? '%' : ''}</td>{/if}</tr>{/each}</tbody>
+				<thead><tr><th>{rowName}</th><th>{tr("When")}</th><th>{name}</th>{#if hasContext}<th>{contextName}</th>{/if}</tr></thead>
+				<tbody>{#each points as p, i (i)}<tr><td>{tr(p.label)}</td><td>{p.sub}</td><td class="tabular">{p.value}%{p.note ? ' · ' + p.note : ''}</td>{#if hasContext}<td class="tabular">{p.context ?? '—'}{p.context !== null ? '%' : ''}</td>{/if}</tr>{/each}</tbody>
 			</table>
 		</div>
 	</details>

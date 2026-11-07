@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Recordings of tutoring sessions (D-80, TS-FR-78, TS-FR-79): watch them
 	// in the browser; the lead teacher downloads, chooses who may watch and
 	// deletes. Each is deleted 2 days after it ends; the list says when.
@@ -32,7 +33,7 @@
 			const { url } = await client.post<{ url: string }>(`/api/recordings/${r.id}/link`, { download });
 			return client.base + url;
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not open the recording', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not open the recording"), 'error');
 			return null;
 		}
 	}
@@ -45,50 +46,50 @@
 		if (url) location.assign(url);
 	}
 	async function viewers(r: Recording, v: Recording['viewers']) {
-		await client.put(`/api/sessions/${r.session_id}/recordings/${r.id}/viewers`, { viewers: v }).catch(() => toast('Could not change it', 'error'));
+		await client.put(`/api/sessions/${r.session_id}/recordings/${r.id}/viewers`, { viewers: v }).catch(() => toast(tr("Could not change it"), 'error'));
 		onchange?.();
 	}
 	async function remove(r: Recording) {
-		if (!(await confirmDialog({ title: 'Delete this recording?', body: 'It’s gone for everyone, at once.', confirm: 'Delete', danger: true }))) return;
-		await client.del(`/api/recordings/${r.id}`).catch(() => toast('Could not delete it', 'error'));
+		if (!(await confirmDialog({ title: tr("Delete this recording?"), body: tr("It’s gone for everyone, at once."), confirm: tr("Delete"), danger: true }))) return;
+		await client.del(`/api/recordings/${r.id}`).catch(() => toast(tr("Could not delete it"), 'error'));
 		onchange?.();
 	}
 	const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 </script>
 
-<ul class="recs" aria-label="Recordings">
+<ul class="recs" aria-label={tr("Recordings")}>
 	{#each recordings as r (r.id)}
 		<li>
 			<div class="min-w-0 flex-1">
 				<p class="m-0 font-semibold truncate">{showSession && r.session_title ? r.session_title : when(r.started_at)}</p>
 				<p class="small muted m-0">
-					{#if showSession}{when(r.started_at)} · {/if}{recordingLength(r)} · {fmtBytes(r.bytes)}{#if r.status !== 'stopped'}{' · '}<span class="text-error">recording now</span>{:else if r.expires_at}{' · deleted '}{deletedIn(r.expires_at)}{/if}
-					{#if r.started_by !== meId}{' · '}by {r.started_by_name}{/if}
+					{#if showSession}{when(r.started_at)} · {/if}{recordingLength(r)} · {fmtBytes(r.bytes)}{#if r.status !== 'stopped'}{' · '}<span class="text-error">{tr("recording now")}</span>{:else if r.expires_at}{tr(" · deleted {0}", [deletedIn(r.expires_at)])}{/if}
+					{#if r.started_by !== meId}{tr(" · by {0}", [r.started_by_name])}{/if}
 				</p>
 			</div>
-			{#if r.status === 'stopped'}<button class="btn btn-xs btn-primary" onclick={() => watch(r)}>Watch</button>{/if}
+			{#if r.status === 'stopped'}<button class="btn btn-xs btn-primary" onclick={() => watch(r)}>{tr("Watch")}</button>{/if}
 			{#if leadOf(r)}
-				{#if r.status === 'stopped'}<button class="btn btn-xs" onclick={() => download(r)}>Download</button>{/if}
-				<select class="select select-xs w-auto" aria-label="Who may watch" value={r.viewers} onchange={(e) => viewers(r, e.currentTarget.value as Recording['viewers'])}>
-					<option value="teachers">Teachers only</option>
-					<option value="students">Students too</option>
+				{#if r.status === 'stopped'}<button class="btn btn-xs" onclick={() => download(r)}>{tr("Download")}</button>{/if}
+				<select class="select select-xs w-auto" aria-label={tr("Who may watch")} value={r.viewers} onchange={(e) => viewers(r, e.currentTarget.value as Recording['viewers'])}>
+					<option value="teachers">{tr("Teachers only")}</option>
+					<option value="students">{tr("Students too")}</option>
 				</select>
-				<button class="btn btn-xs btn-ghost" onclick={() => remove(r)}>Delete</button>
+				<button class="btn btn-xs btn-ghost" onclick={() => remove(r)}>{tr("Delete")}</button>
 			{/if}
 		</li>
 	{:else}
-		<li class="small muted">No recordings.</li>
+		<li class="small muted">{tr("No recordings.")}</li>
 	{/each}
 </ul>
 
-<dialog class="modal" open={!!playing} aria-label="Recording">
+<dialog class="modal" open={!!playing} aria-label={tr("Recording")}>
 	{#if playing}
 		<div class="modal-box max-w-4xl vstack">
-			<p class="m-0 font-semibold">{playing.r.session_title ?? 'Recording'} · {when(playing.r.started_at)}</p>
+			<p class="m-0 font-semibold">{playing.r.session_title ?? tr("Recording")} · {when(playing.r.started_at)}</p>
 			<!-- svelte-ignore a11y_media_has_caption -->
 			<video src={playing.url} controls autoplay class="w-full rounded-lg bg-black"></video>
-			<p class="small muted m-0">The presenter’s screen and voice. The link works for 5 minutes; open it again from the list after that.</p>
-			<div class="modal-action"><button class="btn" onclick={() => (playing = null)}>Close</button></div>
+			<p class="small muted m-0">{tr("The presenter’s screen and voice. The link works for 5 minutes; open it again from the list after that.")}</p>
+			<div class="modal-action"><button class="btn" onclick={() => (playing = null)}>{tr("Close")}</button></div>
 		</div>
 	{/if}
 </dialog>

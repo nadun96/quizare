@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Audio or video recorded in the browser (MediaRecorder), capped at
 	// maxSeconds, previewed, then uploaded. Needs HTTPS (or localhost) and the
 	// participant's permission; every failure says what to do.
@@ -39,7 +40,7 @@
 			stream = await navigator.mediaDevices.getUserMedia(kind === 'audio' ? { audio: true } : { audio: true, video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15 } } });
 		} catch (e) {
 			phase = 'idle';
-			error = (e as DOMException)?.name === 'NotAllowedError' ? `Allow ${kind === 'audio' ? 'microphone' : 'camera and microphone'} access in your browser, then try again.` : `No ${kind === 'audio' ? 'microphone' : 'camera'} was found.`;
+			error = (e as DOMException)?.name === 'NotAllowedError' ? tr("Allow {0} access in your browser, then try again.", [kind === 'audio' ? 'microphone' : tr("camera and microphone")]) : tr("No {0} was found.", [kind === 'audio' ? 'microphone' : 'camera']);
 			return;
 		}
 		const type = mime();
@@ -81,7 +82,7 @@
 			phase = 'idle';
 			blob = null;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Upload failed';
+			error = e instanceof Error ? e.message : tr("Upload failed");
 			phase = 'review';
 		}
 	}
@@ -96,15 +97,15 @@
 
 <div class="rec" role="group" aria-label={label}>
 	{#if !supported}
-		<p class="alert alert-soft alert-warning m-0"><Icon name="alert" />This browser can't record {kind}. Try a recent Chrome, Edge, Firefox or Safari.</p>
+		<p class="alert alert-soft alert-warning m-0"><Icon name="alert" />{tr("This browser can't record {0}. Try a recent Chrome, Edge, Firefox or Safari.", [kind])}</p>
 	{:else if phase === 'recording'}
-		{#if kind === 'video'}<video class="preview" bind:this={live} muted playsinline aria-label="Camera preview"></video>{/if}
+		{#if kind === 'video'}<video class="preview" bind:this={live} muted playsinline aria-label={tr("Camera preview")}></video>{/if}
 		<div class="flex flex-wrap items-center gap-3">
 			<span class="rec-dot" aria-hidden="true"></span>
-			<span class="font-semibold tabular" aria-live="off">Recording · {left}s left</span>
+			<span class="font-semibold tabular" aria-live="off">{tr("Recording · {0}s left", [left])}</span>
 			<progress class="progress progress-error w-32" value={elapsed} max={maxSeconds} aria-hidden="true"></progress>
 			<span class="spacer"></span>
-			<button type="button" class="btn btn-error" onclick={stop}><Icon name="pause" size={16} />Stop</button>
+			<button type="button" class="btn btn-error" onclick={stop}><Icon name="pause" size={16} />{tr("Stop")}</button>
 		</div>
 	{:else if phase === 'review' || phase === 'uploading'}
 		<!-- The participant reviews their own recording; there are no captions to offer. -->
@@ -113,18 +114,18 @@
 		<div class="mt-2 flex flex-wrap items-center gap-2">
 			<span class="small muted">{blob ? fmtSize(blob.size) : ''}</span>
 			<span class="spacer"></span>
-			<button type="button" class="btn btn-ghost" disabled={phase === 'uploading'} onclick={start}>Record again</button>
+			<button type="button" class="btn btn-ghost" disabled={phase === 'uploading'} onclick={start}>{tr("Record again")}</button>
 			<button type="button" class="btn btn-primary" disabled={phase === 'uploading'} onclick={send}>
-				{#if phase === 'uploading'}<span class="loading loading-spinner loading-sm"></span>{/if}Use this recording
+				{#if phase === 'uploading'}<span class="loading loading-spinner loading-sm"></span>{/if}{tr("Use this recording")}
 			</button>
 		</div>
-		{#if phase === 'uploading'}<progress class="progress progress-primary mt-2 w-full" value={progress} max="1" aria-label="Uploading"></progress>{/if}
+		{#if phase === 'uploading'}<progress class="progress progress-primary mt-2 w-full" value={progress} max="1" aria-label={tr("Uploading")}></progress>{/if}
 	{:else}
 		{#if value}
-			<p class="m-0 mb-2 flex items-center gap-2"><span class="text-success"><Icon name="check-circle" /></span><span>Recording sent ({fmtSize(value.size)}).</span></p>
+			<p class="m-0 mb-2 flex items-center gap-2"><span class="text-success"><Icon name="check-circle" /></span><span>{tr("Recording sent ({0}).", [fmtSize(value.size)])}</span></p>
 		{/if}
 		<button type="button" class="btn {value ? '' : 'btn-primary'}" {disabled} onclick={start}>
-			<span class="rec-dot static" aria-hidden="true"></span>{phase === 'asking' ? 'Waiting for permission…' : value ? 'Record a new answer' : `Start recording (up to ${maxSeconds}s)`}
+			<span class="rec-dot static" aria-hidden="true"></span>{phase === 'asking' ? tr("Waiting for permission…") : value ? tr("Record a new answer") : tr("Start recording (up to {0}s)", [maxSeconds])}
 		</button>
 	{/if}
 	{#if error}<p class="field-error" role="alert">{error}</p>{/if}
