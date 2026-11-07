@@ -9,6 +9,7 @@
 	import { fmtSize } from './meta';
 	import { describeKey } from './scoring';
 	import type { Choice, PollKey, PollQuestion, PollResult, TextItem, WordCount } from './types';
+	import ToonChoices from './ToonChoices.svelte';
 	import WordCloud from './WordCloud.svelte';
 
 	let {
@@ -16,6 +17,7 @@
 		result,
 		teacher = false,
 		big = false,
+		toon = false,
 		pollId = '',
 		answerKey = null,
 		onmoderate
@@ -24,6 +26,8 @@
 		result?: PollResult;
 		teacher?: boolean;
 		big?: boolean;
+		/** The cartoon look of choice questions (D-150). */
+		toon?: boolean;
 		pollId?: string;
 		/** Mark the correct answer (scored polls, once it may be shown). */
 		answerKey?: PollKey | null;
@@ -114,6 +118,9 @@
 		{#if table}
 			<table class="table table-sm"><thead><tr><th>Option</th><th class="text-right">People</th><th class="text-right">Share</th></tr></thead>
 				<tbody>{#each optionBars as o (o.id)}<tr><td>{o.label}</td><td class="text-right tabular">{o.n}</td><td class="text-right tabular">{pct(o.n, r.responses)}%</td></tr>{/each}</tbody></table>
+		{:else if toon}
+			<ToonChoices options={optionBars} responses={r.responses} {big} correct={answerKey?.correct ?? null} />
+			{#if question.type === 'MULTI'}<p class="small muted m-0 mt-2">Percentages are of respondents; people could choose more than one.</p>{/if}
 		{:else}
 			<ul class="bars">
 				{#each optionBars as o, i (o.id)}
