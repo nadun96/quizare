@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// The mail server (D-104), admins only: where the platform's email goes
 	// out, set here instead of the config file, with a test that sends one
 	// email at once and says which step failed. The password is never shown.
@@ -82,7 +83,7 @@
 			st = await api.put<State>('/api/admin/email/server', body());
 			f = { ...st, password: '' };
 			changed = false;
-			toast(st.enabled ? 'Saved: email now goes out through this server' : 'Saved, and off: the config file decides');
+			toast(st.enabled ? tr("Saved: email now goes out through this server") : tr("Saved, and off: the config file decides"));
 		} catch (err) {
 			failed(err, 'Could not save it');
 		} finally {
@@ -95,7 +96,7 @@
 		result = null;
 		try {
 			result = await api.post<Result>('/api/admin/email/server/test', saved ? { to: testTo } : { to: testTo, server: body() });
-			if (result.ok) toast(`Sent to ${testTo}: check that inbox (and spam)`);
+			if (result.ok) toast(tr("Sent to {0}: check that inbox (and spam)", [testTo]));
 		} catch (err) {
 			failed(err, 'Could not test it');
 		} finally {
@@ -110,8 +111,8 @@
 		<div class="alert {st.source === 'log' ? 'alert-warning' : 'alert-info'} alert-soft" role="status">
 			<Icon name="info" size={18} />
 			<div>
-				<p class="m-0">Email goes out through <b>{SOURCES[st.source]}</b>{#if st.source === 'config'} ({st.config.addr}, from {st.config.from}){/if}.</p>
-				{#if st.source !== 'console'}<p class="m-0 small">Turn the settings below on to take over from it.</p>{/if}
+				<p class="m-0">{tr("Email goes out through")} <b>{SOURCES[st.source]}</b>{#if st.source === 'config'} {tr("({0}, from {1})", [st.config.addr, st.config.from])}{/if}.</p>
+				{#if st.source !== 'console'}<p class="m-0 small">{tr("Turn the settings below on to take over from it.")}</p>{/if}
 			</div>
 		</div>
 	{/if}
@@ -119,33 +120,33 @@
 	<div class="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={save} oninput={() => (changed = true)} aria-labelledby="ms-h">
 			<div class="flex flex-wrap items-center gap-2">
-				<h2 id="ms-h" class="m-0 grow text-lg">Mail server</h2>
-				<label class="flex items-center gap-2 font-semibold"><input type="checkbox" class="toggle toggle-primary" bind:checked={f.enabled} />Use these settings</label>
+				<h2 id="ms-h" class="m-0 grow text-lg">{tr("Mail server")}</h2>
+				<label class="flex items-center gap-2 font-semibold"><input type="checkbox" class="toggle toggle-primary" bind:checked={f.enabled} />{tr("Use these settings")}</label>
 			</div>
-			<label class="small">Fill in for
+			<label class="small">{tr("Fill in for")}
 				<select class="select select-sm ml-1 w-64 max-w-full" onchange={(e) => { preset(Number(e.currentTarget.value)); e.currentTarget.value = ''; }}>
-					<option value="">Choose a provider…</option>
-					{#each PRESETS as p, i (p.label)}<option value={i}>{p.label}</option>{/each}
+					<option value="">{tr("Choose a provider…")}</option>
+					{#each PRESETS as p, i (p.label)}<option value={i}>{tr(p.label)}</option>{/each}
 				</select>
 			</label>
 			<div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
 				<div>
-					<label for="ms-host" class="small font-semibold">Server</label>
-					<input id="ms-host" class="input w-full" class:input-error={errors.host} placeholder="smtp.gmail.com" autocomplete="off" bind:value={f.host} />
+					<label for="ms-host" class="small font-semibold">{tr("Server")}</label>
+					<input id="ms-host" class="input w-full" class:input-error={errors.host} placeholder={tr("smtp.gmail.com")} autocomplete="off" bind:value={f.host} />
 					{#if errors.host}<p class="m-0 small text-error">{errors.host}</p>{/if}
 				</div>
 				<div>
-					<label for="ms-port" class="small font-semibold">Port</label>
+					<label for="ms-port" class="small font-semibold">{tr("Port")}</label>
 					<input id="ms-port" class="input w-full" class:input-error={errors.port} type="number" min="1" max="65535" bind:value={f.port} />
 				</div>
 			</div>
 			<fieldset>
-				<legend class="small font-semibold">Encryption</legend>
+				<legend class="small font-semibold">{tr("Encryption")}</legend>
 				<div class="grid gap-1 sm:grid-cols-2">
 					{#each SECURITY as s (s.id)}
 						<label class="flex items-start gap-2 rounded-box border border-base-300 p-2 cursor-pointer" class:border-primary={f.security === s.id}>
 							<input type="radio" class="radio radio-sm mt-0.5" name="ms-sec" value={s.id} bind:group={f.security} />
-							<span><span class="font-semibold">{s.label}</span><br /><span class="small muted">{s.hint}</span></span>
+							<span><span class="font-semibold">{tr(s.label)}</span><br /><span class="small muted">{tr(s.hint)}</span></span>
 						</label>
 					{/each}
 				</div>
@@ -153,61 +154,61 @@
 			</fieldset>
 			<div class="grid gap-3 sm:grid-cols-2">
 				<div>
-					<label for="ms-user" class="small font-semibold">Username</label>
-					<input id="ms-user" class="input w-full" placeholder="Empty for no login" autocomplete="off" bind:value={f.username} />
+					<label for="ms-user" class="small font-semibold">{tr("Username")}</label>
+					<input id="ms-user" class="input w-full" placeholder={tr("Empty for no login")} autocomplete="off" bind:value={f.username} />
 				</div>
 				<div>
-					<label for="ms-pw" class="small font-semibold">Password</label>
-					<input id="ms-pw" class="input w-full" class:input-error={errors.password} type="password" autocomplete="new-password" placeholder={f.password_set ? 'Saved: type to replace' : ''} bind:value={f.password} disabled={!f.username} />
+					<label for="ms-pw" class="small font-semibold">{tr("Password")}</label>
+					<input id="ms-pw" class="input w-full" class:input-error={errors.password} type="password" autocomplete="new-password" placeholder={f.password_set ? tr("Saved: type to replace") : ''} bind:value={f.password} disabled={!f.username} />
 					{#if errors.password}<p class="m-0 small text-error">{errors.password}</p>{/if}
 				</div>
 			</div>
 			<div class="grid gap-3 sm:grid-cols-2">
 				<div>
-					<label for="ms-from" class="small font-semibold">From address</label>
-					<input id="ms-from" class="input w-full" class:input-error={errors.from} type="email" placeholder="no-reply@school.lk" bind:value={f.from} />
+					<label for="ms-from" class="small font-semibold">{tr("From address")}</label>
+					<input id="ms-from" class="input w-full" class:input-error={errors.from} type="email" placeholder={tr("no-reply@school.lk")} bind:value={f.from} />
 					{#if errors.from}<p class="m-0 small text-error">{errors.from}</p>{/if}
 				</div>
 				<div>
-					<label for="ms-name" class="small font-semibold">From name</label>
-					<input id="ms-name" class="input w-full" placeholder="Classroom Quiz" maxlength="100" bind:value={f.from_name} />
+					<label for="ms-name" class="small font-semibold">{tr("From name")}</label>
+					<input id="ms-name" class="input w-full" placeholder={tr("Classroom Quiz")} maxlength="100" bind:value={f.from_name} />
 				</div>
 			</div>
 			<div class="flex flex-wrap gap-2">
-				<button class="btn btn-primary" disabled={busy}>Save</button>
-				{#if changed}<span class="small muted self-center">Not saved yet</span>{/if}
+				<button class="btn btn-primary" disabled={busy}>{tr("Save")}</button>
+				{#if changed}<span class="small muted self-center">{tr("Not saved yet")}</span>{/if}
 			</div>
-			{#if st?.updated_at && st.host}<p class="m-0 small muted">Last changed {new Date(st.updated_at).toLocaleString()}.</p>{/if}
+			{#if st?.updated_at && st.host}<p class="m-0 small muted">{tr("Last changed {0}.", [new Date(st.updated_at).toLocaleString(localeTag())])}</p>{/if}
 		</form>
 
 		<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" aria-labelledby="ms-t">
-			<h2 id="ms-t" class="m-0 text-lg">Send a test</h2>
-			<p class="m-0 small muted">Sends one email now, without the queue, and tells you where it failed.</p>
+			<h2 id="ms-t" class="m-0 text-lg">{tr("Send a test")}</h2>
+			<p class="m-0 small muted">{tr("Sends one email now, without the queue, and tells you where it failed.")}</p>
 			<div>
-				<label for="ms-to" class="small font-semibold">To</label>
+				<label for="ms-to" class="small font-semibold">{tr("To")}</label>
 				<input id="ms-to" class="input w-full" type="email" bind:value={testTo} />
 			</div>
 			<div class="flex flex-wrap gap-2">
-				<button class="btn" onclick={() => test(false)} disabled={busy || !testTo || !f.host}>Test these settings</button>
-				<button class="btn btn-ghost" onclick={() => test(true)} disabled={busy || !testTo}>Test what sends now</button>
+				<button class="btn" onclick={() => test(false)} disabled={busy || !testTo || !f.host}>{tr("Test these settings")}</button>
+				<button class="btn btn-ghost" onclick={() => test(true)} disabled={busy || !testTo}>{tr("Test what sends now")}</button>
 			</div>
-			{#if busy}<p class="m-0 small muted" role="status"><span class="loading loading-spinner loading-xs"></span> Talking to the server…</p>{/if}
+			{#if busy}<p class="m-0 small muted" role="status"><span class="loading loading-spinner loading-xs"></span> {tr("Talking to the server…")}</p>{/if}
 			{#if result}
 				<div class="alert {result.ok ? 'alert-success' : 'alert-error'} alert-soft items-start" role="status">
 					<Icon name={result.ok ? 'check' : 'alert'} size={18} />
 					<div class="min-w-0">
 						{#if result.ok}
-							<p class="m-0">The server took it ({result.via}). If it doesn't arrive, look in spam, then at the Queue and the server's mail log.</p>
+							<p class="m-0">{tr("The server took it ({0}). If it doesn't arrive, look in spam, then at the Queue and the server's mail log.", [result.via])}</p>
 						{:else}
-							<p class="m-0 font-semibold">{STEPS[result.step ?? ''] ?? 'It failed.'}</p>
+							<p class="m-0 font-semibold">{STEPS[result.step ?? ''] ?? tr("It failed.")}</p>
 							<p class="m-0 mt-1 small break-words font-mono">{result.error}</p>
 						{/if}
 					</div>
 				</div>
 			{/if}
 			<details class="small">
-				<summary class="cursor-pointer font-semibold">Accepted here but returned later?</summary>
-				<p>That's the receiving provider refusing it after your server took it, so it shows in the server's mail log, not here. For Gmail's "550 5.7.25 … PTR record": the sending server's address (often its IPv6 one) needs reverse DNS pointing at your domain, set at the hosting provider; or have Postfix send over IPv4 only (<code>postconf -e inet_protocols=ipv4</code>, then restart Postfix); or use a provider like Brevo above. SPF, DKIM and DMARC records for the from domain help too.</p>
+				<summary class="cursor-pointer font-semibold">{tr("Accepted here but returned later?")}</summary>
+				<p>{tr("That's the receiving provider refusing it after your server took it, so it shows in the server's mail log, not here. For Gmail's \"550 5.7.25 … PTR record\": the sending server's address (often its IPv6 one) needs reverse DNS pointing at your domain, set at the hosting provider; or have Postfix send over IPv4 only (")}<code>postconf -e inet_protocols=ipv4</code>{tr(", then restart Postfix); or use a provider like Brevo above. SPF, DKIM and DMARC records for the from domain help too.")}</p>
 			</details>
 		</section>
 	</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api';
 	import { promptDialog } from '$lib/ui/dialog.svelte';
@@ -37,14 +38,14 @@
 	type Cls = { classroom_id: string; name: string; status: string; student_number: string | null; can_edit_id?: boolean };
 	// Your own student ID, where the teacher allows it (D-134).
 	async function changeID(c: Cls) {
-		const v = await promptDialog({ title: c.student_number ? 'Change your student ID' : 'Add your student ID', label: `Student ID in ${c.name}`, value: c.student_number ?? '', maxlength: 64, confirm: 'Save', body: 'Use the ID your school gave you. Quizzes you’ve already taken keep the ID they were taken with.' });
+		const v = await promptDialog({ title: c.student_number ? tr("Change your student ID") : tr("Add your student ID"), label: tr("Student ID in {0}", [c.name]), value: c.student_number ?? '', maxlength: 64, confirm: tr("Save"), body: tr("Use the ID your school gave you. Quizzes you’ve already taken keep the ID they were taken with.") });
 		if (v === null || v.trim() === (c.student_number ?? '')) return;
 		try {
 			await api.put(`/api/my/classrooms/${c.classroom_id}/student-number`, { student_number: v });
-			toast('Student ID saved');
+			toast(tr("Student ID saved"));
 			classes.load();
 		} catch (e) {
-			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : 'Could not save it', 'error');
+			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : tr("Could not save it"), 'error');
 		}
 	}
 	// Results and classrooms, one page at a time (PL-FR-02 "My results").
@@ -61,14 +62,14 @@
 	});
 	const live = (s: string) => ['waiting', 'admitted', 'in_progress', 'paused'].includes(s);
 	// "16 Oct, 3:55 PM": short enough to sit on one line on a phone.
-	const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+	const when = (iso: string) => new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 	$effect(() => {
 		if (attempts.loaded && attempts.page === 1 && !attempts.q) liveNow = attempts.rows.filter((a) => live(a.state));
 	});
 </script>
 
 <div class="page-container vstack">
-	<div class="row"><h1 style="margin:0">My quizzes</h1><span class="spacer"></span><a class="btn btn-primary" href="/join">Join with a code</a></div>
+	<div class="row"><h1 style="margin:0">{tr("My quizzes")}</h1><span class="spacer"></span><a class="btn btn-primary" href="/join">{tr("Join with a code")}</a></div>
 	{#if auth.user?.role === 'student' && progress.current}<ProgressCard p={progress.current} />{/if}
 	<UpcomingTutoring />
 	{#each liveNow as a (a.attempt_id)}
@@ -76,10 +77,10 @@
 			<div class="flex items-center gap-3">
 				<span class="grid size-11 flex-none place-items-center rounded-full bg-primary text-primary-content" aria-hidden="true"><Icon name="play" size={20} /></span>
 				<div class="min-w-0 flex-1">
-					<p class="small m-0 font-semibold text-primary">Live now · {STATE_LABEL[a.state]}</p>
+					<p class="small m-0 font-semibold text-primary">{tr("Live now · {0}", [STATE_LABEL[a.state]])}</p>
 					<p class="m-0 truncate text-lg font-semibold">{a.session_title}</p>
 				</div>
-				<span class="btn btn-primary">Continue<Icon name="arrow-right" size={16} /></span>
+				<span class="btn btn-primary">{tr("Continue")}<Icon name="arrow-right" size={16} /></span>
 			</div>
 		</a>
 	{/each}
@@ -87,11 +88,11 @@
 		{#if !attempts.loaded}
 			<Skeleton card={false} lines={3} />
 		{:else if attempts.total === 0 && !attempts.q}
-			<EmptyState icon="qr" title="No quizzes yet">Scan the QR code your teacher shows, or <a href="/join">enter the join code</a>.</EmptyState>
+			<EmptyState icon="qr" title={tr("No quizzes yet")}>{tr("Scan the QR code your teacher shows, or")} <a href="/join">{tr("enter the join code")}</a>.</EmptyState>
 		{:else}
-			<div class="mb-3"><ListSearch list={attempts} placeholder="Search quizzes" label="Search my quizzes" /></div>
+			<div class="mb-3"><ListSearch list={attempts} placeholder={tr("Search quizzes")} label={tr("Search my quizzes")} /></div>
 			<!-- A list, not a table: three columns don't fit a phone, where students use this page. -->
-			<ul class="attempts" aria-label="My quizzes">
+			<ul class="attempts" aria-label={tr("My quizzes")}>
 				{#each attempts.rows as a (a.attempt_id)}
 					<li>
 						<div class="min-w-0">
@@ -100,15 +101,15 @@
 						</div>
 						<div class="end">
 							<span class="badge badge-soft whitespace-nowrap {STATE_BADGE[a.state] ?? ''}"><span aria-hidden="true">{STATE_ICON[a.state] ?? ''}</span> {STATE_LABEL[a.state] ?? a.state}</span>
-							{#if live(a.state)}<a class="btn btn-sm btn-primary" href={'/attempt/' + a.attempt_id}>Continue</a>
-							{:else if a.released}<a class="btn btn-sm" href={'/my/results/' + a.attempt_id}>Results</a>
-							{:else}<span class="small muted whitespace-nowrap">Results not out yet</span>{/if}
+							{#if live(a.state)}<a class="btn btn-sm btn-primary" href={'/attempt/' + a.attempt_id}>{tr("Continue")}</a>
+							{:else if a.released}<a class="btn btn-sm" href={'/my/results/' + a.attempt_id}>{tr("Results")}</a>
+							{:else}<span class="small muted whitespace-nowrap">{tr("Results not out yet")}</span>{/if}
 						</div>
 					</li>
-				{:else}<li class="muted">No quizzes match.</li>
+				{:else}<li class="muted">{tr("No quizzes match.")}</li>
 				{/each}
 			</ul>
-			<div class="mt-3"><Pager list={attempts} label="My quizzes" /></div>
+			<div class="mt-3"><Pager list={attempts} label={tr("My quizzes")} /></div>
 		{/if}
 	</div>
 	{#if auth.user?.role === 'student'}<MyTrends />{/if}
@@ -116,30 +117,30 @@
 	<MyPresentations />
 	<MyRecordings meId={auth.user?.id ?? ''} />
 	<MyAttendance />
-	<h2>My classrooms</h2>
+	<h2>{tr("My classrooms")}</h2>
 	<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
 		{#if classes.rows.length}
-			<ul class="attempts" aria-label="My classrooms">
+			<ul class="attempts" aria-label={tr("My classrooms")}>
 				{#each classes.rows as c (c.classroom_id)}
 					<li>
 						<div class="min-w-0">
 							<p class="m-0 truncate font-semibold">{#if c.status === 'active'}<a href={'/my/classrooms/' + c.classroom_id}>{c.name}</a>{:else}{c.name}{/if}</p>
 							{#if c.student_number || c.can_edit_id}
 								<p class="small muted m-0 flex flex-wrap items-center gap-2">
-									{#if c.student_number}<span>Your student ID: <strong class="tabular">{c.student_number}</strong></span>{:else}<span>No student ID yet</span>{/if}
-									{#if c.can_edit_id}<button class="btn btn-ghost btn-xs" onclick={() => changeID(c)}><Icon name="pencil" size={12} />{c.student_number ? 'Change' : 'Add'}</button>{/if}
+									{#if c.student_number}<span>{tr("Your student ID:")} <strong class="tabular">{c.student_number}</strong></span>{:else}<span>{tr("No student ID yet")}</span>{/if}
+									{#if c.can_edit_id}<button class="btn btn-ghost btn-xs" onclick={() => changeID(c)}><Icon name="pencil" size={12} />{c.student_number ? tr("Change") : tr("Add")}</button>{/if}
 								</p>
 							{/if}
 							{#if c.status === 'active'}<MyFiles classroomId={c.classroom_id} />{/if}
 						</div>
-						{#if c.status === 'pending'}<div class="end"><span class="badge badge-soft badge-warning whitespace-nowrap">Waiting for approval</span></div>{:else}<div class="end"><a class="btn btn-sm" href={'/my/classrooms/' + c.classroom_id}>Due and completed</a></div>{/if}
+						{#if c.status === 'pending'}<div class="end"><span class="badge badge-soft badge-warning whitespace-nowrap">{tr("Waiting for approval")}</span></div>{:else}<div class="end"><a class="btn btn-sm" href={'/my/classrooms/' + c.classroom_id}>{tr("Due and completed")}</a></div>{/if}
 					</li>
 				{/each}
 			</ul>
 		{:else}
-			<p class="muted m-0">{classes.loaded ? 'You haven’t joined a classroom yet. Your teacher can give you a classroom code.' : 'Loading…'}</p>
+			<p class="muted m-0">{classes.loaded ? tr("You haven’t joined a classroom yet. Your teacher can give you a classroom code.") : tr("Loading…")}</p>
 		{/if}
-		<Pager list={classes} label="My classrooms" />
+		<Pager list={classes} label={tr("My classrooms")} />
 	</div>
 </div>
 

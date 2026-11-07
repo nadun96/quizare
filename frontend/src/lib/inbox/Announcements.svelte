@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Announcements (D-103). Teachers post to one of their classrooms (and
 	// may email them too), edit, delete, and see who has read each; students
 	// read their classrooms' posts, which are marked read as they're shown.
@@ -75,10 +76,10 @@
 		try {
 			if (editing) {
 				await api.patch('/api/teacher/announcements/' + editing.id, { title, body });
-				toast('Announcement saved');
+				toast(tr("Announcement saved"));
 			} else {
 				await api.post(`/api/teacher/classrooms/${to}/announcements`, { title, body, email });
-				toast(email ? 'Posted and emailed to its students' : 'Posted');
+				toast(email ? tr("Posted and emailed to its students") : tr("Posted"));
 			}
 			reset();
 			await list.load();
@@ -86,19 +87,19 @@
 			if (err instanceof ApiError) {
 				errors = err.fields;
 				toast(Object.values(err.fields)[0] ?? err.message, 'error');
-			} else toast('Could not post it', 'error');
+			} else toast(tr("Could not post it"), 'error');
 		} finally {
 			busy = false;
 		}
 	}
 	async function remove(a: Announcement) {
-		if (!(await confirmDialog({ title: `Delete "${a.title}"?`, body: `It disappears for the students of ${a.classroom}. Emails already sent stay in their mailboxes.`, confirm: 'Delete', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete \"{0}\"?", [a.title]), body: tr("It disappears for the students of {0}. Emails already sent stay in their mailboxes.", [a.classroom]), confirm: tr("Delete"), danger: true }))) return;
 		try {
 			await api.del('/api/teacher/announcements/' + a.id);
-			toast('Announcement deleted');
+			toast(tr("Announcement deleted"));
 			list.load();
 		} catch {
-			toast('Could not delete it', 'error');
+			toast(tr("Could not delete it"), 'error');
 		}
 	}
 
@@ -118,32 +119,32 @@
 	{#if teacher}
 		{#if open}
 			<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" onsubmit={post} aria-labelledby="an-h">
-				<h2 id="an-h" class="m-0 text-lg">{editing ? 'Edit the announcement' : 'New announcement'}</h2>
+				<h2 id="an-h" class="m-0 text-lg">{editing ? tr("Edit the announcement") : tr("New announcement")}</h2>
 				{#if !editing}
 					<div>
-						<label for="an-to" class="small font-semibold">Classroom</label>
+						<label for="an-to" class="small font-semibold">{tr("Classroom")}</label>
 						<select id="an-to" class="select w-full max-w-md" bind:value={to} required>
-							<option value="" disabled>Choose a classroom</option>
+							<option value="" disabled>{tr("Choose a classroom")}</option>
 							{#each rooms as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
 						</select>
 					</div>
 				{:else}
-					<p class="m-0 small muted">In {editing.classroom}. Saving changes it for its students; nothing is emailed again.</p>
+					<p class="m-0 small muted">{tr("In {0}. Saving changes it for its students; nothing is emailed again.", [editing.classroom])}</p>
 				{/if}
 				<div>
-					<label for="an-title" class="small font-semibold">Title</label>
-					<input id="an-title" class="input w-full" class:input-error={errors.title} maxlength="200" placeholder="Test on Friday" bind:value={title} required />
+					<label for="an-title" class="small font-semibold">{tr("Title")}</label>
+					<input id="an-title" class="input w-full" class:input-error={errors.title} maxlength="200" placeholder={tr("Test on Friday")} bind:value={title} required />
 				</div>
 				<div>
-					<label for="an-body" class="small font-semibold">Announcement</label>
+					<label for="an-body" class="small font-semibold">{tr("Announcement")}</label>
 					<textarea id="an-body" class="textarea w-full" class:textarea-error={errors.body} rows="5" maxlength="10000" bind:value={body} required></textarea>
 				</div>
 				{#if !editing}
-					<label class="flex items-center gap-2 small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={email} />Also email it to the students (those who turned these emails off don't get one)</label>
+					<label class="flex items-center gap-2 small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={email} />{tr("Also email it to the students (those who turned these emails off don't get one)")}</label>
 				{/if}
 				<div class="flex flex-wrap gap-2">
-					<button class="btn btn-primary" disabled={busy || !to || !title.trim() || !body.trim()}><Icon name="send" size={16} />{editing ? 'Save' : 'Post'}</button>
-					<button type="button" class="btn btn-ghost" onclick={reset}>Cancel</button>
+					<button class="btn btn-primary" disabled={busy || !to || !title.trim() || !body.trim()}><Icon name="send" size={16} />{editing ? tr("Save") : tr("Post")}</button>
+					<button type="button" class="btn btn-ghost" onclick={reset}>{tr("Cancel")}</button>
 				</div>
 			</form>
 		{:else}
@@ -154,8 +155,8 @@
 	<div class="row">
 		<ListSearch {list} placeholder={t('inbox.searchAnnouncements')} label={t('inbox.searchAnnouncements')} />
 		{#if teacher && rooms.length > 1}
-			<select class="select select-sm w-auto" aria-label="Classroom" bind:value={filter} onchange={() => list.refilter()}>
-				<option value="">All classrooms</option>
+			<select class="select select-sm w-auto" aria-label={tr("Classroom")} bind:value={filter} onchange={() => list.refilter()}>
+				<option value="">{tr("All classrooms")}</option>
 				{#each rooms as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
 			</select>
 		{/if}
@@ -167,35 +168,35 @@
 				<Avatar id={a.author_id ?? a.id} name={a.author || 'Teacher'} avatar={a.avatar} size={36} />
 				<div class="grow min-w-0">
 					<h3 id="an-{a.id}" class="m-0 text-base">{a.title}{#if fresh.has(a.id)}{' '}<span class="badge badge-primary badge-sm">{t('inbox.new')}</span>{/if}</h3>
-					<p class="m-0 small muted">{a.author} · {a.classroom} · <time datetime={a.created_at} title={new Date(a.created_at).toLocaleString()}>{when(a.created_at)}</time>{#if a.updated_at !== a.created_at && new Date(a.updated_at).getTime() - new Date(a.created_at).getTime() > 1000}{' · edited'}{/if}{#if a.emailed}{' · emailed'}{/if}</p>
+					<p class="m-0 small muted">{a.author} · {a.classroom} · <time datetime={a.created_at} title={new Date(a.created_at).toLocaleString(localeTag())}>{when(a.created_at)}</time>{#if a.updated_at !== a.created_at && new Date(a.updated_at).getTime() - new Date(a.created_at).getTime() > 1000}{tr(" · edited")}{/if}{#if a.emailed}{tr(" · emailed")}{/if}</p>
 				</div>
 			</div>
 			<p class="m-0 whitespace-pre-wrap">{a.body}</p>
 			{#if teacher}
 				<div class="flex flex-wrap items-center gap-2">
-					<button class="btn btn-xs btn-ghost" aria-expanded={readersOf === a.id} onclick={() => showReaders(a)}><Icon name="eye" size={14} />Read by {a.reads} of {a.students}</button>
+					<button class="btn btn-xs btn-ghost" aria-expanded={readersOf === a.id} onclick={() => showReaders(a)}><Icon name="eye" size={14} />{tr("Read by {0} of {1}", [a.reads, a.students])}</button>
 					<span class="spacer"></span>
-					<button class="btn btn-xs" onclick={() => startEdit(a)}>Edit</button>
-					<button class="btn btn-xs btn-error btn-outline" onclick={() => remove(a)}>Delete</button>
+					<button class="btn btn-xs" onclick={() => startEdit(a)}>{tr("Edit")}</button>
+					<button class="btn btn-xs btn-error btn-outline" onclick={() => remove(a)}>{tr("Delete")}</button>
 				</div>
 				{#if readersOf === a.id && readers}
 					<ul class="readers">
 						{#each readers.rows as r (r.id)}
-							<li class="flex justify-between gap-2 small"><span>{r.name}{#if r.student_number}<span class="muted"> · {r.student_number}</span>{/if}</span><span class={r.read_at ? 'muted' : 'text-warning'}>{r.read_at ? 'read ' + when(r.read_at) : 'not yet'}</span></li>
+							<li class="flex justify-between gap-2 small"><span>{r.name}{#if r.student_number}<span class="muted"> · {r.student_number}</span>{/if}</span><span class={r.read_at ? 'muted' : 'text-warning'}>{r.read_at ? tr("read {0}", [when(r.read_at)]) : tr("not yet")}</span></li>
 						{:else}
-							<li class="small muted">{readers.loaded ? 'No students in this classroom yet.' : 'Loading…'}</li>
+							<li class="small muted">{readers.loaded ? tr("No students in this classroom yet.") : tr("Loading…")}</li>
 						{/each}
 					</ul>
-					<Pager list={readers} label="Readers" />
+					<Pager list={readers} label={tr("Readers")} />
 				{/if}
 			{/if}
 		</article>
 	{:else}
 		<div class="card card-border bg-base-100 p-6 text-center muted">
-			{#if !list.loaded}{t('common.loading')}{:else if list.q}No announcements match “{list.q}”.{:else if teacher}{t('inbox.noAnnouncementsT')}{:else}{t('inbox.noAnnouncementsS')}{/if}
+			{#if !list.loaded}{t('common.loading')}{:else if list.q}{tr("No announcements match “{0}”.", [list.q])}{:else if teacher}{t('inbox.noAnnouncementsT')}{:else}{t('inbox.noAnnouncementsS')}{/if}
 		</div>
 	{/each}
-	<Pager {list} label="Announcements" />
+	<Pager {list} label={tr("Announcements")} />
 </div>
 
 <style>

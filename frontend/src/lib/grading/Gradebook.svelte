@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A classroom's results with weights (D-122): every quiz and tutorial,
 	// how much of the final result each carries, each student's mark and
 	// points (55 % on an item worth 10 % gives 5.5), their weighted total and
@@ -38,7 +39,7 @@
 		try {
 			g = await api.get<Gradebook>(`/api/teacher/classrooms/${classroomId}/gradebook`);
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'The results didn’t load';
+			error = e instanceof ApiError ? e.message : tr("The results didn’t load");
 		}
 	}
 	$effect(() => {
@@ -74,9 +75,9 @@
 				weights: g.items.map((it) => ({ kind: it.kind, id: it.id, weight: Number(draft[key(it)] ?? 0) || 0 }))
 			});
 			editing = false;
-			toast('Weights saved; the results are recalculated');
+			toast(tr("Weights saved; the results are recalculated"));
 		} catch (e) {
-			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : 'Could not save the weights', 'error');
+			toast(e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : tr("Could not save the weights"), 'error');
 		} finally {
 			saving = false;
 		}
@@ -141,7 +142,7 @@
 	}
 </script>
 
-<section class="vstack gap-3" aria-label="Results">
+<section class="vstack gap-3" aria-label={tr("Results")}>
 	{#if error}<p class="alert alert-soft alert-error m-0">{error}</p>{/if}
 	{#if !g}
 		{#if !error}<Skeleton lines={5} />{/if}
@@ -152,37 +153,37 @@
 		<div class="flex flex-wrap items-center gap-2">
 			{#if full && full.items.length}<ScopePicker options={scopeOptions(full.items)} value={scopeValue(scope)} onchange={(v) => ((scope = scopeFrom(v)), (editing = false))} />{/if}
 			<span class="grow"></span>
-			{#if !editing && !scoped}<button class="btn btn-sm" onclick={startEditing} disabled={!g.items.length}><Icon name="sliders" size={15} />Weights</button>{/if}
-			<button class="btn btn-sm" onclick={download} disabled={!shownStudents.length}><Icon name="download" size={15} />CSV</button>
+			{#if !editing && !scoped}<button class="btn btn-sm" onclick={startEditing} disabled={!g.items.length}><Icon name="sliders" size={15} />{tr("Weights")}</button>{/if}
+			<button class="btn btn-sm" onclick={download} disabled={!shownStudents.length}><Icon name="download" size={15} />{tr("CSV")}</button>
 			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => (shown ? [{ ...table(shown), frozen: 2 }] : [])} disabled={!shownStudents.length} onbands={(b) => (bands = b)} />
 		</div>
 		{#if g.students.length}<ReportControls bind:view cols={viewCols} show={showOptions} shown={shownStudents.length} total={g.students.length} noun="students" />{/if}
 		<div class="flex flex-wrap items-center gap-2">
 			<p class="small muted m-0 grow">
-				{#if scoped}<strong>{scopeName}</strong>: {g.items.length} {g.items.length === 1 ? 'item' : 'items'}{#if weighted}, worth <strong>{g.weight_total}%</strong> of the final result; the final here is the points as a percentage of that{/if}. Weights are set for the whole classroom.
-				{:else if weighted}Weighted items make up <strong>{g.weight_total}%</strong> of the final result; each mark becomes points (55% on an item worth 10% is 5.5), and a weighted item a student hasn’t done counts 0.
-				{:else}Each student’s best mark on each quiz and tutorial. Set weights to work out a final result.{/if}
+				{#if scoped}<strong>{scopeName}</strong>: {g.items.length} {g.items.length === 1 ? 'item' : 'items'}{#if weighted}{tr(", worth")} <strong>{g.weight_total}%</strong> {tr("of the final result; the final here is the points as a percentage of that")}{/if}{tr(". Weights are set for the whole classroom.")}
+				{:else if weighted}{tr("Weighted items make up")} <strong>{g.weight_total}%</strong> {tr("of the final result; each mark becomes points (55% on an item worth 10% is 5.5), and a weighted item a student hasn’t done counts 0.")}
+				{:else}{tr("Each student’s best mark on each quiz and tutorial. Set weights to work out a final result.")}{/if}
 			</p>
 		</div>
 
 		{#if editing}
 			<div class="card card-border bg-base-100 p-4 vstack gap-3">
 				<div>
-					<h3 class="m-0 text-base">How much each counts towards the final result</h3>
-					<p class="m-0 small muted">A percent of the final result. They don’t need to add up to 100: leave room for tests marked outside the platform. Leave blank or 0 for what shouldn’t count.</p>
+					<h3 class="m-0 text-base">{tr("How much each counts towards the final result")}</h3>
+					<p class="m-0 small muted">{tr("A percent of the final result. They don’t need to add up to 100: leave room for tests marked outside the platform. Leave blank or 0 for what shouldn’t count.")}</p>
 				</div>
 				<div class="weights">
 					{#each g.items as it (key(it))}
 						<label class="weight">
-							<span class="min-w-0"><span class="block truncate font-semibold">{it.title}</span><span class="small muted">{it.kind === 'quiz' ? 'Quiz' : 'Tutorial'} · {it.topic}</span></span>
-							<span class="input input-sm w-24 flex-none"><input type="number" min="0" max="100" step="0.5" bind:value={draft[key(it)]} aria-label="Weight of {it.title}" />%</span>
+							<span class="min-w-0"><span class="block truncate font-semibold">{it.title}</span><span class="small muted">{it.kind === 'quiz' ? tr("Quiz") : tr("Tutorial")} · {it.topic}</span></span>
+							<span class="input input-sm w-24 flex-none"><input type="number" min="0" max="100" step="0.5" bind:value={draft[key(it)]} aria-label={tr("Weight of {0}", [it.title])} />%</span>
 						</label>
 					{/each}
 				</div>
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="grow small" class:text-error={!check.ok}>Total: <strong>{check.total}%</strong> of the final result{#if check.total < 100 && check.ok}; {Math.round((100 - check.total) * 100) / 100}% left for other assessments{/if}{#if !check.ok} · at most 100%, each between 0 and 100{/if}</span>
-					<button class="btn btn-sm btn-ghost" onclick={() => (editing = false)}>Cancel</button>
-					<button class="btn btn-sm btn-primary" onclick={saveWeights} disabled={!check.ok || saving}>Save weights</button>
+					<span class="grow small" class:text-error={!check.ok}>{tr("Total:")} <strong>{check.total}%</strong> {tr("of the final result")}{#if check.total < 100 && check.ok}{tr("; {0}% left for other assessments", [Math.round((100 - check.total) * 100) / 100])}{/if}{#if !check.ok} {tr("· at most 100%, each between 0 and 100")}{/if}</span>
+					<button class="btn btn-sm btn-ghost" onclick={() => (editing = false)}>{tr("Cancel")}</button>
+					<button class="btn btn-sm btn-primary" onclick={saveWeights} disabled={!check.ok || saving}>{tr("Save weights")}</button>
 				</div>
 			</div>
 		{/if}
@@ -192,15 +193,15 @@
 				<table class="table table-sm">
 					<thead>
 						<tr>
-							<th class="num">No.</th>
-							<ReportTh bind:view cols={viewCols} col="student" label="Student" />
+							<th class="num">{tr("No.")}</th>
+							<ReportTh bind:view cols={viewCols} col="student" label={tr("Student")} />
 							{#each g.items as it (key(it))}
-								<ReportTh bind:view cols={viewCols} col={key(it)} label={it.title} class="num" title={it.topic}><span class="small muted font-normal">{it.kind === 'tutorial' ? 'Tutorial' : 'Quiz'}{it.weight ? ` · ${it.weight}%` : weighted ? ' · not counted' : ''}</span></ReportTh>
+								<ReportTh bind:view cols={viewCols} col={key(it)} label={it.title} class="num" title={it.topic}><span class="small muted font-normal">{it.kind === 'tutorial' ? tr("Tutorial") : tr("Quiz")}{it.weight ? ` · ${it.weight}%` : weighted ? tr(" · not counted") : ''}</span></ReportTh>
 							{/each}
-							<ReportTh bind:view cols={viewCols} col="average" label="Average" class="num" />
-							<ReportTh bind:view cols={viewCols} col="marks" label="Total marks" class="num" />
-							{#if weighted}<ReportTh bind:view cols={viewCols} col="points" label="Points" class="num"><span class="small muted font-normal">of {g.weight_total}</span></ReportTh><ReportTh bind:view cols={viewCols} col="final" label="Final" class="num" />{/if}
-							{#if attendance}<ReportTh bind:view cols={viewCols} col="attendance" label="Attendance" class="num" />{/if}
+							<ReportTh bind:view cols={viewCols} col="average" label={tr("Average")} class="num" />
+							<ReportTh bind:view cols={viewCols} col="marks" label={tr("Total marks")} class="num" />
+							{#if weighted}<ReportTh bind:view cols={viewCols} col="points" label={tr("Points")} class="num"><span class="small muted font-normal">{tr("of {0}", [g.weight_total])}</span></ReportTh><ReportTh bind:view cols={viewCols} col="final" label={tr("Final")} class="num" />{/if}
+							{#if attendance}<ReportTh bind:view cols={viewCols} col="attendance" label={tr("Attendance")} class="num" />{/if}
 						</tr>
 					</thead>
 					<tbody>
@@ -210,38 +211,38 @@
 								<td>{s.name}{#if s.student_number}<br /><span class="small muted">{s.student_number}</span>{/if}</td>
 								{#each g.items as it (key(it))}
 									{@const m = s.marks[key(it)]}
-									<td class="num tabular" use:toned={toneFor(m?.pct, bands)}>{#if m}{m.pct}%{#if m.max}<br /><span class="small muted">{m.score} / {m.max}</span>{/if}{#if m.points != null}<br /><span class="small muted">{m.points} pts</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
+									<td class="num tabular" use:toned={toneFor(m?.pct, bands)}>{#if m}{m.pct}%{#if m.max}<br /><span class="small muted">{m.score} / {m.max}</span>{/if}{#if m.points != null}<br /><span class="small muted">{tr("{0} pts", [m.points])}</span>{/if}{:else}<span class="muted">–</span>{/if}</td>
 								{/each}
 								<td class="num tabular">{fmt(s.average, '%')}</td>
 								<td class="num tabular whitespace-nowrap">{marksLine(s)}</td>
 								{#if weighted}
-									<td class="num tabular font-semibold">{fmt(s.total)}{#if s.missing}<br /><span class="small text-warning">{s.missing} missed</span>{/if}</td>
+									<td class="num tabular font-semibold">{fmt(s.total)}{#if s.missing}<br /><span class="small text-warning">{tr("{0} missed", [s.missing])}</span>{/if}</td>
 									<td class="num tabular font-semibold" use:toned={toneFor(s.final, bands)}>{fmt(s.final, '%')}</td>
 								{/if}
 								{#if attendance}<td class="num tabular">{fmt(attendance.get(s.user_id)?.rate, '%')}</td>{/if}
 							</tr>
 						{:else}
-							<tr><td colspan={g.items.length + 6} class="muted">{g.students.length ? 'Nobody matches. Clear the filters to see everyone.' : 'No students yet.'}</td></tr>
+							<tr><td colspan={g.items.length + 6} class="muted">{g.students.length ? tr("Nobody matches. Clear the filters to see everyone.") : tr("No students yet.")}</td></tr>
 						{/each}
 					</tbody>
 					{#if g.students.length && g.items.length}
 						<tfoot>
 							<tr>
-								<td></td><th>Class average</th>
-								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.avg, '%')}<br /><span class="small muted">{it.taken} took it{#if it.max_marks} · out of {it.max_marks}{/if}</span></td>{/each}
+								<td></td><th>{tr("Class average")}</th>
+								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.avg, '%')}<br /><span class="small muted">{tr("{0} took it", [it.taken])}{#if it.max_marks} {tr("· out of {0}", [it.max_marks])}{/if}</span></td>{/each}
 								<td class="num tabular">{fmt(classAverage(g), '%')}</td>
 								<td class="num tabular">{fmt(totalAverage(g))}</td>
 								<td colspan={(weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
 							</tr>
 							<tr class="sub">
-								<td></td><th>Highest</th>
+								<td></td><th>{tr("Highest")}</th>
 								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.high, '%')}</td>{/each}
 								<td class="num tabular">{fmt(range.avgHigh, '%')}</td>
 								<td class="num tabular">{fmt(range.totalHigh)}</td>
 								<td colspan={(weighted ? 2 : 0) + (attendance ? 1 : 0)}></td>
 							</tr>
 							<tr class="sub">
-								<td></td><th>Lowest</th>
+								<td></td><th>{tr("Lowest")}</th>
 								{#each g.items as it (key(it))}<td class="num tabular">{fmt(it.low, '%')}</td>{/each}
 								<td class="num tabular">{fmt(range.avgLow, '%')}</td>
 								<td class="num tabular">{fmt(range.totalLow)}</td>
@@ -252,24 +253,24 @@
 				</table>
 			</div>
 		</div>
-		{#if !g.items.length}<p class="muted small m-0">Results appear once quizzes are run in this classroom or tutorials with questions are published.</p>{/if}
+		{#if !g.items.length}<p class="muted small m-0">{tr("Results appear once quizzes are run in this classroom or tutorials with questions are published.")}</p>{/if}
 
 		{#if g.sessions?.length}
 			<details class="card card-border bg-base-100" open={scope.kind === 'item'}>
-				<summary class="p-3 sm:px-4 cursor-pointer font-semibold">Each session’s report <span class="badge badge-soft badge-sm">{g.sessions.length}</span></summary>
+				<summary class="p-3 sm:px-4 cursor-pointer font-semibold">{tr("Each session’s report")} <span class="badge badge-soft badge-sm">{g.sessions.length}</span></summary>
 				<div class="table-wrap px-2 pb-2 sm:px-4">
 					<table class="table table-sm">
-						<thead><tr><th class="num">No.</th><th>Session</th><th>When</th><th class="num">Took part</th><th class="num">Results</th><th class="num">Average</th><th><span class="sr-only">Reports</span></th></tr></thead>
+						<thead><tr><th class="num">{tr("No.")}</th><th>{tr("Session")}</th><th>{tr("When")}</th><th class="num">{tr("Took part")}</th><th class="num">{tr("Results")}</th><th class="num">{tr("Average")}</th><th><span class="sr-only">{tr("Reports")}</span></th></tr></thead>
 						<tbody>
 							{#each g.sessions as x, n (x.id)}
 								<tr>
 									<td class="num tabular muted">{n + 1}</td>
 									<td>{x.title}{#if x.status !== 'ended'} <span class="badge badge-soft badge-sm">{x.status}</span>{/if}</td>
-									<td class="small">{new Date(x.at).toLocaleString()}</td>
+									<td class="small">{new Date(x.at).toLocaleString(localeTag())}</td>
 									<td class="num tabular">{x.attempts}</td>
 									<td class="num tabular">{x.results}</td>
 									<td class="num tabular">{fmt(x.avg, '%')}</td>
-									<td class="text-right whitespace-nowrap"><a class="btn btn-xs" href={'/t/sessions/' + x.id + '/results'}>Results</a> <a class="btn btn-xs btn-ghost" href={'/api/teacher/sessions/' + x.id + '/export.csv'} download><Icon name="download" size={13} />CSV</a></td>
+									<td class="text-right whitespace-nowrap"><a class="btn btn-xs" href={'/t/sessions/' + x.id + '/results'}>{tr("Results")}</a> <a class="btn btn-xs btn-ghost" href={'/api/teacher/sessions/' + x.id + '/export.csv'} download><Icon name="download" size={13} />{tr("CSV")}</a></td>
 								</tr>
 							{/each}
 						</tbody>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	import MathText from '$lib/richtext/MathText.svelte';
 	// A quiz's workspace: questions, CSV import, pools, settings, sessions and
 	// preview. The question bank (D-66) is a quiz of kind "bank" and uses the
@@ -97,8 +98,8 @@
 			quiz = await api.post<Quiz>('/api/teacher/quizzes/' + id + '/status', { status, accept_warnings: acceptWarnings });
 		} catch (e) {
 			if (e instanceof ApiError && e.code === 'quiz_has_warnings') {
-if (await confirmDialog({ title: 'Some resource links are broken', body: e.message + ' Mark the quiz Ready anyway?', confirm: 'Mark Ready' })) return setStatus(status, true);
-			} else notice = e instanceof ApiError ? e.message : 'Could not change status';
+if (await confirmDialog({ title: tr("Some resource links are broken"), body: tr("{0} Mark the quiz Ready anyway?", [e.message]), confirm: tr("Mark Ready") })) return setStatus(status, true);
+			} else notice = e instanceof ApiError ? e.message : tr("Could not change status");
 		}
 	}
 	async function upload(kind: 'questions' | 'resources', input: HTMLInputElement) {
@@ -112,7 +113,7 @@ if (await confirmDialog({ title: 'Some resource links are broken', body: e.messa
 			else resReport = r;
 			load();
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Upload failed';
+			notice = e instanceof ApiError ? e.message : tr("Upload failed");
 		}
 		input.value = '';
 	}
@@ -122,7 +123,7 @@ if (await confirmDialog({ title: 'Some resource links are broken', body: e.messa
 		driveStatus().then((s) => (drive = s.connected && !s.reconnect));
 	});
 	function driveFail(e: unknown) {
-		notice = e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : e instanceof Error ? e.message : 'Google Drive didn’t answer';
+		notice = e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : e instanceof Error ? e.message : tr("Google Drive didn’t answer");
 	}
 	async function importFromDrive() {
 		try {
@@ -144,7 +145,7 @@ if (await confirmDialog({ title: 'Some resource links are broken', body: e.messa
 			(form.elements.namedItem('url') as HTMLInputElement).value = shared.image_url ?? shared.web_link;
 			const alt = form.elements.namedItem('alt') as HTMLInputElement;
 			if (!alt.value) alt.value = shared.name.replace(/\.[a-z0-9]+$/i, '');
-			toast('Shared by link: students see it without a Google account. Add alt text, then Attach.', 'info');
+			toast(tr("Shared by link: students see it without a Google account. Add alt text, then Attach."), 'info');
 		} catch (err) {
 			driveFail(err);
 		}
@@ -154,7 +155,7 @@ if (await confirmDialog({ title: 'Some resource links are broken', body: e.messa
 		load();
 	}
 	async function delQ(q: Question) {
-if (!(await confirmDialog({ title: 'Delete question ' + q.code + '?', confirm: 'Delete', danger: true }))) return;
+if (!(await confirmDialog({ title: tr("Delete question {0}?", [q.code]), confirm: tr("Delete"), danger: true }))) return;
 		await api.del('/api/teacher/questions/' + q.id);
 		load();
 	}
@@ -168,7 +169,7 @@ if (!(await confirmDialog({ title: 'Delete question ' + q.code + '?', confirm: '
 			form.reset();
 			load();
 		} catch (err) {
-			notice = err instanceof ApiError ? Object.values(err.fields).join('; ') || err.message : 'Could not add the resource';
+			notice = err instanceof ApiError ? (Object.values(err.fields).join('; ') || err.message) : tr("Could not add the resource");
 		}
 	}
 	async function delResource(rid: string) {
@@ -177,7 +178,7 @@ if (!(await confirmDialog({ title: 'Delete question ' + q.code + '?', confirm: '
 	}
 	async function checkLinks() {
 		await api.post('/api/teacher/quizzes/' + id + '/resources/check');
-		toast('Checking links in the background — refresh in a moment.', 'info');
+		toast(tr("Checking links in the background — refresh in a moment."), 'info');
 	}
 	async function saveSettings(o: Overrides) {
 		errors = {};
@@ -189,17 +190,17 @@ if (!(await confirmDialog({ title: 'Delete question ' + q.code + '?', confirm: '
 		}
 	}
 	async function rename() {
-		const t = await promptDialog({ title: 'Rename quiz', label: 'Quiz title', value: quiz?.title ?? '', maxlength: 200 });
+		const t = await promptDialog({ title: tr("Rename quiz"), label: tr("Quiz title"), value: quiz?.title ?? '', maxlength: 200 });
 		if (t) quiz = await api.patch<Quiz>('/api/teacher/quizzes/' + id, { title: t });
 	}
 	async function delQuiz() {
 		// Archived because it has results: deleting now takes them too.
 		if (quiz?.status === 'archived') return delWithResults();
-if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results it is archived instead, so the results stay.', confirm: 'Delete quiz', danger: true }))) return;
+if (!(await confirmDialog({ title: tr("Delete this quiz?"), body: tr("If it has results it is archived instead, so the results stay."), confirm: tr("Delete quiz"), danger: true }))) return;
 		const r = await api.del<{ archived: boolean }>('/api/teacher/quizzes/' + id);
 		if (r?.archived) {
 			load();
-			toast('It has results, so it was archived. Delete it again to remove it with its results too.');
+			toast(tr("It has results, so it was archived. Delete it again to remove it with its results too."));
 		} else goto('/t/topics/' + quiz!.topic_id);
 	}
 	/** An archived quiz keeps its results; this deletes them with it (D-92). */
@@ -210,7 +211,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 			await api.del('/api/teacher/quizzes/' + id + '?confirm=' + encodeURIComponent(typed));
 			goto('/t/topics/' + quiz!.topic_id);
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not delete', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not delete"), 'error');
 		}
 	}
 	async function newSession() {
@@ -218,7 +219,7 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 			const s = await api.post<Session>('/api/teacher/quizzes/' + id + '/sessions', {});
 			goto('/t/sessions/' + s.id);
 		} catch (e) {
-			notice = e instanceof ApiError ? e.message : 'Could not create a session';
+			notice = e instanceof ApiError ? e.message : tr("Could not create a session");
 		}
 	}
 	async function loadPreview() {
@@ -231,39 +232,39 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 	{#if quiz}
 		{#if bank}
 			<div class="row">
-				<h1 style="margin:0">{quiz.kind === 'pool' ? quiz.title : 'Question bank'}</h1>
+				<h1 style="margin:0">{quiz.kind === 'pool' ? quiz.title : tr("Question bank")}</h1>
 			</div>
-			<p class="small m-0">{#if quiz.kind === 'pool'}<a href="/t/classrooms/{quiz.classroom_id}">← Classroom</a>{:else}<a href="/t/bank">← Question pools</a>{/if}</p>
-			<p class="muted small m-0">{quiz.kind === 'pool' ? 'Questions for this classroom’s quizzes' : 'Your questions for any of your quizzes'}: give them categories, then draw from those categories in a quiz's <strong>Pools</strong>. {count(questions.length, 'question')} in {count(categories.length, 'category', 'categories')}.</p>
+			<p class="small m-0">{#if quiz.kind === 'pool'}<a href="/t/classrooms/{quiz.classroom_id}">{tr("← Classroom")}</a>{:else}<a href="/t/bank">{tr("← Question pools")}</a>{/if}</p>
+			<p class="muted small m-0">{tr("{0}: give them categories, then draw from those categories in a quiz's", [quiz.kind === 'pool' ? tr("Questions for this classroom’s quizzes") : tr("Your questions for any of your quizzes")])} <strong>{tr("Pools")}</strong>{tr(". {0} in {1}.", [count(questions.length, 'question'), count(categories.length, 'category', 'categories')])}</p>
 		{:else}
-		<p class="small"><a href={'/t/topics/' + quiz.topic_id}>← Topic</a></p>
+		<p class="small"><a href={'/t/topics/' + quiz.topic_id}>{tr("← Topic")}</a></p>
 		<div class="row">
 			<h1 style="margin:0">{quiz.title}</h1>
 			<span class="badge badge-soft {quiz.status === 'ready' ? 'ok' : ''}">{quiz.status}</span>
 			<span class="spacer"></span>
-			<button class="btn btn-sm" onclick={rename}>Rename</button>
+			<button class="btn btn-sm" onclick={rename}>{tr("Rename")}</button>
 			{#if quiz.status === 'ready'}
-				<button class="btn btn-primary" onclick={newSession}>Start a session</button>
-				<button class="btn btn-sm" onclick={() => setStatus('draft')}>Back to draft</button>
+				<button class="btn btn-primary" onclick={newSession}>{tr("Start a session")}</button>
+				<button class="btn btn-sm" onclick={() => setStatus('draft')}>{tr("Back to draft")}</button>
 			{:else}
-				<button class="btn btn-primary" onclick={() => setStatus('ready')} disabled={readiness.blocking.length > 0}>Mark Ready</button>
+				<button class="btn btn-primary" onclick={() => setStatus('ready')} disabled={readiness.blocking.length > 0}>{tr("Mark Ready")}</button>
 			{/if}
 		</div>
-		<p class="muted small">{count(quiz.question_count, 'question')} · {count(quiz.total_marks, 'mark')}{#if quiz.effective?.quiz_time_limit_sec}{' · '}{Math.round(Number(quiz.effective.quiz_time_limit_sec) / 60)} min limit{/if}{#if quiz.pools?.length}{' · '}drawn from {count(quiz.pools.length, 'pool')}{:else if Number(quiz.effective?.question_draw) > 0 && Number(quiz.effective?.question_draw) < quiz.question_count}{' · '}each student gets {quiz.effective?.question_draw} at random{/if}</p>
+		<p class="muted small">{count(quiz.question_count, 'question')} · {count(quiz.total_marks, 'mark')}{#if quiz.effective?.quiz_time_limit_sec}{tr(" · {0} min limit", [Math.round(Number(quiz.effective.quiz_time_limit_sec) / 60)])}{/if}{#if quiz.pools?.length}{tr(" · drawn from {0}", [count(quiz.pools.length, 'pool')])}{:else if Number(quiz.effective?.question_draw) > 0 && Number(quiz.effective?.question_draw) < quiz.question_count}{tr(" · each student gets {0} at random", [quiz.effective?.question_draw])}{/if}</p>
 		{/if}
 		{#each readiness.blocking as b (b)}<p class="alert alert-soft alert-error small">{b}</p>{/each}
 		{#each readiness.warnings as w (w)}<p class="alert alert-soft alert-warning small">{w}</p>{/each}
 		{#if notice}<p class="alert alert-soft alert-warning">{notice}</p>{/if}
 
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			<button class="tab" role="tab" aria-selected={tab === 'questions'} class:tab-active={tab === 'questions'} onclick={() => (tab = 'questions')}>Questions</button>
-			<button class="tab" role="tab" aria-selected={tab === 'import'} class:tab-active={tab === 'import'} onclick={() => (tab = 'import')}>Import</button>
+			<button class="tab" role="tab" aria-selected={tab === 'questions'} class:tab-active={tab === 'questions'} onclick={() => (tab = 'questions')}>{tr("Questions")}</button>
+			<button class="tab" role="tab" aria-selected={tab === 'import'} class:tab-active={tab === 'import'} onclick={() => (tab = 'import')}>{tr("Import")}</button>
 			{#if !bank}
-				<button class="tab" role="tab" aria-selected={tab === 'pools'} class:tab-active={tab === 'pools'} onclick={() => (tab = 'pools')}>Pools{quiz.pools?.length ? ` (${quiz.pools.length})` : ''}</button>
-				<button class="tab" role="tab" aria-selected={tab === 'settings'} class:tab-active={tab === 'settings'} onclick={() => (tab = 'settings')}>Settings</button>
-				<button class="tab" role="tab" aria-selected={tab === 'sessions'} class:tab-active={tab === 'sessions'} onclick={() => (tab = 'sessions')}>Sessions ({sessions.total})</button>
+				<button class="tab" role="tab" aria-selected={tab === 'pools'} class:tab-active={tab === 'pools'} onclick={() => (tab = 'pools')}>{tr("Pools{0}", [quiz.pools?.length ? ` (${quiz.pools.length})` : ''])}</button>
+				<button class="tab" role="tab" aria-selected={tab === 'settings'} class:tab-active={tab === 'settings'} onclick={() => (tab = 'settings')}>{tr("Settings")}</button>
+				<button class="tab" role="tab" aria-selected={tab === 'sessions'} class:tab-active={tab === 'sessions'} onclick={() => (tab = 'sessions')}>{tr("Sessions ({0})", [sessions.total])}</button>
 			{/if}
-			<button class="tab" role="tab" aria-selected={tab === 'preview'} class:tab-active={tab === 'preview'} onclick={loadPreview}>Preview</button>
+			<button class="tab" role="tab" aria-selected={tab === 'preview'} class:tab-active={tab === 'preview'} onclick={loadPreview}>{tr("Preview")}</button>
 		</div>
 
 		{#if tab === 'questions'}
@@ -273,24 +274,24 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 				</div>
 			{:else}
 				<div class="flex flex-wrap items-center gap-2">
-					<button class="btn btn-primary" onclick={() => (editing = 'new')}><Icon name="plus" size={16} />Add a question</button>
+					<button class="btn btn-primary" onclick={() => (editing = 'new')}><Icon name="plus" size={16} />{tr("Add a question")}</button>
 					<span class="spacer"></span>
 					{#if questions.length}
-						<span class="small muted">{count(shown.length, 'question')} · click one to see it</span>
-						<button class="btn btn-sm btn-ghost" onclick={() => (open = allOpen ? new Set() : new Set(shown.map((q) => q.id)))}>{allOpen ? 'Collapse all' : 'Expand all'}</button>
+						<span class="small muted">{tr("{0} · click one to see it", [count(shown.length, 'question')])}</span>
+						<button class="btn btn-sm btn-ghost" onclick={() => (open = allOpen ? new Set() : new Set(shown.map((q) => q.id)))}>{allOpen ? tr("Collapse all") : tr("Expand all")}</button>
 					{/if}
 				</div>
 			{/if}
 			{#if categories.length}
-				<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Show questions by category">
-					<span class="small muted mr-1">Category</span>
-					<button type="button" class="btn btn-xs" class:btn-primary={filter === null} aria-pressed={filter === null} onclick={() => (filter = null)}>All ({questions.length})</button>
+				<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label={tr("Show questions by category")}>
+					<span class="small muted mr-1">{tr("Category")}</span>
+					<button type="button" class="btn btn-xs" class:btn-primary={filter === null} aria-pressed={filter === null} onclick={() => (filter = null)}>{tr("All ({0})", [questions.length])}</button>
 					{#each categories as c (c)}
 						<button type="button" class="btn btn-xs" class:btn-primary={filter === c} aria-pressed={filter === c} onclick={() => (filter = c)}>{c} ({questions.filter((q) => q.category === c).length})</button>
 					{/each}
-					{#if uncategorised}<button type="button" class="btn btn-xs" class:btn-primary={filter === ''} aria-pressed={filter === ''} onclick={() => (filter = '')}>No category ({uncategorised})</button>{/if}
+					{#if uncategorised}<button type="button" class="btn btn-xs" class:btn-primary={filter === ''} aria-pressed={filter === ''} onclick={() => (filter = '')}>{tr("No category ({0})", [uncategorised])}</button>{/if}
 				</div>
-				{#if filter !== null}<p class="small muted m-0">Showing one category. Show all to drag questions into a new order.</p>{/if}
+				{#if filter !== null}<p class="small muted m-0">{tr("Showing one category. Show all to drag questions into a new order.")}</p>{/if}
 			{/if}
 			<div bind:this={listEl} class="qlist card card-border bg-base-100 shadow-sm">
 				{#each shown as q (q.id)}
@@ -298,18 +299,18 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 					{@const broken = q.resources.some((r) => r.status === 'broken')}
 					<div class="qitem" class:on={isOpen || isEditing(q)} data-id={q.id}>
 						<div class="qrow">
-							{#if filter === null}<span class="handle" title="Drag to reorder"><Icon name="grip" size={16} /></span>{/if}
+							{#if filter === null}<span class="handle" title={tr("Drag to reorder")}><Icon name="grip" size={16} /></span>{/if}
 							<button class="qsum" aria-expanded={isOpen} onclick={() => toggle(q.id)}>
 								<Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />
 								<strong class="qcode tabular">{q.code}</strong>
 								<span class="badge badge-soft badge-sm flex-none">{QTYPE_LABEL[q.type]}</span>
 								{#if q.category}<span class="badge badge-soft badge-primary badge-sm flex-none">{q.category}</span>{/if}
 								<span class="qtext">{plain(q.text)}</span>
-								{#if broken}<span class="text-warning flex-none" title="A resource link is broken"><Icon name="alert" size={15} /></span>{/if}
+								{#if broken}<span class="text-warning flex-none" title={tr("A resource link is broken")}><Icon name="alert" size={15} /></span>{/if}
 								<span class="small muted tabular flex-none">{count(q.marks, 'mark')}{#if q.settings?.question_time_limit_sec}{' · '}{q.settings.question_time_limit_sec}s{/if}</span>
 							</button>
-							<button class="btn btn-sm btn-ghost" onclick={() => (editing = q)}><Icon name="pencil" size={14} /><span class="hide-sm">Edit</span></button>
-							<RowMenu hint="More actions for {q.code}" actions={[
+							<button class="btn btn-sm btn-ghost" onclick={() => (editing = q)}><Icon name="pencil" size={14} /><span class="hide-sm">{tr("Edit")}</span></button>
+							<RowMenu hint={tr("More actions for {0}", [q.code])} actions={[
 								{ label: 'Duplicate', icon: 'copy', onclick: () => dup(q) },
 								{ label: 'Delete question', icon: 'trash', danger: true, onclick: () => delQ(q) }
 							]} />
@@ -321,86 +322,86 @@ if (!(await confirmDialog({ title: 'Delete this quiz?', body: 'If it has results
 						{:else if isOpen}
 						<div class="qbody vstack">
 						<RichText text={q.text} format={q.body.format} blanks="chip" />
-						<p class="small muted" style="margin:0">Answer: <MathText text={describeKey(q.type, q.body, q.key) || '(marked by LLM or manually)'} /></p>
+						<p class="small muted" style="margin:0">{tr("Answer:")} <MathText text={describeKey(q.type, q.body, q.key) || '(marked by LLM or manually)'} /></p>
 						<details open={q.resources.length > 0}>
-							<summary class="small">Resources ({q.resources.length})</summary>
+							<summary class="small">{tr("Resources ({0})", [q.resources.length])}</summary>
 							{#each q.resources as r (r.id)}
 								<div class="row small">
 									<span>{q.code}_{r.role}_{r.n}</span>
 									<a href={r.url} target="_blank" rel="noopener noreferrer">{r.alt_text || 'link'}</a>
 									<span class="badge badge-soft {r.status === 'ok' ? 'ok' : r.status === 'broken' ? 'danger' : ''}">{r.status}</span>
 									{#if r.message}<span class="muted">{r.message}</span>{/if}
-									<button class="btn btn-sm" onclick={() => delResource(r.id)}>Remove</button>
+									<button class="btn btn-sm" onclick={() => delResource(r.id)}>{tr("Remove")}</button>
 								</div>
 							{/each}
 							<form class="row" onsubmit={(e) => addResource(q, e)} style="margin-top:0.5rem">
-								<select class="select w-full" name="role" style="width:8rem" aria-label="Attach to"><option value="Q">Question</option><option value="O">Option</option><option value="F">Feedback</option></select>
-								<input class="input w-full" name="n" type="number" min="1" value="1" style="width:5rem" aria-label="Number" />
-								<input class="input w-full" name="url" placeholder="Public image URL (Google Drive links work)" required style="flex:1;min-width:12rem" aria-label="URL" />
-								{#if drive}<button type="button" class="btn btn-sm" onclick={imageFromDrive}><Icon name="cloud" size={14} />From Drive</button>{/if}
-								<input class="input w-full" name="alt" placeholder="Alt text" style="width:10rem" aria-label="Alt text" />
-								<button class="btn btn-sm">Attach</button>
+								<select class="select w-full" name="role" style="width:8rem" aria-label={tr("Attach to")}><option value="Q">{tr("Question")}</option><option value="O">{tr("Option")}</option><option value="F">{tr("Feedback")}</option></select>
+								<input class="input w-full" name="n" type="number" min="1" value="1" style="width:5rem" aria-label={tr("Number")} />
+								<input class="input w-full" name="url" placeholder={tr("Public image URL (Google Drive links work)")} required style="flex:1;min-width:12rem" aria-label={tr("URL")} />
+								{#if drive}<button type="button" class="btn btn-sm" onclick={imageFromDrive}><Icon name="cloud" size={14} />{tr("From Drive")}</button>{/if}
+								<input class="input w-full" name="alt" placeholder={tr("Alt text")} style="width:10rem" aria-label={tr("Alt text")} />
+								<button class="btn btn-sm">{tr("Attach")}</button>
 							</form>
 						</details>
 						</div>
 						{/if}
 					</div>
 				{:else}
-					<p class="muted m-0 p-4">No questions yet. Add one, or import a CSV.</p>
+					<p class="muted m-0 p-4">{tr("No questions yet. Add one, or import a CSV.")}</p>
 				{/each}
 			</div>
 		{:else if tab === 'import'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-				<h3 style="margin-top:0">Import questions</h3>
-				<p class="small">One row per question. Download the <a href="/api/teacher/quiz-template.csv" download>template</a> for examples of all seven types. Add a <code>category</code> column to sort questions into pools. Valid rows are imported; invalid ones are listed below so you can fix and re-upload just those.</p>
-				<input class="file-input w-full" type="file" accept=".csv,text/csv" onchange={(e) => upload('questions', e.currentTarget)} aria-label="Questions CSV" />
+				<h3 style="margin-top:0">{tr("Import questions")}</h3>
+				<p class="small">{tr("One row per question. Download the")} <a href="/api/teacher/quiz-template.csv" download>{tr("template")}</a> {tr("for examples of all seven types. Add a")} <code>category</code> {tr("column to sort questions into pools. Valid rows are imported; invalid ones are listed below so you can fix and re-upload just those.")}</p>
+				<input class="file-input w-full" type="file" accept=".csv,text/csv" onchange={(e) => upload('questions', e.currentTarget)} aria-label={tr("Questions CSV")} />
 				<CsvGuide />
-				{#if drive}<div><button class="btn" onclick={importFromDrive}><Icon name="cloud" size={16} />Import from Google Drive</button> <span class="small muted">A CSV file, or a Google Sheet with the same columns.</span></div>{/if}
+				{#if drive}<div><button class="btn" onclick={importFromDrive}><Icon name="cloud" size={16} />{tr("Import from Google Drive")}</button> <span class="small muted">{tr("A CSV file, or a Google Sheet with the same columns.")}</span></div>{/if}
 				{#if report}
-					<p class="alert alert-soft {report.rejected.length ? '' : 'ok'}">Imported {report.imported} question(s); rejected {report.rejected.length}.</p>
+					<p class="alert alert-soft {report.rejected.length ? '' : 'ok'}">{tr("Imported {0} question(s); rejected {1}.", [report.imported, report.rejected.length])}</p>
 					{#if report.rejected.length}
-						<div class="table-wrap"><table class="table"><thead><tr><th>Row</th><th>Code</th><th>Problems</th></tr></thead><tbody>
+						<div class="table-wrap"><table class="table"><thead><tr><th>{tr("Row")}</th><th>{tr("Code")}</th><th>{tr("Problems")}</th></tr></thead><tbody>
 							{#each report.rejected as r (r.row)}<tr><td>{r.row}</td><td>{r.code}</td><td>{Object.entries(r.errors).map(([k, v]) => k + ': ' + v).join('; ')}</td></tr>{/each}
 						</tbody></table></div>
 					{/if}
 				{/if}
 			</div>
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-				<h3 style="margin-top:0">Attach images from a mapping CSV</h3>
-				<p class="small">Columns <code>resource_name,url,alt_text</code>. Names follow <code>&lt;question_code&gt;_&lt;Q|O|F&gt;_&lt;n&gt;</code>, e.g. <code>Q001_Q_1</code> for the question image or <code>Q002_O_3</code> for option 3. Use publicly shared links.</p>
-				<input class="file-input w-full" type="file" accept=".csv,text/csv" onchange={(e) => upload('resources', e.currentTarget)} aria-label="Resources CSV" />
+				<h3 style="margin-top:0">{tr("Attach images from a mapping CSV")}</h3>
+				<p class="small">{tr("Columns")} <code>resource_name,url,alt_text</code>{tr(". Names follow")} <code>&lt;question_code&gt;_&lt;Q|O|F&gt;_&lt;n&gt;</code>, e.g. <code>Q001_Q_1</code> {tr("for the question image or")} <code>Q002_O_3</code> {tr("for option 3. Use publicly shared links.")}</p>
+				<input class="file-input w-full" type="file" accept=".csv,text/csv" onchange={(e) => upload('resources', e.currentTarget)} aria-label={tr("Resources CSV")} />
 				{#if resReport}
-					<p class="alert alert-soft {resReport.rejected.length ? '' : 'ok'}">Attached {resReport.imported}; rejected {resReport.rejected.length}.</p>
-					{#each resReport.rejected as r (r.row)}<p class="small">Row {r.row} ({r.code}): {Object.values(r.errors).join('; ')}</p>{/each}
+					<p class="alert alert-soft {resReport.rejected.length ? '' : 'ok'}">{tr("Attached {0}; rejected {1}.", [resReport.imported, resReport.rejected.length])}</p>
+					{#each resReport.rejected as r (r.row)}<p class="small">{tr("Row {0} ({1}): {2}", [r.row, r.code, Object.values(r.errors).join('; ')])}</p>{/each}
 				{/if}
-				<div><button class="btn" onclick={checkLinks}>Re-check all links</button></div>
+				<div><button class="btn" onclick={checkLinks}>{tr("Re-check all links")}</button></div>
 			</div>
 		{:else if tab === 'pools'}
 			<PoolsEditor quizId={id} onchange={load} />
 		{:else if tab === 'settings'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><SettingsEditor level="quiz" value={quiz.settings} effective={quiz.effective} onsave={saveSettings} {errors} /></div>
-			<p class="small muted">Changes apply to new sessions; running sessions keep the settings they started with.</p>
-			<div><button class="btn btn-error btn-outline" onclick={delQuiz}>Delete quiz</button></div>
+			<p class="small muted">{tr("Changes apply to new sessions; running sessions keep the settings they started with.")}</p>
+			<div><button class="btn btn-error btn-outline" onclick={delQuiz}>{tr("Delete quiz")}</button></div>
 		{:else if tab === 'sessions'}
-			<ListSearch list={sessions} placeholder="Search title or join code" label="Search sessions" />
+			<ListSearch list={sessions} placeholder={tr("Search title or join code")} label={tr("Search sessions")} />
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
-				<table class="table"><thead><tr><th><SortHeader list={sessions} key="title" label="Session" /></th><th>Code</th><th><SortHeader list={sessions} key="status" label="Status" /></th><th><SortHeader list={sessions} key="created" label="Started" desc /></th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+				<table class="table"><thead><tr><th><SortHeader list={sessions} key="title" label={tr("Session")} /></th><th>{tr("Code")}</th><th><SortHeader list={sessions} key="status" label={tr("Status")} /></th><th><SortHeader list={sessions} key="created" label={tr("Started")} desc /></th><th><span class="sr-only">{tr("Actions")}</span></th></tr></thead><tbody>
 					{#each sessions.rows as s (s.id)}
 						<tr>
 							<td>{s.title}</td><td><strong>{s.join_code}</strong></td>
 							<td><span class="badge badge-soft {s.status === 'live' ? 'ok' : ''}">{s.status}</span></td>
-							<td class="small">{new Date(s.created_at).toLocaleString()}</td>
-							<td class="row"><a class="btn btn-sm" href={'/t/sessions/' + s.id}>Dashboard</a><a class="btn btn-sm" href={'/t/sessions/' + s.id + '/results'}>Results</a></td>
+							<td class="small">{new Date(s.created_at).toLocaleString(localeTag())}</td>
+							<td class="row"><a class="btn btn-sm" href={'/t/sessions/' + s.id}>{tr("Dashboard")}</a><a class="btn btn-sm" href={'/t/sessions/' + s.id + '/results'}>{tr("Results")}</a></td>
 						</tr>
-					{:else}<tr><td colspan="5" class="muted">{sessions.q ? 'No sessions match.' : 'No sessions yet.'}</td></tr>{/each}
+					{:else}<tr><td colspan="5" class="muted">{sessions.q ? tr("No sessions match.") : tr("No sessions yet.")}</td></tr>{/each}
 				</tbody></table>
 			</div>
-			<Pager list={sessions} label="Sessions" />
-			{#if sessions.total}<a class="btn" href={'/t/quizzes/' + id + '/analytics'}>Quiz analytics across sessions</a>{/if}
+			<Pager list={sessions} label={tr("Sessions")} />
+			{#if sessions.total}<a class="btn" href={'/t/quizzes/' + id + '/analytics'}>{tr("Quiz analytics across sessions")}</a>{/if}
 		{:else}
-			<p class="small muted">This is what students see. Answer keys are not included.</p>
+			<p class="small muted">{tr("This is what students see. Answer keys are not included.")}</p>
 			{#each preview as q, i (q.id)}
-				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><p class="small muted">Question {i + 1}</p><QuestionView question={q} onchange={() => {}} /></div>
+				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6"><p class="small muted">{tr("Question {0}", [i + 1])}</p><QuestionView question={q} onchange={() => {}} /></div>
 			{/each}
 		{/if}
 	{/if}

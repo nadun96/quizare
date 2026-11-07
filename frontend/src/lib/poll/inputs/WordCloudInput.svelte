@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Up to N short entries, added as chips (Enter or comma adds one).
 	import Icon from '../../ui/Icon.svelte';
 	import { scaleIn } from '../../ui/motion';
@@ -39,20 +40,20 @@
 			bind:value={draft}
 			onkeydown={key}
 			maxlength="40"
-			placeholder={full ? `That's ${max} — remove one to change it` : list.length ? 'Add another…' : 'Type a word or short phrase'}
+			placeholder={full ? tr("That's {0} — remove one to change it", [max]) : list.length ? tr("Add another…") : tr("Type a word or short phrase")}
 			disabled={disabled || full}
 			aria-label={label}
 			autocomplete="off"
 		/>
-		<button type="button" class="btn btn-primary" onclick={add} disabled={disabled || full || !draft.trim()}><Icon name="plus" size={16} />Add</button>
+		<button type="button" class="btn btn-primary" onclick={add} disabled={disabled || full || !draft.trim()}><Icon name="plus" size={16} />{tr("Add")}</button>
 	</div>
 	<div class="flex flex-wrap items-center gap-2" aria-live="polite">
 		{#each list as w (w)}
 			<span class="badge badge-lg badge-soft badge-primary gap-1 pr-1" in:scaleIn>
 				{w}
-				{#if !disabled}<button type="button" class="btn btn-ghost btn-xs btn-circle" aria-label="Remove {w}" onclick={() => set(list.filter((x) => x !== w))}><Icon name="x" size={12} /></button>{/if}
+				{#if !disabled}<button type="button" class="btn btn-ghost btn-xs btn-circle" aria-label={tr("Remove {0}", [w])} onclick={() => set(list.filter((x) => x !== w))}><Icon name="x" size={12} /></button>{/if}
 			</span>
 		{/each}
-		<span class="small muted">{list.length} of {max}</span>
+		<span class="small muted">{tr("{0} of {1}", [list.length, max])}</span>
 	</div>
 </div>

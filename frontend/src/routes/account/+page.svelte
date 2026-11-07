@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api';
 	import { auth } from '$lib/session.svelte';
@@ -16,13 +17,13 @@
 			auth.user = null;
 			goto('/');
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not delete the account';
+			error = err instanceof ApiError ? err.message : tr("Could not delete the account");
 		}
 	}
 </script>
 
 <div class="page-container vstack">
-	<h1 class="m-0">Your account</h1>
+	<h1 class="m-0">{tr("Your account")}</h1>
 	{#if auth.user}
 	<!-- Two columns on wide screens (D-110): who you are on the left, how the app behaves on the right. -->
 	<div class="acct">
@@ -33,21 +34,21 @@
 		<div class="vstack">
 		<ConnectedSignIns />
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-			<h2 class="mt-0">Display</h2>
-			<p class="small muted">Saved on this device. Larger text and reduced motion also apply during quizzes.</p>
+			<h2 class="mt-0">{tr("Display")}</h2>
+			<p class="small muted">{tr("Saved on this device. Larger text and reduced motion also apply during quizzes.")}</p>
 			<DisplayMenu idPrefix="acct" />
 		</div>
 		{#if auth.user.role !== 'admin' && auth.user.role !== 'manager'}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
-				<h2 style="margin-top:0">Delete account</h2>
-				<p class="small muted">Your name and email are removed. Your teachers keep anonymised quiz results.</p>
+				<h2 style="margin-top:0">{tr("Delete account")}</h2>
+				<p class="small muted">{tr("Your name and email are removed. Your teachers keep anonymised quiz results.")}</p>
 				{#if !confirming}
-					<button class="btn btn-error btn-outline" onclick={() => (confirming = true)}>Delete my account…</button>
+					<button class="btn btn-error btn-outline" onclick={() => (confirming = true)}>{tr("Delete my account…")}</button>
 				{:else}
 					<form class="vstack" onsubmit={del}>
-						<div><label for="pw">{auth.user?.directory ? 'Enter your school password to confirm' : 'Enter your password to confirm'}</label><input class="input w-full" id="pw" type="password" bind:value={password} required /></div>
+						<div><label for="pw">{auth.user?.directory ? tr("Enter your school password to confirm") : tr("Enter your password to confirm")}</label><input class="input w-full" id="pw" type="password" bind:value={password} required /></div>
 						{#if error}<p class="alert alert-soft alert-error">{error}</p>{/if}
-						<button class="btn btn-error btn-outline">Delete permanently</button>
+						<button class="btn btn-error btn-outline">{tr("Delete permanently")}</button>
 					</form>
 				{/if}
 			</div>
@@ -55,7 +56,7 @@
 		</div>
 	</div>
 	{:else if auth.loaded}
-		<p><a href="/login?next=/account">Log in</a> to manage your account.</p>
+		<p><a href="/login?next=/account">{tr("Log in")}</a> {tr("to manage your account.")}</p>
 	{/if}
 </div>
 

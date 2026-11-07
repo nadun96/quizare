@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// When the server has a newer version (D-137): the next page change loads
 	// it in full, and a small notice offers to reload now, in case the teacher
 	// stays on this page. Never shown over a quiz, tutoring or a projector.
@@ -18,9 +19,9 @@
 {#if updated.current && !bare && !dismissed}
 	<div class="notice alert alert-info shadow-lg" role="status">
 		<Icon name="info" size={18} />
-		<span>A new version is available. Save your work, then reload.</span>
-		<button class="btn btn-sm btn-primary" onclick={() => location.reload()}>Reload</button>
-		<button class="btn btn-sm btn-ghost btn-square" aria-label="Not now" onclick={() => (dismissed = true)}><Icon name="x" size={16} /></button>
+		<span>{tr("A new version is available. Save your work, then reload.")}</span>
+		<button class="btn btn-sm btn-primary" onclick={() => location.reload()}>{tr("Reload")}</button>
+		<button class="btn btn-sm btn-ghost btn-square" aria-label={tr("Not now")} onclick={() => (dismissed = true)}><Icon name="x" size={16} /></button>
 	</div>
 {/if}
 

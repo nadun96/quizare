@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // Scored polls and leaderboards (V2-01, V2-02, D-42). The server marks
 // answers; these helpers only shape keys in the editor and show results.
 import type { Choice, GroupRank, Poll, PollBody, PollKey, PollQuestion, PollSettings, PollType, Rank } from './types';
@@ -77,7 +78,7 @@ export function secondsLeft(startedAt: number | undefined, limitSec: number | nu
 }
 
 /** "1,250" or "87.5" points. */
-export const fmtPoints = (n: number) => (Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 1 }));
+export const fmtPoints = (n: number) => (Number.isInteger(n) ? n.toLocaleString(localeTag()) : n.toLocaleString(localeTag(), { maximumFractionDigits: 1 }));
 
 /** "1st", "2nd", "23rd". */
 export function ordinal(n: number): string {

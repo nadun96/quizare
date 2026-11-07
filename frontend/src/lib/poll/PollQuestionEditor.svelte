@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Create or edit one poll question of any type, with a live preview that
 	// uses the participant's real input (D-40).
 	import { api, ApiError } from '../api';
@@ -73,7 +74,7 @@
 			const q = initial
 				? await api.put<PollQuestion>('/api/teacher/poll-questions/' + initial.id, payload)
 				: await api.post<PollQuestion>('/api/teacher/polls/' + pollId + '/questions', { ...payload, ...extra });
-			toast(initial ? 'Question saved' : 'Question added');
+			toast(initial ? tr("Question saved") : tr("Question added"));
 			onsaved(q);
 		} catch (err) {
 			errors = err instanceof ApiError ? (Object.keys(err.fields).length ? err.fields : { _: err.message }) : { _: 'Save failed' };
@@ -87,9 +88,9 @@
 {#if !type}
 	<div class="vstack">
 		<div class="flex items-center gap-2">
-			<h2 class="m-0 text-lg">Choose a question type</h2>
+			<h2 class="m-0 text-lg">{tr("Choose a question type")}</h2>
 			<span class="spacer"></span>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={oncancel}>Cancel</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={oncancel}>{tr("Cancel")}</button>
 		</div>
 		{#each TYPES_BY_GROUP as g (g.group)}
 			<section>
@@ -99,8 +100,8 @@
 						<button type="button" class="type-card" onclick={() => choose(t)}>
 							<span class="type-icon" aria-hidden="true"><Icon name={TYPE_META[t].icon} size={18} /></span>
 							<span class="min-w-0 text-left">
-								<span class="block font-semibold">{TYPE_META[t].label}</span>
-								<span class="small muted block">{TYPE_META[t].hint}</span>
+								<span class="block font-semibold">{tr(TYPE_META[t].label)}</span>
+								<span class="small muted block">{tr(TYPE_META[t].hint)}</span>
 							</span>
 						</button>
 					{/each}
@@ -112,51 +113,51 @@
 	<form class="editor" onsubmit={save}>
 		<div class="vstack min-w-0">
 			<div class="flex flex-wrap items-center gap-2">
-				<span class="badge badge-soft badge-primary gap-1"><Icon name={TYPE_META[type].icon} size={13} />{TYPE_META[type].label}</span>
-				{#if !initial}<button type="button" class="btn btn-ghost btn-xs" onclick={() => (type = null)}>Change type</button>{/if}
+				<span class="badge badge-soft badge-primary gap-1"><Icon name={TYPE_META[type].icon} size={13} />{tr(TYPE_META[type].label)}</span>
+				{#if !initial}<button type="button" class="btn btn-ghost btn-xs" onclick={() => (type = null)}>{tr("Change type")}</button>{/if}
 				<span class="spacer"></span>
-				<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={required} /> Required</label>
+				<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={required} /> {tr("Required")}</label>
 			</div>
 			<div>
-				<label for="pq-text">Question</label>
-				<RichTextEditor id="pq-text" label="Question" bind:value={text} {format} compact={false} blanks={type === 'BLANK_OPT' || type === 'BLANK_TEXT'} />
-				{#if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}<p class="small muted m-0 mt-1">Add blanks with <strong>+ Blank</strong> or by typing [[1]].</p>{/if}
+				<label for="pq-text">{tr("Question")}</label>
+				<RichTextEditor id="pq-text" label={tr("Question")} bind:value={text} {format} compact={false} blanks={type === 'BLANK_OPT' || type === 'BLANK_TEXT'} />
+				{#if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}<p class="small muted m-0 mt-1">{tr("Add blanks with")} <strong>{tr("+ Blank")}</strong> {tr("or by typing [[1]].")}</p>{/if}
 			</div>
 
 			{#if type === 'SINGLE' || type === 'MULTI' || type === 'BLANK_OPT'}
-				<ChoiceList marks={type === 'SINGLE' || type === 'MULTI'} bind:items={body.options} label={type === 'BLANK_OPT' ? 'Word choices (shared by all blanks)' : 'Options'} letters={type !== 'BLANK_OPT'} />
+				<ChoiceList marks={type === 'SINGLE' || type === 'MULTI'} bind:items={body.options} label={type === 'BLANK_OPT' ? tr("Word choices (shared by all blanks)") : tr("Options")} letters={type !== 'BLANK_OPT'} />
 				{#if type === 'SINGLE'}
 					<div class="join">
-						<button type="button" class="btn btn-sm join-item" class:btn-primary={body.display !== 'dropdown'} onclick={() => (body.display = 'radio')}>Radio buttons</button>
-						<button type="button" class="btn btn-sm join-item" class:btn-primary={body.display === 'dropdown'} onclick={() => (body.display = 'dropdown')}>Dropdown</button>
+						<button type="button" class="btn btn-sm join-item" class:btn-primary={body.display !== 'dropdown'} onclick={() => (body.display = 'radio')}>{tr("Radio buttons")}</button>
+						<button type="button" class="btn btn-sm join-item" class:btn-primary={body.display === 'dropdown'} onclick={() => (body.display = 'dropdown')}>{tr("Dropdown")}</button>
 					</div>
 				{/if}
 				{#if type === 'MULTI'}
-					<div class="max-w-xs"><label for="pq-max">Most choices allowed (0 = any)</label><input id="pq-max" class="input input-sm w-full" type="number" min="0" max={body.options?.length ?? 0} bind:value={body.max_choices} /></div>
+					<div class="max-w-xs"><label for="pq-max">{tr("Most choices allowed (0 = any)")}</label><input id="pq-max" class="input input-sm w-full" type="number" min="0" max={body.options?.length ?? 0} bind:value={body.max_choices} /></div>
 				{/if}
 			{:else if type === 'MATCH'}
 				<div class="grid gap-4 sm:grid-cols-2">
-					<ChoiceList bind:items={body.left} label="Left items" noun="item" />
-					<ChoiceList bind:items={body.right} label="Right items" noun="item" />
+					<ChoiceList bind:items={body.left} label={tr("Left items")} noun="item" />
+					<ChoiceList bind:items={body.right} label={tr("Right items")} noun="item" />
 				</div>
 			{:else if type === 'DRAG'}
 				<div class="join">
-					<button type="button" class="btn btn-sm join-item" class:btn-primary={!body.zones} onclick={() => (body.zones = undefined)}>Rank in order</button>
-					<button type="button" class="btn btn-sm join-item" class:btn-primary={!!body.zones} onclick={() => (body.zones = body.zones ?? [{ id: '', text: 'Box 1' }, { id: '', text: 'Box 2' }])}>Sort into boxes</button>
+					<button type="button" class="btn btn-sm join-item" class:btn-primary={!body.zones} onclick={() => (body.zones = undefined)}>{tr("Rank in order")}</button>
+					<button type="button" class="btn btn-sm join-item" class:btn-primary={!!body.zones} onclick={() => (body.zones = body.zones ?? [{ id: '', text: 'Box 1' }, { id: '', text: 'Box 2' }])}>{tr("Sort into boxes")}</button>
 				</div>
-				<ChoiceList bind:items={body.options} label="Items" noun="item" />
-				{#if body.zones}<ChoiceList bind:items={body.zones} label="Boxes" noun="box" max={10} />{/if}
+				<ChoiceList bind:items={body.options} label={tr("Items")} noun="item" />
+				{#if body.zones}<ChoiceList bind:items={body.zones} label={tr("Boxes")} noun="box" max={10} />{/if}
 			{:else if type === 'LIKERT'}
-				<ChoiceList bind:items={body.rows} label="Statements" noun="statement" min={1} max={20} />
+				<ChoiceList bind:items={body.rows} label={tr("Statements")} noun="statement" min={1} max={20} />
 				<div>
-					<p class="small font-semibold m-0 mb-1">Scale</p>
+					<p class="small font-semibold m-0 mb-1">{tr("Scale")}</p>
 					<div class="flex flex-wrap gap-1">
 						{#each Object.entries(LIKERT_PRESETS) as [name, labels] (name)}
 							<button type="button" class="btn btn-xs" class:btn-primary={JSON.stringify(body.scale) === JSON.stringify(labels)} onclick={() => (body.scale = [...labels])}>{name}</button>
 						{/each}
 					</div>
 					<div class="mt-2 grid gap-1 sm:grid-cols-2">
-						{#each body.scale ?? [] as _, i (i)}<input class="input input-sm w-full" bind:value={body.scale![i]} aria-label="Scale point {i + 1}" maxlength="40" />{/each}
+						{#each body.scale ?? [] as _, i (i)}<input class="input input-sm w-full" bind:value={body.scale![i]} aria-label={tr("Scale point {0}", [i + 1])} maxlength="40" />{/each}
 					</div>
 				</div>
 			{:else if type === 'MATRIX'}
@@ -166,72 +167,72 @@
 					{/each}
 				</div>
 				<div class="grid gap-4 sm:grid-cols-2">
-					<ChoiceList bind:items={body.rows} label="Rows" noun="row" min={1} max={20} />
-					<ChoiceList bind:items={body.columns} label="Columns" noun="column" max={10} />
+					<ChoiceList bind:items={body.rows} label={tr("Rows")} noun="row" min={1} max={20} />
+					<ChoiceList bind:items={body.columns} label={tr("Columns")} noun="column" max={10} />
 				</div>
 			{:else if type === 'RATING'}
-				<div class="max-w-xs"><label for="pq-pts">Stars</label>
+				<div class="max-w-xs"><label for="pq-pts">{tr("Stars")}</label>
 					<select id="pq-pts" class="select select-sm w-full" bind:value={body.points}>{#each [3, 4, 5, 6, 7, 8, 9, 10] as n (n)}<option value={n}>{n}</option>{/each}</select></div>
 			{:else if type === 'SLIDER' || type === 'NUMBER'}
 				<div class="grid grid-cols-3 gap-2">
-					<div><label for="pq-min">Minimum</label><input id="pq-min" class="input input-sm w-full" type="number" value={body.min ?? ''} oninput={(e) => (body.min = num(e.currentTarget.value))} placeholder={type === 'NUMBER' ? 'none' : ''} /></div>
-					<div><label for="pq-maxv">Maximum</label><input id="pq-maxv" class="input input-sm w-full" type="number" value={body.max ?? ''} oninput={(e) => (body.max = num(e.currentTarget.value))} placeholder={type === 'NUMBER' ? 'none' : ''} /></div>
-					<div><label for="pq-step">Step</label><input id="pq-step" class="input input-sm w-full" type="number" min="0" step="any" value={body.step ?? ''} oninput={(e) => (body.step = num(e.currentTarget.value))} placeholder={type === 'NUMBER' ? 'any' : '1'} /></div>
+					<div><label for="pq-min">{tr("Minimum")}</label><input id="pq-min" class="input input-sm w-full" type="number" value={body.min ?? ''} oninput={(e) => (body.min = num(e.currentTarget.value))} placeholder={type === 'NUMBER' ? 'none' : ''} /></div>
+					<div><label for="pq-maxv">{tr("Maximum")}</label><input id="pq-maxv" class="input input-sm w-full" type="number" value={body.max ?? ''} oninput={(e) => (body.max = num(e.currentTarget.value))} placeholder={type === 'NUMBER' ? 'none' : ''} /></div>
+					<div><label for="pq-step">{tr("Step")}</label><input id="pq-step" class="input input-sm w-full" type="number" min="0" step="any" value={body.step ?? ''} oninput={(e) => (body.step = num(e.currentTarget.value))} placeholder={type === 'NUMBER' ? 'any' : '1'} /></div>
 				</div>
 				{#if type === 'SLIDER'}
 					<div class="grid grid-cols-2 gap-2">
-						<div><label for="pq-minl">Left label</label><input id="pq-minl" class="input input-sm w-full" bind:value={body.min_label} maxlength="60" /></div>
-						<div><label for="pq-maxl">Right label</label><input id="pq-maxl" class="input input-sm w-full" bind:value={body.max_label} maxlength="60" /></div>
+						<div><label for="pq-minl">{tr("Left label")}</label><input id="pq-minl" class="input input-sm w-full" bind:value={body.min_label} maxlength="60" /></div>
+						<div><label for="pq-maxl">{tr("Right label")}</label><input id="pq-maxl" class="input input-sm w-full" bind:value={body.max_label} maxlength="60" /></div>
 					</div>
 				{:else}
-					<div class="max-w-xs"><label for="pq-unit">Unit (optional)</label><input id="pq-unit" class="input input-sm w-full" bind:value={body.unit} maxlength="20" placeholder="e.g. kg, °C, minutes" /></div>
+					<div class="max-w-xs"><label for="pq-unit">{tr("Unit (optional)")}</label><input id="pq-unit" class="input input-sm w-full" bind:value={body.unit} maxlength="20" placeholder={tr("e.g. kg, °C, minutes")} /></div>
 				{/if}
 			{:else if type === 'DATE' || type === 'TIME'}
 				<div class="grid grid-cols-2 gap-2">
-					<div><label for="pq-from">Earliest (optional)</label><input id="pq-from" class="input input-sm w-full" type={type === 'DATE' ? 'date' : 'time'} bind:value={body.from} /></div>
-					<div><label for="pq-to">Latest (optional)</label><input id="pq-to" class="input input-sm w-full" type={type === 'DATE' ? 'date' : 'time'} bind:value={body.to} /></div>
+					<div><label for="pq-from">{tr("Earliest (optional)")}</label><input id="pq-from" class="input input-sm w-full" type={type === 'DATE' ? 'date' : 'time'} bind:value={body.from} /></div>
+					<div><label for="pq-to">{tr("Latest (optional)")}</label><input id="pq-to" class="input input-sm w-full" type={type === 'DATE' ? 'date' : 'time'} bind:value={body.to} /></div>
 				</div>
 			{:else if type === 'SHORT_TEXT' || type === 'CODE'}
 				<div class="grid grid-cols-2 gap-2">
-					{#if type === 'CODE'}<div><label for="pq-lang">Language label</label><input id="pq-lang" class="input input-sm w-full" bind:value={body.language} maxlength="40" /></div>{/if}
-					<div><label for="pq-len">Maximum characters</label><input id="pq-len" class="input input-sm w-full" type="number" min="1" max={type === 'CODE' ? 20000 : 500} bind:value={body.max_length} /></div>
+					{#if type === 'CODE'}<div><label for="pq-lang">{tr("Language label")}</label><input id="pq-lang" class="input input-sm w-full" bind:value={body.language} maxlength="40" /></div>{/if}
+					<div><label for="pq-len">{tr("Maximum characters")}</label><input id="pq-len" class="input input-sm w-full" type="number" min="1" max={type === 'CODE' ? 20000 : 500} bind:value={body.max_length} /></div>
 				</div>
 			{:else if type === 'ESSAY'}
-				<div class="max-w-xs"><label for="pq-words">Word limit (0 = none)</label><input id="pq-words" class="input input-sm w-full" type="number" min="0" max="5000" bind:value={body.max_words} /></div>
+				<div class="max-w-xs"><label for="pq-words">{tr("Word limit (0 = none)")}</label><input id="pq-words" class="input input-sm w-full" type="number" min="0" max="5000" bind:value={body.max_words} /></div>
 			{:else if type === 'WORD_CLOUD'}
-				<div class="max-w-xs"><label for="pq-ent">Words per participant</label>
+				<div class="max-w-xs"><label for="pq-ent">{tr("Words per participant")}</label>
 					<select id="pq-ent" class="select select-sm w-full" bind:value={body.max_entries}>{#each [1, 2, 3, 4, 5] as n (n)}<option value={n}>{n}</option>{/each}</select></div>
 			{:else if type === 'FILE'}
 				<fieldset class="m-0 border-0 p-0">
-					<legend class="small font-semibold">Accepted files</legend>
+					<legend class="small font-semibold">{tr("Accepted files")}</legend>
 					<div class="flex flex-wrap gap-3">
 						{#each [['image', 'Images'], ['pdf', 'PDF'], ['document', 'Documents'], ['any', 'Any of these']] as [k, l] (k)}
 							<label class="m-0 flex items-center gap-2 font-normal"><input type="checkbox" class="checkbox checkbox-sm" checked={body.accept?.includes(k as 'image')} onchange={(e) => (body.accept = e.currentTarget.checked ? [...(body.accept ?? []), k as 'image'] : (body.accept ?? []).filter((x) => x !== k))} />{l}</label>
 						{/each}
 					</div>
 				</fieldset>
-				<div class="max-w-xs"><label for="pq-mb">Largest file (MB, up to 5)</label><input id="pq-mb" class="input input-sm w-full" type="number" min="1" max="5" bind:value={body.max_mb} /></div>
+				<div class="max-w-xs"><label for="pq-mb">{tr("Largest file (MB, up to 5)")}</label><input id="pq-mb" class="input input-sm w-full" type="number" min="1" max="5" bind:value={body.max_mb} /></div>
 			{:else if type === 'AUDIO' || type === 'VIDEO'}
-				<div class="max-w-xs"><label for="pq-sec">Longest recording (seconds, up to {type === 'AUDIO' ? 60 : 30})</label><input id="pq-sec" class="input input-sm w-full" type="number" min="5" max={type === 'AUDIO' ? 60 : 30} bind:value={body.max_seconds} /></div>
-				<p class="small muted m-0">Recording needs HTTPS (or localhost) and the participant's permission.</p>
+				<div class="max-w-xs"><label for="pq-sec">{tr("Longest recording (seconds, up to {0})", [type === 'AUDIO' ? 60 : 30])}</label><input id="pq-sec" class="input input-sm w-full" type="number" min="5" max={type === 'AUDIO' ? 60 : 30} bind:value={body.max_seconds} /></div>
+				<p class="small muted m-0">{tr("Recording needs HTTPS (or localhost) and the participant's permission.")}</p>
 			{/if}
 
 			{#if scoring || pacing === 'presenter'}
-				<section class="scoring vstack" aria-label="Scoring">
+				<section class="scoring vstack" aria-label={tr("Scoring")}>
 					{#if scoring && SCORABLE.has(type)}
 						<KeyEditor {type} body={withIds($state.snapshot(body) as PollBody)} {blanks} bind:key />
 					{:else if scoring}
-						<p class="small muted m-0 flex items-center gap-1"><Icon name="info" size={14} />{TYPE_META[type].label} answers are opinions, so they aren't scored.</p>
+						<p class="small muted m-0 flex items-center gap-1"><Icon name="info" size={14} />{tr("{0} answers are opinions, so they aren't scored.", [tr(TYPE_META[type].label)])}</p>
 					{/if}
 					<div class="flex flex-wrap gap-3">
 						{#if scoring && SCORABLE.has(type)}
-							<div class="w-32"><label for="pq-points">Points</label><input id="pq-points" class="input input-sm w-full" type="number" min="0" max="10000" step="10" bind:value={points} /></div>
+							<div class="w-32"><label for="pq-points">{tr("Points")}</label><input id="pq-points" class="input input-sm w-full" type="number" min="0" max="10000" step="10" bind:value={points} /></div>
 						{/if}
 						{#if pacing === 'presenter'}
-							<div class="w-40"><label for="pq-limit">Time limit (seconds)</label><input id="pq-limit" class="input input-sm w-full" type="number" min="5" max="3600" placeholder="none" value={timeLimit ?? ''} oninput={(e) => (timeLimit = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))} /></div>
+							<div class="w-40"><label for="pq-limit">{tr("Time limit (seconds)")}</label><input id="pq-limit" class="input input-sm w-full" type="number" min="5" max="3600" placeholder={tr("none")} value={timeLimit ?? ''} oninput={(e) => (timeLimit = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))} /></div>
 						{/if}
 					</div>
-					{#if pacing === 'presenter'}<p class="small muted m-0">With a time limit, answers close when the countdown ends{scoring ? ', and the speed bonus (if on) rewards quick right answers' : ''}.</p>{/if}
+					{#if pacing === 'presenter'}<p class="small muted m-0">{tr("With a time limit, answers close when the countdown ends{0}.", [scoring ? tr(", and the speed bonus (if on) rewards quick right answers") : ''])}</p>{/if}
 				</section>
 			{/if}
 
@@ -239,12 +240,12 @@
 				<div class="alert alert-soft alert-error small" role="alert"><Icon name="alert" /><ul class="m-0 pl-4">{#each errorList as [k, v] (k)}<li>{k === '_' ? '' : k.replace('body.', '') + ': '}{v}</li>{/each}</ul></div>
 			{/if}
 			<div class="flex gap-2">
-				<button class="btn btn-primary" disabled={saving}>{#if saving}<span class="loading loading-spinner loading-sm"></span>{/if}{initial ? 'Save question' : 'Add question'}</button>
-				<button type="button" class="btn" onclick={oncancel}>Cancel</button>
+				<button class="btn btn-primary" disabled={saving}>{#if saving}<span class="loading loading-spinner loading-sm"></span>{/if}{initial ? tr("Save question") : tr("Add question")}</button>
+				<button type="button" class="btn" onclick={oncancel}>{tr("Cancel")}</button>
 			</div>
 		</div>
-		<aside class="preview" aria-label="Preview">
-			<p class="small muted m-0 mb-2 flex items-center gap-1"><Icon name="eye" size={14} />What participants see</p>
+		<aside class="preview" aria-label={tr("Preview")}>
+			<p class="small muted m-0 mb-2 flex items-center gap-1"><Icon name="eye" size={14} />{tr("What participants see")}</p>
 			{#if preview}
 				{#key type}
 					<PollInput question={preview} value={previewValue} onchange={(a) => (previewValue = a)} upload={async () => { toast('Uploads work once the poll is open', 'info'); }} />

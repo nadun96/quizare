@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Profile picture and password (D-49). Pictures are checked here for a
 	// quick answer (type, 512 KB) and again by the server, which re-encodes
 	// them. Changing the password signs out your other devices.
@@ -31,7 +32,7 @@
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) throw new ApiError(res.status, data.code ?? 'error', data.fields?.avatar ?? data.message ?? 'Upload failed', data.fields ?? {});
 			auth.user = { ...auth.user, avatar: data.avatar };
-			toast('Profile picture updated');
+			toast(tr("Profile picture updated"));
 		} catch (err) {
 			picError = err instanceof ApiError ? err.message : 'Upload failed. Check your connection.';
 		} finally {
@@ -41,10 +42,10 @@
 	}
 	async function removePicture() {
 		if (!auth.user) return;
-		if (!(await confirmDialog({ title: 'Remove your picture?', body: 'Your initial is shown instead.', confirm: 'Remove' }))) return;
+		if (!(await confirmDialog({ title: tr("Remove your picture?"), body: tr("Your initial is shown instead."), confirm: tr("Remove") }))) return;
 		await api.del('/api/auth/me/avatar');
 		auth.user = { ...auth.user, avatar: '' };
-		toast('Picture removed');
+		toast(tr("Picture removed"));
 	}
 
 	// ---- password ----
@@ -66,7 +67,7 @@
 		try {
 			await api.post('/api/auth/me/password', { current_password: current, new_password: next });
 			current = next = again = '';
-			toast('Password changed. Your other devices were signed out.');
+			toast(tr("Password changed. Your other devices were signed out."));
 		} catch (err) {
 			if (err instanceof ApiError && Object.keys(err.fields).length) errors = err.fields;
 			else errors = { _: err instanceof ApiError ? (err.status === 429 ? 'Too many attempts. Wait a minute and try again.' : err.message) : 'Could not change the password' };
@@ -79,53 +80,53 @@
 
 {#if auth.user}
 	<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack" aria-labelledby="pic-h">
-		<h2 id="pic-h" class="mt-0">Profile picture</h2>
+		<h2 id="pic-h" class="mt-0">{tr("Profile picture")}</h2>
 		<div class="flex flex-wrap items-center gap-4">
 			<Avatar id={auth.user.id} name={auth.user.name} avatar={auth.user.avatar} size={80} />
 			<div class="vstack min-w-0 flex-1">
 				<div class="flex flex-wrap gap-2">
 					<label class="btn btn-sm m-0" class:btn-disabled={uploading}>
 						{#if uploading}<span class="loading loading-spinner loading-xs"></span>{:else}<Icon name="upload" size={15} />{/if}
-						{auth.user.avatar ? 'Change picture' : 'Upload a picture'}
+						{auth.user.avatar ? tr("Change picture") : tr("Upload a picture")}
 						<input bind:this={file} type="file" class="sr-only" accept={TYPES.join(',')} onchange={upload} disabled={uploading} />
 					</label>
-					{#if auth.user.avatar}<button type="button" class="btn btn-sm btn-ghost" onclick={removePicture}><Icon name="x" size={15} />Remove</button>{/if}
+					{#if auth.user.avatar}<button type="button" class="btn btn-sm btn-ghost" onclick={removePicture}><Icon name="x" size={15} />{tr("Remove")}</button>{/if}
 				</div>
-				<p class="small muted m-0">PNG, JPEG, WebP or GIF up to 512 KB. It's cropped to a square. Your teachers see it (and your students, if you teach); other students don't.</p>
+				<p class="small muted m-0">{tr("PNG, JPEG, WebP or GIF up to 512 KB. It's cropped to a square. Your teachers see it (and your students, if you teach); other students don't.")}</p>
 				{#if picError}<p class="alert alert-soft alert-error small m-0" role="alert"><Icon name="alert" size={15} />{picError}</p>{/if}
 			</div>
 		</div>
 	</section>
 
 	<section class="card card-border bg-base-100 shadow-sm p-4 sm:p-6" aria-labelledby="pw-h">
-		<h2 id="pw-h" class="mt-0">{auth.user?.directory ? 'Password' : 'Change password'}</h2>
+		<h2 id="pw-h" class="mt-0">{auth.user?.directory ? tr("Password") : tr("Change password")}</h2>
 		{#if auth.user?.directory}
-			<p class="m-0">You sign in with your school account, so your password belongs to your school. Change it the way your school does, for example on a school computer.</p>
+			<p class="m-0">{tr("You sign in with your school account, so your password belongs to your school. Change it the way your school does, for example on a school computer.")}</p>
 		{:else}
 			<form class="vstack" onsubmit={changePassword} novalidate>
 				<div>
-					<label for="pw-cur">Current password</label>
+					<label for="pw-cur">{tr("Current password")}</label>
 					<input id="pw-cur" class="input w-full" class:input-error={!!errors.current_password} type={show ? 'text' : 'password'} autocomplete="current-password" bind:value={current} required aria-invalid={!!errors.current_password} aria-describedby={errors.current_password ? 'pw-cur-e' : undefined} />
 					{#if errors.current_password}<p id="pw-cur-e" class="field-error">{cap(errors.current_password)}</p>{/if}
 				</div>
 				<div>
-					<label for="pw-new">New password</label>
+					<label for="pw-new">{tr("New password")}</label>
 					<input id="pw-new" class="input w-full" class:input-error={!!errors.new_password} type={show ? 'text' : 'password'} autocomplete="new-password" minlength="8" maxlength="128" bind:value={next} required aria-describedby="pw-new-h{errors.new_password ? ' pw-new-e' : ''}" aria-invalid={!!errors.new_password} />
-					<p id="pw-new-h" class="small muted m-0 mt-1">At least 8 characters. A short sentence is easy to remember and hard to guess.</p>
+					<p id="pw-new-h" class="small muted m-0 mt-1">{tr("At least 8 characters. A short sentence is easy to remember and hard to guess.")}</p>
 					{#if errors.new_password}<p id="pw-new-e" class="field-error">{cap(errors.new_password)}</p>{/if}
 				</div>
 				<div>
-					<label for="pw-again">New password again</label>
+					<label for="pw-again">{tr("New password again")}</label>
 					<input id="pw-again" class="input w-full" class:input-error={mismatch || !!errors.again} type={show ? 'text' : 'password'} autocomplete="new-password" bind:value={again} required aria-invalid={mismatch} aria-describedby={mismatch || errors.again ? 'pw-again-e' : undefined} />
-					{#if mismatch || errors.again}<p id="pw-again-e" class="field-error">{errors.again ?? "The two new passwords don't match."}</p>{/if}
+					{#if mismatch || errors.again}<p id="pw-again-e" class="field-error">{errors.again ?? tr("The two new passwords don't match.")}</p>{/if}
 				</div>
-				<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={show} />Show passwords</label>
+				<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={show} />{tr("Show passwords")}</label>
 				{#if errors._}<p class="alert alert-soft alert-error small m-0" role="alert"><Icon name="alert" size={15} />{errors._}</p>{/if}
 				<div class="flex flex-wrap items-center gap-3">
-					<button class="btn btn-primary" disabled={saving || !current || next.length < 8 || mismatch}>{#if saving}<span class="loading loading-spinner loading-sm"></span>{/if}Change password</button>
-					<span class="small muted">Your other devices will be signed out.</span>
+					<button class="btn btn-primary" disabled={saving || !current || next.length < 8 || mismatch}>{#if saving}<span class="loading loading-spinner loading-sm"></span>{/if}{tr("Change password")}</button>
+					<span class="small muted">{tr("Your other devices will be signed out.")}</span>
 				</div>
-				<p class="small m-0"><a href="/forgot-password">Forgot your current password?</a></p>
+				<p class="small m-0"><a href="/forgot-password">{tr("Forgot your current password?")}</a></p>
 			</form>
 		{/if}
 	</section>

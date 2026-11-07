@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Ranked horizontal bars (D-105): one per classroom, largest first, one
 	// hue on a lighter track of the same ramp, the value at the tip in ink
 	// and a second figure beside it. No value: an empty track and "—".
@@ -11,7 +12,7 @@
 <ol class="bars" aria-label={title} use:grow={rows}>
 	{#each rows as r (r.label)}
 		<li aria-label="{r.label}: {r.value === null ? 'no results' : r.value + unit}, {r.note}">
-			<div class="head small"><span class="name truncate">{r.label}</span><span class="figs"><strong>{r.value === null ? '—' : r.value + unit}</strong><span class="muted">{r.note}</span></span></div>
+			<div class="head small"><span class="name truncate">{tr(r.label)}</span><span class="figs"><strong>{r.value === null ? '—' : r.value + unit}</strong><span class="muted">{r.note}</span></span></div>
 			<div class="track" aria-hidden="true"><div class="fill" data-grow="x" style="width: {Math.max(0, Math.min(100, ((r.value ?? 0) / (max || 1)) * 100))}%"></div></div>
 		</li>
 	{/each}

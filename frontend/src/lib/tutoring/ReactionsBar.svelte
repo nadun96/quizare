@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Quick reactions (TS-FR-26): students tap one; teachers see how many
 	// people sent each in the last minute. No permission, no media.
 	import type { TutorClient } from './client';
@@ -23,19 +24,19 @@
 
 {#if teacher}
 	{#if list.length}
-		<div class="flex flex-wrap items-center gap-1" role="status" aria-label="Reactions in the last minute">
+		<div class="flex flex-wrap items-center gap-1" role="status" aria-label={tr("Reactions in the last minute")}>
 			{#each list as r (r.kind)}
 				<span class="badge badge-soft gap-1" title={describe(r)} aria-label={describe(r)}><span aria-hidden="true">{r.emoji}</span>{r.n}</span>
 			{/each}
 		</div>
 	{/if}
 {:else}
-	<div class="flex items-center gap-1" role="group" aria-label="Quick reactions">
+	<div class="flex items-center gap-1" role="group" aria-label={tr("Quick reactions")}>
 		{#each REACTIONS as r (r.kind)}
-			<button class="btn btn-sm btn-ghost px-2" class:btn-active={sent === r.kind} title={r.label} aria-label={r.label} onclick={() => react(r.kind)}>
+			<button class="btn btn-sm btn-ghost px-2" class:btn-active={sent === r.kind} title={tr(r.label)} aria-label={tr(r.label)} onclick={() => react(r.kind)}>
 				<span aria-hidden="true">{r.emoji}</span>
 			</button>
 		{/each}
-		{#if sent}<span class="small muted" role="status">Sent</span>{/if}
+		{#if sent}<span class="small muted" role="status">{tr("Sent")}</span>{/if}
 	</div>
 {/if}

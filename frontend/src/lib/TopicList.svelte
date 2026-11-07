@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
 	// A module's topics, one page at a time (PL-FR-02), in the teacher's
@@ -26,7 +27,7 @@
 		list.goTo(list.pages); // the new topic is last
 	}
 	async function rename(t: Topic) {
-		const v = await promptDialog({ title: 'Rename topic', label: 'Name', value: t.name, maxlength: 200 });
+		const v = await promptDialog({ title: tr("Rename topic"), label: tr("Name"), value: t.name, maxlength: 200 });
 		if (v && v !== t.name) {
 			await api.patch('/api/teacher/topics/' + t.id, { name: v });
 			list.load();
@@ -36,7 +37,7 @@
 		try {
 			if (await deleteWithContents('topic', t.id)) list.load();
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Delete failed', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Delete failed"), 'error');
 		}
 	}
 </script>
@@ -46,7 +47,7 @@
 		{#each list.rows as t (t.id)}
 			<li>
 				<a class="topic" href={'/t/topics/' + t.id + '?name=' + encodeURIComponent(t.name)}><Icon name="book" size={16} /><span class="truncate">{t.name}</span></a>
-				<RowMenu hint="More actions for {t.name}" actions={[
+				<RowMenu hint={tr("More actions for {0}", [t.name])} actions={[
 					{ label: 'Rename', icon: 'pencil', onclick: () => rename(t) },
 					{ label: 'Delete topic', icon: 'trash', danger: true, onclick: () => remove(t) }
 				]} />
@@ -54,12 +55,12 @@
 		{/each}
 	</ul>
 {:else if list.loaded}
-	<p class="small muted m-0">No topics yet. Topics hold the quizzes, for example “Plants” or “Week 3”.</p>
+	<p class="small muted m-0">{tr("No topics yet. Topics hold the quizzes, for example “Plants” or “Week 3”.")}</p>
 {/if}
-<Pager {list} label="Topics" />
+<Pager {list} label={tr("Topics")} />
 <form class="row" onsubmit={add}>
-	<input class="input input-sm w-full" style="flex:1" placeholder="Add a topic" bind:value={name} required aria-label="New topic name" />
-	<button class="btn btn-sm"><Icon name="plus" size={14} />Add topic</button>
+	<input class="input input-sm w-full" style="flex:1" placeholder={tr("Add a topic")} bind:value={name} required aria-label={tr("New topic name")} />
+	<button class="btn btn-sm"><Icon name="plus" size={14} />{tr("Add topic")}</button>
 </form>
 
 <style>

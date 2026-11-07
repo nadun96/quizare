@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // A student's one classroom (D-138): what's on, due and coming, and what
 // they've completed, from /api/my/classrooms/{id}/work, with tutoring
 // sessions, which the tutoring service knows about, added here.
@@ -45,7 +46,7 @@ export const STATUS: Record<string, { label: string; tone: string }> = {
 };
 export const statusOf = (s: string) => STATUS[s] ?? { label: s, tone: 'badge-ghost' };
 
-const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+const when = (iso: string) => new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
 /** "Due 5 Nov, 3:00 PM": what the date beside an item means. */
 export function dateLine(it: { status: string; at?: string }): string {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// A tutoring session's room (D-59): the waiting room, the broadcast, the
 	// teacher's controls, raised hands, chat, breakout groups (D-79) and
 	// recording the presenter (D-80).
@@ -211,7 +212,7 @@
 	// student opening the link in a fresh browser goes to the login first.
 	async function join() {
 		if (!(await tutoringConfig()).enabled) {
-			problem = 'Tutoring is unavailable on this platform.';
+			problem = tr("Tutoring is unavailable on this platform.");
 			return;
 		}
 		try {
@@ -222,7 +223,7 @@
 			});
 			await socket.open();
 		} catch (e) {
-			problem = e instanceof ApiError ? e.message : 'Could not open the session';
+			problem = e instanceof ApiError ? e.message : tr("Could not open the session");
 		}
 	}
 
@@ -256,31 +257,31 @@
 				offer = true;
 				break;
 			case 'broadcast_ended':
-				toast('The teacher took the broadcast back');
+				toast(tr("The teacher took the broadcast back"));
 				break;
 			case 'broadcast_answer':
-				toast(e.data.accepted ? `${e.data.name} is broadcasting` : `${e.data.name} declined to broadcast`, e.data.accepted ? 'info' : 'error');
+				toast(e.data.accepted ? tr("{0} is broadcasting", [e.data.name]) : tr("{0} declined to broadcast", [e.data.name]), e.data.accepted ? 'info' : 'error');
 				break;
 			case 'ask_answer':
-				toast(e.data.accepted ? `${e.data.name} is turning it on` : `${e.data.name} declined`, e.data.accepted ? 'info' : 'error');
+				toast(e.data.accepted ? tr("{0} is turning it on", [e.data.name]) : tr("{0} declined", [e.data.name]), e.data.accepted ? 'info' : 'error');
 				break;
 			case 'groups_opened':
-				if (!teacher) toast('Groups are open: you’re with your group now');
+				if (!teacher) toast(tr("Groups are open: you’re with your group now"));
 				break;
 			case 'groups_closed':
-				toast('The groups have closed: everyone is back together');
+				toast(tr("The groups have closed: everyone is back together"));
 				break;
 			case 'announcement':
 				if (!teacher) toast(`${e.data.name}: ${e.data.text}`, 'info');
 				break;
 			case 'group_help':
-				toast(`${e.data.name} asks for help in their group`, 'error');
+				toast(tr("{0} asks for help in their group", [e.data.name]), 'error');
 				break;
 			case 'poll_shown':
 				if (!teacher) {
 					side = 'poll'; // students answer beside the broadcast (D-86)
 					panelOpen = true;
-					toast(`A poll has started: ${e.data.title}`);
+					toast(tr("A poll has started: {0}", [e.data.title]));
 				}
 				break;
 			case 'board':
@@ -295,11 +296,11 @@
 				if (view && isBroadcaster(view)) media.cutBack(e.data.step);
 				break;
 			case 'resources_available':
-				toast(`There’s bandwidth again: turn back on ${(e.data.auto_off as AutoOffStep[]).map((s) => STEP_LABELS[s].toLowerCase()).join(', ')} under Resources`);
+				toast(tr("There’s bandwidth again: turn back on {0} under Resources", [(e.data.auto_off as AutoOffStep[]).map((s) => STEP_LABELS[s].toLowerCase()).join(', ')]));
 				break;
 			case 'restored':
 				if (e.data.step === 'fps') media.restoreFps();
-				else toast(e.data.step === 'camera' ? 'You can turn your camera back on' : 'You can add more screens and cameras again');
+				else toast(e.data.step === 'camera' ? tr("You can turn your camera back on") : tr("You can add more screens and cameras again"));
 				break;
 			case 'closed':
 				closed = e.data?.reason ?? 'closed';
@@ -387,19 +388,19 @@
 			await f();
 			if (ok) toast(ok);
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'That didn’t work', 'error');
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work"), 'error');
 		}
 	}
 	// Starting checks the session's plan against the server's budget (TS-FR-32).
 	async function start() {
 		try {
-			if (await withBudget((force) => client.post(`/api/sessions/${sid()}/start`, { force }), 'Start anyway')) toast('The session is live');
+			if (await withBudget((force) => client.post(`/api/sessions/${sid()}/start`, { force }), 'Start anyway')) toast(tr("The session is live"));
 		} catch (e) {
-			toast(e instanceof ApiError ? sentence(e.message) : 'That didn’t work', 'error');
+			toast(e instanceof ApiError ? sentence(e.message) : tr("That didn’t work"), 'error');
 		}
 	}
 	async function end() {
-		if (!(await confirmDialog({ title: 'End the session for everyone?', body: 'Everyone is disconnected and all video stops. Nobody can join again.', confirm: 'End session', danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("End the session for everyone?"), body: tr("Everyone is disconnected and all video stops. Nobody can join again."), confirm: tr("End session"), danger: true }))) return;
 		act(() => client.post(`/api/sessions/${sid()}/end`));
 	}
 	const settings = (s: Record<string, unknown>) => act(() => client.put(`/api/sessions/${sid()}/settings`, s));
@@ -419,7 +420,7 @@
 			await f();
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			toast(/Permission|NotAllowed/i.test(msg) ? 'Your browser blocked it. Allow the camera, microphone or screen for this site in the browser’s settings.' : msg, 'error');
+			toast(/Permission|NotAllowed/i.test(msg) ? tr("Your browser blocked it. Allow the camera, microphone or screen for this site in the browser’s settings.") : msg, 'error');
 		}
 	}
 	// The broadcaster asks before sending one more screen or camera to everyone (TS-FR-32).
@@ -428,7 +429,7 @@
 			try {
 				if (!(await withBudget((force) => client.post(`/api/sessions/${sid()}/budget/track`, { kind, force }), 'Send it anyway'))) return;
 			} catch (e) {
-				toast(e instanceof ApiError ? sentence(e.message) : 'That didn’t work', 'error');
+				toast(e instanceof ApiError ? sentence(e.message) : tr("That didn’t work"), 'error');
 				return;
 			}
 		}
@@ -463,7 +464,7 @@
 	const minutes = (s: number) => Math.round(s / 60);
 	const panelTitle = $derived<Record<Side, string>>({ chat: 'Chat', people: 'People', groups: 'Groups', recordings: 'Recordings', attendance: 'Attendance', resources: 'Resources', board: 'Whiteboard', poll: teacher ? 'Polls' : 'Poll', settings: 'Session settings' });
 	async function leave() {
-		if (recordingHere && !(await confirmDialog({ title: 'Leave and stop recording?', body: 'The recording runs in this browser, so leaving stops and saves it.', confirm: 'Leave' }))) return;
+		if (recordingHere && !(await confirmDialog({ title: tr("Leave and stop recording?"), body: tr("The recording runs in this browser, so leaving stops and saves it."), confirm: tr("Leave") }))) return;
 		goto(auth.home());
 	}
 	const closedText: Record<string, string> = {
@@ -475,7 +476,7 @@
 	};
 </script>
 
-<svelte:head><title>{view?.session.title ?? 'Tutoring'} · Classroom Quiz</title></svelte:head>
+<svelte:head><title>{tr("{0} · Classroom Quiz", [view?.session.title ?? tr("Tutoring")])}</title></svelte:head>
 
 <svelte:window bind:innerWidth={vw} bind:innerHeight={vh} />
 
@@ -489,47 +490,47 @@
 {#if problem || closed || !view}
 	<div class="center-screen">
 		{#if problem}
-			<div class="card card-border bg-base-100 p-6 vstack"><h1 class="m-0 text-xl">Tutoring</h1><p class="m-0">{problem}</p><div><a class="btn btn-sm" href={auth.home()}>Home</a></div></div>
+			<div class="card card-border bg-base-100 p-6 vstack"><h1 class="m-0 text-xl">{tr("Tutoring")}</h1><p class="m-0">{problem}</p><div><a class="btn btn-sm" href={auth.home()}>{tr("Home")}</a></div></div>
 		{:else if closed}
 			<div class="card card-border bg-base-100 p-6 vstack">
-				<h1 class="m-0 text-xl">{view?.session.title ?? 'Tutoring'}</h1>
-				<p class="m-0">{closedText[closed] ?? 'You were disconnected.'}</p>
-				<div class="row">{#if closed === 'replaced' || closed === 'expired'}<button class="btn btn-primary btn-sm" onclick={() => location.reload()}>Reload</button>{/if}<a class="btn btn-sm" href={auth.home()}>Home</a></div>
+				<h1 class="m-0 text-xl">{view?.session.title ?? tr("Tutoring")}</h1>
+				<p class="m-0">{closedText[closed] ?? tr("You were disconnected.")}</p>
+				<div class="row">{#if closed === 'replaced' || closed === 'expired'}<button class="btn btn-primary btn-sm" onclick={() => location.reload()}>{tr("Reload")}</button>{/if}<a class="btn btn-sm" href={auth.home()}>{tr("Home")}</a></div>
 			</div>
 		{:else}
-			<p class="muted">Joining…</p>
+			<p class="muted">{tr("Joining…")}</p>
 		{/if}
 	</div>
 {:else}
 	<div class="room">
 		<header class="top">
-			<button class="btn btn-ghost btn-sm btn-square" onclick={leave} title="Leave the session" aria-label="Leave the session"><Icon name="arrow-left" size={18} /></button>
+			<button class="btn btn-ghost btn-sm btn-square" onclick={leave} title={tr("Leave the session")} aria-label={tr("Leave the session")}><Icon name="arrow-left" size={18} /></button>
 			<div class="min-w-0 grow">
 				<h1 class="m-0 text-base truncate">{view.session.title}</h1>
-				<p class="small muted m-0 truncate">{view.session.classroom_name} · {view.teachers.map((t) => t.name + (t.role === 'coteacher' ? ' (co-teacher)' : '')).join(', ')} · {view.online} here{#if teacher && view.waiting}{' · '}{view.waiting} waiting{/if}{#if view.session.broadcaster_id}{' · '}{broadcasterName(view)} is broadcasting{/if}</p>
+				<p class="small muted m-0 truncate">{tr("{0} · {1} · {2} here", [view.session.classroom_name, view.teachers.map((t) => t.name + (t.role === 'coteacher' ? ' (co-teacher)' : '')).join(', '), view.online])}{#if teacher && view.waiting}{tr(" · {0} waiting", [view.waiting])}{/if}{#if view.session.broadcaster_id}{tr(" · {0} is broadcasting", [broadcasterName(view)])}{/if}</p>
 			</div>
-			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">Reconnecting…</span>{/if}
-			{#if !closed && (media.state === 'reconnecting' || media.state === 'error' || media.state === 'disconnected')}<span class="badge badge-soft warn" role="status">Video is reconnecting</span>{/if}
-			{#if media.forceRelay}<span class="badge badge-soft" title="Opened with ?relay=1: video goes only through the relay on port 443">Relay only</span>{/if}
-			{#if live}<span class="badge badge-soft danger">● Live</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">{view.session.scheduled_at ? 'Starts ' + new Date(view.session.scheduled_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : 'Not started'}</span>{/if}
-			{#if view.recording}<span class="badge badge-error gap-1" role="status" title="Only the presenter’s screen and voice are recorded">{view.recording.status === 'paused' ? '❚❚ Recording paused' : '● Recording'}</span>{/if}
+			{#if socketStatus === 'reconnecting'}<span class="badge badge-soft warn" role="status">{tr("Reconnecting…")}</span>{/if}
+			{#if !closed && (media.state === 'reconnecting' || media.state === 'error' || media.state === 'disconnected')}<span class="badge badge-soft warn" role="status">{tr("Video is reconnecting")}</span>{/if}
+			{#if media.forceRelay}<span class="badge badge-soft" title={tr("Opened with ?relay=1: video goes only through the relay on port 443")}>{tr("Relay only")}</span>{/if}
+			{#if live}<span class="badge badge-soft danger">{tr("● Live")}</span>{:else if view.session.status === 'open'}<span class="badge badge-soft">{view.session.scheduled_at ? tr("Starts {0}", [new Date(view.session.scheduled_at).toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' })]) : tr("Not started")}</span>{/if}
+			{#if view.recording}<span class="badge badge-error gap-1" role="status" title={tr("Only the presenter’s screen and voice are recorded")}>{view.recording.status === 'paused' ? tr("❚❚ Recording paused") : tr("● Recording")}</span>{/if}
 			{#if teacher && live}
 				{#if recordingHere && recorder}
-					<button class="btn btn-sm" onclick={() => recorder?.pause(recorder.state !== 'paused')}>{recorder.state === 'paused' ? 'Resume' : 'Pause'}</button>
-					<button class="btn btn-sm btn-error" disabled={recorder.state === 'stopping'} onclick={() => recorder?.stop()}>{recorder.state === 'stopping' ? 'Saving…' : 'Stop recording'}</button>
+					<button class="btn btn-sm" onclick={() => recorder?.pause(recorder.state !== 'paused')}>{recorder.state === 'paused' ? tr("Resume") : tr("Pause")}</button>
+					<button class="btn btn-sm btn-error" disabled={recorder.state === 'stopping'} onclick={() => recorder?.stop()}>{recorder.state === 'stopping' ? tr("Saving…") : tr("Stop recording")}</button>
 				{:else if view.recording}
-					<span class="small muted">Recorded by {view.recording.started_by_name}</span>
+					<span class="small muted">{tr("Recorded by {0}", [view.recording.started_by_name])}</span>
 				{:else}
-					<button class="btn btn-sm" disabled={recorder?.state === 'starting'} onclick={startRecording} title="Records the presenter’s screen and voice, in this browser">Record</button>
+					<button class="btn btn-sm" disabled={recorder?.state === 'starting'} onclick={startRecording} title={tr("Records the presenter’s screen and voice, in this browser")}>{tr("Record")}</button>
 				{/if}
 			{/if}
-			<label class="sr-only" for="layout">Layout</label>
-			<select id="layout" class="select select-sm w-auto" value={layout} onchange={(e) => (lead ? settings({ layout: e.currentTarget.value }) : (myLayout = e.currentTarget.value as TutoringSession['layout']))} title={lead ? 'What students see' : 'Your own view, until the teacher changes it'}>
-				{#each LAYOUTS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+			<label class="sr-only" for="layout">{tr("Layout")}</label>
+			<select id="layout" class="select select-sm w-auto" value={layout} onchange={(e) => (lead ? settings({ layout: e.currentTarget.value }) : (myLayout = e.currentTarget.value as TutoringSession['layout']))} title={lead ? tr("What students see") : tr("Your own view, until the teacher changes it")}>
+				{#each LAYOUTS as l (l.id)}<option value={l.id}>{tr(l.label)}</option>{/each}
 			</select>
 			{#if lead}
-				{#if view.session.status === 'open'}<button class="btn btn-primary btn-sm" onclick={start}>Start session</button>{/if}
-				<button class="btn btn-error btn-sm" onclick={end}>End</button>
+				{#if view.session.status === 'open'}<button class="btn btn-primary btn-sm" onclick={start}>{tr("Start session")}</button>{/if}
+				<button class="btn btn-error btn-sm" onclick={end}>{tr("End")}</button>
 			{/if}
 		</header>
 		<DeviceCheck bind:open={checking} canPublish={teacher || media.canMic || media.canCamera || media.canScreen} onsave={(c) => media.useDevices(c)} />
@@ -537,50 +538,50 @@
 		{#if !admitted || (!teacher && !live)}
 			<div class="center-screen">
 				<div class="card card-border bg-base-100 p-6 vstack">
-					<p class="m-0">{admitted ? 'You’re in. The session starts when the teacher starts it.' : 'Waiting for the teacher to let you in…'}</p>
-					<div><button class="btn btn-sm" onclick={() => (checking = true)}>Check your sound and devices</button></div>
+					<p class="m-0">{admitted ? tr("You’re in. The session starts when the teacher starts it.") : tr("Waiting for the teacher to let you in…")}</p>
+					<div><button class="btn btn-sm" onclick={() => (checking = true)}>{tr("Check your sound and devices")}</button></div>
 				</div>
 			</div>
 		{:else}
 			<div class="body" class:docked={panelOpen && placed.mode === 'docked'} style:--panel-w="{placed.width}px">
 				<main class="stage">
-					{#if !teacher && (!media.canMic && !media.canCamera && !media.canScreen)}<p class="small muted m-0">Your teacher hasn’t allowed you to share anything yet.</p>{/if}
-					{#if !teacher && media.tiles.some((t) => t.local && t.backstage)}<p class="small m-0"><span class="badge badge-soft">Your teachers can see what you share</span></p>{/if}
-					{#if sidelined}<p class="small muted m-0">{broadcasterName(view)} is broadcasting; your microphone still reaches everyone.</p>{/if}
+					{#if !teacher && (!media.canMic && !media.canCamera && !media.canScreen)}<p class="small muted m-0">{tr("Your teacher hasn’t allowed you to share anything yet.")}</p>{/if}
+					{#if !teacher && media.tiles.some((t) => t.local && t.backstage)}<p class="small m-0"><span class="badge badge-soft">{tr("Your teachers can see what you share")}</span></p>{/if}
+					{#if sidelined}<p class="small muted m-0">{tr("{0} is broadcasting; your microphone still reaches everyone.", [broadcasterName(view)])}</p>{/if}
 					{#if !teacher && view.session.groups_open}
 						<div class="alert alert-soft py-2" class:alert-info={!!group} role="status">
 							{#if group}
-								<span class="flex-1">You’re in <strong>{group.name}</strong>{#if view.group_mates?.length}{' with '}{view.group_mates.map((m) => m.name).join(', ')}{/if}. Only your group sees and hears you here.</span>
-								<button class="btn btn-sm" class:btn-warning={helpAsked} onclick={() => help(!helpAsked)}>{helpAsked ? 'Cancel the call' : 'Ask for help'}</button>
+								<span class="flex-1">{tr("You’re in")} <strong>{group.name}</strong>{#if view.group_mates?.length}{tr(" with {0}", [view.group_mates.map((m) => m.name).join(', ')])}{/if}{tr(". Only your group sees and hears you here.")}</span>
+								<button class="btn btn-sm" class:btn-warning={helpAsked} onclick={() => help(!helpAsked)}>{helpAsked ? tr("Cancel the call") : tr("Ask for help")}</button>
 							{:else}
-								<span>The class is in groups; your teacher will put you in one.</span>
+								<span>{tr("The class is in groups; your teacher will put you in one.")}</span>
 							{/if}
 						</div>
 					{/if}
-					{#if closingIn !== null}<p class="alert alert-soft alert-warning py-2 m-0" role="timer">Groups close in {closingIn} s</p>{/if}
+					{#if closingIn !== null}<p class="alert alert-soft alert-warning py-2 m-0" role="timer">{tr("Groups close in {0} s", [closingIn])}</p>{/if}
 					{#if !teacher && view.session.groups_choose && view.groups.length && !group}
 						<div class="card card-border bg-base-100 p-3 vstack gap-2">
-							<p class="m-0 font-semibold">Choose your group</p>
+							<p class="m-0 font-semibold">{tr("Choose your group")}</p>
 							<div class="row flex-wrap gap-2">
 								{#each view.groups as g (g.id)}<button class="btn btn-sm" class:btn-primary={view.me.group === g.id} onclick={() => choose(g.id)}>{g.name} <span class="muted">({g.size})</span></button>{/each}
 							</div>
 						</div>
 					{/if}
 					{#if group}
-						<h2 class="m-0 text-sm">{teacher ? `Visiting ${group.name}` : group.name}</h2>
+						<h2 class="m-0 text-sm">{teacher ? tr("Visiting {0}", [group.name]) : group.name}</h2>
 						{#if groupTiles.length}
 							<div class="grid-view">{#each groupTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 						{:else}
-							<div class="empty small">{media.canMic || media.canCamera ? 'Nobody has turned on a camera here yet. Turn on your microphone to talk with your group.' : 'Your group is here. Use the chat to work together.'}</div>
+							<div class="empty small">{media.canMic || media.canCamera ? tr("Nobody has turned on a camera here yet. Turn on your microphone to talk with your group.") : tr("Your group is here. Use the chat to work together.")}</div>
 						{/if}
-						<h2 class="m-0 text-sm">The main room</h2>
+						<h2 class="m-0 text-sm">{tr("The main room")}</h2>
 					{/if}
-					{#if view.recording && isBroadcaster(view)}<p class="alert alert-soft alert-error py-2 m-0" role="status">You’re presenting: your screen and voice are being recorded.</p>{/if}
-					{#if media.needsClick}<button class="btn btn-primary" onclick={() => media.startAudio()}>Click to hear the session</button>{/if}
+					{#if view.recording && isBroadcaster(view)}<p class="alert alert-soft alert-error py-2 m-0" role="status">{tr("You’re presenting: your screen and voice are being recorded.")}</p>{/if}
+					{#if media.needsClick}<button class="btn btn-primary" onclick={() => media.startAudio()}>{tr("Click to hear the session")}</button>{/if}
 					<div class="main-room" class:mini={!!group}>
 					{#if boardShown}
 						<!-- The board with the broadcast, as the layout says (TS-FR-67). -->
-						{#snippet wb()}<div class="board-box"><Whiteboard {board} client={boardClient} teacher={teacher} title={view!.session.title + ' whiteboard'} /></div>{/snippet}
+						{#snippet wb()}<div class="board-box"><Whiteboard {board} client={boardClient} teacher={teacher} title={tr("{0} whiteboard", [view!.session.title])} /></div>{/snippet}
 						{#if layout === 'spotlight'}
 							{@render wb()}
 							{#if broadcast.length}<div class="thumbs">{#each broadcast as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>{/if}
@@ -592,7 +593,7 @@
 							{#if layout === 'side' && others.length}<div class="thumbs">{#each others as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>{/if}
 						{/if}
 					{:else if !main}
-						<div class="empty">{isBroadcaster(view) ? 'Share a screen or camera; everyone will see it here.' : `${broadcasterName(view)} isn’t sharing anything yet.`}{media.state === 'error' ? ' ' + media.error : ''}</div>
+						<div class="empty">{isBroadcaster(view) ? tr("Share a screen or camera; everyone will see it here.") : tr("{0} isn’t sharing anything yet.", [broadcasterName(view)])}{media.state === 'error' ? ' ' + media.error : ''}</div>
 					{:else if layout === 'spotlight'}
 						<TrackView tile={main} big onstop={main.local ? () => media.stop(main) : undefined} />
 						{#if others.length}<div class="thumbs">{#each others as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>{/if}
@@ -605,7 +606,7 @@
 						{@const mine = stageTiles.filter((t) => t.local)}
 						{#if mine.length}<div class="thumbs">{#each mine as t (t.key)}<TrackView tile={t} onstop={() => media.stop(t)} />{/each}</div>{/if}
 					{:else if stageTiles.length}
-						<h2 class="m-0 text-sm">What you share: only your teachers see it</h2>
+						<h2 class="m-0 text-sm">{tr("What you share: only your teachers see it")}</h2>
 						<div class="thumbs">{#each stageTiles as t (t.key)}<TrackView tile={t} onstop={t.local ? () => media.stop(t) : undefined} />{/each}</div>
 					{/if}
 					<div bind:this={audioHost} hidden></div>
@@ -616,18 +617,18 @@
 					{#if !floating}
 						<!-- A focusable separator is a widget (WAI-ARIA window splitter). -->
 						<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-						<div class="resizer" role="separator" aria-orientation="vertical" aria-label="Panel width" aria-valuenow={placed.width} aria-valuemin={280} aria-valuemax={640} tabindex="0" onpointerdown={(e) => drag(e, 'width')} onkeydown={(e) => nudge(e, 'width')}></div>
+						<div class="resizer" role="separator" aria-orientation="vertical" aria-label={tr("Panel width")} aria-valuenow={placed.width} aria-valuemin={280} aria-valuemax={640} tabindex="0" onpointerdown={(e) => drag(e, 'width')} onkeydown={(e) => nudge(e, 'width')}></div>
 					{/if}
 					<aside class="panel bg-base-100" class:floating aria-label={panelTitle[side]}
 						style:left={floating ? `${placed.x}px` : undefined} style:top={floating ? `${placed.y}px` : undefined}
 						style:width={floating ? `${placed.width}px` : undefined} style:height={floating ? `${placed.h}px` : undefined}>
 						<div class="panel-head" role="presentation" onpointerdown={(e) => floating && !(e.target as HTMLElement).closest('button, [role=button]') && drag(e, 'move')}>
 							{#if floating}
-								<span class="grip" role="button" tabindex="0" title="Drag to move; arrow keys move it too" aria-label="Move the panel" onpointerdown={(e) => drag(e, 'move')} onkeydown={(e) => nudge(e, 'move')}><Icon name="grip" size={16} /></span>
+								<span class="grip" role="button" tabindex="0" title={tr("Drag to move; arrow keys move it too")} aria-label={tr("Move the panel")} onpointerdown={(e) => drag(e, 'move')} onkeydown={(e) => nudge(e, 'move')}><Icon name="grip" size={16} /></span>
 							{/if}
 							<h2 class="m-0 grow text-sm">{panelTitle[side]}</h2>
-							<IconBtn icon={floating ? 'dock' : 'float'} label={floating ? 'Dock' : 'Float'} hint={floating ? 'Dock beside the video' : 'Float over the video'} class="btn-ghost btn-xs dockbtn" tip="bottom" onclick={() => setDock({ mode: floating ? 'docked' : 'floating' })} />
-							<IconBtn icon="x" label="Close" hint="Close the panel" class="btn-ghost btn-xs" tip="bottom" onclick={() => (panelOpen = false)} />
+							<IconBtn icon={floating ? 'dock' : 'float'} label={floating ? tr("Dock") : tr("Float")} hint={floating ? tr("Dock beside the video") : tr("Float over the video")} class="btn-ghost btn-xs dockbtn" tip="bottom" onclick={() => setDock({ mode: floating ? 'docked' : 'floating' })} />
+							<IconBtn icon="x" label={tr("Close")} hint={tr("Close the panel")} class="btn-ghost btn-xs" tip="bottom" onclick={() => (panelOpen = false)} />
 						</div>
 						<div class="panel-body vstack">
 							{#if side === 'chat'}
@@ -638,50 +639,50 @@
 								<GroupsPanel {client} {view} />
 							{:else if side === 'recordings'}
 								<RecordingsList {client} {recordings} meId={view.me.user_id} leadOf={(r) => r.lead} onchange={loadRecordings} />
-								{#if !recordings.length && !teacher}<p class="small muted m-0">Your teacher chooses whether students can watch recordings.</p>{/if}
+								{#if !recordings.length && !teacher}<p class="small muted m-0">{tr("Your teacher chooses whether students can watch recordings.")}</p>{/if}
 							{:else if side === 'poll' && teacher}
 								<SessionPolls {client} {view} />
 							{:else if side === 'poll' && view.session.poll_code}
 								{#key view.session.poll_code}<PollTake code={view.session.poll_code} compact />{/key}
 							{:else if side === 'poll'}
-								<p class="small muted m-0">The poll has ended.</p>
+								<p class="small muted m-0">{tr("The poll has ended.")}</p>
 							{:else if side === 'board' && teacher}
 								<BoardControls {client} {view} />
 							{:else if side === 'resources' && teacher}
 								<ResourcesPanel {client} {view} {resources} />
 							{:else if side === 'attendance' && teacher}
-								<button class="btn btn-sm" onclick={() => act(() => client.download(`/api/sessions/${sid()}/attendance?format=csv`, `attendance-${code}.csv`))}>Download CSV</button>
-								<table class="table table-sm"><thead><tr><th>Name</th><th>Visits</th><th>Minutes</th></tr></thead><tbody>
-									{#each attendance as a (a.user_id)}<tr><td>{a.name}{#if a.online}{' '}<span class="badge badge-soft ok badge-xs">here</span>{/if}</td><td class="tabular">{a.visits}</td><td class="tabular">{minutes(a.seconds)}</td></tr>{:else}<tr><td colspan="3" class="muted">Attendance starts when the session does.</td></tr>{/each}
+								<button class="btn btn-sm" onclick={() => act(() => client.download(`/api/sessions/${sid()}/attendance?format=csv`, `attendance-${code}.csv`))}>{tr("Download CSV")}</button>
+								<table class="table table-sm"><thead><tr><th>{tr("Name")}</th><th>{tr("Visits")}</th><th>{tr("Minutes")}</th></tr></thead><tbody>
+									{#each attendance as a (a.user_id)}<tr><td>{a.name}{#if a.online}{' '}<span class="badge badge-soft ok badge-xs">{tr("here")}</span>{/if}</td><td class="tabular">{a.visits}</td><td class="tabular">{minutes(a.seconds)}</td></tr>{:else}<tr><td colspan="3" class="muted">{tr("Attendance starts when the session does.")}</td></tr>{/each}
 								</tbody></table>
 							{:else if side === 'settings' && teacher}
 								{#if lead && view.session.status === 'open'}
-									<h3 class="m-0 text-sm">Schedule{#if view.session.scheduled_at}{' '}<span class="font-normal small muted">· {new Date(view.session.scheduled_at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>{/if}</h3>
+									<h3 class="m-0 text-sm">{tr("Schedule")}{#if view.session.scheduled_at}{' '}<span class="font-normal small muted">· {new Date(view.session.scheduled_at).toLocaleString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>{/if}</h3>
 									<SessionTiming {client} session={view.session} />
 								{/if}
-								<h3 class="m-0 text-sm">Joining</h3>
-								<p class="small m-0">Code <strong class="tabular">{view.session.join_code}</strong> · <a href={link}>{link}</a></p>
+								<h3 class="m-0 text-sm">{tr("Joining")}</h3>
+								<p class="small m-0">{tr("Code")} <strong class="tabular">{view.session.join_code}</strong> · <a href={link}>{link}</a></p>
 								<QrCode text={link} size={140} />
-								<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.locked} onchange={(e) => settings({ locked: e.currentTarget.checked })} /> Lock: nobody new can join</label>
-								<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.admit_mode === 'manual'} onchange={(e) => settings({ admit_mode: e.currentTarget.checked ? 'manual' : 'auto' })} /> Students wait until I admit them</label>
-								<h3 class="m-0 text-sm">Chat</h3>
-								<label class="small" for="chat-mode">Who can write</label>
-								<select id="chat-mode" class="select select-sm w-full" value={view.session.chat_mode} onchange={(e) => settings({ chat_mode: e.currentTarget.value })}>{#each CHAT_MODES as m (m.id)}<option value={m.id}>{m.label}</option>{/each}</select>
-								<label class="small" for="slow">Slow mode</label>
-								<select id="slow" class="select select-sm w-full" value={String(view.session.slow_seconds)} onchange={(e) => settings({ slow_seconds: Number(e.currentTarget.value) })}>{#each [0, 10, 30, 60, 120] as n (n)}<option value={String(n)}>{n ? `One message every ${n} s` : 'Off'}</option>{/each}</select>
+								<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.locked} onchange={(e) => settings({ locked: e.currentTarget.checked })} /> {tr("Lock: nobody new can join")}</label>
+								<label class="row font-normal"><input type="checkbox" class="toggle toggle-sm" checked={view.session.admit_mode === 'manual'} onchange={(e) => settings({ admit_mode: e.currentTarget.checked ? 'manual' : 'auto' })} /> {tr("Students wait until I admit them")}</label>
+								<h3 class="m-0 text-sm">{tr("Chat")}</h3>
+								<label class="small" for="chat-mode">{tr("Who can write")}</label>
+								<select id="chat-mode" class="select select-sm w-full" value={view.session.chat_mode} onchange={(e) => settings({ chat_mode: e.currentTarget.value })}>{#each CHAT_MODES as m (m.id)}<option value={m.id}>{tr(m.label)}</option>{/each}</select>
+								<label class="small" for="slow">{tr("Slow mode")}</label>
+								<select id="slow" class="select select-sm w-full" value={String(view.session.slow_seconds)} onchange={(e) => settings({ slow_seconds: Number(e.currentTarget.value) })}>{#each [0, 10, 30, 60, 120] as n (n)}<option value={String(n)}>{n ? tr("One message every {0} s", [n]) : tr("Off")}</option>{/each}</select>
 							{/if}
 						</div>
 						{#if floating}
 							<!-- A focusable separator is a widget (WAI-ARIA window splitter). -->
 							<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-							<div class="vresize" role="separator" aria-orientation="horizontal" aria-label="Panel height" aria-valuenow={placed.h} tabindex="0" onpointerdown={(e) => drag(e, 'height')} onkeydown={(e) => nudge(e, 'height')}></div>
+							<div class="vresize" role="separator" aria-orientation="horizontal" aria-label={tr("Panel height")} aria-valuenow={placed.h} tabindex="0" onpointerdown={(e) => drag(e, 'height')} onkeydown={(e) => nudge(e, 'height')}></div>
 						{/if}
 					</aside>
 				{/if}
 			</div>
 
 			<!-- Everything one does in the room, under the video (D-116). -->
-			<div class="toolbar" role="toolbar" aria-label="Session controls">
+			<div class="toolbar" role="toolbar" aria-label={tr("Session controls")}>
 				<div class="group">
 					{@render tool('sliders', 'Devices', () => (checking = true), { tip: 'Speakers, microphone and camera' })}
 					{#if media.canMic}
@@ -699,10 +700,10 @@
 						{/if}
 						{#if media.canCamera}
 							<details class="dropdown dropdown-top" ontoggle={(e) => e.currentTarget.open && loadCameras()}>
-								<summary class="btn btn-ghost tool" class:btn-disabled={media.state !== 'connected'} title="Add a camera"><span class="ico"><Icon name="video" size={20} /></span><span class="lbl">Camera</span></summary>
+								<summary class="btn btn-ghost tool" class:btn-disabled={media.state !== 'connected'} title={tr("Add a camera")}><span class="ico"><Icon name="video" size={20} /></span><span class="lbl">{tr("Camera")}</span></summary>
 								<ul class="menu dropdown-content z-40 mb-1 w-64 rounded-box border border-base-300 bg-base-100 p-1 shadow">
-									<li><button onclick={(e) => { closeMenu(e); addTrack('camera', () => media.addCamera()); }}>Default camera</button></li>
-									{#each cameras.filter((c) => c.deviceId) as c (c.deviceId)}<li><button onclick={(e) => { closeMenu(e); addTrack('camera', () => media.addCamera(c.deviceId, c.label || undefined)); }}>{c.label || 'Camera'}</button></li>{/each}
+									<li><button onclick={(e) => { closeMenu(e); addTrack('camera', () => media.addCamera()); }}>{tr("Default camera")}</button></li>
+									{#each cameras.filter((c) => c.deviceId) as c (c.deviceId)}<li><button onclick={(e) => { closeMenu(e); addTrack('camera', () => media.addCamera(c.deviceId, c.label || undefined)); }}>{c.label || tr("Camera")}</button></li>{/each}
 								</ul>
 							</details>
 						{:else}
@@ -716,7 +717,7 @@
 						<ReactionsBar {client} sessionId={view.session.id} teacher counts={reactions} />
 					{/if}
 				</div>
-				<div class="group panels" aria-label="Panels">
+				<div class="group panels" aria-label={tr("Panels")}>
 					{@render tool('chat', 'Chat', () => show('chat'), { on: panelOpen && side === 'chat', pressed: panelOpen && side === 'chat' })}
 					{#if teacher || view.session.poll_code}
 						{@render tool('chart', teacher ? 'Polls' : 'Poll', () => show('poll'), { on: panelOpen && side === 'poll', pressed: panelOpen && side === 'poll', badge: view.session.poll_code ? 'live' : '' })}
@@ -741,9 +742,9 @@
 <dialog class="modal" open={!!ask} aria-labelledby="ask-h">
 	{#if ask}
 		<div class="modal-box vstack">
-			<h2 id="ask-h" class="m-0 text-lg">Your teacher asks you to turn on your {[ask.mic && 'microphone', ask.camera && 'camera', ask.screen && 'screen'].filter(Boolean).join(' and ')}</h2>
-			<p class="m-0 small muted">Nothing turns on unless you choose it. Your browser will ask for permission.</p>
-			<div class="modal-action"><button class="btn" onclick={declineAsk}>Not now</button><button class="btn btn-primary" onclick={acceptAsk}>Turn on</button></div>
+			<h2 id="ask-h" class="m-0 text-lg">{tr("Your teacher asks you to turn on your {0}", [[ask.mic && 'microphone', ask.camera && 'camera', ask.screen && 'screen'].filter(Boolean).join(' and ')])}</h2>
+			<p class="m-0 small muted">{tr("Nothing turns on unless you choose it. Your browser will ask for permission.")}</p>
+			<div class="modal-action"><button class="btn" onclick={declineAsk}>{tr("Not now")}</button><button class="btn btn-primary" onclick={acceptAsk}>{tr("Turn on")}</button></div>
 		</div>
 	{/if}
 </dialog>
@@ -751,9 +752,9 @@
 <dialog class="modal" open={offer} aria-labelledby="offer-h">
 	{#if offer}
 		<div class="modal-box vstack">
-			<h2 id="offer-h" class="m-0 text-lg">The teacher asks you to present to the class</h2>
-			<p class="m-0 small muted">Everyone will see and hear what you share until the teacher takes the broadcast back. Nothing turns on until you choose it.</p>
-			<div class="modal-action"><button class="btn" onclick={() => answerOffer(false)}>Not now</button><button class="btn btn-primary" onclick={() => answerOffer(true)}>Present</button></div>
+			<h2 id="offer-h" class="m-0 text-lg">{tr("The teacher asks you to present to the class")}</h2>
+			<p class="m-0 small muted">{tr("Everyone will see and hear what you share until the teacher takes the broadcast back. Nothing turns on until you choose it.")}</p>
+			<div class="modal-action"><button class="btn" onclick={() => answerOffer(false)}>{tr("Not now")}</button><button class="btn btn-primary" onclick={() => answerOffer(true)}>{tr("Present")}</button></div>
 		</div>
 	{/if}
 </dialog>

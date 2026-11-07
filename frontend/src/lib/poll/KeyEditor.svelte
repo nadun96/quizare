@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// The correct answer of a scored poll question (D-42), in the shape the
 	// question type needs. Participants never see it until it is revealed.
 	import type { Choice, PollBody, PollKey, PollType } from './types';
@@ -31,7 +32,7 @@
 </script>
 
 <fieldset class="key m-0 vstack">
-	<legend class="font-semibold">Correct answer</legend>
+	<legend class="font-semibold">{tr("Correct answer")}</legend>
 	{#if type === 'SINGLE' || type === 'MULTI'}
 		<div class="grid gap-1">
 			{#each opts as o, i (o.id || i)}
@@ -42,54 +43,54 @@
 				</label>
 			{/each}
 		</div>
-		{#if type === 'MULTI'}<p class="small muted m-0">Partial credit: each right choice earns its share, each wrong one takes a share away (never below 0).</p>{/if}
+		{#if type === 'MULTI'}<p class="small muted m-0">{tr("Partial credit: each right choice earns its share, each wrong one takes a share away (never below 0).")}</p>{/if}
 	{:else if type === 'MATCH' || (type === 'DRAG' && body.zones?.length)}
 		{@const froms = type === 'MATCH' ? (body.left ?? []) : opts}
 		{@const tos = type === 'MATCH' ? (body.right ?? []) : (body.zones ?? [])}
 		<div class="pairs">
 			{#each froms as f, i (f.id || i)}
-				<label class="m-0 font-normal" for="key-p-{i}">{f.text || `Item ${i + 1}`}</label>
+				<label class="m-0 font-normal" for="key-p-{i}">{f.text || tr("Item {0}", [i + 1])}</label>
 				<select id="key-p-{i}" class="select select-sm w-full" disabled={!f.id} value={key.pairs?.[f.id] ?? ''} onchange={(e) => setPair(f.id, e.currentTarget.value)}>
-					<option value="">Not scored</option>
-					{#each tos as t, j (t.id || j)}{#if t.id}<option value={t.id}>{t.text || `Choice ${j + 1}`}</option>{/if}{/each}
+					<option value="">{tr("Not scored")}</option>
+					{#each tos as t, j (t.id || j)}{#if t.id}<option value={t.id}>{t.text || tr("Choice {0}", [j + 1])}</option>{/if}{/each}
 				</select>
 			{/each}
 		</div>
-		<p class="small muted m-0">Each right {type === 'MATCH' ? 'match' : 'box'} earns its share of the points.</p>
+		<p class="small muted m-0">{tr("Each right {0} earns its share of the points.", [type === 'MATCH' ? 'match' : 'box'])}</p>
 	{:else if type === 'DRAG'}
 		<label class="m-0 flex items-center gap-2 font-normal">
 			<input type="checkbox" class="checkbox checkbox-sm checkbox-success" checked={rankedAsListed} onchange={(e) => (key.order = e.currentTarget.checked ? opts.map((o) => o.id) : undefined)} />
-			The order listed above is the correct ranking
+			{tr("The order listed above is the correct ranking")}
 		</label>
-		<p class="small muted m-0">Each item in its right place earns its share. Reorder the items above to change the key.</p>
+		<p class="small muted m-0">{tr("Each item in its right place earns its share. Reorder the items above to change the key.")}</p>
 	{:else if type === 'BLANK_OPT' || type === 'BLANK_TEXT'}
-		{#if !blanks.length}<p class="small muted m-0">Add blanks to the question first.</p>{/if}
+		{#if !blanks.length}<p class="small muted m-0">{tr("Add blanks to the question first.")}</p>{/if}
 		<div class="pairs">
 			{#each blanks as b (b)}
-				<label class="m-0 font-normal" for="key-b-{b}">Blank {b}</label>
+				<label class="m-0 font-normal" for="key-b-{b}">{tr("Blank {0}", [b])}</label>
 				{#if type === 'BLANK_OPT'}
 					<select id="key-b-{b}" class="select select-sm w-full" value={key.blanks?.[b]?.[0] ?? ''} onchange={(e) => setBlank(b, e.currentTarget.value ? [e.currentTarget.value] : [])}>
-						<option value="">Not scored</option>
+						<option value="">{tr("Not scored")}</option>
 						{#each opts as o, i (o.id || i)}{#if o.id}<option value={o.id}>{o.text}</option>{/if}{/each}
 					</select>
 				{:else}
-					<input id="key-b-{b}" class="input input-sm w-full" value={(key.blanks?.[b] ?? []).join(', ')} placeholder="Accepted words, separated by commas" onchange={(e) => setBlank(b, words(e.currentTarget.value))} />
+					<input id="key-b-{b}" class="input input-sm w-full" value={(key.blanks?.[b] ?? []).join(', ')} placeholder={tr("Accepted words, separated by commas")} onchange={(e) => setBlank(b, words(e.currentTarget.value))} />
 				{/if}
 			{/each}
 		</div>
-		{#if type === 'BLANK_TEXT'}<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-xs" bind:checked={key.case_sensitive} />Capital letters must match</label>{/if}
+		{#if type === 'BLANK_TEXT'}<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-xs" bind:checked={key.case_sensitive} />{tr("Capital letters must match")}</label>{/if}
 	{:else if type === 'SHORT_TEXT'}
-		<label class="m-0" for="key-acc">Accepted answers <span class="muted font-normal">(one per line)</span></label>
+		<label class="m-0" for="key-acc">{tr("Accepted answers")} <span class="muted font-normal">{tr("(one per line)")}</span></label>
 		<textarea id="key-acc" class="textarea textarea-sm w-full" rows="3" value={(key.accepted ?? []).join('\n')} onchange={(e) => (key.accepted = words(e.currentTarget.value))}></textarea>
-		<p class="small muted m-0">Extra spaces and punctuation at the ends are ignored.</p>
-		<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-xs" bind:checked={key.case_sensitive} />Capital letters must match</label>
+		<p class="small muted m-0">{tr("Extra spaces and punctuation at the ends are ignored.")}</p>
+		<label class="m-0 flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-xs" bind:checked={key.case_sensitive} />{tr("Capital letters must match")}</label>
 	{:else if type === 'NUMBER' || type === 'SLIDER'}
 		<div class="grid max-w-md grid-cols-2 gap-2">
-			<div><label for="key-v">Correct value</label><input id="key-v" class="input input-sm w-full" type="number" step="any" value={key.value ?? ''} oninput={(e) => (key.value = num(e.currentTarget.value))} /></div>
-			<div><label for="key-t">Allowed ± <span class="muted font-normal">{body.unit ?? ''}</span></label><input id="key-t" class="input input-sm w-full" type="number" min="0" step="any" value={key.tolerance ?? ''} oninput={(e) => (key.tolerance = num(e.currentTarget.value))} placeholder="0" /></div>
+			<div><label for="key-v">{tr("Correct value")}</label><input id="key-v" class="input input-sm w-full" type="number" step="any" value={key.value ?? ''} oninput={(e) => (key.value = num(e.currentTarget.value))} /></div>
+			<div><label for="key-t">{tr("Allowed ±")} <span class="muted font-normal">{body.unit ?? ''}</span></label><input id="key-t" class="input input-sm w-full" type="number" min="0" step="any" value={key.tolerance ?? ''} oninput={(e) => (key.tolerance = num(e.currentTarget.value))} placeholder="0" /></div>
 		</div>
 	{:else if type === 'DATE' || type === 'TIME'}
-		<div class="max-w-xs"><label for="key-d">Correct {type === 'DATE' ? 'date' : 'time'}</label>
+		<div class="max-w-xs"><label for="key-d">{tr("Correct {0}", [type === 'DATE' ? 'date' : 'time'])}</label>
 			<input id="key-d" class="input input-sm w-full" type={type === 'DATE' ? 'date' : 'time'} value={key.accepted?.[0] ?? ''} onchange={(e) => (key.accepted = e.currentTarget.value ? [e.currentTarget.value] : [])} /></div>
 	{/if}
 </fieldset>

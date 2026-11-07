@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Rich text editor for question text and feedback (D-38). Tiptap loads on
 	// first use (teachers only); `value` is always Markdown in our dialect
 	// (./syntax.ts). A plain-text value (format '') is converted on load with
@@ -126,13 +127,13 @@
 			uploading++;
 			try {
 				const img = await uploadImage(file);
-				const alt = await promptDialog({ title: 'Describe the picture', body: 'Students who use a screen reader, or whose picture doesn’t load, read this instead.', label: 'Description', value: file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '), allowEmpty: true, maxlength: 200, confirm: 'Insert' });
+				const alt = await promptDialog({ title: tr("Describe the picture"), body: tr("Students who use a screen reader, or whose picture doesn’t load, read this instead."), label: tr("Description"), value: file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '), allowEmpty: true, maxlength: 200, confirm: tr("Insert") });
 				if (alt === null) continue;
 				const node = { type: 'image', attrs: { src: img.url, alt: alt.trim() } };
 				if (at !== null) run((c) => c.insertContentAt(at, node));
 				else run((c) => c.insertContent(node));
 			} catch (e) {
-				toast(e instanceof Error ? e.message : 'Could not add the picture', 'error');
+				toast(e instanceof Error ? e.message : tr("Could not add the picture"), 'error');
 			} finally {
 				uploading--;
 			}
@@ -187,83 +188,83 @@
 </script>
 
 <div class="rte" class:compact class:empty-required={required && !value.trim()}>
-	<div class="bar" role="toolbar" tabindex="-1" aria-label={label + ' formatting'} onmousedown={keepFocus}>
+	<div class="bar" role="toolbar" tabindex="-1" aria-label={tr("{0} formatting", [label])} onmousedown={keepFocus}>
 		{#if !source}
-			<select class="select select-sm w-auto min-w-36" aria-label="Text style" value={block} onchange={(e) => setBlock(e.currentTarget.value)} disabled={!editor}>
-				<option value="p">Paragraph</option>
-				<option value="h2">Heading</option>
-				<option value="h3">Subheading</option>
-				<option value="h4">Small heading</option>
+			<select class="select select-sm w-auto min-w-36" aria-label={tr("Text style")} value={block} onchange={(e) => setBlock(e.currentTarget.value)} disabled={!editor}>
+				<option value="p">{tr("Paragraph")}</option>
+				<option value="h2">{tr("Heading")}</option>
+				<option value="h3">{tr("Subheading")}</option>
+				<option value="h4">{tr("Small heading")}</option>
 			</select>
 			<span class="sep"></span>
-			<IconBtn icon="bold" label="Bold" hint="Bold (Ctrl+B)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bold')} onclick={() => run((c) => c.toggleBold())} />
-			<IconBtn icon="italic" label="Italic" hint="Italic (Ctrl+I)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('italic')} onclick={() => run((c) => c.toggleItalic())} />
-			<IconBtn icon="underline" label="Underline" hint="Underline (Ctrl+U)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('underline')} onclick={() => run((c) => c.toggleUnderline())} />
-			<IconBtn icon="strike" label="Strikethrough" hint="Strikethrough (Ctrl+Shift+S)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())} />
-			<IconBtn icon="code" label="Inline code" hint="Inline code (Ctrl+E)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())} />
-			<IconBtn icon="link" label="Link" hint="Link (Ctrl+K)" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('link')} onclick={openLink} />
-			<IconBtn icon="image" label="Picture" hint="Picture: pick one, or drop or paste it into the text" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={uploading > 0} onclick={() => picker?.click()} />
+			<IconBtn icon="bold" label={tr("Bold")} hint={tr("Bold (Ctrl+B)")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bold')} onclick={() => run((c) => c.toggleBold())} />
+			<IconBtn icon="italic" label={tr("Italic")} hint={tr("Italic (Ctrl+I)")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('italic')} onclick={() => run((c) => c.toggleItalic())} />
+			<IconBtn icon="underline" label={tr("Underline")} hint={tr("Underline (Ctrl+U)")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('underline')} onclick={() => run((c) => c.toggleUnderline())} />
+			<IconBtn icon="strike" label={tr("Strikethrough")} hint={tr("Strikethrough (Ctrl+Shift+S)")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('strike')} onclick={() => run((c) => c.toggleStrike())} />
+			<IconBtn icon="code" label={tr("Inline code")} hint={tr("Inline code (Ctrl+E)")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('code')} onclick={() => run((c) => c.toggleCode())} />
+			<IconBtn icon="link" label={tr("Link")} hint={tr("Link (Ctrl+K)")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('link')} onclick={openLink} />
+			<IconBtn icon="image" label={tr("Picture")} hint={tr("Picture: pick one, or drop or paste it into the text")} class="btn-ghost btn-sm" size={16} tip="bottom" disabled={uploading > 0} onclick={() => picker?.click()} />
 			<input type="file" class="hidden" accept={IMAGE_TYPES.join(',')} multiple bind:this={picker} onchange={(e) => { addImages([...(e.currentTarget.files ?? [])]); e.currentTarget.value = ''; }} />
-			{#if uploading}<span class="loading loading-spinner loading-xs" aria-label="Uploading a picture"></span>{/if}
-			{#if onlink}<IconBtn icon="cloud" label="Drive file" hint="Link a Google Drive file (shared by link)" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={linking} onclick={linkFile} />{/if}
+			{#if uploading}<span class="loading loading-spinner loading-xs" aria-label={tr("Uploading a picture")}></span>{/if}
+			{#if onlink}<IconBtn icon="cloud" label={tr("Drive file")} hint={tr("Link a Google Drive file (shared by link)")} class="btn-ghost btn-sm" size={16} tip="bottom" disabled={linking} onclick={linkFile} />{/if}
 			<span class="sep"></span>
-			<IconBtn icon="list" label="Bulleted list" hint="Bulleted list" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())} />
-			<IconBtn icon="list-ordered" label="Numbered list" hint="Numbered list" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('orderedList')} onclick={() => run((c) => c.toggleOrderedList())} />
-			<IconBtn icon="quote" label="Quote" hint="Quote" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('blockquote')} onclick={() => run((c) => c.toggleBlockquote())} />
-			<IconBtn icon="braces" label="Code block" hint="Code block" class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('codeBlock')} onclick={() => run((c) => c.toggleCodeBlock())} />
-			<IconBtn icon="minus" label="Divider" hint="Divider" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.setHorizontalRule())} />
+			<IconBtn icon="list" label={tr("Bulleted list")} hint={tr("Bulleted list")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('bulletList')} onclick={() => run((c) => c.toggleBulletList())} />
+			<IconBtn icon="list-ordered" label={tr("Numbered list")} hint={tr("Numbered list")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('orderedList')} onclick={() => run((c) => c.toggleOrderedList())} />
+			<IconBtn icon="quote" label={tr("Quote")} hint={tr("Quote")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('blockquote')} onclick={() => run((c) => c.toggleBlockquote())} />
+			<IconBtn icon="braces" label={tr("Code block")} hint={tr("Code block")} class="btn-ghost btn-sm" size={16} tip="bottom" aria-pressed={is('codeBlock')} onclick={() => run((c) => c.toggleCodeBlock())} />
+			<IconBtn icon="minus" label={tr("Divider")} hint={tr("Divider")} class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.setHorizontalRule())} />
 			{#if !compact}
 				<span class="sep"></span>
-				<IconBtn icon="table" label="Insert table" hint="Insert table" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))} />
-				<IconBtn icon="sigma" label="Inline math" hint="Inline math: Math, inline (type $$x^2$$ as a shortcut)" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => openMath('', false)} />
-				<IconBtn icon="sigma-block" label="Display math" hint="Display math: Math, on its own line" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => openMath('', true)} />
+				<IconBtn icon="table" label={tr("Insert table")} hint={tr("Insert table")} class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))} />
+				<IconBtn icon="sigma" label={tr("Inline math")} hint={tr("Inline math: Math, inline (type $$x^2$$ as a shortcut)")} class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => openMath('', false)} />
+				<IconBtn icon="sigma-block" label={tr("Display math")} hint={tr("Display math: Math, on its own line")} class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => openMath('', true)} />
 			{/if}
 			{#if blanks}
 				<span class="sep"></span>
-				<span class="tooltip tooltip-bottom" data-tip="Insert a blank (or type [[1]])"><button type="button" class="btn btn-ghost btn-sm blank-btn" onclick={() => run((c) => c.insertContent({ type: 'blank', attrs: { n: nextBlank() } }))}><Icon name="plus" size={14} />Blank</button></span>
+				<span class="tooltip tooltip-bottom" data-tip={tr("Insert a blank (or type [[1]])")}><button type="button" class="btn btn-ghost btn-sm blank-btn" onclick={() => run((c) => c.insertContent({ type: 'blank', attrs: { n: nextBlank() } }))}><Icon name="plus" size={14} />{tr("Blank")}</button></span>
 			{/if}
 			<span class="grow"></span>
-			<IconBtn icon="undo" label="Undo" hint="Undo (Ctrl+Z)" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={!can((e) => e.can().undo())} onclick={() => run((c) => c.undo())} />
-			<IconBtn icon="redo" label="Redo" hint="Redo (Ctrl+Shift+Z)" class="btn-ghost btn-sm" size={16} tip="bottom" disabled={!can((e) => e.can().redo())} onclick={() => run((c) => c.redo())} />
-			<IconBtn icon="remove-format" label="Clear formatting" hint="Clear formatting" class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.unsetAllMarks().clearNodes())} />
+			<IconBtn icon="undo" label={tr("Undo")} hint={tr("Undo (Ctrl+Z)")} class="btn-ghost btn-sm" size={16} tip="bottom" disabled={!can((e) => e.can().undo())} onclick={() => run((c) => c.undo())} />
+			<IconBtn icon="redo" label={tr("Redo")} hint={tr("Redo (Ctrl+Shift+Z)")} class="btn-ghost btn-sm" size={16} tip="bottom" disabled={!can((e) => e.can().redo())} onclick={() => run((c) => c.redo())} />
+			<IconBtn icon="remove-format" label={tr("Clear formatting")} hint={tr("Clear formatting")} class="btn-ghost btn-sm" size={16} tip="bottom" onclick={() => run((c) => c.unsetAllMarks().clearNodes())} />
 		{:else}
-			<span class="small muted">{failed ? 'Editor unavailable: editing Markdown directly.' : 'Markdown'}</span>
+			<span class="small muted">{failed ? tr("Editor unavailable: editing Markdown directly.") : tr("Markdown")}</span>
 			<span class="grow"></span>
 		{/if}
-		{#if !failed}<IconBtn icon="markdown" label="Markdown" hint="Show the Markdown source" class="btn-ghost btn-sm" size={16} tip="left" aria-pressed={source} onclick={toggleSource} />{/if}
+		{#if !failed}<IconBtn icon="markdown" label={tr("Markdown")} hint={tr("Show the Markdown source")} class="btn-ghost btn-sm" size={16} tip="left" aria-pressed={source} onclick={toggleSource} />{/if}
 	</div>
 
 	{#if is('table') && !source}
-		<div class="bar sub" role="toolbar" tabindex="-1" aria-label="Table" onmousedown={keepFocus}>
-			<span class="small muted">Table:</span>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.addRowAfter())}>+ Row</button>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.addColumnAfter())}>+ Column</button>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteRow())}>− Row</button>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteColumn())}>− Column</button>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.toggleHeaderRow())}>Header row</button>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteTable())}>Delete table</button>
+		<div class="bar sub" role="toolbar" tabindex="-1" aria-label={tr("Table")} onmousedown={keepFocus}>
+			<span class="small muted">{tr("Table:")}</span>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.addRowAfter())}>{tr("+ Row")}</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.addColumnAfter())}>{tr("+ Column")}</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteRow())}>{tr("− Row")}</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteColumn())}>{tr("− Column")}</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.toggleHeaderRow())}>{tr("Header row")}</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => run((c) => c.deleteTable())}>{tr("Delete table")}</button>
 		</div>
 	{/if}
 
 	{#if panel}
 		<form class="bar sub" onsubmit={applyPanel}>
 			{#if panel.kind === 'link'}
-				<label class="small" for={id + '-panel'}>Link</label>
-				<input class="input input-sm" id={id + '-panel'} bind:this={panelInput} bind:value={panel.href} onkeydown={panelKey} placeholder="https://…" />
-				{#if !linkOk}<span class="small danger">Use an https://, http:// or mailto: address</span>{/if}
+				<label class="small" for={id + '-panel'}>{tr("Link")}</label>
+				<input class="input input-sm" id={id + '-panel'} bind:this={panelInput} bind:value={panel.href} onkeydown={panelKey} placeholder={tr("https://…")} />
+				{#if !linkOk}<span class="small danger">{tr("Use an https://, http:// or mailto: address")}</span>{/if}
 			{:else}
-				<label class="small" for={id + '-panel'}>LaTeX</label>
-				<input id={id + '-panel'} class="input input-sm mono" bind:this={panelInput} bind:value={panel.latex} onkeydown={panelKey} placeholder={'\\frac{a}{b}, x^2, \\sqrt{2}'} />
-				<label class="small row" style="font-weight:400"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={panel.display} disabled={panel.pos !== null} /> Own line</label>
+				<label class="small" for={id + '-panel'}>{tr("LaTeX")}</label>
+				<input id={id + '-panel'} class="input input-sm mono" bind:this={panelInput} bind:value={panel.latex} onkeydown={panelKey} placeholder={tr("\\frac{a}{b}, x^2, \\sqrt{2}")} />
+				<label class="small row" style="font-weight:400"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={panel.display} disabled={panel.pos !== null} /> {tr("Own line")}</label>
 			{/if}
-			<button type="submit" class="btn btn-primary btn-sm">{panel.kind === 'math' && panel.pos !== null && !panel.latex.trim() ? 'Remove' : 'Apply'}</button>
-			<button type="button" class="btn btn-sm" onclick={() => (panel = null)}>Cancel</button>
+			<button type="submit" class="btn btn-primary btn-sm">{panel.kind === 'math' && panel.pos !== null && !panel.latex.trim() ? tr("Remove") : tr("Apply")}</button>
+			<button type="button" class="btn btn-sm" onclick={() => (panel = null)}>{tr("Cancel")}</button>
 		</form>
 	{/if}
 
 	<div class="surface" class:hidden={source} bind:this={host} onkeydown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openLink(); } }} role="presentation"></div>
 	{#if source}
-		<textarea id={failed ? id : id + '-md'} class="textarea mono" aria-label={label + ' (Markdown)'} bind:value rows={compact ? 3 : 6} {required} {placeholder}></textarea>
+		<textarea id={failed ? id : id + '-md'} class="textarea mono" aria-label={tr("{0} (Markdown)", [label])} bind:value rows={compact ? 3 : 6} {required} {placeholder}></textarea>
 	{/if}
 </div>
 

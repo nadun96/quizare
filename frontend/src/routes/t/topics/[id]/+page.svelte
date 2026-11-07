@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	import { count } from '$lib/words';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -73,41 +74,41 @@
 		<p class="small"><a href={'/t/classrooms/' + topic.classroom_id}>← {topic.classroom_name}</a> · {topic.module_name}</p>
 		<h1>{topic.name}</h1>
 		<div class="row">
-			<ListSearch list={quizzes} placeholder="Search quizzes" label="Search quizzes" />
-			<select class="select select-sm w-auto" bind:value={status} onchange={() => quizzes.refilter()} aria-label="Status"><option value="">All statuses</option><option value="draft">draft</option><option value="ready">ready</option><option value="archived">archived</option></select>
+			<ListSearch list={quizzes} placeholder={tr("Search quizzes")} label={tr("Search quizzes")} />
+			<select class="select select-sm w-auto" bind:value={status} onchange={() => quizzes.refilter()} aria-label={tr("Status")}><option value="">{tr("All statuses")}</option><option value="draft">{tr("draft")}</option><option value="ready">{tr("ready")}</option><option value="archived">{tr("archived")}</option></select>
 		</div>
 		<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 			<table class="table">
-				<thead><tr><th><SortHeader list={quizzes} key="title" label="Quiz" /></th><th>Questions</th><th><SortHeader list={quizzes} key="status" label="Status" /></th><th><SortHeader list={quizzes} key="created" label="Created" /></th></tr></thead>
+				<thead><tr><th><SortHeader list={quizzes} key="title" label={tr("Quiz")} /></th><th>{tr("Questions")}</th><th><SortHeader list={quizzes} key="status" label={tr("Status")} /></th><th><SortHeader list={quizzes} key="created" label={tr("Created")} /></th></tr></thead>
 				<tbody>
 					{#each quizzes.rows as q (q.id)}
 						<tr>
 							<td><a href={'/t/quizzes/' + q.id}>{q.title}</a></td>
 							<td>{q.question_count} ({count(q.total_marks, 'mark')})</td>
 							<td><span class="badge badge-soft {q.status === 'ready' ? 'ok' : ''}">{q.status}</span></td>
-							<td class="small tabular">{q.created_at ? new Date(q.created_at).toLocaleDateString() : ''}</td>
+							<td class="small tabular">{q.created_at ? new Date(q.created_at).toLocaleDateString(localeTag()) : ''}</td>
 						</tr>
-					{:else}<tr><td colspan="4" class="muted">{quizzes.q || status ? 'No quizzes match.' : 'No quizzes yet.'}</td></tr>{/each}
+					{:else}<tr><td colspan="4" class="muted">{quizzes.q || status ? tr("No quizzes match.") : tr("No quizzes yet.")}</td></tr>{/each}
 				</tbody>
 			</table>
 		</div>
-		<Pager list={quizzes} label="Quizzes" />
+		<Pager list={quizzes} label={tr("Quizzes")} />
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={create}>
-			<input class="input w-full" style="flex:1" bind:value={title} placeholder="New quiz title" required aria-label="Quiz title" />
-			<button class="btn btn-primary">Create quiz</button>
+			<input class="input w-full" style="flex:1" bind:value={title} placeholder={tr("New quiz title")} required aria-label={tr("Quiz title")} />
+			<button class="btn btn-primary">{tr("Create quiz")}</button>
 		</form>
-		<h2 class="mb-0 flex items-center gap-2"><Icon name="book" size={20} />Tutorials</h2>
-		<p class="small muted m-0">Lessons in pages: reading, pictures and videos, with questions about them. Students work through them at their own pace.</p>
+		<h2 class="mb-0 flex items-center gap-2"><Icon name="book" size={20} />{tr("Tutorials")}</h2>
+		<p class="small muted m-0">{tr("Lessons in pages: reading, pictures and videos, with questions about them. Students work through them at their own pace.")}</p>
 		{#if tutorials.length}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 				<table class="table">
-					<thead><tr><th>Tutorial</th><th>Pages</th><th>Status</th><th>Due</th></tr></thead>
+					<thead><tr><th>{tr("Tutorial")}</th><th>{tr("Pages")}</th><th>{tr("Status")}</th><th>{tr("Due")}</th></tr></thead>
 					<tbody>
 						{#each tutorials as t (t.id)}
 							<tr>
 								<td><a href={'/t/tutorials/' + t.id}>{t.title}</a></td>
 								<td class="tabular">{t.page_count}</td>
-								<td><span class="badge badge-soft" class:ok={t.status === 'published'}>{t.status === 'published' ? 'Published' : 'Draft'}</span></td>
+								<td><span class="badge badge-soft" class:ok={t.status === 'published'}>{t.status === 'published' ? tr("Published") : tr("Draft")}</span></td>
 								<td class="small tabular">{t.due_at ? new Date(t.due_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''}</td>
 							</tr>
 						{/each}
@@ -116,21 +117,21 @@
 			</div>
 		{/if}
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={createTutorial}>
-			<input class="input w-full" style="flex:1" bind:value={tutorialTitle} placeholder="New tutorial title" required maxlength="200" aria-label="Tutorial title" />
-			<button class="btn btn-primary">Create tutorial</button>
+			<input class="input w-full" style="flex:1" bind:value={tutorialTitle} placeholder={tr("New tutorial title")} required maxlength="200" aria-label={tr("Tutorial title")} />
+			<button class="btn btn-primary">{tr("Create tutorial")}</button>
 		</form>
-		<h2 class="mb-0 flex items-center gap-2"><Icon name="monitor" size={20} />Presentations</h2>
-		<p class="small muted m-0">Slides from a PDF that students go through at their own pace. You see who saw which slides, and for how long.</p>
+		<h2 class="mb-0 flex items-center gap-2"><Icon name="monitor" size={20} />{tr("Presentations")}</h2>
+		<p class="small muted m-0">{tr("Slides from a PDF that students go through at their own pace. You see who saw which slides, and for how long.")}</p>
 		{#if presentations.length}
 			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
 				<table class="table">
-					<thead><tr><th>Presentation</th><th>Slides</th><th>Status</th></tr></thead>
+					<thead><tr><th>{tr("Presentation")}</th><th>{tr("Slides")}</th><th>{tr("Status")}</th></tr></thead>
 					<tbody>
 						{#each presentations as p (p.id)}
 							<tr>
 								<td><a href={'/t/presentations/' + p.id}>{p.title}</a></td>
 								<td class="tabular">{p.slide_count || '—'}</td>
-								<td><span class="badge badge-soft" class:ok={p.status === 'published'}>{p.status === 'published' ? 'Published' : 'Draft'}</span></td>
+								<td><span class="badge badge-soft" class:ok={p.status === 'published'}>{p.status === 'published' ? tr("Published") : tr("Draft")}</span></td>
 							</tr>
 						{/each}
 					</tbody>
@@ -138,12 +139,12 @@
 			</div>
 		{/if}
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={createPresentation}>
-			<input class="input w-full" style="flex:1" bind:value={presentationTitle} placeholder="New presentation title" required maxlength="200" aria-label="Presentation title" />
-			<button class="btn btn-primary">Create presentation</button>
+			<input class="input w-full" style="flex:1" bind:value={presentationTitle} placeholder={tr("New presentation title")} required maxlength="200" aria-label={tr("Presentation title")} />
+			<button class="btn btn-primary">{tr("Create presentation")}</button>
 		</form>
 		<ClassActivities classroomId={topic.classroom_id} topicId={topic.id} />
 		<details class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">
-			<summary><strong>Topic settings</strong></summary>
+			<summary><strong>{tr("Topic settings")}</strong></summary>
 			<div style="margin-top:1rem"><SettingsEditor level="topic" value={topic.settings} onsave={saveSettings} {errors} /></div>
 		</details>
 	{/if}

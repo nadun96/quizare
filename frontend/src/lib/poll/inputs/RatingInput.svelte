@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Star rating as a radio group: arrow keys move, Enter/Space chooses, and
 	// the count is spoken ("4 of 5 stars"), so it isn't colour or shape alone.
 	let { points = 5, value, disabled = false, label, onchange }: { points?: number; value?: number; disabled?: boolean; label: string; onchange: (v: number | undefined) => void } = $props();
@@ -29,7 +30,7 @@
 				class="star"
 				class:on={n <= shown}
 				aria-checked={value === n}
-				aria-label="{n} of {points} star{n === 1 ? '' : 's'}"
+				aria-label={tr("{0} of {1} star{2}", [n, points, n === 1 ? '' : 's'])}
 				tabindex={(value ?? 1) === n ? 0 : -1}
 				{disabled}
 				onmouseenter={() => (hover = n)}
@@ -40,8 +41,8 @@
 			</button>
 		{/each}
 	</div>
-	<span class="small muted tabular" aria-hidden="true">{value ? `${value} / ${points}` : 'Not rated'}</span>
-	{#if value && !disabled}<button type="button" class="btn btn-ghost btn-sm" onclick={() => onchange(undefined)}>Clear</button>{/if}
+	<span class="small muted tabular" aria-hidden="true">{value ? `${value} / ${points}` : tr("Not rated")}</span>
+	{#if value && !disabled}<button type="button" class="btn btn-ghost btn-sm" onclick={() => onchange(undefined)}>{tr("Clear")}</button>{/if}
 </div>
 
 <style>

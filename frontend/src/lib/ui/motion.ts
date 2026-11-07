@@ -1,3 +1,4 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
 // Motion with GSAP (D-108), always honouring reduced motion (WCAG 2.3.3,
 // D-39): the OS setting or the in-app "Reduce motion" preference turns every
 // animation off, leaving things where they end.
@@ -47,7 +48,7 @@ export function cascade(node: HTMLElement, opts: { selector?: string; y?: number
 
 /** A number counting from where it was to its value (from 0 the first time). */
 export function countTo(node: HTMLElement, value: number): { update(v: number): void; destroy(): void } {
-	const fmt = (n: number) => (Number.isInteger(value) ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString();
+	const fmt = (n: number) => (Number.isInteger(value) ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString(localeTag());
 	const state = { n: 0 };
 	let tween: gsap.core.Tween | null = null;
 	const run = (to: number) => {

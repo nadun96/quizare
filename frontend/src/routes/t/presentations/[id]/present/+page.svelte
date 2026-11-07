@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// Presenting live (D-77, PR-FR-13): the current and next slides, a timer,
 	// the code to join, and the class's attention. Arrow keys move the slides.
 	import { onMount } from 'svelte';
@@ -45,7 +46,7 @@
 				}
 			};
 			socket.open();
-		})().catch((e) => toast(e instanceof ApiError ? e.message : 'Could not start presenting', 'error'));
+		})().catch((e) => toast(e instanceof ApiError ? e.message : tr("Could not start presenting"), 'error'));
 	});
 	onMount(() => {
 		const t = setInterval(() => (now = Date.now()), 1000);
@@ -65,7 +66,7 @@
 		try {
 			live = await api.post<Live>(`/api/teacher/presentations/${id}/live/slide`, { slide: n });
 		} catch (e) {
-			toast(e instanceof ApiError ? e.message : 'Could not change the slide', 'error');
+			toast(e instanceof ApiError ? e.message : tr("Could not change the slide"), 'error');
 		} finally {
 			busy = false;
 		}
@@ -74,7 +75,7 @@
 		live = await api.put<Live>(`/api/teacher/presentations/${id}/live`, { allow_browse: allow });
 	}
 	async function end() {
-		if (!(await confirmDialog({ title: 'End presenting?', body: 'Students’ screens stop following you. What they saw, and for how long, stays in the report.', confirm: 'End' }))) return;
+		if (!(await confirmDialog({ title: tr("End presenting?"), body: tr("Students’ screens stop following you. What they saw, and for how long, stays in the report."), confirm: tr("End") }))) return;
 		await api.post(`/api/teacher/presentations/${id}/live/end`);
 		socket?.close();
 		goto('/t/presentations/' + id);
@@ -88,11 +89,11 @@
 	}
 	async function copy() {
 		await navigator.clipboard?.writeText(joinUrl).catch(() => {});
-		toast('Link copied');
+		toast(tr("Link copied"));
 	}
 </script>
 
-<svelte:head><title>Presenting: {p?.title ?? ''}</title></svelte:head>
+<svelte:head><title>{tr("Presenting: {0}", [p?.title ?? ''])}</title></svelte:head>
 <svelte:window onkeydown={key} />
 
 <div class="presenter">
@@ -101,26 +102,26 @@
 	{:else}
 		{@const cur = slides[live.slide - 1]}
 		<header class="bar">
-			<a class="btn btn-sm btn-ghost" href={'/t/presentations/' + id}><Icon name="arrow-left" size={14} />Back</a>
+			<a class="btn btn-sm btn-ghost" href={'/t/presentations/' + id}><Icon name="arrow-left" size={14} />{tr("Back")}</a>
 			<h1 class="m-0 truncate text-lg">{p.title}</h1>
-			<span class="badge badge-error badge-soft gap-1"><span class="dot" aria-hidden="true"></span>Live</span>
-			<span class="tabular small" title="Time since you started">{elapsed(live.started_at, now)}</span>
-			{#if !connected}<span class="badge badge-warning badge-sm">Reconnecting…</span>{/if}
+			<span class="badge badge-error badge-soft gap-1"><span class="dot" aria-hidden="true"></span>{tr("Live")}</span>
+			<span class="tabular small" title={tr("Time since you started")}>{elapsed(live.started_at, now)}</span>
+			{#if !connected}<span class="badge badge-warning badge-sm">{tr("Reconnecting…")}</span>{/if}
 			<span class="spacer"></span>
-			<span class="small">Code <strong class="code">{live.code}</strong></span>
-			<button class="btn btn-sm" onclick={() => (showQr = !showQr)} aria-pressed={showQr}><Icon name="qr" size={14} />QR</button>
-			<button class="btn btn-sm" onclick={copy}><Icon name="copy" size={14} />Link</button>
-			<a class="btn btn-sm" href={`/t/presentations/${id}/screen`} target="_blank" rel="noopener"><Icon name="monitor" size={14} />Screen view</a>
-			<button class="btn btn-sm btn-error btn-outline" onclick={end}>End</button>
+			<span class="small">{tr("Code")} <strong class="code">{live.code}</strong></span>
+			<button class="btn btn-sm" onclick={() => (showQr = !showQr)} aria-pressed={showQr}><Icon name="qr" size={14} />{tr("QR")}</button>
+			<button class="btn btn-sm" onclick={copy}><Icon name="copy" size={14} />{tr("Link")}</button>
+			<a class="btn btn-sm" href={`/t/presentations/${id}/screen`} target="_blank" rel="noopener"><Icon name="monitor" size={14} />{tr("Screen view")}</a>
+			<button class="btn btn-sm btn-error btn-outline" onclick={end}>{tr("End")}</button>
 		</header>
 
 		<div class="grid-main">
-			<section class="current" aria-label="Current slide">
+			<section class="current" aria-label={tr("Current slide")}>
 				{#if cur}<img src={thumb(cur.n)} alt={slideAlt(cur, total)} width={cur.width} height={cur.height} />{/if}
 				<div class="controls">
-					<button class="btn" disabled={live.slide === 1} onclick={() => show(live!.slide - 1)}><Icon name="arrow-left" size={16} />Back</button>
+					<button class="btn" disabled={live.slide === 1} onclick={() => show(live!.slide - 1)}><Icon name="arrow-left" size={16} />{tr("Back")}</button>
 					<span class="tabular font-semibold" aria-live="polite">{live.slide} / {total}</span>
-					<button class="btn btn-primary" disabled={live.slide === total} onclick={() => show(live!.slide + 1)}>Next<Icon name="arrow-right" size={16} /></button>
+					<button class="btn btn-primary" disabled={live.slide === total} onclick={() => show(live!.slide + 1)}>{tr("Next")}<Icon name="arrow-right" size={16} /></button>
 				</div>
 			</section>
 
@@ -132,24 +133,24 @@
 					</div>
 				{/if}
 				<div class="card card-border bg-base-100 p-3 vstack gap-2">
-					<p class="small muted m-0">Next</p>
+					<p class="small muted m-0">{tr("Next")}</p>
 					{#if live.slide < total}
 						{@const nx = slides[live.slide]}
 						<img class="next" src={thumb(nx.n)} alt={slideAlt(nx, total)} width={nx.width} height={nx.height} loading="lazy" />
-					{:else}<p class="small m-0">That’s the last slide.</p>{/if}
+					{:else}<p class="small m-0">{tr("That’s the last slide.")}</p>{/if}
 				</div>
 				<div class="card card-border bg-base-100 p-3 vstack gap-2">
 					<div class="counts" role="status">
-						<span><strong class="tabular">{counts.joined}</strong> joined</span>
-						<span class="ok"><strong class="tabular">{counts.following}</strong> following</span>
-						<span><strong class="tabular">{counts.looking_back}</strong> looking back</span>
-						<span class="warn"><strong class="tabular">{counts.away}</strong> away</span>
+						<span><strong class="tabular">{counts.joined}</strong> {tr("joined")}</span>
+						<span class="ok"><strong class="tabular">{counts.following}</strong> {tr("following")}</span>
+						<span><strong class="tabular">{counts.looking_back}</strong> {tr("looking back")}</span>
+						<span class="warn"><strong class="tabular">{counts.away}</strong> {tr("away")}</span>
 					</div>
-					<label class="small flex items-center gap-2"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={live.allow_browse} onchange={(e) => browse(e.currentTarget.checked)} />Students may look back on their own</label>
-					<ul class="people" aria-label="Students">
+					<label class="small flex items-center gap-2"><input type="checkbox" class="toggle toggle-sm toggle-primary" checked={live.allow_browse} onchange={(e) => browse(e.currentTarget.checked)} />{tr("Students may look back on their own")}</label>
+					<ul class="people" aria-label={tr("Students")}>
 						{#each people as person (person.user_id)}
 							<li class:away={!person.visible} class:off={person.visible && !person.following}><span class="name truncate">{person.name}</span><span class="small muted">{personState(person, live.slide)}</span></li>
-						{:else}<li class="small muted">Nobody has joined yet. Share the code, link or QR code.</li>{/each}
+						{:else}<li class="small muted">{tr("Nobody has joined yet. Share the code, link or QR code.")}</li>{/each}
 					</ul>
 				</div>
 			</aside>

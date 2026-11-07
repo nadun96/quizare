@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { localeTag, tr } from '$lib/i18n/i18n.svelte';
 	// Explore (D-120): pick what to measure, what to break it down by, and
 	// which classrooms and dates; the answer comes back as a chart and a
 	// table (or a grid for two breakdowns), with CSV. The query lives in the
@@ -76,7 +77,7 @@
 			}
 			if (!body.measures.length) {
 				result = null;
-				error = 'Choose at least one measure.';
+				error = tr("Choose at least one measure.");
 				return;
 			}
 			const mine = ++seq;
@@ -88,7 +89,7 @@
 					error = '';
 				}
 			} catch (e) {
-				if (mine === seq) error = e instanceof ApiError ? Object.values(e.fields)[0] ?? e.message : 'The query failed';
+				if (mine === seq) error = e instanceof ApiError ? (Object.values(e.fields)[0] ?? e.message) : tr("The query failed");
 			} finally {
 				if (mine === seq) busy = false;
 			}
@@ -149,17 +150,17 @@
 	{:else}
 		<div class="card card-border bg-base-100 p-4 vstack gap-4">
 			<fieldset class="vstack gap-2">
-				<legend class="small font-semibold">Measure</legend>
-				<div class="flex flex-wrap gap-2" role="group" aria-label="Activity measures">
-					<span class="small muted self-center">Activity</span>
+				<legend class="small font-semibold">{tr("Measure")}</legend>
+				<div class="flex flex-wrap gap-2" role="group" aria-label={tr("Activity measures")}>
+					<span class="small muted self-center">{tr("Activity")}</span>
 					{#each catalog.measures.filter((m) => m.fact === 'activity') as m (m.key)}
-						<button type="button" class="chip" class:on={q.measures.includes(m.key)} aria-pressed={q.measures.includes(m.key)} title={m.help ?? ''} onclick={() => toggleMeasure(m.key, m.fact)}>{m.label}</button>
+						<button type="button" class="chip" class:on={q.measures.includes(m.key)} aria-pressed={q.measures.includes(m.key)} title={m.help ?? ''} onclick={() => toggleMeasure(m.key, m.fact)}>{tr(m.label)}</button>
 					{/each}
 				</div>
-				<div class="flex flex-wrap gap-2" role="group" aria-label="Question measures">
-					<span class="small muted self-center">Questions</span>
+				<div class="flex flex-wrap gap-2" role="group" aria-label={tr("Question measures")}>
+					<span class="small muted self-center">{tr("Questions")}</span>
 					{#each catalog.measures.filter((m) => m.fact === 'answers') as m (m.key)}
-						<button type="button" class="chip" class:on={q.measures.includes(m.key)} aria-pressed={q.measures.includes(m.key)} title={m.help ?? ''} onclick={() => toggleMeasure(m.key, m.fact)}>{m.label}</button>
+						<button type="button" class="chip" class:on={q.measures.includes(m.key)} aria-pressed={q.measures.includes(m.key)} title={m.help ?? ''} onclick={() => toggleMeasure(m.key, m.fact)}>{tr(m.label)}</button>
 					{/each}
 				</div>
 			</fieldset>
@@ -168,17 +169,17 @@
 				{#each [0, 1, 2] as i (i)}
 					{#if i <= q.dimensions.length}
 						<label class="vstack gap-1">
-							<span class="small font-semibold">{i === 0 ? 'Break down by' : i === 1 ? 'then by' : 'and by'}</span>
+							<span class="small font-semibold">{i === 0 ? tr("Break down by") : i === 1 ? tr("then by") : tr("and by")}</span>
 							<select class="select select-sm w-full" value={q.dimensions[i] ?? ''} onchange={(e) => setDim(i, e.currentTarget.value)}>
-								<option value="">{i === 0 ? 'Nothing: one total' : '—'}</option>
-								{#each dims as d (d.key)}<option value={d.key} disabled={q.dimensions.includes(d.key) && q.dimensions[i] !== d.key}>{d.label}</option>{/each}
+								<option value="">{i === 0 ? tr("Nothing: one total") : '—'}</option>
+								{#each dims as d (d.key)}<option value={d.key} disabled={q.dimensions.includes(d.key) && q.dimensions[i] !== d.key}>{tr(d.label)}</option>{/each}
 							</select>
 						</label>
 					{/if}
 				{/each}
 				{#if q.dimensions.includes('date')}
 					<label class="vstack gap-1">
-						<span class="small font-semibold">Dates by</span>
+						<span class="small font-semibold">{tr("Dates by")}</span>
 						<select class="select select-sm w-full" bind:value={q.grain}>
 							{#each catalog.grains as g (g)}<option value={g}>{g[0].toUpperCase() + g.slice(1)}</option>{/each}
 						</select>
@@ -188,38 +189,38 @@
 
 			<div class="controls">
 				<label class="vstack gap-1">
-					<span class="small font-semibold">Dates</span>
+					<span class="small font-semibold">{tr("Dates")}</span>
 					<select class="select select-sm w-full" value={rangeKey} onchange={(e) => setRange(e.currentTarget.value)}>
-						<option value="">From – to</option>
-						{#each RANGES as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+						<option value="">{tr("From – to")}</option>
+						{#each RANGES as r (r.key)}<option value={r.key}>{tr(r.label)}</option>{/each}
 					</select>
 				</label>
-				<label class="vstack gap-1"><span class="small font-semibold">From</span><input type="date" class="input input-sm w-full" bind:value={q.from} oninput={() => (rangeKey = '')} /></label>
-				<label class="vstack gap-1"><span class="small font-semibold">To</span><input type="date" class="input input-sm w-full" bind:value={q.to} oninput={() => (rangeKey = '')} /></label>
+				<label class="vstack gap-1"><span class="small font-semibold">{tr("From")}</span><input type="date" class="input input-sm w-full" bind:value={q.from} oninput={() => (rangeKey = '')} /></label>
+				<label class="vstack gap-1"><span class="small font-semibold">{tr("To")}</span><input type="date" class="input input-sm w-full" bind:value={q.to} oninput={() => (rangeKey = '')} /></label>
 				<div class="vstack gap-1">
-					<span class="small font-semibold">Classrooms</span>
+					<span class="small font-semibold">{tr("Classrooms")}</span>
 					<details class="dropdown w-full">
-						<summary class="select select-sm w-full">{(q.filters.classroom ?? []).length ? `${q.filters.classroom.length} chosen` : 'All'}</summary>
+						<summary class="select select-sm w-full">{(q.filters.classroom ?? []).length ? tr("{0} chosen", [q.filters.classroom.length]) : tr("All")}</summary>
 						<div class="dropdown-content z-30 mt-1 max-h-72 w-72 overflow-auto border border-base-300 bg-base-100 p-2 shadow">
 							{#each catalog.classrooms as c (c.id)}
-								<label class="flex items-center gap-2 py-1 font-normal"><input type="checkbox" class="checkbox checkbox-sm" checked={(q.filters.classroom ?? []).includes(c.id)} onchange={() => toggleFilter('classroom', c.id)} />{c.label}</label>
+								<label class="flex items-center gap-2 py-1 font-normal"><input type="checkbox" class="checkbox checkbox-sm" checked={(q.filters.classroom ?? []).includes(c.id)} onchange={() => toggleFilter('classroom', c.id)} />{tr(c.label)}</label>
 							{:else}
-								<p class="m-0 small muted">No classrooms yet.</p>
+								<p class="m-0 small muted">{tr("No classrooms yet.")}</p>
 							{/each}
 						</div>
 					</details>
 				</div>
 				{#if fact === 'activity'}
 					<label class="vstack gap-1">
-						<span class="small font-semibold">Activity</span>
+						<span class="small font-semibold">{tr("Activity")}</span>
 						<select class="select select-sm w-full" value={(q.filters.kind ?? [])[0] ?? ''} onchange={(e) => (q.filters = { ...q.filters, kind: e.currentTarget.value ? [e.currentTarget.value] : [] })}>
-							<option value="">Quizzes and tutorials</option><option value="quiz">Quizzes</option><option value="tutorial">Tutorials</option>
+							<option value="">{tr("Quizzes and tutorials")}</option><option value="quiz">{tr("Quizzes")}</option><option value="tutorial">{tr("Tutorials")}</option>
 						</select>
 					</label>
 				{/if}
-				<label class="flex items-center gap-2 self-end pb-1 font-normal"><input type="checkbox" class="toggle toggle-sm" bind:checked={q.totals} />Totals</label>
+				<label class="flex items-center gap-2 self-end pb-1 font-normal"><input type="checkbox" class="toggle toggle-sm" bind:checked={q.totals} />{tr("Totals")}</label>
 			</div>
-			{#if catalog.staff}<p class="m-0 small muted"><Icon name="shield" size={13} /> As an admin you see groups, not single students; a group of fewer than {catalog.min_group} students is shown without its figures.</p>{/if}
+			{#if catalog.staff}<p class="m-0 small muted"><Icon name="shield" size={13} /> {tr("As an admin you see groups, not single students; a group of fewer than {0} students is shown without its figures.", [catalog.min_group])}</p>{/if}
 		</div>
 
 		{#if error}
@@ -229,28 +230,28 @@
 		{:else}
 			<div class="flex flex-wrap items-center gap-2" class:opacity-60={busy}>
 				<p class="m-0 grow small muted">
-					{dateLabel(result.from, 'day')} – {dateLabel(result.to, 'day')}{result.loaded_at ? ` · data as of ${new Date(result.loaded_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ' · the first load is still running'}
-					{#if result.truncated} · only the first 5,000 rows{/if}
-					{#if hiddenCount} · {hiddenCount} small {hiddenCount === 1 ? 'group' : 'groups'} hidden{/if}
+					{dateLabel(result.from, 'day')} – {dateLabel(result.to, 'day')}{result.loaded_at ? tr(" · data as of {0}", [new Date(result.loaded_at).toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' })]) : tr(" · the first load is still running")}
+					{#if result.truncated} {tr("· only the first 5,000 rows")}{/if}
+					{#if hiddenCount} {tr("· {0} small {1} hidden", [hiddenCount, hiddenCount === 1 ? 'group' : 'groups'])}{/if}
 				</p>
 				{#if dimCols.length === 2}
-					<div class="join" role="group" aria-label="Show as">
-						<button class="btn btn-sm join-item" class:btn-active={view === 'table'} aria-pressed={view === 'table'} onclick={() => (view = 'table')}>Table</button>
-						<button class="btn btn-sm join-item" class:btn-active={view === 'grid'} aria-pressed={view === 'grid'} onclick={() => (view = 'grid')}>Grid</button>
+					<div class="join" role="group" aria-label={tr("Show as")}>
+						<button class="btn btn-sm join-item" class:btn-active={view === 'table'} aria-pressed={view === 'table'} onclick={() => (view = 'table')}>{tr("Table")}</button>
+						<button class="btn btn-sm join-item" class:btn-active={view === 'grid'} aria-pressed={view === 'grid'} onclick={() => (view = 'grid')}>{tr("Grid")}</button>
 					</div>
 				{/if}
-				<button class="btn btn-sm" onclick={copyLink}><Icon name="link" size={15} />Copy link</button>
-				<button class="btn btn-sm" onclick={download}><Icon name="download" size={15} />CSV</button>
+				<button class="btn btn-sm" onclick={copyLink}><Icon name="link" size={15} />{tr("Copy link")}</button>
+				<button class="btn btn-sm" onclick={download}><Icon name="download" size={15} />{tr("CSV")}</button>
 			</div>
 
 			{#if chart}
 				<div class="card card-border bg-base-100 p-4 vstack gap-2">
-					<h3 class="m-0 text-base">{chart.m.label} by {dimCols[0].label.toLowerCase()}</h3>
+					<h3 class="m-0 text-base">{tr("{0} by {1}", [tr(chart.m.label), dimCols[0].label.toLowerCase()])}</h3>
 					{#if chart.kind === 'line'}
-						<TrendChart title="{chart.m.label} by date" name={chart.m.label} contextName="" rowName="Date" noun="dates" points={chart.points} />
+						<TrendChart title={tr("{0} by date", [tr(chart.m.label)])} name={chart.m.label} contextName="" rowName="Date" noun="dates" points={chart.points} />
 					{:else}
-						<RankedBars title="{chart.m.label} by {dimCols[0].label}" rows={chart.bars} unit={chart.m.unit === '%' ? '%' : chart.m.unit ? ' ' + chart.m.unit : ''} max={chart.max} />
-						{#if chart.more > 0}<p class="m-0 small muted">And {chart.more} more in the table.</p>{/if}
+						<RankedBars title={tr("{0} by {1}", [tr(chart.m.label), tr(dimCols[0].label)])} rows={chart.bars} unit={chart.m.unit === '%' ? '%' : chart.m.unit ? ' ' + chart.m.unit : ''} max={chart.max} />
+						{#if chart.more > 0}<p class="m-0 small muted">{tr("And {0} more in the table.", [chart.more])}</p>{/if}
 					{/if}
 				</div>
 			{/if}
@@ -258,13 +259,13 @@
 			{#if grid && view === 'grid'}
 				<div class="card card-border bg-base-100 p-4 vstack gap-2">
 					{#if measCols.length > 1}
-						<label class="flex items-center gap-2 small">Showing
-							<select class="select select-sm w-auto" bind:value={gridMeasure}>{#each measCols as m (m.key)}<option value={m.key}>{m.label}</option>{/each}</select>
+						<label class="flex items-center gap-2 small">{tr("Showing")}
+							<select class="select select-sm w-auto" bind:value={gridMeasure}>{#each measCols as m (m.key)}<option value={m.key}>{tr(m.label)}</option>{/each}</select>
 						</label>
 					{/if}
 					<div class="table-wrap">
 						<table class="table table-sm">
-							<thead><tr><th>{dimCols[0].label} \ {dimCols[1].label}</th>{#each grid.cols as c (c.id)}<th class="tabular">{cellText(grid.colDim, c, result.grain)}</th>{/each}</tr></thead>
+							<thead><tr><th>{tr(dimCols[0].label)} \ {tr(dimCols[1].label)}</th>{#each grid.cols as c (c.id)}<th class="tabular">{cellText(grid.colDim, c, result.grain)}</th>{/each}</tr></thead>
 							<tbody>
 								{#each grid.rows as r (r.id)}
 									<tr><th class="font-normal">{cellText(grid.rowDim, r, result.grain)}</th>{#each grid.cols as c (c.id)}{@const v = grid.at(r.id, c.id)}<td class="tabular">{v === undefined ? '' : fmt(v, unitOf(gridMeasure || measCols[0].key))}</td>{/each}</tr>
@@ -277,19 +278,19 @@
 				<div class="card card-border bg-base-100 p-4">
 					<div class="table-wrap">
 						<table class="table table-sm">
-							<thead><tr>{#each result.columns as c (c.key)}<th class:num={c.kind === 'measure'}>{c.label}</th>{/each}</tr></thead>
+							<thead><tr>{#each result.columns as c (c.key)}<th class:num={c.kind === 'measure'}>{tr(c.label)}</th>{/each}</tr></thead>
 							<tbody>
 								{#each result.rows as r, i (i)}
 									<tr class:sub={r.level === 1} class:total={r.level === 2}>
 										{#each dimCols as c, j (c.key)}
-											<td>{r.level === 2 ? (j === 0 ? 'Total' : '') : r.dims?.[c.key] ? cellText(c.key, r.dims[c.key], result.grain) : r.level === 1 ? 'Subtotal' : ''}</td>
+											<td>{r.level === 2 ? (j === 0 ? tr("Total") : '') : r.dims?.[c.key] ? cellText(c.key, r.dims[c.key], result.grain) : r.level === 1 ? tr("Subtotal") : ''}</td>
 										{/each}
 										{#each measCols as c, j (c.key)}
-											<td class="tabular num">{#if r.hidden}{#if j === 0}<span class="small muted" title="Groups of fewer than {result.min_group} students are not shown to staff">under {result.min_group} students</span>{/if}{:else}{fmt(r.values[c.key], c.unit)}{/if}</td>
+											<td class="tabular num">{#if r.hidden}{#if j === 0}<span class="small muted" title={tr("Groups of fewer than {0} students are not shown to staff", [result.min_group])}>{tr("under {0} students", [result.min_group])}</span>{/if}{:else}{fmt(r.values[c.key], c.unit)}{/if}</td>
 										{/each}
 									</tr>
 								{:else}
-									<tr><td colspan={result.columns.length} class="muted">Nothing in these dates.</td></tr>
+									<tr><td colspan={result.columns.length} class="muted">{tr("Nothing in these dates.")}</td></tr>
 								{/each}
 							</tbody>
 						</table>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from '$lib/i18n/i18n.svelte';
 	// One student's months in a classroom, beside the class average (D-119).
 	import { api } from '../api';
 	import TrendChart from '../dashboard/TrendChart.svelte';
@@ -23,13 +24,13 @@
 		{:else}
 			{@const pts = points(shown, (m) => m.avg, (m) => m.class_avg, (m) => `${m.quizzes} results`)}
 			{#if pts.length}
-				<TrendChart title="{student.name}’s average each month" name="Their average" contextName="Class average" rowName="Month" noun="months" points={pts} />
+				<TrendChart title={tr("{0}’s average each month", [student.name])} name="Their average" contextName="Class average" rowName="Month" noun="months" points={pts} />
 			{:else}
-				<p class="m-0 muted small">No quiz results in this span.</p>
+				<p class="m-0 muted small">{tr("No quiz results in this span.")}</p>
 			{/if}
 			<div class="table-wrap">
 				<table class="table table-sm">
-					<thead><tr><th>Month</th><th>Results</th><th>Average</th><th>Class average</th><th>Passed</th><th>Tutorials</th><th>Active days</th></tr></thead>
+					<thead><tr><th>{tr("Month")}</th><th>{tr("Results")}</th><th>{tr("Average")}</th><th>{tr("Class average")}</th><th>{tr("Passed")}</th><th>{tr("Tutorials")}</th><th>{tr("Active days")}</th></tr></thead>
 					<tbody>
 						{#each [...shown].reverse() as m (m.month)}
 							<tr><td>{monthLabel(m.month)}</td><td class="tabular">{m.quizzes}</td><td class="tabular">{m.avg ?? '—'}{m.avg !== null ? '%' : ''}</td><td class="tabular">{m.class_avg ?? '—'}{m.class_avg != null ? '%' : ''}</td><td class="tabular">{m.pass_rate ?? '—'}{m.pass_rate !== null ? '%' : ''}</td><td class="tabular">{m.tutorials}</td><td class="tabular">{m.active}</td></tr>
@@ -38,7 +39,7 @@
 				</table>
 			</div>
 		{/if}
-		<div class="modal-action"><button class="btn" onclick={() => dialog?.close()}>Close</button></div>
+		<div class="modal-action"><button class="btn" onclick={() => dialog?.close()}>{tr("Close")}</button></div>
 	</div>
-	<form method="dialog" class="modal-backdrop"><button>close</button></form>
+	<form method="dialog" class="modal-backdrop"><button>{tr("close")}</button></form>
 </dialog>
