@@ -9,8 +9,11 @@
 	import { toast } from '../ui/toast.svelte';
 	import { TutorClient, tutoringConfig } from '../tutoring/client';
 	import { saveFile, type ClassroomReport } from '../tutoring/types';
-	import { attendanceDetailCSV, attendanceScopes, attendanceSummaryCSV, mergeTutoring, scopedAttendance, scopeFrom, scopeValue, summarise, type Attendance } from './grading';
+	import { attendanceDetailCSV, attendanceScopes, attendanceSummaryCSV, mergeTutoring, scopedAttendance, scopeFrom, scopeValue, summarise, type Attendance, type AttendanceSummary } from './grading';
+	import ReportControls from './ReportControls.svelte';
 	import ReportPdfButton from './ReportPdfButton.svelte';
+	import ReportTh from './ReportTh.svelte';
+	import { bandOptions, inBand, matches, newView, shownNote, sortRows, type ViewCol } from './reportView';
 	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
 	import ScopePicker from './ScopePicker.svelte';
 
@@ -67,9 +70,24 @@
 		}
 	}
 
-	const rows = $derived(data ? summarise(data) : []);
+	const allRows = $derived(data ? summarise(data) : []);
 	const kinds = $derived(data ? (['quiz', 'meeting', 'tutoring'] as const).filter((k) => data!.events.some((e) => e.kind === k)) : []);
 	const LABEL = { quiz: 'Quiz sessions', meeting: 'Meetings', tutoring: 'Tutoring' } as const;
+	// Search, filter and sort (D-154).
+	let view = $state(newView());
+	const viewCols = $derived<ViewCol<AttendanceSummary>[]>([
+		{ key: 'student', label: 'Student', value: (r) => r.name },
+		{ key: 'id', label: 'Student ID', value: (r) => r.number },
+		...kinds.map((k) => ({ key: k, label: LABEL[k], value: (r: AttendanceSummary) => r.byKind[k].came, numeric: true })),
+		{ key: 'came', label: 'Attended', value: (r) => r.came, numeric: true },
+		{ key: 'rate', label: 'Rate', value: (r) => r.rate, numeric: true },
+		{ key: 'minutes', label: 'Minutes', value: (r) => r.minutes, numeric: true }
+	]);
+	const showOptions = $derived([...bandOptions(bands, 'Rate'), { v: 'never', label: 'Never came' }]);
+	const rows = $derived(sortRows(
+		allRows.filter((r) => matches(`${r.name} ${r.number}`, view.q) && (!view.show || (view.show === 'never' ? r.came === 0 : inBand(r.rate, view.show, bands)))),
+		viewCols, view.sort, view.dir));
+	const note = $derived(shownNote(rows.length, allRows.length, 'students'));
 	const file = (what: string) => `${what}-${classroomName}${scope.kind !== 'all' ? '-' + scopeName : ''}-${from}-to-${to}`.replace(/[\\/:*?"<>|]+/g, '-');
 
 	const pdfTitle = $derived(`Attendance · ${classroomName}${scope.kind !== 'all' ? ' · ' + scopeName : ''}`);
@@ -89,9 +107,9 @@
 		{#if scopes.length > 1}<ScopePicker options={scopes} value={scopeValue(scope)} onchange={(v) => (scope = scopeFrom(v))} />{/if}
 		<span class="grow"></span>
 		{#if data}
-			<button class="btn btn-sm" onclick={() => saveFile(file('attendance') + '.csv', attendanceSummaryCSV(data!))} disabled={!rows.length}><Icon name="download" size={15} />Summary CSV</button>
-			<button class="btn btn-sm" onclick={() => saveFile(file('attendance-by-session') + '.csv', attendanceDetailCSV(data!))} disabled={!data.events.length}><Icon name="download" size={15} />By session CSV</button>
-			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => [{ heading: `${from} to ${to} · ${data?.events.length ?? 0} sessions`, ...table(), frozen: 2 }]} disabled={!rows.length} onbands={(b) => (bands = b)} />
+			<button class="btn btn-sm" onclick={() => saveFile(file('attendance') + '.csv', attendanceSummaryCSV(data!, rows))} disabled={!rows.length}><Icon name="download" size={15} />Summary CSV</button>
+			<button class="btn btn-sm" onclick={() => saveFile(file('attendance-by-session') + '.csv', attendanceDetailCSV(data!, rows.map((r) => r.user_id)))} disabled={!data.events.length}><Icon name="download" size={15} />By session CSV</button>
+			<ReportPdfButton {classroomId} title={pdfTitle} fileName={pdfTitle} sheets={() => [{ heading: `${from} to ${to} · ${data?.events.length ?? 0} sessions${note ? ` · ${note}` : ''}`, ...table(), frozen: 2 }]} disabled={!rows.length} onbands={(b) => (bands = b)} />
 		{/if}
 	</div>
 	{#if error}<p class="alert alert-soft alert-error m-0">{error}</p>{/if}
@@ -102,13 +120,15 @@
 		{#if tutoring}
 			<label class="flex items-center gap-2 font-normal small"><input type="checkbox" class="toggle toggle-sm" checked={tutoring.counts_in_results} onchange={(e) => setCounts(e.currentTarget.checked)} /> Show attendance in the classroom’s results</label>
 		{/if}
+		{#if allRows.length}<ReportControls bind:view cols={viewCols} show={showOptions} shown={rows.length} total={allRows.length} noun="students" />{/if}
 		<div class="card card-border bg-base-100 p-2 sm:p-4">
 			<div class="table-wrap">
 				<table class="table table-sm">
-					<thead><tr><th>Student</th>{#each kinds as k (k)}<th class="num">{LABEL[k]}</th>{/each}<th class="num">Attended</th><th class="num">Rate</th><th class="num">Minutes</th></tr></thead>
+					<thead><tr><th class="num">No.</th><ReportTh bind:view cols={viewCols} col="student" label="Student" />{#each kinds as k (k)}<ReportTh bind:view cols={viewCols} col={k} label={LABEL[k]} class="num" />{/each}<ReportTh bind:view cols={viewCols} col="came" label="Attended" class="num" /><ReportTh bind:view cols={viewCols} col="rate" label="Rate" class="num" /><ReportTh bind:view cols={viewCols} col="minutes" label="Minutes" class="num" /></tr></thead>
 					<tbody>
-						{#each rows as r (r.user_id)}
+						{#each rows as r, n (r.user_id)}
 							<tr>
+								<td class="num tabular muted">{n + 1}</td>
 								<td>{r.name}{#if r.number}<br /><span class="small muted">{r.number}</span>{/if}</td>
 								{#each kinds as k (k)}<td class="num tabular">{r.byKind[k].came} / {r.byKind[k].of}</td>{/each}
 								<td class="num tabular">{r.came} / {r.of}</td>
@@ -116,7 +136,7 @@
 								<td class="num tabular">{r.minutes}</td>
 							</tr>
 						{:else}
-							<tr><td colspan={kinds.length + 4} class="muted">No students yet.</td></tr>
+							<tr><td colspan={kinds.length + 5} class="muted">{allRows.length ? 'Nobody matches. Clear the filters to see everyone.' : 'No students yet.'}</td></tr>
 						{/each}
 					</tbody>
 				</table>

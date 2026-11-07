@@ -157,3 +157,25 @@ describe('colours on mark sheets (D-143)', () => {
 	});
 });
 
+const EOL = new RegExp(String.fromCharCode(13) + '?' + String.fromCharCode(10));
+
+describe('the class report as filtered (D-154)', () => {
+	it('writes only who’s shown, numbered, with the class figures whole', () => {
+		const r = report();
+		const other = { ...r.students[0], user_id: 'u2', name: 'Ben', final: 40 };
+		r.students = [...r.students, other];
+		const lines = classReportCSV(r, [other]).trim().split(EOL);
+		expect(lines[0].startsWith('No.,Student,Student ID')).toBe(true);
+		expect(lines[1].startsWith('1,Ben,')).toBe(true);
+		expect(lines.join()).not.toContain('Amaya');
+		expect(lines.find((l) => l.startsWith(',Highest'))?.endsWith(',80')).toBe(true); // Amaya's is still the class's highest
+	});
+
+	it('numbers each group sheet in a CSV', () => {
+		const r = report();
+		r.class_groups = [{ id: 'g1', name: 'Red', members: ['u1'], marks: {}, total: 0, final: null }];
+		const lines = groupsCSV(r).trim().split(EOL);
+		expect(lines[1].startsWith('No.,Group')).toBe(true);
+		expect(lines[2].startsWith('1,Red')).toBe(true);
+	});
+});

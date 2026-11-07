@@ -5,6 +5,7 @@
 	import { api, ApiError } from '../api';
 	import Icon from '../ui/Icon.svelte';
 	import { toast } from '../ui/toast.svelte';
+	import { numberSheet } from './reportView';
 	import { ACCENTS, addRange, bandsOf, exportPdf, logoDataUrl, MAX_RANGES, printReportHTML, rangeLabel, rangesProblem, type Bands, type ReportHeader, type Sheet } from './reportPdf';
 
 	let { classroomId, title, fileName, sheets, disabled = false, onbands }: { classroomId: string; title: string; fileName: string; sheets: () => Sheet[]; disabled?: boolean; onbands?: (b: Bands) => void } = $props();
@@ -33,7 +34,7 @@
 		if (!w) return toast('Allow pop-ups for this site to print', 'error');
 		try {
 			const header = await saved();
-			w.document.write(printReportHTML(sheets(), header, title));
+			w.document.write(printReportHTML(sheets().map(numberSheet), header, title));
 			w.document.close();
 			// Called from here: the site's content policy stops a script inside the page.
 			const img = w.document.querySelector('img');
@@ -49,7 +50,7 @@
 		busy = true;
 		try {
 			const header = await saved();
-			await exportPdf(sheets(), header, title, fileName);
+			await exportPdf(sheets().map(numberSheet), header, title, fileName);
 			toast('PDF downloaded');
 		} catch (e) {
 			toast(e instanceof ApiError ? e.message : 'The PDF couldn’t be made. Try again.', 'error');
@@ -88,7 +89,7 @@
 		try {
 			const header = await api.put<ReportHeader>(url, h);
 			onbands?.(bandsOf(header));
-			if (andDownload) await exportPdf(sheets(), header, title, fileName);
+			if (andDownload) await exportPdf(sheets().map(numberSheet), header, title, fileName);
 			dialog?.close();
 			toast(andDownload ? 'PDF downloaded' : 'Header and footer saved');
 		} catch (err) {
