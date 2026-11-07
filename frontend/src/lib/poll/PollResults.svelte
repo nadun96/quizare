@@ -71,8 +71,14 @@
 		const shares = counts.map((n) => (total ? (n / total) * 100 : 0));
 		const mid = (scale.length - 1) / 2;
 		const left = shares.slice(0, Math.floor(mid)).reduce((s, x) => s + x, 0) + (scale.length % 2 ? shares[mid] / 2 : 0);
-		return { counts, shares, total, offset: 50 - left };
+		return { counts, shares, total, left };
 	}
+	// Bars centre on the neutral point, so a row that leans one way would run off
+	// its side; all rows shrink alike to fit the one that leans most, staying comparable.
+	const likertFit = $derived.by(() => {
+		const most = Math.max(50, ...(b.rows ?? []).map((row) => { const { left } = likertRow(row.id); return Math.max(left, 100 - left); }));
+		return 50 / most;
+	});
 
 	const stats = $derived(r.stats);
 	const maxBucket = $derived(Math.max(1, ...(stats?.buckets ?? []).map((x) => x.count)));
@@ -112,7 +118,8 @@
 		{/if}
 	</div>
 
-	{#if r.responses === 0 && !texts.length}
+	<!-- The room needs to see a choice question's options before anyone has answered. -->
+	{#if r.responses === 0 && !texts.length && !(toon && (question.type === 'SINGLE' || question.type === 'MULTI'))}
 		<p class="waiting muted small"><span class="loading loading-dots loading-sm text-primary"></span> Waiting for answers…</p>
 	{:else if question.type === 'SINGLE' || question.type === 'MULTI'}
 		{#if table}
@@ -182,11 +189,11 @@
 						<span class="lk-label">{row.text} <span class="small muted ml-1">· mean {r.row_means?.[row.id] ?? '–'}</span></span>
 						<div class="lk-track" aria-hidden="true">
 							<span class="lk-mid"></span>
-							<div class="lk-bar" style:margin-left="{lr.offset}%">
+							<div class="lk-bar" style:margin-left="{50 - lr.left * likertFit}%">
 								{#each lr.shares as s, i (i)}
 									{#if s > 0}
 										<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-										<span class="seg s{i + 1}" style:width="{s}%" tabindex="0" aria-label="{scale[i]}: {lr.counts[i]}">
+										<span class="seg s{i + 1}" style:width="{s * likertFit}%" tabindex="0" aria-label="{scale[i]}: {lr.counts[i]}">
 											{#if s >= 9}<span class="seg-label">{Math.round(s)}%</span>{/if}
 											<span class="tip" role="tooltip">{scale[i]}: {lr.counts[i]} ({Math.round(s)}%)</span>
 										</span>
