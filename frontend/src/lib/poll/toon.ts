@@ -25,6 +25,14 @@ const maskUrl = (path: string) => `url("data:image/svg+xml,${encodeURIComponent(
 /** Sets the marks as CSS variables on a toon page, for controls that can't draw them. */
 export const toonVars = MARKS.map((m, i) => `--toon-${i + 1}:${m.color};--shape-${i + 1}:${maskUrl(m.path)}`).join(';');
 
+/** How many tiles to a row on a presenter's screen, by how many options there are. */
+export function tileColumns(options: number): number {
+	if (options <= 4) return 2;
+	if (options <= 9) return 3;
+	if (options <= 16) return 4;
+	return 5;
+}
+
 /** WCAG contrast of two #rrggbb colours. */
 export function contrast(a: string, b: string): number {
 	const lum = (hex: string) => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
-import { contrast, INK, MARKS, markFor, toonVars } from './toon';
+import { contrast, INK, MARKS, markFor, tileColumns, toonVars } from './toon';
 import PollResults from './PollResults.svelte';
 import ToonChoices from './ToonChoices.svelte';
 
@@ -75,5 +75,18 @@ describe('the cartoon look of polls (D-150)', () => {
 		flushSync();
 		expect(target.textContent).toContain('Waiting for answers');
 		unmount(plain);
+	});
+
+	it('puts more tiles to a row as options grow (D-153)', () => {
+		expect([2, 4, 5, 9, 10, 16, 17, 50].map(tileColumns)).toEqual([2, 2, 3, 3, 4, 4, 5, 5]);
+		const many = Array.from({ length: 10 }, (_, i) => ({ id: 'o' + i, label: 'A long option '.repeat(20) + i, n: 1 }));
+		const { target, done } = render({ options: many, big: true });
+		const tiles = target.querySelector<HTMLElement>('.tiles')!;
+		expect(target.querySelector('.toon-choices')?.classList.contains('dense')).toBe(true);
+		expect(target.querySelector('.toon-choices')?.classList.contains('tiny')).toBe(true);
+		expect(tiles.style.getPropertyValue('--cols')).toBe('4');
+		expect(target.querySelector('.opt-label')?.getAttribute('title')).toContain('A long option'); // whole, when it's cut short
+		expect(target.querySelector('.opt-label')?.textContent).toBe(many[0].label);
+		done();
 	});
 });
