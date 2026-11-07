@@ -17,6 +17,9 @@
 	import { teacherBoard } from '$lib/board/teacher';
 	import type { GroupsView } from '$lib/poll/types';
 	import PollResults from '$lib/poll/PollResults.svelte';
+	import '@fontsource-variable/fredoka';
+	import '$lib/poll/toon.css';
+	import { toonVars } from '$lib/poll/toon';
 	import { groupRanks, secondsLeft } from '$lib/poll/scoring';
 	import type { Poll, TeacherResults } from '$lib/poll/types';
 	import RichText from '$lib/richtext/RichText.svelte';
@@ -211,7 +214,13 @@
 <svelte:window onkeydown={key} />
 <svelte:head><title>{poll ? poll.title + ' · Presenting' : 'Presenting'}</title></svelte:head>
 
-<div class="stage">
+<div class="stage toon" data-theme="quiz" style={toonVars}>
+	<svg class="sky" viewBox="0 0 1200 500" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+		<path d="M120 150a45 45 0 0 1 8-89 70 70 0 0 1 132-14 58 58 0 0 1 70 56 47 47 0 0 1-8 47z" />
+		<path d="M880 110a36 36 0 0 1 6-71 56 56 0 0 1 106-11 46 46 0 0 1 56 45 38 38 0 0 1-6 37z" />
+		<path d="M1010 380a30 30 0 0 1 5-60 47 47 0 0 1 89-9 39 39 0 0 1 47 38 32 32 0 0 1-5 31z" />
+		<path d="M30 420a30 30 0 0 1 5-60 47 47 0 0 1 89-9 39 39 0 0 1 47 38 32 32 0 0 1-5 31z" />
+	</svg>
 	{#if !poll}
 		<div class="p-8"><Skeleton lines={5} /></div>
 	{:else}
@@ -231,6 +240,15 @@
 			</div>
 		{/if}
 
+		<div class="layout" class:wide={!showCode && !showBoard}>
+		{#if !showCode && !showBoard}
+			<aside class="toon-panel join-card" aria-label="How to join">
+				<strong class="side-title">Join</strong>
+				<div class="mini-qr"><QrCode text={poll.join_url} size={150} /></div>
+				<p class="mini-code tabular m-0">{poll.join_code}</p>
+				<p class="small m-0">Go to <strong>{host}/join</strong> or scan the code</p>
+			</aside>
+		{/if}
 		<main class="main">
 			{#if showCode}
 				<section class="lobby" in:flyIn>
@@ -285,21 +303,35 @@
 			{:else if q}
 				{#key q.id}
 					<section class="question" in:flyIn={{ x: 30, y: 0, duration: 260 }}>
-						<div class="flex flex-wrap items-center gap-3">
+						<div class="toon-panel q-banner">
+							<div class="flex flex-wrap items-center gap-3">
 							<p class="muted m-0 text-lg">Question {cur + 1} of {questions.length} · {TYPE_META[q.type].label}{poll.scoring && q.key ? ` · ${q.points ?? 100} points` : ''}</p>
 							{#if secs !== null && !answerShown}<span class="timer tabular" class:low={secs <= 5} role="timer"><Icon name="clock" size={22} />{secs === 0 ? "Time's up" : secs}</span>{/if}
 						</div>
 						<RichText text={q.text} format={q.body.format} blanks="line" class="q-title" />
+							</div>
 						{#if presenter && poll.show_results === 'presenter' && !poll.revealed}
 							<p class="hidden-note muted"><Icon name="eye-off" size={18} /> Results are hidden from participants. Press <kbd class="kbd kbd-sm">R</kbd> to reveal them.</p>
 						{/if}
-						<PollResults question={q} result={data?.results[q.id]} teacher big pollId={id} answerKey={answerShown || poll.status === 'closed' ? q.key : null} />
+						<PollResults question={q} result={data?.results[q.id]} teacher big toon pollId={id} answerKey={answerShown || poll.status === 'closed' ? q.key : null} />
 					</section>
 				{/key}
 			{:else}
 				<p class="muted p-8 text-center text-xl">Add questions to this poll first.</p>
 			{/if}
 		</main>
+		{#if !showCode && !showBoard && !board}
+			<aside class="toon-panel people-card" aria-label="Who's taking part">
+				<strong class="side-title">Participants ({data?.participants ?? 0})</strong>
+				{#if poll.scoring}
+					<Leaderboard ranks={data?.leaderboard ?? []} limit={8} />
+				{:else if q}
+					<p class="answers-in tabular m-0">{data?.results[q.id]?.responses ?? 0}</p>
+					<p class="small m-0">answered this question</p>
+				{/if}
+			</aside>
+		{/if}
+		</div>
 
 		<footer class="controls">
 			<button class="btn" disabled={cur === 0} onclick={() => go(cur - 1)}><Icon name="arrow-left" size={18} />Previous</button>
@@ -338,13 +370,34 @@
 </div>
 
 <style>
-	.stage { min-height: 100dvh; display: flex; flex-direction: column; background: var(--color-base-200); }
-	.bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; background: var(--color-base-100); border-bottom: 1px solid var(--color-base-300); }
+	.stage { position: relative; min-height: 100dvh; display: flex; flex-direction: column; isolation: isolate; overflow-x: clip; }
+	/* Clouds, behind everything. */
+	.sky { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+	.sky path { fill: #fff; opacity: 0.75; }
+	.bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; background: #fff; border-bottom: var(--toon-line); }
 	.join-hint { font-size: 1.05rem; }
 	@media (max-width: 720px) { .join-hint { display: none; } }
+	.layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; width: 100%; max-width: 110rem; margin: 0 auto; }
+	/* Join on the left, people on the right, as long as the question keeps its room. */
+	@media (min-width: 1180px) {
+		.layout.wide { grid-template-columns: 13rem minmax(0, 1fr) 16rem; gap: 0 0.5rem; padding: 0 1.25rem; }
+		.layout.wide .join-card { order: 0; }
+		.layout.wide .main { order: 1; }
+		.layout.wide .people-card { order: 2; }
+		.layout.wide .join-card, .layout.wide .people-card { margin: 2rem 0 0; }
+	}
+	.side-title { display: block; font-size: 1.1rem; font-weight: 650; }
+	.join-card, .people-card { display: grid; gap: 0.5rem; padding: 0.9rem; margin: 0 1.5rem 1rem; min-width: 0; }
+	.join-card { justify-items: center; text-align: center; }
+	@media (max-width: 1179px) { .join-card { display: none; } .layout .main { order: 0; } .layout .people-card { order: 1; } }
+	.mini-qr { width: 150px; max-width: 100%; }
+	.mini-code { font-size: 1.9rem; font-weight: 700; letter-spacing: 0.06em; line-height: 1.1; }
+	.answers-in { font-size: 3.5rem; font-weight: 700; line-height: 1; }
+	.q-banner { padding: 0.9rem 1.25rem; margin-bottom: 1.25rem; text-align: center; }
+	.q-banner > div { justify-content: center; }
 	.code-inline { letter-spacing: 0.08em; }
-	.main { flex: 1; width: 100%; max-width: 78rem; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
-	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.5rem; }
+	.main { flex: 1; width: 100%; min-width: 0; max-width: 78rem; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
+	.question :global(.q-title) { font-size: clamp(1.6rem, 1rem + 2.2vw, 2.75rem); font-weight: 650; line-height: 1.2; margin: 0.25rem 0 0; }
 	.boards { display: grid; gap: 2rem; }
 	@media (min-width: 1000px) { .boards { grid-template-columns: 1.4fr 1fr; } }
 	.board-view { display: grid; gap: 0.75rem; }
@@ -352,18 +405,18 @@
 	.pick { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
 	.gdot { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: inline-block; }
 	.add-box { width: min(72rem, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); }
-	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: var(--color-base-100); border: 2px solid var(--color-base-300); }
-	.timer.low { color: var(--color-error); border-color: var(--color-error); }
+	.timer { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; padding: 0.2rem 0.9rem; border-radius: 999px; background: #ffc72e; border: var(--toon-line); }
+	.timer.low { background: #ff8177; color: var(--toon-ink); }
 	.hidden-note { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }
 	.lobby { display: grid; gap: 3rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 60vh; }
 	@media (max-width: 860px) { .lobby { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
-	.qr-box { background: #fff; padding: 1rem; border-radius: 1.25rem; box-shadow: 0 12px 40px -20px rgb(0 0 0 / 40%); }
-	.big-code { font-size: clamp(3.5rem, 2rem + 6vw, 7rem); font-weight: 800; letter-spacing: 0.12em; line-height: 1.1; color: var(--color-primary); }
+	.qr-box { background: #fff; padding: 1rem; border: var(--toon-line); border-radius: 1.25rem; box-shadow: 8px 8px 0 var(--toon-ink); rotate: -2deg; }
+	.big-code { font-size: clamp(3.5rem, 2rem + 6vw, 7rem); font-weight: 700; letter-spacing: 0.08em; line-height: 1.1; color: var(--toon-ink); }
 	.controls { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; flex-wrap: wrap; justify-content: center; }
 	.dots { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; flex: 1; }
 	/* 24 px hit area (WCAG 2.5.8) around a small visible dot. */
 	.dot { width: 1.5rem; height: 1.5rem; border-radius: 999px; border: 0; background: transparent; cursor: pointer; padding: 0; display: grid; place-items: center; }
-	.dot::before { content: ''; width: 0.7rem; height: 0.7rem; border-radius: 999px; background: var(--color-field); transition: transform var(--motion-fast), background-color var(--motion-fast); }
-	.dot.on::before { background: var(--color-primary); transform: scale(1.4); }
+	.dot::before { content: ''; width: 0.75rem; height: 0.75rem; border-radius: 999px; background: #fff; border: 2px solid var(--toon-ink); transition: transform var(--motion-fast), background-color var(--motion-fast); }
+	.dot.on::before { background: #ffc72e; transform: scale(1.4); }
 	.keys { text-align: center; margin: 0 0 0.75rem; }
 </style>

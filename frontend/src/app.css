@@ -319,12 +319,13 @@ html[data-motion='reduce'] *::after {
 
 /* Square corners everywhere (D-106): every theme, daisyUI's components and
    our own. Only what must stay round to mean what it means keeps its shape:
-   radio buttons (round says "pick one"), loading spinners and status dots. */
+   radio buttons (round says "pick one"), loading spinners and status dots.
+   The polls' cartoon look (.toon, D-150) is rounded on purpose. */
 :root, [data-theme] { --radius-selector: 0; --radius-field: 0; --radius-box: 0; }
 /* Profile pictures (.round) stay round too (D-110), and so do switches (.toggle): their knob shows on or off. */
-:where(*:not(.radio, .toggle, .loading, .status, .round)),
-:where(*:not(.radio, .toggle, .loading, .status, .round))::before,
-:where(*:not(.radio, .toggle, .loading, .status, .round))::after { border-radius: 0 !important; }
+:where(*:not(.radio, .toggle, .loading, .status, .round, .toon, .toon *)),
+:where(*:not(.radio, .toggle, .loading, .status, .round, .toon, .toon *))::before,
+:where(*:not(.radio, .toggle, .loading, .status, .round, .toon, .toon *))::after { border-radius: 0 !important; }
 
 /* Sinhala and Tamil (D-109): the system's own faces, from Windows (Nirmala
    UI, Iskoola Pota, Latha), Android and Linux (Noto), and Apple's. Their

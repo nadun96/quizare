@@ -1,0 +1,78 @@
+/* The cartoon look of polls (D-150): ink outlines, flat colour and solid shadows
+   that sit under a pressed control. Everything is inside .toon; the app's other
+   pages keep their own look. The colours are set here rather than by theme, so a
+   projector shows the same bright picture whatever a teacher's settings. */
+.toon {
+	--toon-ink: #1b2148;
+	--toon-sky: #bfe6ff;
+	--toon-line: 3px solid var(--toon-ink);
+	--toon-shadow: 4px 4px 0 var(--toon-ink);
+	--color-base-100: #fff;
+	--color-base-200: #e6f4ff;
+	--color-base-300: #1b2148;
+	--color-base-content: #1b2148;
+	--color-muted: #454c76;
+	--color-field: #1b2148;
+	--color-primary: #2a5cf0;
+	--color-primary-content: #fff;
+	--color-success: #0b7a4b;
+	--color-success-content: #fff;
+	--color-warning: #8f5a00;
+	--color-error: #c5281c;
+	--border: 2px;
+	color: var(--toon-ink);
+	font-family: 'Fredoka Variable', var(--font-sans, system-ui), system-ui, sans-serif;
+	background: linear-gradient(var(--toon-sky), #e9f7ff 60%, #fff);
+}
+.toon[data-theme] { --radius-selector: 0.5rem; --radius-field: 0.7rem; --radius-box: 0.9rem; }
+.toon :is(h1, h2, h3) { font-weight: 650; }
+
+/* Panels and controls. */
+.toon :is(.card, .toon-panel) { border: var(--toon-line); border-radius: 1.1rem; box-shadow: var(--toon-shadow); background: #fff; }
+.toon .btn { border: var(--toon-line); border-radius: 0.8rem; font-weight: 600; box-shadow: 3px 3px 0 var(--toon-ink); background: #fff; color: var(--toon-ink); transition: translate 90ms, box-shadow 90ms; }
+.toon .btn:hover:not(:disabled) { background: #fff3c4; }
+.toon .btn:active:not(:disabled) { translate: 3px 3px; box-shadow: 0 0 0 var(--toon-ink); }
+.toon .btn-primary { background: #ffc72e; color: var(--toon-ink); }
+.toon .btn-primary:hover:not(:disabled) { background: #ffd65c; }
+.toon .btn-ghost { box-shadow: none; border-color: transparent; background: transparent; }
+.toon .btn:disabled { box-shadow: none; opacity: 0.45; background: #fff; color: var(--toon-ink); }
+.toon .btn[aria-pressed='true'] { background: #ffc72e; }
+.toon .badge { border: 2px solid var(--toon-ink); background: #fff; color: var(--toon-ink); font-weight: 600; }
+.toon :is(.input, .select, .textarea) { border: var(--toon-line); border-radius: 0.8rem; background: #fff; color: var(--toon-ink); }
+.toon :is(a, button, input, select, textarea, label, li):focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+
+/* A teacher's pages: tabs, tiles and stats join in. */
+.toon .tabs .tab { font-weight: 600; color: var(--toon-ink); }
+.toon .tabs .tab-active { background: #ffc72e; border: var(--toon-line); border-bottom-width: 3px; border-radius: 0.8rem 0.8rem 0 0; }
+.toon .card.interactive { transition: translate 90ms, box-shadow 90ms; }
+.toon .card.interactive:hover { translate: -2px -2px; box-shadow: 6px 6px 0 var(--toon-ink); }
+.toon .card.interactive:active { translate: 4px 4px; box-shadow: 0 0 0 var(--toon-ink); }
+.toon .type-grid .type-card { border: var(--toon-line); border-radius: 0.9rem; background: #fff; box-shadow: 3px 3px 0 var(--toon-ink); }
+.toon .type-grid .type-card:hover { border-color: var(--toon-ink); background: #fff3c4; transform: none; box-shadow: 3px 3px 0 var(--toon-ink); }
+.toon .editor .preview { border: 3px dashed var(--toon-ink); border-radius: 1rem; background: var(--color-base-200); }
+.toon .editor .scoring { border: var(--toon-line); border-radius: 0.9rem; background: #e6fbf0; }
+.toon .checkbox { border: 2.5px solid var(--toon-ink); border-radius: 0.4rem; }
+.toon fieldset { border-color: var(--toon-ink); }
+
+/* A participant's choices: each option in its colour and shape. */
+.toon .choices { gap: 0.8rem; }
+.toon .choices .choice { position: relative; gap: 0.75rem; padding: 0.9rem 1rem; border: var(--toon-line); border-radius: 1rem; background: var(--tile); color: var(--toon-ink); font-weight: 550; box-shadow: var(--toon-shadow); transition: translate 90ms, box-shadow 90ms; }
+.toon .choices .choice::before { content: ''; flex: none; width: 1.9rem; height: 1.9rem; background: var(--toon-ink); -webkit-mask: var(--mark) center / contain no-repeat; mask: var(--mark) center / contain no-repeat; }
+.toon .choices .choice:hover { border-color: var(--toon-ink); filter: brightness(1.05); }
+.toon .choices .choice:active { transform: none; translate: 4px 4px; box-shadow: 0 0 0 var(--toon-ink); }
+.toon .choices .choice.on { border-color: var(--toon-ink); background: var(--tile); translate: 4px 4px; box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--toon-ink); }
+.toon .choices .choice .letter { border: 2.5px solid var(--toon-ink); background: #fff; color: var(--toon-ink); order: 3; }
+.toon .choices .choice.on .letter { background: var(--toon-ink); color: #fff; }
+.toon .choices .choice:has(input:disabled) { opacity: 1; box-shadow: none; }
+.toon .choices .choice:nth-child(8n + 1) { --tile: var(--toon-1); --mark: var(--shape-1); }
+.toon .choices .choice:nth-child(8n + 2) { --tile: var(--toon-2); --mark: var(--shape-2); }
+.toon .choices .choice:nth-child(8n + 3) { --tile: var(--toon-3); --mark: var(--shape-3); }
+.toon .choices .choice:nth-child(8n + 4) { --tile: var(--toon-4); --mark: var(--shape-4); }
+.toon .choices .choice:nth-child(8n + 5) { --tile: var(--toon-5); --mark: var(--shape-5); }
+.toon .choices .choice:nth-child(8n + 6) { --tile: var(--toon-6); --mark: var(--shape-6); }
+.toon .choices .choice:nth-child(8n + 7) { --tile: var(--toon-7); --mark: var(--shape-7); }
+.toon .choices .choice:nth-child(8n + 8) { --tile: var(--toon-8); --mark: var(--shape-8); }
+
+@media (prefers-reduced-motion: reduce) {
+	.toon .btn, .toon .choices .choice { transition: none; }
+}

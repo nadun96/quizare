@@ -7,6 +7,7 @@
 	import { onDestroy } from 'svelte';
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
+	import ToonPage from '$lib/poll/ToonPage.svelte';
 	import QrCode from '$lib/QrCode.svelte';
 	import { IDENTITY_LABEL, RESULTS_LABEL, TYPE_META } from '$lib/poll/meta';
 	import PollQuestionEditor from '$lib/poll/PollQuestionEditor.svelte';
@@ -141,6 +142,7 @@
 	const answered = $derived(results ? Object.values(results.results).reduce((s, r) => s + r.responses, 0) : 0);
 </script>
 
+<ToonPage>
 <div class="page-container vstack">
 	{#if !poll || !settings}
 		<Skeleton lines={5} />
@@ -231,7 +233,7 @@
 				<section class="card card-border bg-base-100 p-4 shadow-sm sm:p-6">
 					<p class="small muted m-0">Question {i + 1} · {TYPE_META[q.type].label}</p>
 					<RichText text={q.text} format={q.body.format} blanks="chip" class="mb-3 font-semibold" />
-					<PollResults question={q} result={results?.results[q.id]} teacher pollId={id} onmoderate={moderate} />
+					<PollResults question={q} result={results?.results[q.id]} teacher toon pollId={id} onmoderate={moderate} />
 					<AnswerList pollId={id} questionId={q.id} onmoderate={moderate} />
 				</section>
 			{:else}
@@ -277,6 +279,7 @@
 		{/if}
 	{/if}
 </div>
+</ToonPage>
 
 <style>
 	.lb-grid { display: grid; gap: 1.5rem; }
