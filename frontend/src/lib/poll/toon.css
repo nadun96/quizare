@@ -41,6 +41,19 @@
 .toon :is(.input, .select, .textarea) { border: var(--toon-line); border-radius: 0.8rem; background: #fff; color: var(--toon-ink); }
 .toon :is(a, button, input, select, textarea, label, li):focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 
+/* A teacher's pages: tabs, tiles and stats join in. */
+.toon .tabs .tab { font-weight: 600; color: var(--toon-ink); }
+.toon .tabs .tab-active { background: #ffc72e; border: var(--toon-line); border-bottom-width: 3px; border-radius: 0.8rem 0.8rem 0 0; }
+.toon .card.interactive { transition: translate 90ms, box-shadow 90ms; }
+.toon .card.interactive:hover { translate: -2px -2px; box-shadow: 6px 6px 0 var(--toon-ink); }
+.toon .card.interactive:active { translate: 4px 4px; box-shadow: 0 0 0 var(--toon-ink); }
+.toon .type-grid .type-card { border: var(--toon-line); border-radius: 0.9rem; background: #fff; box-shadow: 3px 3px 0 var(--toon-ink); }
+.toon .type-grid .type-card:hover { border-color: var(--toon-ink); background: #fff3c4; transform: none; box-shadow: 3px 3px 0 var(--toon-ink); }
+.toon .editor .preview { border: 3px dashed var(--toon-ink); border-radius: 1rem; background: var(--color-base-200); }
+.toon .editor .scoring { border: var(--toon-line); border-radius: 0.9rem; background: #e6fbf0; }
+.toon .checkbox { border: 2.5px solid var(--toon-ink); border-radius: 0.4rem; }
+.toon fieldset { border-color: var(--toon-ink); }
+
 /* A participant's choices: each option in its colour and shape. */
 .toon .choices { gap: 0.8rem; }
 .toon .choices .choice { position: relative; gap: 0.75rem; padding: 0.9rem 1rem; border: var(--toon-line); border-radius: 1rem; background: var(--tile); color: var(--toon-ink); font-weight: 550; box-shadow: var(--toon-shadow); transition: translate 90ms, box-shadow 90ms; }
