@@ -9,6 +9,9 @@
 	import { pollClient } from '$lib/poll/client';
 	import { hasAnswer } from '$lib/poll/meta';
 	import PollInput from '$lib/poll/PollInput.svelte';
+	import '@fontsource-variable/fredoka';
+	import '$lib/poll/toon.css';
+	import { toonVars } from '$lib/poll/toon';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
 	import Whiteboard from '$lib/board/Whiteboard.svelte';
 	import { BoardState, type BoardEvent } from '$lib/board/strokes.svelte';
@@ -214,7 +217,7 @@
 
 <svelte:head>{#if !compact}<title>{v ? v.title : 'Poll'} · Classroom Quiz</title>{/if}</svelte:head>
 
-<div class="poll-page" class:compact>
+<div class="poll-page" class:compact class:toon={!compact} data-theme={compact ? undefined : 'quiz'} style={compact ? undefined : toonVars}>
 	{#if notFound}
 		<div class="narrow"><div class="card card-border bg-base-100"><EmptyState icon="alert" title="No poll with that code">Check the code with your presenter, or <a href="/join">enter it again</a>.</EmptyState></div></div>
 	{:else if notOpen}
@@ -341,7 +344,7 @@
 					{#if result}
 						<div class="results-box" in:flyIn>
 							<p class="small font-semibold m-0 mb-2 flex items-center gap-1"><Icon name="chart" size={14} />Results so far</p>
-							<PollResults question={q} {result} />
+							<PollResults question={q} {result} toon={!compact} />
 						</div>
 					{/if}
 				</section>
@@ -383,6 +386,7 @@
 
 <style>
 	.poll-page { min-height: 70vh; }
+	.poll-page.toon { min-height: calc(100dvh - 4rem); }
 	/* Beside a tutoring session's broadcast (D-86): no page furniture. */
 	.poll-page.compact { min-height: 0; }
 	.compact .poll-bar { position: static; backdrop-filter: none; }
