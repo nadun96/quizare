@@ -451,3 +451,63 @@ func TestReportFinalMarkIsExact(t *testing.T) {
 		t.Fatalf("group mark %+v", g)
 	}
 }
+
+// D-156: a report can also show violations, attendance and dates.
+func TestReportExtras(t *testing.T) {
+	f := newReportFx(t)
+	q := f.quiz(t, "One")
+	other := f.quiz(t, "Two")
+	s := f.student(t)
+	attempt := f.take(t, s, q, 2)
+	f.take(t, s, other, 2)
+	if _, err := f.e.Pool.Exec(context.Background(), `UPDATE live.attempts SET violations = 3 WHERE id = $1`, attempt); err != nil {
+		t.Fatal(err)
+	}
+	url := "/api/teacher/classrooms/" + f.class.ID + "/class-report"
+	var r grading.ClassReport
+	f.teacher.Call("GET", url, nil, 200, &r)
+	if r.Options != (grading.ReportOptions{}) {
+		t.Fatalf("on by default: %+v", r.Options)
+	}
+	if r.Items[0].Date.IsZero() {
+		t.Fatalf("no date: %+v", r.Items[0])
+	}
+	st := r.Students[0]
+	if st.ViolationsTotal != 3 || st.Violations["quiz:"+q] != 3 {
+		t.Fatalf("violations: %+v", st)
+	}
+
+	// Saved, and left alone by a setup that doesn't mention them.
+	in := setupFor(r, func(*grading.ReportItemInput) {})
+	in.Options = &grading.ReportOptions{Violations: true, Dates: true}
+	r = grading.ClassReport{}
+	f.teacher.Call("PUT", url, in, 200, &r)
+	if !r.Options.Violations || !r.Options.Dates || r.Options.Attendance {
+		t.Fatalf("saved: %+v", r.Options)
+	}
+	in.Options = nil
+	r = grading.ClassReport{}
+	f.teacher.Call("PUT", url, in, 200, &r)
+	if !r.Options.Violations {
+		t.Fatalf("lost: %+v", r.Options)
+	}
+
+	// A quiz left out of the report takes its violations with it.
+	in = setupFor(r, func(x *grading.ReportItemInput) { x.Included = x.ID != q })
+	r = grading.ClassReport{}
+	f.teacher.Call("PUT", url, in, 200, &r)
+	if r.Students[0].ViolationsTotal != 0 {
+		t.Fatalf("left out, still counted: %+v", r.Students[0])
+	}
+
+	// An attempt thrown out still shows its violations.
+	if _, err := f.e.Pool.Exec(context.Background(), `UPDATE eval.results SET invalidated = true WHERE attempt_id = $1`, attempt); err != nil {
+		t.Fatal(err)
+	}
+	in = setupFor(r, func(x *grading.ReportItemInput) { x.Included = true })
+	r = grading.ClassReport{}
+	f.teacher.Call("PUT", url, in, 200, &r)
+	if m := r.Students[0]; m.Violations["quiz:"+q] != 3 {
+		t.Fatalf("thrown out: %+v", m)
+	}
+}

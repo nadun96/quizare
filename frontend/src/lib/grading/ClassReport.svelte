@@ -6,6 +6,9 @@
 	import Icon from '../ui/Icon.svelte';
 	import Skeleton from '../ui/Skeleton.svelte';
 	import { toast } from '../ui/toast.svelte';
+	import { TutorClient, tutoringConfig } from '../tutoring/client';
+	import type { ClassroomReport as TutorReport } from '../tutoring/types';
+	import { mergeTutoring, summarise, type Attendance, type AttendanceSummary } from './grading';
 	import { saveFile } from '../tutoring/types';
 	import GroupsEditor from './GroupsEditor.svelte';
 	import ReportControls from './ReportControls.svelte';
@@ -13,7 +16,7 @@
 	import ReportTh from './ReportTh.svelte';
 	import { bandOptions, inBand, matches, newView, numberSheet, shownNote, sortRows, type ViewCol } from './reportView';
 	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
-	import { classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, markTone, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type GroupRow, type ReportStudent, type Unit } from './classReport';
+	import { ATTENDANCE_SPAN, attendanceText, dateText, optionsOf, violationsText, classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, markTone, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type GroupRow, type ReportStudent, type Unit } from './classReport';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
 	let rep = $state<ClassReport | null>(null);
@@ -60,6 +63,32 @@
 			saving = false;
 		}
 	}
+	// What else it shows (D-156). Attendance comes from the Attendance report's figures,
+	// so the two agree; it's fetched only when asked for.
+	const options = $derived(rep ? optionsOf(rep) : null);
+	let attendance = $state<Map<string, AttendanceSummary> | null>(null);
+	$effect(() => {
+		if (!options?.attendance) {
+			attendance = null;
+			return;
+		}
+		loadAttendance(classroomId);
+	});
+	async function loadAttendance(id: string) {
+		const to = new Date(Date.now() + 864e5);
+		const from = new Date(to.getTime() - 365 * 864e5);
+		const day = (d: Date) => d.toISOString().slice(0, 10);
+		try {
+			const a = await api.get<Attendance>(`/api/teacher/classrooms/${id}/attendance?from=${day(from)}&to=${day(to)}`);
+			const tutoring = (await tutoringConfig()).enabled
+				? await new TutorClient().get<TutorReport>(`/api/classrooms/${id}/attendance?from=${from.toISOString()}&to=${to.toISOString()}`).catch(() => null)
+				: null;
+			attendance = new Map(summarise(mergeTutoring(a, tutoring)).map((s) => [s.user_id, s]));
+		} catch {
+			toast('The attendance didn’t load', 'error');
+		}
+	}
+
 	// Search, filter and sort (D-154). The class figures below stay the whole class's.
 	let peopleView = $state(newView());
 	let groupsView = $state(newView('group'));
@@ -68,7 +97,9 @@
 		{ key: 'id', label: 'Student ID', value: (s) => s.student_number },
 		...cols.map((it) => ({ key: itemKey(it), label: it.title, value: (s: ReportStudent) => s.marks[itemKey(it)]?.pct, numeric: true })),
 		{ key: 'total', label: 'Total', value: (s) => s.total, numeric: true },
-		{ key: 'final', label: 'Final', value: (s) => s.final, numeric: true }
+		{ key: 'final', label: 'Final', value: (s) => s.final, numeric: true },
+		...(options?.violations ? [{ key: 'violations', label: 'Violations', value: (s: ReportStudent) => s.violations_total ?? 0, numeric: true }] : []),
+		...(attendance ? [{ key: 'attendance', label: 'Attendance', value: (s: ReportStudent) => attendance?.get(s.user_id)?.rate, numeric: true }] : [])
 	]);
 	const groupCols = $derived<ViewCol<GroupRow>[]>([
 		{ key: 'group', label: 'Group', value: (g) => g.name },
@@ -76,7 +107,7 @@
 		{ key: 'total', label: 'Total', value: (g) => g.total, numeric: true },
 		{ key: 'final', label: 'Final', value: (g) => g.final, numeric: true }
 	]);
-	const peopleShow = $derived([...bandOptions(bands, 'Final'), { v: 'missing', label: 'Has work missing' }]);
+	const peopleShow = $derived([...bandOptions(bands, 'Final'), { v: 'missing', label: 'Has work missing' }, ...(options?.violations ? [{ v: 'violations', label: 'Has violations' }] : [])]);
 	const shownStudents = $derived.by(() => {
 		if (!rep) return [];
 		const r = rep;
@@ -84,7 +115,7 @@
 		const kept = r.students.filter((s) =>
 			matches(`${s.name} ${s.student_number ?? ''}`, peopleView.q) &&
 			(!inGroup || inGroup.has(s.user_id)) &&
-			(!peopleView.show || (peopleView.show === 'missing' ? cols.some((it) => !s.marks[itemKey(it)]) : inBand(s.final, peopleView.show, bands))));
+			(!peopleView.show || (peopleView.show === 'missing' ? cols.some((it) => !s.marks[itemKey(it)]) : peopleView.show === 'violations' ? (s.violations_total ?? 0) > 0 : inBand(s.final, peopleView.show, bands))));
 		return sortRows(kept, peopleCols, peopleView.sort, peopleView.dir);
 	});
 	const groupMatch = (g: GroupRow) => !!rep && matches(`${g.name} ${memberNames(rep, g)}`, groupsView.q);
@@ -100,13 +131,13 @@
 	function csv() {
 		if (!rep || !groupsRep) return;
 		if (view === 'groups') saveFile(`${classroomName} group marks.csv`, groupsCSV(groupsRep));
-		else saveFile(`${classroomName} class report.csv`, classReportCSV(rep, shownStudents));
+		else saveFile(`${classroomName} class report.csv`, classReportCSV(rep, shownStudents, attendance));
 	}
 	const noted = (heading: string | undefined, note: string) => (note ? `${heading ?? ''}. ${note}` : heading);
 	const sheets = () => {
 		if (!rep || !groupsRep) return [];
 		if (view === 'groups') return groupSheets(groupsRep, bands).map((s, i) => (i === 0 && rep?.class_groups.length ? { ...s, heading: noted(s.heading, groupsNote) } : s));
-		const sheet = individualSheet({ ...rep, students: shownStudents }, bands);
+		const sheet = individualSheet({ ...rep, students: shownStudents }, bands, attendance);
 		return [{ ...sheet, heading: noted(sheet.heading, peopleNote) }];
 	};
 	function addException() {
@@ -172,6 +203,13 @@
 					A review time runs from when a student gets their results. When it ends the score stays and the question detail closes; blank means no limit.
 				</p>
 
+				<fieldset class="flex flex-wrap items-center gap-x-5 gap-y-2 small">
+					<legend class="mb-1 font-semibold">Also show in the report</legend>
+					<label class="flex items-center gap-2 font-normal"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={draft.options.dates} />Date of each item</label>
+					<label class="flex items-center gap-2 font-normal"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={draft.options.violations} />Violations</label>
+					<label class="flex items-center gap-2 font-normal"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={draft.options.attendance} />Attendance ({ATTENDANCE_SPAN})</label>
+				</fieldset>
+
 				<h3 class="m-0 text-sm">Exceptions for one student</h3>
 				{#if draft.exceptions.length}
 					<ul class="vstack gap-2 list-none m-0 p-0">
@@ -218,7 +256,7 @@
 					<h2 class="m-0 text-base">By class group</h2>
 					<div class="card card-border bg-base-100 overflow-x-auto">
 						<table class="table table-sm">
-							<thead><tr><th>No.</th><ReportTh bind:view={groupsView} cols={groupCols} col="group" label="Group" />{#each cols as it (itemKey(it))}<ReportTh bind:view={groupsView} cols={groupCols} col={itemKey(it)} label={it.title} class="min-w-32"><span class="font-normal text-xs muted normal-case">{weightText(it)} · {it.group_rule}</span></ReportTh>{/each}<ReportTh bind:view={groupsView} cols={groupCols} col="total" label="Total" /><ReportTh bind:view={groupsView} cols={groupCols} col="final" label="Final" /></tr></thead>
+							<thead><tr><th>No.</th><ReportTh bind:view={groupsView} cols={groupCols} col="group" label="Group" />{#each cols as it (itemKey(it))}<ReportTh bind:view={groupsView} cols={groupCols} col={itemKey(it)} label={it.title} class="min-w-32"><span class="font-normal text-xs muted normal-case">{weightText(it)} · {it.group_rule}{#if options?.dates && it.date}<br />{dateText(it)}{/if}</span></ReportTh>{/each}<ReportTh bind:view={groupsView} cols={groupCols} col="total" label="Total" /><ReportTh bind:view={groupsView} cols={groupCols} col="final" label="Final" /></tr></thead>
 							<tbody>
 								{#each shownGroups as g, n (g.id)}
 									<tr>
@@ -259,9 +297,11 @@
 							<th>No.</th>
 							<ReportTh bind:view={peopleView} cols={peopleCols} col="student" label="Student" />
 							{#each cols as it (itemKey(it))}
-								<ReportTh bind:view={peopleView} cols={peopleCols} col={itemKey(it)} label={it.title} class="min-w-32"><span class="font-normal text-xs muted normal-case">{weightText(it)}{#if it.kind === 'quiz'}{' · '}{it.pick === 'low' ? 'lowest' : 'highest'}{/if}</span></ReportTh>
+								<ReportTh bind:view={peopleView} cols={peopleCols} col={itemKey(it)} label={it.title} class="min-w-32"><span class="font-normal text-xs muted normal-case">{weightText(it)}{#if it.kind === 'quiz'}{' · '}{it.pick === 'low' ? 'lowest' : 'highest'}{/if}{#if options?.dates && it.date}<br />{dateText(it)}{/if}</span></ReportTh>
 							{/each}
 							<ReportTh bind:view={peopleView} cols={peopleCols} col="total" label="Total" /><ReportTh bind:view={peopleView} cols={peopleCols} col="final" label="Final" />
+							{#if options?.violations}<ReportTh bind:view={peopleView} cols={peopleCols} col="violations" label="Violations" />{/if}
+							{#if attendance}<ReportTh bind:view={peopleView} cols={peopleCols} col="attendance" label="Attendance"><span class="font-normal text-xs muted normal-case">{ATTENDANCE_SPAN}</span></ReportTh>{/if}
 						</tr>
 					</thead>
 					<tbody>
@@ -279,19 +319,22 @@
 											{#if m.pending}<br /><span class="text-xs text-warning">still being marked</span>{/if}
 										{:else if it.weight > 0}<span class="text-xs text-warning">Missing: counts 0</span>
 										{:else}<span class="muted">—</span>{/if}
+										{#if options?.violations && s.violations?.[itemKey(it)]}<br /><span class="text-xs text-error"><Icon name="flag" size={11} /> {violationsText(s.violations[itemKey(it)])}</span>{/if}
 									</td>
 								{/each}
 								<td class="tabular whitespace-nowrap font-semibold">{s.total} / {rep.out_of}</td>
 								<td class="tabular font-semibold" use:toned={toneFor(s.final, bands)}>{s.final == null ? '—' : `${s.final}%`}</td>
+								{#if options?.violations}<td class="tabular" class:text-error={!!s.violations_total}>{s.violations_total ?? 0}</td>{/if}
+								{#if attendance}<td class="tabular whitespace-nowrap" use:toned={toneFor(attendance.get(s.user_id)?.rate, bands)}>{attendanceText(attendance.get(s.user_id))}</td>{/if}
 							</tr>
 						{:else}
-							<tr><td colspan={cols.length + 4} class="muted">{rep.students.length ? 'Nobody matches. Clear the filters to see everyone.' : 'No students are active in this classroom yet.'}</td></tr>
+							<tr><td colspan={cols.length + 4 + (options?.violations ? 1 : 0) + (attendance ? 1 : 0)} class="muted">{rep.students.length ? 'Nobody matches. Clear the filters to see everyone.' : 'No students are active in this classroom yet.'}</td></tr>
 						{/each}
 					</tbody>
 					<tfoot>
-						<tr><td></td><th>Class average</th>{#each cols as it (itemKey(it))}<td class="tabular">{it.avg == null ? '—' : `${it.avg}%`}</td>{/each}<td></td><td class="tabular">{range?.avg == null ? '—' : `${range.avg}%`}</td></tr>
-						<tr><td></td><th>Highest</th>{#each cols as it (itemKey(it))}<td class="tabular">{it.high == null ? '—' : `${it.high}%`}</td>{/each}<td></td><td class="tabular">{range?.high == null ? '—' : `${range.high}%`}</td></tr>
-						<tr><td></td><th>Lowest</th>{#each cols as it (itemKey(it))}<td class="tabular">{it.low == null ? '—' : `${it.low}%`}</td>{/each}<td></td><td class="tabular">{range?.low == null ? '—' : `${range.low}%`}</td></tr>
+						<tr><td></td><th>Class average</th>{#each cols as it (itemKey(it))}<td class="tabular">{it.avg == null ? '—' : `${it.avg}%`}</td>{/each}<td></td><td class="tabular">{range?.avg == null ? '—' : `${range.avg}%`}</td>{#if options?.violations}<td></td>{/if}{#if attendance}<td></td>{/if}</tr>
+						<tr><td></td><th>Highest</th>{#each cols as it (itemKey(it))}<td class="tabular">{it.high == null ? '—' : `${it.high}%`}</td>{/each}<td></td><td class="tabular">{range?.high == null ? '—' : `${range.high}%`}</td>{#if options?.violations}<td></td>{/if}{#if attendance}<td></td>{/if}</tr>
+						<tr><td></td><th>Lowest</th>{#each cols as it (itemKey(it))}<td class="tabular">{it.low == null ? '—' : `${it.low}%`}</td>{/each}<td></td><td class="tabular">{range?.low == null ? '—' : `${range.low}%`}</td>{#if options?.violations}<td></td>{/if}{#if attendance}<td></td>{/if}</tr>
 					</tfoot>
 				</table>
 			</div>
