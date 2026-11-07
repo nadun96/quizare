@@ -139,6 +139,7 @@
 		if (i !== cur) showKey = false;
 		if (!presenter) {
 			index = i;
+			shownId = questions[i].id; // moved on purpose, so the check for inserted questions leaves it
 			return;
 		}
 		try {
@@ -386,12 +387,25 @@
 		.layout.wide .people-card { order: 2; }
 		.layout.wide .join-card, .layout.wide .people-card { margin: 2rem 0 0; }
 	}
+	/* A presenter's screen: exactly the window, with nothing to scroll for a choice
+	   question. What's still too tall, such as a long list of answers, scrolls in the middle. */
+	@media (min-width: 1180px) and (min-height: 620px) {
+		.stage { height: 100dvh; overflow: clip; }
+		.layout { min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+		.main { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding-top: 1.25rem; padding-bottom: 0.5rem; }
+		.question { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+		.q-banner { flex: none; margin-bottom: 0.6rem; padding: 0.6rem 1.25rem; }
+		.question :global(.q-title) { font-size: clamp(1.4rem, 0.8rem + 1.6vw, 2.5rem); }
+		.layout.wide .join-card, .layout.wide .people-card { margin-top: 1.25rem; align-self: start; max-height: calc(100% - 2rem); overflow-y: auto; }
+		.controls { padding-block: 0.5rem; }
+		.keys { margin-bottom: 0.4rem; }
+	}
 	.side-title { display: block; font-size: 1.1rem; font-weight: 650; }
 	.join-card, .people-card { display: grid; gap: 0.5rem; padding: 0.9rem; margin: 0 1.5rem 1rem; min-width: 0; }
 	.join-card { justify-items: center; text-align: center; }
 	@media (max-width: 1179px) { .join-card { display: none; } .layout .main { order: 0; } .layout .people-card { order: 1; } }
 	.mini-qr { width: 150px; max-width: 100%; }
-	.mini-code { font-size: 1.9rem; font-weight: 700; letter-spacing: 0.06em; line-height: 1.1; }
+	.mini-code { font-size: 1.9rem; font-weight: 700; letter-spacing: 0.08em; font-kerning: none; line-height: 1.1; }
 	.answers-in { font-size: 3.5rem; font-weight: 700; line-height: 1; }
 	.q-banner { padding: 0.9rem 1.25rem; margin-bottom: 1.25rem; text-align: center; }
 	.q-banner > div { justify-content: center; }
@@ -411,7 +425,7 @@
 	.lobby { display: grid; gap: 3rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 60vh; }
 	@media (max-width: 860px) { .lobby { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
 	.qr-box { background: #fff; padding: 1rem; border: var(--toon-line); border-radius: 1.25rem; box-shadow: 8px 8px 0 var(--toon-ink); rotate: -2deg; }
-	.big-code { font-size: clamp(3.5rem, 2rem + 6vw, 7rem); font-weight: 700; letter-spacing: 0.08em; line-height: 1.1; color: var(--toon-ink); }
+	.big-code { font-size: clamp(3.5rem, 2rem + 6vw, 7rem); font-weight: 700; letter-spacing: 0.1em; font-kerning: none; line-height: 1.1; color: var(--toon-ink); }
 	.controls { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; flex-wrap: wrap; justify-content: center; }
 	.dots { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; flex: 1; }
 	/* 24 px hit area (WCAG 2.5.8) around a small visible dot. */

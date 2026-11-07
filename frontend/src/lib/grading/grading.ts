@@ -2,6 +2,7 @@
 // /api/teacher/classrooms/{id}/gradebook and /attendance, tutoring sessions
 // merged in, and the reports built from them (CSV, and a printable page).
 import type { ClassroomReport } from '../tutoring/types';
+import { numberCSV } from './reportView';
 import { toCSV } from '../tutoring/types';
 
 export type Item = { kind: 'quiz' | 'tutorial'; id: string; title: string; topic: string; topic_id?: string; module_id?: string; module?: string; weight: number | null; taken: number; avg: number | null; high?: number | null; low?: number | null; max_marks?: number };
@@ -77,7 +78,7 @@ export function summarise(a: Attendance): AttendanceSummary[] {
 const dateOf = (iso: string) => iso.slice(0, 10);
 
 /** The results report: each item's mark and points, the average, the weighted total and the final result. */
-export function gradebookCSV(g: Gradebook, att?: Map<string, AttendanceSummary>): string {
+export function gradebookCSV(g: Gradebook, att?: Map<string, AttendanceSummary>, students: GradeStudent[] = g.students): string {
 	const weighted = g.items.filter((i) => i.weight);
 	const head = ['Student', 'Student ID'];
 	for (const it of g.items) {
@@ -88,7 +89,7 @@ export function gradebookCSV(g: Gradebook, att?: Map<string, AttendanceSummary>)
 	if (weighted.length) head.push('Weighted total', `Out of`, 'Final (%)', 'Weighted items missed');
 	if (att) head.push('Sessions attended', 'Sessions', 'Attendance (%)');
 	const rows: (string | number)[][] = [head];
-	for (const s of g.students) {
+	for (const s of students) {
 		const row: (string | number)[] = [s.name, s.student_number ?? ''];
 		for (const it of g.items) {
 			const m = s.marks[key(it)];
@@ -113,29 +114,31 @@ export function gradebookCSV(g: Gradebook, att?: Map<string, AttendanceSummary>)
 	rows.push(['Out of (marks)', '', ...per((it) => it.max_marks ?? '')]);
 	rows.push(['Students with a mark', '', ...g.items.flatMap((it) => (it.weight ? [it.taken, ''] : [it.taken]))]);
 	if (weighted.length) rows.push(['Weight (% of the final result)', '', ...g.items.flatMap((it) => (it.weight ? [it.weight, ''] : ['not counted']))]);
-	return toCSV(rows);
+	return toCSV(numberCSV(rows, students.length));
 }
 
 /** The attendance summary: per student, by kind and in all. */
-export function attendanceSummaryCSV(a: Attendance): string {
+export function attendanceSummaryCSV(a: Attendance, summaries: AttendanceSummary[] = summarise(a)): string {
 	const rows: (string | number)[][] = [['Student', 'Student ID', 'Quiz sessions', 'Meetings', 'Tutoring sessions', 'Attended', 'Of', 'Attendance (%)', 'Minutes (meetings, tutoring)']];
-	for (const s of summarise(a)) {
+	for (const s of summaries) {
 		const f = (k: Event['kind']) => (s.byKind[k].of ? `${s.byKind[k].came}/${s.byKind[k].of}` : '');
 		rows.push([s.name, s.number, f('quiz'), f('meeting'), f('tutoring'), s.came, s.of, s.rate ?? '', s.minutes]);
 	}
-	return toCSV(rows);
+	return toCSV(numberCSV(rows, summaries.length));
 }
 
 /** Every session as a column: present or absent, with meeting minutes. */
-export function attendanceDetailCSV(a: Attendance): string {
+export function attendanceDetailCSV(a: Attendance, order: string[] = a.students.map((s) => s.user_id)): string {
 	const head = ['Student', 'Student ID', ...a.events.map((e) => `${KIND[e.kind]}: ${e.title} (${dateOf(e.at)})`)];
 	const rows: (string | number)[][] = [head];
-	for (const s of a.students) {
+	const byId = new Map(a.students.map((s) => [s.user_id, s]));
+	const listed = order.flatMap((id) => byId.get(id) ?? []);
+	for (const s of listed) {
 		const came = new Set(s.attended);
 		rows.push([s.name, s.student_number ?? '', ...a.events.map((e) => (came.has(e.id) ? (s.minutes[e.id] != null ? `present (${Math.round(s.minutes[e.id])} min)` : 'present') : 'absent'))]);
 	}
 	rows.push(['Present', '', ...a.events.map((e) => a.students.filter((s) => s.attended.includes(e.id)).length)]);
-	return toCSV(rows);
+	return toCSV(numberCSV(rows, listed.length));
 }
 
 const esc = (s: string | number) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);

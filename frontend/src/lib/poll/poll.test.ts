@@ -155,6 +155,16 @@ describe('results', () => {
 		expect(v.target.querySelectorAll('.seg').length).toBe(2);
 		v.done();
 	});
+	test('a likert bar that leans one way stays inside its space (D-152)', () => {
+		const lq = q('LIKERT');
+		// All disagree: left of neutral is everything, so the bar takes half the width, up to the centre.
+		const v = results(lq, { question_id: lq.id, type: 'LIKERT', responses: 4, grid: { row1: { '1': 4 } }, row_means: { row1: 1 } });
+		const bar = v.target.querySelector<HTMLElement>('.lk-bar')!;
+		expect(parseFloat(bar.style.marginLeft)).toBeGreaterThanOrEqual(0);
+		expect(parseFloat(v.target.querySelector<HTMLElement>('.seg')!.style.width)).toBe(50);
+		expect(v.target.querySelector('.seg-label')?.textContent).toBe('100%'); // the figure stays true
+		v.done();
+	});
 	test('participants never see the file list', () => {
 		const fq = q('FILE');
 		const r: PollResult = { question_id: fq.id, type: 'FILE', responses: 1, files: [{ participant_id: 'x', file: { id: 'f', name: 'a.png', size: 10, content_type: 'image/png' }, at: 1 }] };
