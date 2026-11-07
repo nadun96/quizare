@@ -130,7 +130,9 @@ function run() {
 		const head = rows.shift();
 		const known = new Set(all);
 		const bad = [];
-		const places = (s) => [...s.matchAll(/\{\d+\}|%[sdv]/g)].map((x) => x[0]).sort().join();
+		const places = (s) => new Set(s.match(/\{\d+\}|%[sdv]/g) ?? []);
+		// A placeholder right after a letter only adds an English plural ending, so it may go.
+		const needed = (s) => [...places(s)].filter((p) => !new RegExp('[A-Za-z]' + p.replace(/[{}]/g, '\\$&')).test(s));
 		for (let c = 1; c < head.length; c++) {
 			const loc = head[c].trim();
 			if (!LOCALES.includes(loc)) continue;
@@ -138,8 +140,9 @@ function run() {
 			for (const r of rows) {
 				const [en, v] = [r[0], r[c]];
 				if (!en || !v || !known.has(en)) continue;
-				if (places(en) !== places(v)) {
-					bad.push(`${loc}: "${en}" must keep ${places(en)}`);
+				const has = places(v);
+				if (needed(en).some((p) => !has.has(p)) || [...has].some((p) => !places(en).has(p))) {
+					bad.push(`${loc}: "${en}" must keep ${needed(en).join(' ')}`);
 					continue;
 				}
 				d[en] = v;
