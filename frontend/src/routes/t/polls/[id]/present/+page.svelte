@@ -139,6 +139,7 @@
 		if (i !== cur) showKey = false;
 		if (!presenter) {
 			index = i;
+			shownId = questions[i].id; // moved on purpose, so the check for inserted questions leaves it
 			return;
 		}
 		try {
@@ -391,7 +392,7 @@
 	.join-card { justify-items: center; text-align: center; }
 	@media (max-width: 1179px) { .join-card { display: none; } .layout .main { order: 0; } .layout .people-card { order: 1; } }
 	.mini-qr { width: 150px; max-width: 100%; }
-	.mini-code { font-size: 1.9rem; font-weight: 700; letter-spacing: 0.06em; line-height: 1.1; }
+	.mini-code { font-size: 1.9rem; font-weight: 700; letter-spacing: 0.08em; font-kerning: none; line-height: 1.1; }
 	.answers-in { font-size: 3.5rem; font-weight: 700; line-height: 1; }
 	.q-banner { padding: 0.9rem 1.25rem; margin-bottom: 1.25rem; text-align: center; }
 	.q-banner > div { justify-content: center; }
@@ -411,7 +412,7 @@
 	.lobby { display: grid; gap: 3rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 60vh; }
 	@media (max-width: 860px) { .lobby { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
 	.qr-box { background: #fff; padding: 1rem; border: var(--toon-line); border-radius: 1.25rem; box-shadow: 8px 8px 0 var(--toon-ink); rotate: -2deg; }
-	.big-code { font-size: clamp(3.5rem, 2rem + 6vw, 7rem); font-weight: 700; letter-spacing: 0.08em; line-height: 1.1; color: var(--toon-ink); }
+	.big-code { font-size: clamp(3.5rem, 2rem + 6vw, 7rem); font-weight: 700; letter-spacing: 0.1em; font-kerning: none; line-height: 1.1; color: var(--toon-ink); }
 	.controls { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; flex-wrap: wrap; justify-content: center; }
 	.dots { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; flex: 1; }
 	/* 24 px hit area (WCAG 2.5.8) around a small visible dot. */

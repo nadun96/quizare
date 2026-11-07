@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { contrast, INK, MARKS, markFor, toonVars } from './toon';
+import PollResults from './PollResults.svelte';
 import ToonChoices from './ToonChoices.svelte';
 
 describe('the cartoon look of polls (D-150)', () => {
@@ -60,5 +61,19 @@ describe('the cartoon look of polls (D-150)', () => {
 		const { target, done } = render({ responses: 0, options: [{ id: 'a', label: 'Cells', n: 0 }] });
 		expect(target.querySelector('.share')?.textContent).toContain('0%');
 		done();
+	});
+
+	it('shows a choice question’s options before anyone answers', () => {
+		const question = { id: 'q', type: 'SINGLE', text: 'Which?', body: { options: [{ id: 'a', text: 'Cells' }, { id: 'b', text: 'Atoms' }] } };
+		const target = document.createElement('div');
+		const c = mount(PollResults, { target, props: { question, toon: true } as never });
+		flushSync();
+		expect(target.querySelectorAll('.tile').length).toBe(2);
+		expect(target.textContent).not.toContain('Waiting for answers');
+		unmount(c);
+		const plain = mount(PollResults, { target, props: { question } as never });
+		flushSync();
+		expect(target.textContent).toContain('Waiting for answers');
+		unmount(plain);
 	});
 });
