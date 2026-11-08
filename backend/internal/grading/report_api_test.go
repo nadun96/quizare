@@ -436,7 +436,7 @@ func TestReportFinalMarkIsExact(t *testing.T) {
 	url := "/api/teacher/classrooms/" + f.class.ID + "/class-report"
 	var r grading.ClassReport
 	f.teacher.Call("GET", url, nil, 200, &r)
-	f.teacher.Call("PUT", "/api/teacher/classrooms/"+f.class.ID+"/report-groups", grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{{Name: "G", Members: []string{s.User.ID}}}}, 200, nil)
+	f.classGroup(t, "G", s)
 	in := setupFor(r, func(x *grading.ReportItemInput) { x.Weight = 1 })
 	r = grading.ClassReport{}
 	f.teacher.Call("PUT", url, in, 200, &r)

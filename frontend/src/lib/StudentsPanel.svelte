@@ -87,7 +87,7 @@
 		try {
 			const c = await api.post<Category>('/api/teacher/classrooms/' + classroomId + '/categories', { name: newName });
 			newName = '';
-			toast(tr("Category “{0}” created", [c.name]));
+			toast(tr("Group “{0}” made", [c.name]));
 			await loadCategories();
 		} catch (err) {
 			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("Could not create"), 'error');
@@ -105,7 +105,7 @@
 		}
 	}
 	async function remove(c: Category) {
-		if (!(await confirmDialog({ title: tr("Delete “{0}”?", [c.name]), body: tr("Students stay in the classroom; only the label is removed."), confirm: tr("Delete category"), danger: true }))) return;
+		if (!(await confirmDialog({ title: tr("Delete “{0}”?", [c.name]), body: tr("Its students stay in the classroom and in their other groups."), confirm: tr("Delete group"), danger: true }))) return;
 		await api.del('/api/teacher/categories/' + c.id);
 		editing = null;
 		await loadCategories();
@@ -136,10 +136,10 @@
 </script>
 
 <div class="vstack">
-	<!-- Categories: filter chips, create, edit -->
+	<!-- Groups (D-41, D-158): filter chips, create, edit -->
 	<div class="card card-border bg-base-100 p-4 shadow-sm sm:p-5">
 		<div class="flex flex-wrap items-center gap-2">
-			<span class="small font-semibold mr-1">{tr("Categories")}</span>
+			<span class="small font-semibold mr-1">{tr("Groups")}</span>
 			<button class="chip btn btn-sm rounded-full" class:btn-primary={filter === null} class:btn-soft={filter === null} aria-pressed={filter === null} onclick={() => setFilter(null)}>{tr("All")} <span class="muted tabular">{count}</span></button>
 			{#each categories as c (c.id)}
 				<span class="chip-wrap" animate:flip={{ duration: flipMs() }}>
@@ -150,13 +150,13 @@
 				</span>
 			{/each}
 			<form class="flex items-center gap-1" onsubmit={create}>
-				<input class="input input-sm w-40" bind:value={newName} maxlength="60" placeholder={tr("New category")} aria-label={tr("New category name")} />
+				<input class="input input-sm w-40" bind:value={newName} maxlength="60" placeholder={tr("New group")} aria-label={tr("New group name")} />
 				<button class="btn btn-sm" disabled={!newName.trim()}><Icon name="plus" size={14} />{tr("Add")}</button>
 			</form>
 		</div>
 		{#if editing}
 			<form class="edit mt-3 flex flex-wrap items-center gap-2" onsubmit={saveEdit} in:fadeIn>
-				<input class="input input-sm w-48" bind:value={editing.name} maxlength="60" aria-label={tr("Category name")} />
+				<input class="input input-sm w-48" bind:value={editing.name} maxlength="60" aria-label={tr("Group name")} />
 				<div class="flex gap-1" role="radiogroup" aria-label={tr("Colour")}>
 					{#each [1, 2, 3, 4, 5, 6, 7, 8] as n (n)}
 						<button type="button" role="radio" aria-checked={editing.color === n} aria-label={tr("Colour {0}", [n])} class="swatch" class:on={editing.color === n} style:background="var(--cat-{n})" onclick={() => (editing!.color = n)}></button>
@@ -176,8 +176,8 @@
 		<span class="spacer"></span>
 		{#if selected.size}
 			<span class="small" in:fadeIn><strong>{selected.size}</strong> {tr("selected")}</span>
-			<select class="select select-sm w-auto" bind:value={target} aria-label={tr("Category")}>
-				<option value="">{tr("Category…")}</option>
+			<select class="select select-sm w-auto" bind:value={target} aria-label={tr("Group")}>
+				<option value="">{tr("Group…")}</option>
 				{#each categories as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 			</select>
 			<button class="btn btn-sm btn-primary" disabled={!target} onclick={() => assign(true)}>{tr("Add to")}</button>
@@ -194,7 +194,7 @@
 				<thead>
 					<tr>
 						<th class="w-10"><input type="checkbox" class="checkbox checkbox-sm" checked={allShownSelected} onchange={toggleAll} aria-label={tr("Select all on this page")} /></th>
-						<th><SortHeader {list} key="name" label={tr("Name")} /></th><th><SortHeader {list} key="number" label={tr("Student ID")} /></th><th>{tr("Categories")}</th><th><SortHeader {list} key="status" label={tr("Status")} /></th><th><span class="sr-only">{tr("Actions")}</span></th>
+						<th><SortHeader {list} key="name" label={tr("Name")} /></th><th><SortHeader {list} key="number" label={tr("Student ID")} /></th><th>{tr("Groups")}</th><th><SortHeader {list} key="status" label={tr("Status")} /></th><th><span class="sr-only">{tr("Actions")}</span></th>
 					</tr>
 				</thead>
 				<tbody>
