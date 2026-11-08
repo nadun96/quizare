@@ -20,6 +20,16 @@ type Category struct {
 	Color       int    `json:"color"` // 1-8, a slot of the categorical palette
 	Position    int    `json:"position"`
 	Members     int    `json:"members"`
+	// What its leader named it for everyone to see (D-158); empty: its name.
+	PublicName *string `json:"public_name"`
+}
+
+// Shown is the name people see: the leader's choice if there is one.
+func (c Category) Shown() string {
+	if c.PublicName != nil && *c.PublicName != "" {
+		return *c.PublicName
+	}
+	return c.Name
 }
 
 type CategoryInput struct {
@@ -29,7 +39,7 @@ type CategoryInput struct {
 
 const maxCategories = 50
 
-var errCategoryName = httpx.Conflict("a category with this name already exists in the classroom")
+var errCategoryName = httpx.Conflict("a group with this name already exists in the classroom")
 
 func validCategory(name string, color int) map[string]string {
 	f := map[string]string{}
@@ -52,14 +62,14 @@ func (s *Service) ListCategories(ctx context.Context, teacherID, classroomID str
 func (s *Service) categories(ctx context.Context, classroomID string) ([]Category, error) {
 	rows, err := s.pool.Query(ctx, `SELECT c.id, c.classroom_id, c.name, c.color, c.position,
 		(SELECT count(*) FROM content.enrolment_categories ec JOIN content.enrolments e ON e.id=ec.enrolment_id
-		 WHERE ec.category_id=c.id AND e.status='active')
+		 WHERE ec.category_id=c.id AND e.status='active'), c.public_name
 		FROM content.categories c WHERE c.classroom_id=$1 ORDER BY c.position, lower(c.name)`, classroomID)
 	if err != nil {
 		return nil, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Category, error) {
 		var c Category
-		err := r.Scan(&c.ID, &c.ClassroomID, &c.Name, &c.Color, &c.Position, &c.Members)
+		err := r.Scan(&c.ID, &c.ClassroomID, &c.Name, &c.Color, &c.Position, &c.Members, &c.PublicName)
 		return c, err
 	})
 	if out == nil {
@@ -88,7 +98,7 @@ func (s *Service) CreateCategory(ctx context.Context, teacherID, classroomID str
 		return Category{}, httpx.Invalid(f)
 	}
 	if n >= maxCategories {
-		return Category{}, httpx.Conflict("a classroom can have at most 50 categories")
+		return Category{}, httpx.Conflict("a classroom can have at most 50 groups")
 	}
 	var c Category
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -209,9 +219,10 @@ func (s *Service) categoriesOf(ctx context.Context, classroomID string) (map[str
 // CategoryMember is an active student in a category, for forming groups (V2-06).
 type CategoryMember struct {
 	CategoryID   string
-	CategoryName string
+	CategoryName string // the name people see: its public name if its leader set one
 	Color        int
 	UserID       string
+	Role         string // member, leader or assistant (D-158)
 }
 
 // CategoryMembers lists active students per category of a classroom the teacher owns.
@@ -219,7 +230,7 @@ func (s *Service) CategoryMembers(ctx context.Context, teacherID, classroomID st
 	if _, err := s.GetClassroom(ctx, teacherID, classroomID); err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT c.id, c.name, c.color, e.user_id FROM content.categories c
+	rows, err := s.pool.Query(ctx, `SELECT c.id, coalesce(c.public_name, c.name), c.color, e.user_id, ec.role FROM content.categories c
 		JOIN content.enrolment_categories ec ON ec.category_id=c.id
 		JOIN content.enrolments e ON e.id=ec.enrolment_id AND e.status='active'
 		WHERE c.classroom_id=$1 ORDER BY c.position, lower(c.name), e.created_at`, classroomID)
@@ -228,7 +239,7 @@ func (s *Service) CategoryMembers(ctx context.Context, teacherID, classroomID st
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (CategoryMember, error) {
 		var m CategoryMember
-		err := r.Scan(&m.CategoryID, &m.CategoryName, &m.Color, &m.UserID)
+		err := r.Scan(&m.CategoryID, &m.CategoryName, &m.Color, &m.UserID, &m.Role)
 		return m, err
 	})
 }

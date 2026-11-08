@@ -51,6 +51,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("DELETE", "/topics/{id}", httpx.Handler(s.hDeleteTopic))
 	r.Method("GET", "/topics/{id}/delete-preview", httpx.Handler(s.hDeletePreview("topic")))
 	s.teacherRoutesCo(r) // co-teachers (D-121)
+	s.groupRoutes(r)     // the classroom's groups (D-158)
 }
 
 // StudentRoutes mounts endpoints for any logged-in user (enrolment is by code).
@@ -58,6 +59,7 @@ func (s *Service) StudentRoutes(r chi.Router) {
 	r.Method("GET", "/join/classrooms/{code}", httpx.Handler(s.hPreview))
 	r.Method("POST", "/enrolments", httpx.Handler(s.hEnrol))
 	r.Method("GET", "/my/classrooms", httpx.Handler(s.hMyClassrooms))
+	s.myGroupRoutes(r) // choosing and naming groups (D-158)
 	// A student's own ID, where the teacher allows it (D-134).
 	r.Method("PUT", "/my/classrooms/{id}/student-number", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		var in struct {

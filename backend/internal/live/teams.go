@@ -451,13 +451,13 @@ func (s *Service) randomTeams(ctx context.Context, sessionID string, count int, 
 	return nil
 }
 
-func (s *Service) categoryTeams(ctx context.Context, sess *Session, reassign bool) error {
+func (s *Service) categoryTeams(ctx context.Context, sess *Session, reassign bool) (err error) {
 	cats, err := s.classrooms.ListCategories(ctx, sess.TeacherID, sess.ClassroomID)
 	if err != nil {
 		return err
 	}
 	if len(cats) == 0 {
-		return httpx.Invalid(map[string]string{"from": "this classroom has no categories yet"})
+		return httpx.Invalid(map[string]string{"from": "this classroom has no groups yet"})
 	}
 	ts, err := s.teamInfos(ctx, sess.ID)
 	if err != nil {
@@ -474,16 +474,21 @@ func (s *Service) categoryTeams(ctx context.Context, sess *Session, reassign boo
 			continue
 		}
 		id, color := c.ID, c.Color
-		t, err := s.insertTeam(ctx, sess.ID, c.Name, &color, &id)
+		t, err := s.insertTeam(ctx, sess.ID, c.Shown(), &color, &id)
 		if err != nil {
 			return err
 		}
 		byCat[c.ID] = t.ID
 	}
-	first, err := s.firstCategoryTeam(ctx, sess, byCat)
+	first, leaders, err := s.firstCategoryTeam(ctx, sess, byCat)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err == nil {
+			err = s.leadersCaptain(ctx, sess.ID, leaders)
+		}
+	}()
 	cond := ` AND team_id IS NULL`
 	if reassign {
 		cond = ``
@@ -515,13 +520,22 @@ func (s *Service) categoryTeams(ctx context.Context, sess *Session, reassign boo
 	return nil
 }
 
-// firstCategoryTeam maps each student to the team of their first category.
-func (s *Service) firstCategoryTeam(ctx context.Context, sess *Session, byCat map[string]string) (map[string]string, error) {
+// firstCategoryTeam maps each student to the team of their first group, or
+// of the group they lead (D-158), and each team to its group's leader.
+func (s *Service) firstCategoryTeam(ctx context.Context, sess *Session, byCat map[string]string) (map[string]string, map[string]string, error) {
 	members, err := s.classrooms.CategoryMembers(ctx, sess.TeacherID, sess.ClassroomID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	first := map[string]string{}
+	first, leaders := map[string]string{}, map[string]string{}
+	for _, m := range members {
+		if t, ok := byCat[m.CategoryID]; ok && m.Role == "leader" {
+			if _, seen := first[m.UserID]; !seen {
+				first[m.UserID] = t
+				leaders[t] = m.UserID
+			}
+		}
+	}
 	for _, m := range members {
 		if t, ok := byCat[m.CategoryID]; ok {
 			if _, seen := first[m.UserID]; !seen {
@@ -529,7 +543,20 @@ func (s *Service) firstCategoryTeam(ctx context.Context, sess *Session, byCat ma
 			}
 		}
 	}
-	return first, nil
+	return first, leaders, nil
+}
+
+// leadersCaptain makes each group's leader the captain of its team, when the
+// leader is in it (D-158).
+func (s *Service) leadersCaptain(ctx context.Context, sessionID string, leaders map[string]string) error {
+	for team, user := range leaders {
+		_, err := s.pool.Exec(ctx, `UPDATE live.attempts SET captain=(user_id=$3)
+			WHERE session_id=$1 AND team_id=$2 AND EXISTS (SELECT 1 FROM live.attempts WHERE session_id=$1 AND team_id=$2 AND user_id=$3)`, sessionID, team, user)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // placeTeam puts a new attempt in a team according to team_mode; chosen is
@@ -565,7 +592,7 @@ func (s *Service) placeTeam(ctx context.Context, tx pgx.Tx, sess *Session, eff s
 		if len(byCat) == 0 {
 			return nil
 		}
-		first, err := s.firstCategoryTeam(ctx, sess, byCat)
+		first, _, err := s.firstCategoryTeam(ctx, sess, byCat)
 		if err != nil {
 			return err
 		}

@@ -405,6 +405,19 @@ func (s *Service) fillCaptains(ctx context.Context, pollID string) error {
 	return err
 }
 
+// leadersCaptain makes each classroom group's leader the captain of its poll
+// group, when the leader is in it (D-158).
+func (s *Service) leadersCaptain(ctx context.Context, pollID string, leaders map[string]string) error {
+	for group, user := range leaders {
+		_, err := s.pool.Exec(ctx, `UPDATE poll.participants SET captain=(user_id IS NOT DISTINCT FROM $3::uuid)
+			WHERE poll_id=$1 AND group_id=$2 AND EXISTS (SELECT 1 FROM poll.participants WHERE poll_id=$1 AND group_id=$2 AND user_id=$3::uuid)`, pollID, group, user)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GenerateInput forms groups automatically.
 type GenerateInput struct {
 	From     string `json:"from"`     // random | categories
@@ -498,9 +511,9 @@ func (s *Service) randomGroups(ctx context.Context, p *Poll, count int, reassign
 
 // categoryGroups makes one group per classroom category and puts each
 // identified participant in the group of their first category.
-func (s *Service) categoryGroups(ctx context.Context, p *Poll, reassign bool) error {
+func (s *Service) categoryGroups(ctx context.Context, p *Poll, reassign bool) (err error) {
 	if p.ClassroomID == nil {
-		return httpx.Invalid(map[string]string{"from": "link the poll to a classroom to use its categories"})
+		return httpx.Invalid(map[string]string{"from": "link the poll to a classroom to use its groups"})
 	}
 	members, err := s.classes.CategoryMembers(ctx, p.TeacherID, *p.ClassroomID)
 	if err != nil {
@@ -511,7 +524,7 @@ func (s *Service) categoryGroups(ctx context.Context, p *Poll, reassign bool) er
 		return err
 	}
 	if len(cats) == 0 {
-		return httpx.Invalid(map[string]string{"from": "this classroom has no categories yet"})
+		return httpx.Invalid(map[string]string{"from": "this classroom has no groups yet"})
 	}
 	gs, err := s.listGroups(ctx, p.ID)
 	if err != nil {
@@ -529,18 +542,30 @@ func (s *Service) categoryGroups(ctx context.Context, p *Poll, reassign bool) er
 		}
 		id := c.ID
 		color := c.Color
-		g, err := s.insertGroup(ctx, p.ID, c.Name, &color, &id)
+		g, err := s.insertGroup(ctx, p.ID, c.Shown(), &color, &id)
 		if err != nil {
 			return err
 		}
 		byCat[c.ID] = g.ID
 	}
-	first := map[string]string{} // user → group
+	// Each student goes to the group they lead, else their first (D-158).
+	first, leaders := map[string]string{}, map[string]string{} // user → group, group → leader
+	for _, m := range members {
+		if _, ok := first[m.UserID]; !ok && m.Role == "leader" {
+			first[m.UserID] = byCat[m.CategoryID]
+			leaders[byCat[m.CategoryID]] = m.UserID
+		}
+	}
 	for _, m := range members {
 		if _, ok := first[m.UserID]; !ok {
 			first[m.UserID] = byCat[m.CategoryID]
 		}
 	}
+	defer func() {
+		if err == nil {
+			err = s.leadersCaptain(ctx, p.ID, leaders)
+		}
+	}()
 	cond := ` AND group_id IS NULL`
 	if reassign {
 		cond = ``

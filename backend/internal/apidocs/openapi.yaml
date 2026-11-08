@@ -1809,6 +1809,32 @@ paths:
       summary: Add students to, or remove them from, a category (enrolments of the same classroom only)
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [enrolment_ids, assigned], properties: { enrolment_ids: { type: array, items: { type: string, format: uuid } }, assigned: { type: boolean } } } } } }
       responses: { '200': { description: 'Rows changed', content: { application/json: { schema: { type: object, properties: { affected: { type: integer } } } } } } }
+  /api/teacher/classrooms/{id}/groups:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomGroups
+      tags: [classrooms]
+      summary: The classroom's groups (D-158) with their members, leaders first, and whether students may choose their own
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { groups: { type: array, items: { $ref: '#/components/schemas/ClassGroup' } }, policy: { $ref: '#/components/schemas/GroupPolicy' }, students: { type: array, description: 'Active students, to put in groups', items: { type: object, properties: { enrolment_id: { type: string }, user_id: { type: string }, name: { type: string }, student_number: { type: string } } } } } } } } } }
+  /api/teacher/classrooms/{id}/group-policy:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherClassroomGroupPolicy
+      tags: [classrooms]
+      summary: Let students choose their own groups, between two times, with limits (D-158)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [self_join, max_per_student], properties: { self_join: { type: boolean }, opens_at: { type: string, format: date-time, nullable: true }, closes_at: { type: string, format: date-time, nullable: true }, max_per_student: { type: integer, minimum: 1, maximum: 50, description: 'Groups a student may choose' }, max_size: { type: integer, minimum: 1, maximum: 1000, nullable: true } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/GroupPolicy' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/categories/{id}/members/{enrolment}/role:
+    parameters: [{ $ref: '#/components/parameters/id' }, { name: enrolment, in: path, required: true, schema: { type: string, format: uuid } }]
+    put:
+      operationId: putTeacherGroupMemberRole
+      tags: [classrooms]
+      summary: Make a member the group's leader (replacing the old one), an assistant leader, or a plain member (D-158)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: [member, leader, assistant] } } } } } }
+      responses: { '204': { description: 'Saved' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/categories/{id}/public-name:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    delete: { operationId: deleteTeacherGroupPublicName, tags: [classrooms], summary: "Remove the name a group's leader chose (D-158)", responses: { '204': { description: 'Removed' } } }
   /api/teacher/classrooms/{id}/modules:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -2489,6 +2515,25 @@ paths:
       summary: Classrooms I am enrolled in
       parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [name] } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, classrooms: { type: array, items: { type: object, properties: { classroom_id: { type: string }, name: { type: string }, status: { type: string }, student_number: { type: [string, 'null'] } } } } } } } } } }
+  /api/my/classrooms/{id}/groups:
+    get:
+      operationId: getMyClassroomGroups
+      tags: [student]
+      summary: "The classroom's groups as a student sees them (D-158): every group's name and size, and the members of their own"
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { groups: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string, description: 'The public name if its leader set one' }, teacher_name: { type: string }, public_name: { type: string, nullable: true }, color: { type: integer }, size: { type: integer }, mine: { type: boolean }, role: { type: string }, self_joined: { type: boolean }, full: { type: boolean }, members: { type: array, items: { type: object, properties: { user_id: { type: string }, name: { type: string }, role: { type: string } } } } } } }, policy: { $ref: '#/components/schemas/GroupPolicy' }, chosen: { type: integer, description: 'Groups they chose themselves' } } } } } } }
+  /api/my/groups/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post: { operationId: postMyGroup, tags: [student], summary: 'Join a group while the teacher lets students choose, within the limits (D-158)', responses: { '204': { description: 'Joined' }, '409': { $ref: '#/components/responses/Conflict' } } }
+    delete: { operationId: deleteMyGroup, tags: [student], summary: 'Leave a group I chose, while choosing is open (D-158)', responses: { '204': { description: 'Left' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /api/my/groups/{id}/name:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putMyGroupName
+      tags: [student]
+      summary: "The group's leader names it for everyone to see; empty goes back to the teacher's name (D-158)"
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 40 } } } } } }
+      responses: { '204': { description: 'Saved' }, '403': { description: 'Not the leader' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/my/classrooms/{id}/work:
     get:
       operationId: getMyClassroomWork
@@ -4194,6 +4239,22 @@ components:
         color: { type: integer, minimum: 1, maximum: 8, description: 'Slot of the categorical palette' }
         position: { type: integer }
         members: { type: integer, description: 'Active students in the category' }
+        public_name: { type: string, nullable: true, description: "The name its leader chose for everyone to see (D-158)" }
+    ClassGroup:
+      allOf:
+        - $ref: '#/components/schemas/Category'
+        - type: object
+          properties:
+            people: { type: array, items: { type: object, properties: { enrolment_id: { type: string }, user_id: { type: string }, name: { type: string }, student_number: { type: string }, role: { type: string, enum: [member, leader, assistant] }, self_joined: { type: boolean } } } }
+    GroupPolicy:
+      type: object
+      properties:
+        self_join: { type: boolean }
+        opens_at: { type: string, format: date-time, nullable: true }
+        closes_at: { type: string, format: date-time, nullable: true }
+        max_per_student: { type: integer }
+        max_size: { type: integer, nullable: true }
+        open: { type: boolean, description: 'Students may choose now' }
     CategoryInput:
       type: object
       properties:
