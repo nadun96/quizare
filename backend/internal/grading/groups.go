@@ -16,10 +16,11 @@ import (
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 )
 
-// Groups of students for mark sheets (D-141): the whole class's, or one
-// quiz's, tutorial's or poll's own, which it then has as well. A group's mark
-// on an item comes from its members' marks by the item's rule. Live quiz and
-// poll teams are separate.
+// Groups of students for mark sheets (D-141): the classroom's groups (D-158,
+// edited on the classroom's Groups tab), or one quiz's, tutorial's or poll's
+// own, which it then has as well. A group's mark on an item comes from its
+// members' marks by the item's rule. A student can be in several of the
+// classroom's groups.
 
 const (
 	RuleAverage = "average"
@@ -103,9 +104,18 @@ func groupMark(rule string, marks []ReportMark, members int, itemMax float64) Gr
 
 // loadGroups fills in the class's groups and each item's own, with their marks.
 func (s *Service) loadGroups(ctx context.Context, classroomID string, rep *ClassReport) error {
-	rows, err := s.pool.Query(ctx, `SELECT g.id::text, g.kind, coalesce(g.item_id::text, ''), g.name,
-			coalesce((SELECT array_agg(m.user_id::text ORDER BY m.user_id) FROM grading.group_members m WHERE m.group_id = g.id), '{}')
-		FROM grading.groups g WHERE g.classroom_id = $1 ORDER BY g.kind, g.item_id, g.position, g.created_at`, classroomID)
+	rows, err := s.pool.Query(ctx, `SELECT id, kind, item, name, members FROM (
+			SELECT c.id::text AS id, 'class' AS kind, '' AS item, c.name,
+				coalesce((SELECT array_agg(e.user_id::text ORDER BY e.user_id) FROM content.enrolment_categories ec
+					JOIN content.enrolments e ON e.id = ec.enrolment_id WHERE ec.category_id = c.id), '{}') AS members,
+				0 AS scope, c.position, lower(c.name) AS sort, c.created_at
+			FROM content.categories c WHERE c.classroom_id = $1
+			UNION ALL
+			SELECT g.id::text, g.kind, coalesce(g.item_id::text, ''), g.name,
+				coalesce((SELECT array_agg(m.user_id::text ORDER BY m.user_id) FROM grading.group_members m WHERE m.group_id = g.id), '{}'),
+				1, g.position, '', g.created_at
+			FROM grading.groups g WHERE g.classroom_id = $1 AND g.kind <> 'class') x
+		ORDER BY scope, kind, item, position, sort, created_at`, classroomID)
 	if err != nil {
 		return err
 	}
@@ -201,7 +211,8 @@ type GroupsInput struct {
 	Groups []GroupInput `json:"groups"`
 }
 
-// SetGroups saves a scope's groups. Any teacher of the classroom may.
+// SetGroups saves an item's own groups. Any teacher of the classroom may. The
+// classroom's groups are edited on its Groups tab (D-158).
 func (s *Service) SetGroups(ctx context.Context, teacherID, classroomID string, in GroupsInput) (ClassReport, error) {
 	rep, err := s.ClassReport(ctx, teacherID, classroomID)
 	if err != nil {
@@ -209,7 +220,7 @@ func (s *Service) SetGroups(ctx context.Context, teacherID, classroomID string, 
 	}
 	var item any
 	if in.Kind == ScopeClass {
-		in.ID = ""
+		return rep, httpx.Invalid(map[string]string{"kind": "edit the classroom's groups on its Groups tab"})
 	} else {
 		item = in.ID
 		found := false

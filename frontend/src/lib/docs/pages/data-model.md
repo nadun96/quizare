@@ -52,6 +52,7 @@ Migrations live in `backend/migrations/NNNN_*.sql` and are embedded into the bin
 | `0056_topic_activities.sql` | Polls and meetings under a topic: `poll.polls.topic_id`, `meet.meetings.topic_id` (D-147); tutoring's own `0012_topic.sql` adds `tutoring.sessions.topic_id` |
 | `0057_archive.sql` | Finished activities in the archive: `archived_at` on `live.sessions`, `poll.polls`, `meet.meetings` and `presentation.lives` (D-149); tutoring's own `0013_archive.sql` adds it to `tutoring.sessions` |
 | `0058_report_options.sql` | What else a class report shows: `grading.report_options` (D-156) |
+| `0059_class_groups.sql` | Classroom groups (D-158): `content.categories.public_name`, `role` and `self_joined` on `content.enrolment_categories`, and `content.group_policy`; the class report's class groups move into them |
 | `0026_drive.sql` | Google Drive (D-71): the `drive` schema with `config` (the platform's Google app, client secret sealed), `connections` (each teacher's refresh token, sealed; results folder; save after each session), `connect_states`, `classroom_files` (file, name, link, how it's shared, the link permission the platform made), `shares` (the per-student permissions the platform made, to take back) and `exports` (results saved, with links or why they failed) |
 | `0025_oidc.sql` | Sign-in with OpenID Connect providers (D-70): `auth.identities` (provider, subject and account: one sign-in per provider per account); the `oidc` schema with `providers` (issuer, client ID, client secret sealed like LLM keys, scopes, email claim, allowed domains, who becomes what) and `logins` (sign-ins in progress: state hash, nonce, PKCE verifier, for 10 minutes) |
 | `0024_meet.sql` | Meetings (D-69): `meet.meetings` (host, title, unique code, optional classroom that clears when the classroom goes, 2–8 people, `open` or `ended`) and `meet.attendance` (first joined, last seen, number of joins per person) |
@@ -144,6 +145,8 @@ Primary key `(attempt_id, question_id)`. `question_id` refers to the **snapshot*
 ## Student categories
 
 `content.categories` holds a classroom's labels (name unique per classroom, case-insensitive; `color` is a slot 1–8 of the categorical palette). `content.enrolment_categories` links enrolments to categories, so a student can be in several and removing a student from the classroom keeps the history. Both cascade from the classroom. See D-41.
+
+These are the classroom's groups (D-158). `content.categories.public_name` is the name the group's leader chose for everyone to see (unique per classroom, case-insensitive). `content.enrolment_categories.role` is `member`, `leader` (at most one a group) or `assistant`; `self_joined` marks a group the student chose. `content.group_policy` (one row a classroom) says whether students may choose groups, between `opens_at` and `closes_at`, at most `max_per_student` each, and at most `max_size` to a group. Quiz teams, poll groups and tutoring breakouts made from them take the public name, and the leader becomes the captain. The class report's class groups are these groups.
 
 ## Polls
 
