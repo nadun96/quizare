@@ -5,9 +5,29 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/nadun96/quizplatform/internal/app/apptest"
 	"github.com/nadun96/quizplatform/internal/auth"
+	"github.com/nadun96/quizplatform/internal/content"
 	"github.com/nadun96/quizplatform/internal/grading"
 )
+
+// classGroup makes one of the classroom's groups (D-158) with these students.
+func (f *reportFx) classGroup(t *testing.T, name string, users ...*apptest.Client) {
+	t.Helper()
+	var ens struct{ Enrolments []content.Enrolment }
+	f.teacher.Call("GET", "/api/teacher/classrooms/"+f.class.ID+"/enrolments", nil, 200, &ens)
+	enrolment := map[string]string{}
+	for _, en := range ens.Enrolments {
+		enrolment[en.UserID] = en.ID
+	}
+	var c content.Category
+	f.teacher.Call("POST", "/api/teacher/classrooms/"+f.class.ID+"/categories", map[string]any{"name": name}, 201, &c)
+	ids := []string{}
+	for _, u := range users {
+		ids = append(ids, enrolment[u.User.ID])
+	}
+	f.teacher.Call("POST", "/api/teacher/categories/"+c.ID+"/members", map[string]any{"enrolment_ids": ids, "assigned": true}, 200, nil)
+}
 
 func groupOf(r grading.ClassReport, name string) grading.GroupRow {
 	for _, g := range r.ClassGroups {
@@ -40,12 +60,12 @@ func TestReportGroups(t *testing.T) {
 		f.teacher.Call("PUT", url, setupFor(cur, func(x *grading.ReportItemInput) { x.GroupRule = rule }), 200, &out)
 		return out
 	}
-	r = grading.ClassReport{}
-	f.teacher.Call("PUT", groupsURL, grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{
-		{Name: "Red", Members: []string{amaya.User.ID, ben.User.ID}},
-		{Name: "Blue", Members: []string{chen.User.ID}},
-	}}, 200, &r)
-	if len(r.ClassGroups) != 2 {
+	// The class's groups are the classroom's groups (D-158).
+	f.classGroup(t, "Red", amaya, ben)
+	f.classGroup(t, "Blue", chen)
+	f.classGroup(t, "Readers", amaya) // a student can be in several
+	f.teacher.Call("GET", url, nil, 200, &r)
+	if len(r.ClassGroups) != 3 || groupOf(r, "Readers").Marks[k].Pct != 100 {
 		t.Fatalf("groups: %+v", r.ClassGroups)
 	}
 
@@ -82,13 +102,13 @@ func TestReportGroups(t *testing.T) {
 	// An item's own groups sit beside the class's.
 	r = grading.ClassReport{}
 	f.teacher.Call("PUT", groupsURL, grading.GroupsInput{Kind: "quiz", ID: q, Groups: []grading.GroupInput{{Name: "Solo", Members: []string{amaya.User.ID}}}}, 200, &r)
-	if len(r.ItemGroups) != 1 || r.ItemGroups[0].ID != q || r.ItemGroups[0].Groups[0].Marks[k].Pct != 100 || len(r.ClassGroups) != 2 {
+	if len(r.ItemGroups) != 1 || r.ItemGroups[0].ID != q || r.ItemGroups[0].Groups[0].Marks[k].Pct != 100 || len(r.ClassGroups) != 3 {
 		t.Fatalf("own groups: %+v", r.ItemGroups)
 	}
 	// None removes them, and leaves the class's alone.
 	r = grading.ClassReport{}
 	f.teacher.Call("PUT", groupsURL, grading.GroupsInput{Kind: "quiz", ID: q}, 200, &r)
-	if len(r.ItemGroups) != 0 || len(r.ClassGroups) != 2 {
+	if len(r.ItemGroups) != 0 || len(r.ClassGroups) != 3 {
 		t.Fatalf("after removing: %+v %+v", r.ItemGroups, r.ClassGroups)
 	}
 
@@ -97,10 +117,11 @@ func TestReportGroups(t *testing.T) {
 		t.Helper()
 		f.teacher.Call("PUT", groupsURL, in, 422, nil)
 	}
-	bad(grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{{Name: "A", Members: []string{amaya.User.ID}}, {Name: "B", Members: []string{amaya.User.ID}}}})
-	bad(grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{{Name: "A"}, {Name: "a"}}})
-	bad(grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{{Name: " "}}})
-	bad(grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{{Name: "A", Members: []string{f.e.NewUser(auth.RoleStudent).User.ID}}}})
+	bad(grading.GroupsInput{Kind: "class", Groups: []grading.GroupInput{{Name: "A", Members: []string{amaya.User.ID}}}}) // edited on the Groups tab
+	bad(grading.GroupsInput{Kind: "quiz", ID: q, Groups: []grading.GroupInput{{Name: "A", Members: []string{amaya.User.ID}}, {Name: "B", Members: []string{amaya.User.ID}}}})
+	bad(grading.GroupsInput{Kind: "quiz", ID: q, Groups: []grading.GroupInput{{Name: "A"}, {Name: "a"}}})
+	bad(grading.GroupsInput{Kind: "quiz", ID: q, Groups: []grading.GroupInput{{Name: " "}}})
+	bad(grading.GroupsInput{Kind: "quiz", ID: q, Groups: []grading.GroupInput{{Name: "A", Members: []string{f.e.NewUser(auth.RoleStudent).User.ID}}}})
 	bad(grading.GroupsInput{Kind: "quiz", ID: "00000000-0000-0000-0000-000000000000"})
 	f.e.NewUser(auth.RoleTeacher).Call("PUT", groupsURL, grading.GroupsInput{Kind: "class"}, 404, nil)
 	amaya.Call("PUT", groupsURL, grading.GroupsInput{Kind: "class"}, 403, nil)

@@ -1,6 +1,7 @@
 package live_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/nadun96/quizplatform/internal/auth"
@@ -122,9 +123,15 @@ func TestSelfChosenAndCategoryTeams(t *testing.T) {
 	var list struct{ Enrolments []content.Enrolment }
 	f.teacher.Call("GET", "/api/teacher/classrooms/"+f.sess.ClassroomID+"/enrolments", nil, 200, &list)
 	f.teacher.Call("POST", "/api/teacher/categories/"+cat.ID+"/members", map[string]any{"enrolment_ids": []string{list.Enrolments[0].ID}, "assigned": true}, 200, nil)
+	// Its leader is the team's captain and its public name the team's (D-158).
+	f.teacher.Call("PUT", "/api/teacher/categories/"+cat.ID+"/members/"+list.Enrolments[0].ID+"/role", map[string]string{"role": "leader"}, 204, nil)
+	_, err := f.e.Pool.Exec(context.Background(), `UPDATE content.categories SET public_name='Elders' WHERE id=$1`, cat.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var gv live.TeamsView
 	f.teacher.Call("POST", "/api/teacher/sessions/"+f.sess.ID+"/teams/generate", map[string]any{"from": "categories", "reassign": true}, 200, &gv)
-	if len(gv.Teams) != 2 || gv.Teams[1].Name != "Seniors" || gv.Teams[1].Color != 7 || len(gv.Teams[1].List) != 1 || len(gv.Teams[0].List) != 0 {
+	if len(gv.Teams) != 2 || gv.Teams[1].Name != "Elders" || gv.Teams[1].Color != 7 || len(gv.Teams[1].List) != 1 || len(gv.Teams[0].List) != 0 || !gv.Teams[1].List[0].Captain {
 		t.Fatalf("category teams: %+v", gv.Teams)
 	}
 }

@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import MyFiles from '$lib/drive/MyFiles.svelte';
+	import MyGroups from '$lib/classroom/MyGroups.svelte';
 	import { requireLogin } from '$lib/guard.svelte';
 	import { action, dateLine, kindOf, markLine, statusOf, withTutoring, type ClassroomWork, type WorkItem } from '$lib/my/classroomWork';
 	import { TutorClient, tutoringConfig } from '$lib/tutoring/client';
@@ -90,6 +91,7 @@
 		{#if work.status !== 'active'}
 			<div class="alert alert-soft alert-warning" role="status"><Icon name="clock" size={18} />{tr("Your teacher hasn’t approved your enrolment yet. Your work appears here once they do.")}</div>
 		{:else}
+			<MyGroups classroomId={work.classroom_id} />
 			<div class="join self-start" role="group" aria-label={tr("Show")}>
 				<button class="btn btn-sm join-item" class:btn-primary={view === 'all'} aria-pressed={view === 'all'} onclick={() => (view = 'all')}>{tr("All")}</button>
 				<button class="btn btn-sm join-item" class:btn-primary={view === 'todo'} aria-pressed={view === 'todo'} onclick={() => (view = 'todo')}>{tr("To do ({0})", [todoCount])}</button>

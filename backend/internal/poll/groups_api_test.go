@@ -224,6 +224,9 @@ func TestGroupsFromCategories(t *testing.T) {
 	teacher.Call("POST", "/api/teacher/classrooms/"+c.ID+"/categories", map[string]any{"name": "Foxes"}, 201, &foxes)
 	teacher.Call("POST", "/api/teacher/categories/"+owls.ID+"/members", map[string]any{"enrolment_ids": []string{ens[0].ID, ens[1].ID}, "assigned": true}, 200, nil)
 	teacher.Call("POST", "/api/teacher/categories/"+foxes.ID+"/members", map[string]any{"enrolment_ids": []string{ens[2].ID}, "assigned": true}, 200, nil)
+	// Owls' leader names it (D-158).
+	teacher.Call("PUT", "/api/teacher/categories/"+owls.ID+"/members/"+ens[1].ID+"/role", map[string]string{"role": "leader"}, 204, nil)
+	students[1].Call("PUT", "/api/my/groups/"+owls.ID+"/name", map[string]string{"name": "Night Owls"}, 204, nil)
 
 	st := grouped("categories", "all", "sum")
 	st["identity"] = "anonymous"
@@ -245,7 +248,7 @@ func TestGroupsFromCategories(t *testing.T) {
 	students[0].Call("POST", "/api/polls/"+p.JoinCode+"/join", map[string]bool{"identify": true}, 200, nil)
 	var gv poll.GroupsView
 	teacher.Call("POST", "/api/teacher/polls/"+p.ID+"/groups/generate", map[string]any{"from": "categories"}, 200, &gv)
-	if len(gv.Groups) != 2 || gv.Groups[0].Name != "Owls" || gv.Groups[0].Color != 3 || len(gv.Groups[0].Members) != 1 || !gv.Groups[0].Members[0].Captain {
+	if len(gv.Groups) != 2 || gv.Groups[0].Name != "Night Owls" || gv.Groups[0].Color != 3 || len(gv.Groups[0].Members) != 1 || !gv.Groups[0].Members[0].Captain {
 		t.Fatalf("groups from categories: %+v", gv)
 	}
 	// Later joiners go straight to their category's group.
@@ -256,13 +259,26 @@ func TestGroupsFromCategories(t *testing.T) {
 	if len(gv.Groups[0].Members) != 2 || len(gv.Groups[1].Members) != 1 || gv.Groups[0].Members[0].RealName == "" {
 		t.Fatalf("joined into category groups: %+v", gv)
 	}
-	// Generating again doesn't duplicate groups.
+	// Generating again doesn't duplicate groups, and makes the leader, now
+	// here, the captain.
 	teacher.Call("POST", "/api/teacher/polls/"+p.ID+"/groups/generate", map[string]any{"from": "categories"}, 200, &gv)
 	if len(gv.Groups) != 2 {
 		t.Fatalf("regenerated: %d groups", len(gv.Groups))
 	}
+	captains := 0
+	for _, m := range gv.Groups[0].Members {
+		if m.Captain {
+			captains++
+			if m.RealName != students[1].User.Name {
+				t.Fatalf("captain is %q, not the leader", m.RealName)
+			}
+		}
+	}
+	if captains != 1 {
+		t.Fatalf("captains: %+v", gv.Groups[0].Members)
+	}
 	students[2].Call("PUT", "/api/polls/"+p.JoinCode+"/answers/"+q.ID, map[string]any{"value": map[string]any{"selected": []string{"o2"}}}, 200, nil)
-	if got := groupScores(f.results().GroupLeaderboard); got != "1:Foxes=100 2:Owls=0" {
+	if got := groupScores(f.results().GroupLeaderboard); got != "1:Foxes=100 2:Night Owls=0" {
 		t.Fatalf("category groups scored: %s", got)
 	}
 }

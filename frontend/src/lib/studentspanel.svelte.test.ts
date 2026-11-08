@@ -82,7 +82,7 @@ describe('StudentsPanel', () => {
 		boxes[2].click();
 		flushSync();
 		expect(v.target.textContent).toContain('2 selected');
-		const sel = v.target.querySelector<HTMLSelectElement>('select[aria-label=Category]')!;
+		const sel = v.target.querySelector<HTMLSelectElement>('select[aria-label=Group]')!;
 		sel.value = 'c1';
 		sel.dispatchEvent(new Event('change', { bubbles: true }));
 		flushSync();
