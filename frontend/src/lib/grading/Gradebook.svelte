@@ -175,7 +175,7 @@
 				<div class="weights">
 					{#each g.items as it (key(it))}
 						<label class="weight">
-							<span class="min-w-0"><span class="block truncate font-semibold">{it.title}</span><span class="small muted">{it.kind === 'quiz' ? tr("Quiz") : tr("Tutorial")} · {it.topic}</span></span>
+							<span class="min-w-0"><span class="block truncate font-semibold">{it.title}</span><span class="small muted">{it.kind === 'quiz' ? tr("Quiz") : it.kind === 'offline' ? tr("Offline assignment") : tr("Tutorial")} · {it.topic}</span></span>
 							<span class="input input-sm w-24 flex-none"><input type="number" min="0" max="100" step="0.5" bind:value={draft[key(it)]} aria-label={tr("Weight of {0}", [it.title])} />%</span>
 						</label>
 					{/each}
@@ -196,7 +196,7 @@
 							<th class="num">{tr("No.")}</th>
 							<ReportTh bind:view cols={viewCols} col="student" label={tr("Student")} />
 							{#each g.items as it (key(it))}
-								<ReportTh bind:view cols={viewCols} col={key(it)} label={it.title} class="num" title={it.topic}><span class="small muted font-normal">{it.kind === 'tutorial' ? tr("Tutorial") : tr("Quiz")}{it.weight ? ` · ${it.weight}%` : weighted ? tr(" · not counted") : ''}</span></ReportTh>
+								<ReportTh bind:view cols={viewCols} col={key(it)} label={it.title} class="num" title={it.topic}><span class="small muted font-normal">{it.kind === 'tutorial' ? tr("Tutorial") : it.kind === 'offline' ? tr("Offline") : tr("Quiz")}{it.weight ? ` · ${it.weight}%` : weighted ? tr(" · not counted") : ''}</span></ReportTh>
 							{/each}
 							<ReportTh bind:view cols={viewCols} col="average" label={tr("Average")} class="num" />
 							<ReportTh bind:view cols={viewCols} col="marks" label={tr("Total marks")} class="num" />

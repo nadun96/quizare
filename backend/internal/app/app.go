@@ -455,6 +455,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool, opt Options)
 			s.Route("/tutoring", tutorlink.UserRoutes(a.Tutor))
 			a.Meet.UserRoutes(s)
 			a.Drive.UserRoutes(s)
+			a.Grading.StudentRoutes(s) // offline assignments (D-159)
 		})
 		api.Group(func(s chi.Router) {
 			s.Use(auth.RequireRole(auth.RoleStudent))

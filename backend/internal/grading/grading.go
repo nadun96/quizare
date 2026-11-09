@@ -129,6 +129,11 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 		FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = 'tutorial' AND w.item_id = t.id
 		WHERE m.classroom_id = $1 AND t.status = 'published' AND EXISTS (SELECT 1 FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)
+		UNION ALL
+		SELECT 'offline', a.id::text, a.title, tp.name, w.weight::float8, coalesce(a.due_at, a.created_at), tp.id::text, m.id::text, m.name
+		FROM grading.offline_assignments a JOIN content.topics tp ON tp.id = a.topic_id JOIN content.modules m ON m.id = tp.module_id
+		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = 'offline' AND w.item_id = a.id
+		WHERE a.classroom_id = $1
 		ORDER BY 6, 2`, classroomID)
 	if err != nil {
 		return g, err
@@ -167,7 +172,9 @@ func (s *Service) Gradebook(ctx context.Context, teacherID, classroomID string) 
 		FROM tutorial.runs ru JOIN tutorial.tutorials t ON t.id = ru.tutorial_id
 		JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 		WHERE m.classroom_id = $1 AND ru.finished_at IS NOT NULL
-			AND (SELECT sum(x.marks) FROM quiz.questions x WHERE x.quiz_id = t.quiz_id) > 0`, classroomID)
+			AND (SELECT sum(x.marks) FROM quiz.questions x WHERE x.quiz_id = t.quiz_id) > 0
+		UNION ALL
+		SELECT o.user_id, 'offline:' || o.assignment_id, 100 * o.score / o.max_marks, o.score, o.max_marks FROM (`+offlineMarksSQL+`) o`, classroomID)
 	if err != nil {
 		return g, err
 	}
