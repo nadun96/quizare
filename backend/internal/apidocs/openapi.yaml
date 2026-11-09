@@ -1617,6 +1617,63 @@ paths:
       summary: Students enrolled in a classroom
       parameters: [{ $ref: '#/components/parameters/id' }, { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, removed] } }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, name, number, status] } }, { name: category, in: query, description: 'Only students in this category', schema: { type: string, format: uuid } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, enrolments: { type: array, items: { $ref: '#/components/schemas/Enrolment' } } } } } } } }
+  /api/teacher/topics/{id}/offline-assignments:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherTopicOfflineAssignments
+      tags: [classrooms]
+      summary: "A topic's offline assignments: work done away from the platform, marked by the teacher (D-159)"
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { assignments: { type: array, items: { $ref: '#/components/schemas/OfflineAssignment' } } } } } } } }
+    post:
+      operationId: postTeacherTopicOfflineAssignment
+      tags: [classrooms]
+      summary: Add an offline assignment to a topic (D-159)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OfflineAssignmentInput' } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/OfflineAssignment' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/offline-assignments/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherOfflineAssignment
+      tags: [classrooms]
+      summary: "An offline assignment with every active student's mark (their own, or their group's) and the classroom's groups with theirs (D-159)"
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/OfflineSheet' } } } } }
+    put:
+      operationId: putTeacherOfflineAssignment
+      tags: [classrooms]
+      summary: "Change an offline assignment; it can't be out of fewer marks than one already given"
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OfflineAssignmentInput' } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/OfflineAssignment' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete: { operationId: deleteTeacherOfflineAssignment, tags: [classrooms], summary: 'Delete an offline assignment and its marks', responses: { '204': { description: 'Deleted' } } }
+  /api/teacher/offline-assignments/{id}/release:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherOfflineAssignmentRelease
+      tags: [classrooms]
+      summary: Show students their marks, or hide them again
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [released], properties: { released: { type: boolean } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/OfflineAssignment' } } } } }
+  /api/teacher/offline-assignments/{id}/marks:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherOfflineAssignmentMarks
+      tags: [classrooms]
+      summary: "Save the marks listed (students' own, groups'); a missing score removes that mark; others stay"
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { students: { type: array, items: { type: object, required: [user_id], properties: { user_id: { type: string, format: uuid }, score: { type: number, nullable: true }, comment: { type: string, maxLength: 1000 } } } }, groups: { type: array, items: { type: object, required: [group_id], properties: { group_id: { type: string, format: uuid }, score: { type: number, nullable: true }, comment: { type: string, maxLength: 1000 } } } } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/OfflineSheet' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/offline-assignments/{id}/sheet:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherOfflineAssignmentSheet
+      tags: [classrooms]
+      summary: "The mark sheet to fill in: Excel (a Groups sheet first in a group assignment) or one table as CSV"
+      parameters: [{ name: format, in: query, schema: { type: string, enum: [xlsx, csv] } }, { name: sheet, in: query, schema: { type: string, enum: [students, groups] }, description: 'For CSV: which table' }]
+      responses: { '200': { description: 'The file', content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }, text/csv: { schema: { type: string } } } } }
+    post:
+      operationId: postTeacherOfflineAssignmentSheet
+      tags: [classrooms]
+      summary: "Read a filled-in sheet (.xlsx or .csv, at most 5 MB) and say what it would change; nothing is saved until PUT .../marks"
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses: { '200': { description: 'What would change', content: { application/json: { schema: { type: object, properties: { students: { type: array, items: { type: object, properties: { user_id: { type: string }, name: { type: string }, score: { type: number }, comment: { type: string }, was: { type: number, nullable: true } } } }, groups: { type: array, items: { type: object, properties: { group_id: { type: string }, name: { type: string }, score: { type: number }, comment: { type: string }, was: { type: number, nullable: true } } } }, problems: { type: array, items: { type: object, properties: { sheet: { type: string }, row: { type: integer }, message: { type: string } } } }, same: { type: integer } } } } } }, '413': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/classrooms/{id}/gradebook:
     get:
       operationId: getTeacherClassroomGradebook
@@ -2534,6 +2591,13 @@ paths:
       summary: "The group's leader names it for everyone to see; empty goes back to the teacher's name (D-158)"
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 40 } } } } } }
       responses: { '204': { description: 'Saved' }, '403': { description: 'Not the leader' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/my/offline-assignments/{id}:
+    get:
+      operationId: getMyOfflineAssignment
+      tags: [student]
+      summary: "An offline assignment of a classroom I'm in, with my mark once released (D-159)"
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { id: { type: string }, title: { type: string }, instructions: { type: string }, classroom: { type: string }, classroom_id: { type: string }, topic: { type: string }, max_marks: { type: number }, mode: { type: string }, due_at: { type: string, format: date-time, nullable: true }, released: { type: boolean }, group: { type: string }, score: { type: number }, pct: { type: number }, comment: { type: string } } } } } } }
   /api/my/classrooms/{id}/work:
     get:
       operationId: getMyClassroomWork
@@ -4240,6 +4304,40 @@ components:
         position: { type: integer }
         members: { type: integer, description: 'Active students in the category' }
         public_name: { type: string, nullable: true, description: "The name its leader chose for everyone to see (D-158)" }
+    OfflineAssignment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        classroom_id: { type: string, format: uuid }
+        topic_id: { type: string, format: uuid }
+        title: { type: string }
+        instructions: { type: string }
+        max_marks: { type: number }
+        mode: { type: string, enum: [individual, group] }
+        due_at: { type: string, format: date-time, nullable: true }
+        released_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        marked: { type: integer, description: 'Students with a mark' }
+        students: { type: integer }
+    OfflineAssignmentInput:
+      type: object
+      required: [title, max_marks]
+      properties:
+        title: { type: string, maxLength: 200 }
+        instructions: { type: string, maxLength: 5000 }
+        max_marks: { type: number, minimum: 0.01, maximum: 10000 }
+        mode: { type: string, enum: [individual, group] }
+        due_at: { type: string, format: date-time, nullable: true }
+    OfflineSheet:
+      allOf:
+        - $ref: '#/components/schemas/OfflineAssignment'
+        - type: object
+          properties:
+            classroom: { type: string }
+            topic: { type: string }
+            module: { type: string }
+            students: { type: array, items: { type: object, properties: { user_id: { type: string }, name: { type: string }, student_number: { type: string, nullable: true }, groups: { type: array, items: { type: string } }, group_id: { type: string }, group_name: { type: string }, group_score: { type: number }, own: { type: number, nullable: true }, own_comment: { type: string }, score: { type: number, nullable: true, description: 'The mark that counts' }, comment: { type: string } } } }
+            groups: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, color: { type: integer }, members: { type: array, items: { type: string } }, score: { type: number, nullable: true }, comment: { type: string } } } }
     ClassGroup:
       allOf:
         - $ref: '#/components/schemas/Category'

@@ -11,7 +11,7 @@ export type Detail = '' | 'marks' | 'correctness' | 'answers';
 export type Unit = 'minutes' | 'hours' | 'days';
 export type GroupRule = 'average' | 'total' | 'highest' | 'lowest';
 
-export type ReportItem = { kind: 'quiz' | 'tutorial' | 'poll'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number; date?: string };
+export type ReportItem = { kind: 'quiz' | 'tutorial' | 'poll' | 'offline'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number; date?: string };
 export type ReportMark = { score: number; max: number; pct: number; points?: number; submissions: number; pending?: boolean };
 export type ReportStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, ReportMark>; total: number; missing: number; final: number | null; violations?: Record<string, number>; violations_total?: number };
 export type ReportOptions = { violations: boolean; attendance: boolean; dates: boolean };
@@ -41,7 +41,7 @@ export const GROUP_RULES: { v: GroupRule; label: string }[] = [
 	{ v: 'lowest', label: 'Lowest' }
 ];
 
-export const KIND_LABEL: Record<string, string> = { quiz: 'Quiz', tutorial: 'Tutorial', poll: 'Poll' };
+export const KIND_LABEL: Record<string, string> = { quiz: 'Quiz', tutorial: 'Tutorial', poll: 'Poll', offline: 'Offline assignment' };
 
 /** The largest unit that says a number of minutes exactly: 2880 is 2 days. */
 export function reviewParts(minutes: number | null | undefined): { n: number | null; unit: Unit } {

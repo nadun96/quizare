@@ -103,6 +103,9 @@ func (s *Service) Classroom(ctx context.Context, userID, classroomID string) (Cl
 	if err := s.student(ctx, userID, classroomID, lists); err != nil {
 		return w, err
 	}
+	if err := s.offline(ctx, userID, classroomID, &w); err != nil {
+		return w, err
+	}
 	w.Live = append(w.Live, lists[ListLive]...)
 	w.Due = append(append(w.Due, lists[ListOverdue]...), lists[ListPending]...)
 	for _, it := range lists[ListUpcoming] {
@@ -130,6 +133,7 @@ func (s *Service) Classroom(ctx context.Context, userID, classroomID string) (Cl
 	if err := s.completedLessons(ctx, userID, classroomID, &w); err != nil {
 		return w, err
 	}
+
 	sort.SliceStable(w.Completed, func(i, j int) bool {
 		a, b := w.Completed[i].At, w.Completed[j].At
 		return a != nil && (b == nil || a.After(*b))
@@ -214,6 +218,57 @@ func (s *Service) completedLessons(ctx context.Context, userID, classroomID stri
 			d.Href = "/slides/" + d.ID
 		}
 		w.Completed = append(w.Completed, d)
+		return nil
+	})
+}
+
+// offline adds offline assignments (D-159): ones still to come are due by
+// their date (or undated); once the teacher releases the marks, they're done,
+// with the student's mark - their own, or their group's.
+func (s *Service) offline(ctx context.Context, userID, classroomID string, w *ClassroomWork) error {
+	now := s.now()
+	rows, err := s.pool.Query(ctx, `SELECT a.id::text, a.title, a.due_at, a.released_at, a.max_marks::float8,
+			coalesce((SELECT m.score FROM grading.offline_marks m WHERE m.assignment_id = a.id AND m.user_id = e.user_id),
+				(SELECT g.score FROM content.enrolment_categories ec JOIN content.categories c ON c.id = ec.category_id
+					JOIN grading.offline_group_marks g ON g.category_id = c.id AND g.assignment_id = a.id
+					WHERE ec.enrolment_id = e.id AND a.mode = 'group' ORDER BY c.position, lower(c.name) LIMIT 1))::float8
+		FROM grading.offline_assignments a
+		JOIN content.enrolments e ON e.classroom_id = a.classroom_id AND e.user_id = $1 AND e.status = 'active'
+		WHERE a.classroom_id::text = $2
+		LIMIT 500`, userID, classroomID)
+	if err != nil {
+		return err
+	}
+	return each(rows, func(r pgx.Rows) error {
+		var id, title string
+		var due, released *time.Time
+		var max float64
+		var score *float64
+		if err := r.Scan(&id, &title, &due, &released, &max, &score); err != nil {
+			return err
+		}
+		href := "/my/offline/" + id
+		if released != nil {
+			d := Done{Kind: "offline", ID: id, Title: title, At: released, Status: "finished", Released: true, Href: href}
+			if score != nil {
+				pct := float64(int64(*score/max*1000+0.5)) / 10
+				m := max
+				d.Score, d.Max, d.Pct = score, &m, &pct
+			}
+			w.Completed = append(w.Completed, d)
+			return nil
+		}
+		it := Item{Kind: "offline", ID: id, Title: title, Href: href, Status: "due"}
+		switch {
+		case due == nil:
+		case due.Before(now):
+			return nil // handed in, or not: the teacher marks it
+		case due.Sub(now) <= dueSoon:
+			it.Status, it.At = "due_soon", due
+		default:
+			it.At = due
+		}
+		w.Due = append(w.Due, it)
 		return nil
 	})
 }
