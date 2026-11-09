@@ -8,7 +8,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { requireRole } from '$lib/guard.svelte';
-	import { changed, markText, progress, readable, sheetUrl, type Draft, type Mode, type OfflineSheet, type Upload } from '$lib/offline/offline';
+	import { changed, markText, readable, sheetUrl, type Draft, type Mode, type OfflineSheet, type Upload } from '$lib/offline/offline';
 	import { fromLocalInput, toLocalInput } from '$lib/tutorial/tutorial';
 	import { confirmDialog } from '$lib/ui/dialog.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -106,7 +106,7 @@
 				students: upload.students.map((m) => ({ user_id: m.user_id, score: m.score, comment: m.comment })),
 				groups: upload.groups.map((m) => ({ group_id: m.group_id, score: m.score, comment: m.comment }))
 			}));
-			toast(tr("{0} marks saved from the file", [upload.students.length + upload.groups.length]));
+			toast(tr("Marks saved from the file: {0}", [upload.students.length + upload.groups.length]));
 			upload = null;
 		} catch (e) {
 			problem(e);
@@ -116,7 +116,7 @@
 	}
 	async function release(on: boolean) {
 		if (!sh) return;
-		if (on && sh.marked < sh.students && !(await confirmDialog({ title: tr("Show students their marks?"), body: tr("{0} students have no mark yet. They’ll see that they have none.", [sh.students - sh.marked]), confirm: tr("Show marks") }))) return;
+		if (on && sh.marked < sh.students.length && !(await confirmDialog({ title: tr("Show students their marks?"), body: tr("Students with no mark yet: {0}. They’ll see that they have none.", [sh.students.length - sh.marked]), confirm: tr("Show marks") }))) return;
 		busy = true;
 		try {
 			await api.put(`/api/teacher/offline-assignments/${id}/release`, { released: on });
@@ -166,7 +166,7 @@
 			<div class="grow min-w-0">
 				<h1 class="m-0 break-words">{sh.title}</h1>
 				<p class="m-0 small muted">
-					{isGroup ? tr("Marked by group") : tr("Marked student by student")} · {tr("out of {0}", [sh.max_marks])}{#if sh.due_at} · {tr("due {0}", [when(sh.due_at)])}{/if} · {tr(progress(sh))}
+					{isGroup ? tr("Marked by group") : tr("Marked student by student")} · {tr("out of {0}", [sh.max_marks])}{#if sh.due_at} · {tr("due {0}", [when(sh.due_at)])}{/if} · {tr("{0} of {1} marked", [sh.marked, sh.students.length])}
 				</p>
 			</div>
 			<button class="btn btn-sm" onclick={() => (editing = !editing)} aria-expanded={editing}><Icon name="pencil" size={15} />{tr("Edit")}</button>
@@ -205,7 +205,7 @@
 			<section class="card card-border border-primary bg-base-100 p-4 vstack gap-2" aria-label={tr("From the file")}>
 				<h2 class="m-0 text-base">{tr("From the file")}</h2>
 				{#if upload.students.length || upload.groups.length}
-					<p class="m-0 small">{tr("{0} marks will change; {1} rows are the same as now.", [upload.students.length + upload.groups.length, upload.same])}</p>
+					<p class="m-0 small">{tr("Marks to change: {0}. The same as now: {1}.", [upload.students.length + upload.groups.length, upload.same])}</p>
 					<div class="overflow-x-auto max-h-80">
 						<table class="table table-sm">
 							<thead><tr><th>{tr("Who")}</th><th>{tr("Mark")}</th><th>{tr("Comment")}</th></tr></thead>
@@ -216,12 +216,12 @@
 						</table>
 					</div>
 				{:else}
-					<p class="m-0 small">{tr("Nothing to change: {0} rows are the same as now.", [upload.same])}</p>
+					<p class="m-0 small">{tr("Nothing to change. The same as now: {0}.", [upload.same])}</p>
 				{/if}
 				{#if upload.problems.length}
 					<div class="alert alert-soft alert-warning vstack items-start gap-1" role="status">
-						<strong>{tr("{0} rows weren’t used", [upload.problems.length])}</strong>
-						<ul class="m-0 pl-4 small">{#each upload.problems as p, i (i)}<li>{#if p.row}{p.sheet} {tr("row {0}", [p.row])}: {/if}{p.message}</li>{/each}</ul>
+						<strong>{(upload.problems.length === 1 ? tr("1 row wasn’t used") : tr("{0} rows weren’t used", [upload.problems.length]))}</strong>
+						<ul class="m-0 pl-4 small">{#each upload.problems as p, i (i)}<li>{#if p.row}{p.sheet} {tr("row {0}", [p.row])}{': '}{/if}{p.message}</li>{/each}</ul>
 					</div>
 				{/if}
 				<div class="flex gap-2">
@@ -290,8 +290,8 @@
 			</div>
 		</section>
 
-		<div class="savebar card card-border bg-base-100 p-3 flex flex-wrap items-center gap-2">
-			<span class="small grow">{dirty ? tr("{0} unsaved changes", [dirty]) : tr("All marks saved")}{#if invalid} · <span class="text-error">{tr("{0} marks to fix", [invalid])}</span>{/if}</span>
+		<div class="savebar rounded-box border border-base-300 bg-base-100 p-3 flex flex-row flex-wrap items-center gap-2">
+			<span class="small grow">{dirty ? (dirty === 1 ? tr("1 unsaved change") : tr("{0} unsaved changes", [dirty])) : tr("All marks saved")}{#if invalid} · <span class="text-error">{(invalid === 1 ? tr("1 mark to fix") : tr("{0} marks to fix", [invalid]))}</span>{/if}</span>
 			{#if sh.released_at}
 				<span class="badge badge-success badge-soft">{tr("Students see marks since {0}", [when(sh.released_at)])}</span>
 				<button class="btn btn-sm" disabled={busy} onclick={() => release(false)}>{tr("Hide marks")}</button>

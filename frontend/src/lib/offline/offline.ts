@@ -35,7 +35,8 @@ export type OfflineStudent = {
 
 export type OfflineGroup = { id: string; name: string; color: number; members: string[]; score: number | null; comment: string };
 
-export type OfflineSheet = Offline & { classroom: string; topic: string; module: string; students: OfflineStudent[]; groups: OfflineGroup[] };
+// students is the list here, not the count: it shadows Offline's.
+export type OfflineSheet = Omit<Offline, 'students'> & { classroom: string; topic: string; module: string; students: OfflineStudent[]; groups: OfflineGroup[] };
 
 export type Upload = {
 	students: { user_id: string; name: string; score: number; comment: string; was: number | null }[];
