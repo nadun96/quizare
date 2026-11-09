@@ -40,6 +40,18 @@ export function byRole(people: GroupPerson[]): GroupPerson[] {
 	return [...people].sort((a, b) => rank(a.role) - rank(b.role) || a.name.localeCompare(b.name));
 }
 
+/**
+ * Whether a student matches a search: by name or student ID, any part. Several
+ * searches can be pasted at once, split by commas, semicolons or new lines,
+ * and a student matching any of them matches (D-164).
+ */
+export function matchesSearch(s: Pick<GroupPerson, 'name' | 'student_number'>, q: string): boolean {
+	const terms = q.split(/[,;\n]+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+	if (!terms.length) return true;
+	const hay = `${s.name} ${s.student_number ?? ''}`.toLowerCase();
+	return terms.some((t) => hay.includes(t));
+}
+
 /** The students in no group. */
 export function ungrouped(students: GroupPerson[], groups: ClassGroup[]): GroupPerson[] {
 	const placed = new Set(groups.flatMap((g) => g.people.map((p) => p.user_id)));

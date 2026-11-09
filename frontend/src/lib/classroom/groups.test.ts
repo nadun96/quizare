@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byRole, joinBlock, policyState, shareOut, ungrouped, type ClassGroup, type GroupPolicy, type MyGroup, type MyGroupsView } from './groups';
+import { byRole, joinBlock, matchesSearch, policyState, shareOut, ungrouped, type ClassGroup, type GroupPolicy, type MyGroup, type MyGroupsView } from './groups';
 
 const person = (user_id: string, name: string, role: 'member' | 'leader' | 'assistant' = 'member') => ({ user_id, name, role });
 const group = (id: string, ...people: ReturnType<typeof person>[]): ClassGroup => ({ id, classroom_id: 'c', name: id, color: 1, position: 0, members: people.length, public_name: null, people });
@@ -9,6 +9,16 @@ describe('classroom groups (D-158)', () => {
 	it('puts leaders first, then assistants, then members by name', () => {
 		const got = byRole([person('1', 'Zoe'), person('2', 'Amal', 'assistant'), person('3', 'Bo', 'leader'), person('4', 'Ann')]);
 		expect(got.map((p) => p.name)).toEqual(['Bo', 'Amal', 'Ann', 'Zoe']);
+	});
+
+	it('finds students by name or ID, several pasted at once (D-164)', () => {
+		const a = { name: 'Aadhil Ansar', student_number: 'MGT/2024/004' };
+		const b = { name: 'dilmi konara', student_number: 'MGT/2024/006' };
+		expect(matchesSearch(a, '')).toBe(true);
+		expect(matchesSearch(a, 'ansar')).toBe(true);
+		expect(matchesSearch(b, 'mgt/2024/006')).toBe(true);
+		expect(matchesSearch(a, 'MGT/2024/006, MGT/2024/004')).toBe(true);
+		expect(matchesSearch(b, 'MGT/2024/009;\nnobody')).toBe(false);
 	});
 
 	it('finds students in no group', () => {
