@@ -1696,8 +1696,10 @@ paths:
     get:
       operationId: getTeacherClassroomClassReport
       tags: [classrooms]
-      summary: The class report per student, with its setup and what students see (D-140)
-      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ClassReport' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+      summary: The class report per student, with its setup and what students see (D-140); or of part of the classroom (D-160)
+      description: "With scope, only what it covers is in the report and its totals: module:<id>, topic:<id>, item:<kind>:<id> (quiz, tutorial, poll or offline) or session:<id> (one run of a quiz, using only its marks). An item or session asked for is shown even if the setup leaves it out. The answer always lists the classroom's quiz sessions."
+      parameters: [{ name: scope, in: query, schema: { type: string }, description: 'Empty or all: the whole classroom' }]
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ClassReport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
     put:
       operationId: putTeacherClassroomClassReport
       tags: [classrooms]
@@ -3756,6 +3758,8 @@ components:
         exceptions: { type: array, items: { $ref: '#/components/schemas/ResultException' } }
         class_groups: { type: array, items: { $ref: '#/components/schemas/GroupRow' } }
         item_groups: { type: array, items: { type: object, properties: { kind: { type: string }, id: { type: string }, groups: { type: array, items: { $ref: '#/components/schemas/GroupRow' } } } } }
+        scope: { type: object, description: 'What the report covers (D-160)', properties: { kind: { type: string, enum: [all, module, topic, item, session] }, id: { type: string }, label: { type: string } } }
+        sessions: { type: array, description: "The classroom's quiz sessions, newest first", items: { type: object, properties: { id: { type: string }, quiz_id: { type: string }, title: { type: string }, started_at: { type: string, format: date-time }, ended_at: { type: string, format: date-time, nullable: true }, students: { type: integer } } } }
     Gradebook:
       type: object
       properties:
