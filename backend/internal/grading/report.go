@@ -106,6 +106,8 @@ type ReportItem struct {
 	Low           *float64  `json:"low"`
 	MaxMarks      float64   `json:"max_marks"`
 	Date          time.Time `json:"date"` // a quiz's first session, a tutorial's publishing, a poll's opening
+	TopicID       string    `json:"topic_id"`
+	ModuleID      string    `json:"module_id"`
 }
 
 // ReportOptions says what else the report shows (D-156).
@@ -159,6 +161,8 @@ type ClassReport struct {
 	ClassGroups []GroupRow        `json:"class_groups"` // the whole class's groups (D-141)
 	ItemGroups  []ItemGroups      `json:"item_groups"`  // items with groups of their own
 	Options     ReportOptions     `json:"options"`
+	Scope       ReportScope       `json:"scope"`    // what it covers (D-160)
+	Sessions    []ReportSession   `json:"sessions"` // the classroom's quiz sessions, to report on one
 }
 
 // submission is one valid mark a student has on an item.
@@ -195,7 +199,7 @@ func pickMark(list []submission, pick string) submission {
 }
 
 // loadReportExtras fills in the options and each student's violations.
-func (s *Service) loadReportExtras(ctx context.Context, classroomID string, rep *ClassReport) error {
+func (s *Service) loadReportExtras(ctx context.Context, classroomID, session string, rep *ClassReport) error {
 	err := s.pool.QueryRow(ctx, `SELECT show_violations, show_attendance, show_dates FROM grading.report_options WHERE classroom_id = $1`, classroomID).
 		Scan(&rep.Options.Violations, &rep.Options.Attendance, &rep.Options.Dates)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -211,8 +215,8 @@ func (s *Service) loadReportExtras(ctx context.Context, classroomID string, rep 
 	}
 	rows, err := s.pool.Query(ctx, `SELECT a.user_id::text, 'quiz:' || se.quiz_id::text, sum(a.violations)::int
 		FROM live.attempts a JOIN live.sessions se ON se.id = a.session_id
-		WHERE se.classroom_id = $1 AND a.violations > 0
-		GROUP BY a.user_id, se.quiz_id`, classroomID)
+		WHERE se.classroom_id = $1 AND a.violations > 0 AND ($2 = '' OR se.id::text = $2)
+		GROUP BY a.user_id, se.quiz_id`, classroomID, session)
 	if err != nil {
 		return err
 	}
@@ -238,6 +242,12 @@ func (s *Service) loadReportExtras(ctx context.Context, classroomID string, rep 
 
 // ClassReport builds the report from the current setup and marks.
 func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string) (ClassReport, error) {
+	return s.ScopedReport(ctx, teacherID, classroomID, "")
+}
+
+// ScopedReport is the report of part of the classroom (D-160): a module, a
+// topic, one item, or one quiz session; "" is the whole classroom.
+func (s *Service) ScopedReport(ctx context.Context, teacherID, classroomID, scope string) (ClassReport, error) {
 	name, err := s.teaches(ctx, teacherID, classroomID)
 	if err != nil {
 		return ClassReport{}, err
@@ -247,28 +257,31 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 	// Weights start from the gradebook's, until the report sets its own.
 	rows, err := s.pool.Query(ctx, `
 		WITH items AS (
-			SELECT 'quiz' AS kind, q.id, q.title, coalesce(tp.name, '') AS topic, coalesce(m.name, '') AS module, se.first AS at
+			SELECT 'quiz' AS kind, q.id, q.title, coalesce(tp.name, '') AS topic, coalesce(m.name, '') AS module, se.first AS at,
+				coalesce(tp.id::text, '') AS topic_id, coalesce(m.id::text, '') AS module_id
 			FROM quiz.quizzes q
 			JOIN (SELECT quiz_id, min(created_at) AS first FROM live.sessions WHERE classroom_id = $1 GROUP BY quiz_id) se ON se.quiz_id = q.id
 			LEFT JOIN content.topics tp ON tp.id = q.topic_id
 			LEFT JOIN content.modules m ON m.id = tp.module_id
 			UNION ALL
-			SELECT 'tutorial', t.id, t.title, tp.name, m.name, coalesce(t.published_at, t.created_at)
+			SELECT 'tutorial', t.id, t.title, tp.name, m.name, coalesce(t.published_at, t.created_at), tp.id::text, m.id::text
 			FROM tutorial.tutorials t JOIN content.topics tp ON tp.id = t.topic_id JOIN content.modules m ON m.id = tp.module_id
 			WHERE m.classroom_id = $1 AND t.status = 'published' AND EXISTS (SELECT 1 FROM quiz.questions x WHERE x.quiz_id = t.quiz_id)
 			UNION ALL
-			SELECT 'poll', p.id, p.title, coalesce(ptp.name, ''), coalesce(pm.name, ''), coalesce(p.opened_at, p.created_at)
+			SELECT 'poll', p.id, p.title, coalesce(ptp.name, ''), coalesce(pm.name, ''), coalesce(p.opened_at, p.created_at),
+				coalesce(ptp.id::text, ''), coalesce(pm.id::text, '')
 			FROM poll.polls p
 			LEFT JOIN content.topics ptp ON ptp.id = p.topic_id LEFT JOIN content.modules pm ON pm.id = ptp.module_id
 			WHERE p.classroom_id = $1 AND p.scoring AND p.identity <> 'anonymous' AND p.status <> 'draft'
 				AND EXISTS (SELECT 1 FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL AND x.points > 0)
 			UNION ALL
-			SELECT 'offline', a.id, a.title, tp.name, m.name, coalesce(a.due_at, a.created_at)
+			SELECT 'offline', a.id, a.title, tp.name, m.name, coalesce(a.due_at, a.created_at), tp.id::text, m.id::text
 			FROM grading.offline_assignments a JOIN content.topics tp ON tp.id = a.topic_id JOIN content.modules m ON m.id = tp.module_id
 			WHERE a.classroom_id = $1
 		)
 		SELECT i.kind, i.id::text, i.title, i.topic, i.module, coalesce(ri.included, true),
-			coalesce(ri.weight, w.weight / 100, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average'), i.at
+			coalesce(ri.weight, w.weight / 100, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average'), i.at,
+			i.topic_id, i.module_id
 		FROM items i
 		LEFT JOIN grading.report_items ri ON ri.classroom_id = $1 AND ri.kind = i.kind AND ri.item_id = i.id
 		LEFT JOIN grading.weights w ON w.classroom_id = $1 AND w.kind = i.kind AND w.item_id = i.id
@@ -278,8 +291,11 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 	}
 	if rep.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (ReportItem, error) {
 		var it ReportItem
-		return it, r.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Module, &it.Included, &it.Weight, &it.Pick, &it.Detail, &it.ReviewMinutes, &it.GroupRule, &it.Date)
+		return it, r.Scan(&it.Kind, &it.ID, &it.Title, &it.Topic, &it.Module, &it.Included, &it.Weight, &it.Pick, &it.Detail, &it.ReviewMinutes, &it.GroupRule, &it.Date, &it.TopicID, &it.ModuleID)
 	}); err != nil {
+		return rep, err
+	}
+	if err := s.scopeReport(ctx, classroomID, scope, &rep); err != nil {
 		return rep, err
 	}
 
@@ -289,7 +305,7 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 	rows, err = s.pool.Query(ctx, `
 		SELECT r.user_id::text, 'quiz:' || se.quiz_id::text, r.score::float8, r.max_score::float8, r.pct::float8, r.complete
 		FROM eval.results r JOIN live.sessions se ON se.id = r.session_id
-		WHERE se.classroom_id = $1 AND NOT r.invalidated
+		WHERE se.classroom_id = $1 AND NOT r.invalidated AND ($2 = '' OR se.id::text = $2)
 		UNION ALL
 		SELECT ru.user_id::text, 'tutorial:' || t.id::text,
 			coalesce((SELECT sum(a.score) FROM tutorial.answers a WHERE a.run_id = ru.id), 0)::float8, mx.marks::float8,
@@ -310,7 +326,7 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 		GROUP BY pa.user_id, p.id, mx.points
 		UNION ALL
 		SELECT o.user_id, 'offline:' || o.assignment_id, o.score, o.max_marks, 100 * o.score / o.max_marks, true
-		FROM (`+offlineMarksSQL+`) o`, classroomID)
+		FROM (`+offlineMarksSQL+`) o`, classroomID, rep.Scope.SessionID())
 	if err != nil {
 		return rep, err
 	}
@@ -395,7 +411,7 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			it.Avg, it.High, it.Low = &a, &h, &l
 		}
 	}
-	if err := s.loadReportExtras(ctx, classroomID, &rep); err != nil {
+	if err := s.loadReportExtras(ctx, classroomID, rep.Scope.SessionID(), &rep); err != nil {
 		return rep, err
 	}
 	rep.WeightTotal = round(rep.WeightTotal, 4)
