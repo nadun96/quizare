@@ -12,7 +12,7 @@
 	import RowMenu from '$lib/ui/RowMenu.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { byRole, policyState, ROLES, shareOut, ungrouped, type ClassGroup, type GroupPerson, type GroupsView, type Role } from './groups';
+	import { byRole, matchesSearch, policyState, ROLES, shareOut, ungrouped, type ClassGroup, type GroupPerson, type GroupsView, type Role } from './groups';
 
 	let { classroomId }: { classroomId: string } = $props();
 	let view = $state<GroupsView | null>(null);
@@ -24,7 +24,11 @@
 	let rMax = $state<number | null>(null);
 	let rBalance = $state(true);
 	let rPrefix = $state('Group');
-	let adding = $state<Record<string, string>>({});
+	// Adding students to a group: search, tick, add them all at once (D-164).
+	let picking = $state<string | null>(null);
+	let pickQ = $state('');
+	let pickLoose = $state(true);
+	let picked = $state<Set<string>>(new Set());
 	let q = $state('');
 	// The policy being edited.
 	let selfJoin = $state(false);
@@ -103,13 +107,40 @@
 		const ok = await confirmDialog({ title: tr("Delete “{0}”?", [g.name]), body: tr("Its students stay in the classroom and in their other groups."), confirm: tr("Delete group"), danger: true });
 		if (ok) run(() => api.del(`/api/teacher/categories/${g.id}`), tr("Deleted"));
 	}
-	function add(g: ClassGroup) {
-		const en = adding[g.id];
-		if (!en) return;
+	function openPicker(g: ClassGroup) {
+		picking = picking === g.id ? null : g.id;
+		pickQ = '';
+		picked = new Set();
+		pickLoose = loose.length > 0;
+	}
+	function candidates(g: ClassGroup) {
+		if (!view) return [];
+		const looseIds = new Set(loose.map((s) => s.user_id));
+		return view.students.filter((s) => !g.people.some((p) => p.user_id === s.user_id) && (!pickLoose || looseIds.has(s.user_id)) && matchesSearch(s, pickQ));
+	}
+	function togglePick(id: string) {
+		const n = new Set(picked);
+		if (n.has(id)) n.delete(id);
+		else n.add(id);
+		picked = n;
+	}
+	function pickAll(list: GroupPerson[]) {
+		const all = list.every((s) => picked.has(s.enrolment_id!));
+		const n = new Set(picked);
+		for (const s of list) {
+			if (all) n.delete(s.enrolment_id!);
+			else n.add(s.enrolment_id!);
+		}
+		picked = n;
+	}
+	function addPicked(g: ClassGroup) {
+		const ids = [...picked];
+		if (!ids.length) return;
 		run(async () => {
-			await api.post(`/api/teacher/categories/${g.id}/members`, { enrolment_ids: [en], assigned: true });
-			adding[g.id] = '';
-		});
+			await api.post(`/api/teacher/categories/${g.id}/members`, { enrolment_ids: ids, assigned: true });
+			picked = new Set();
+			picking = null;
+		}, ids.length === 1 ? tr("1 student added to {0}", [g.name]) : tr("{0} students added to {1}", [ids.length, g.name]));
 	}
 	function take(g: ClassGroup, p: GroupPerson) {
 		run(() => api.post(`/api/teacher/categories/${g.id}/members`, { enrolment_ids: [p.enrolment_id], assigned: false }));
@@ -187,7 +218,12 @@
 				<div class="flex gap-2"><button class="btn btn-primary btn-sm" disabled={busy}>{tr("Make the groups")}</button><button type="button" class="btn btn-ghost btn-sm" onclick={() => (randomOpen = false)}>{tr("Cancel")}</button></div>
 			</form>
 		{/if}
-		{#if loose.length && view.groups.length}<p class="m-0 small text-warning">{tr("In no group: {0}", [loose.map((s) => s.name).join(', ')])}</p>{/if}
+		{#if loose.length && view.groups.length}
+			<details class="small">
+				<summary class="cursor-pointer text-warning">{loose.length === 1 ? tr("1 student is in no group") : tr("{0} students are in no group", [loose.length])}</summary>
+				<p class="m-0 mt-1 muted">{loose.map((s) => s.name).join(', ')}</p>
+			</details>
+		{/if}
 
 		{#if !view.groups.length}
 			<div class="card card-border bg-base-100"><EmptyState icon="users" title={tr("No groups yet")}>{tr("Add a group, then put students in it, or let students choose.")}</EmptyState></div>
@@ -195,6 +231,7 @@
 			<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 				{#each shown as g (g.id)}
 					{@const out = view.students.filter((s) => !g.people.some((p) => p.user_id === s.user_id))}
+					{@const list = picking === g.id ? candidates(g) : []}
 					<section class="card card-border bg-base-100 p-4 vstack gap-2 m-0 self-start" aria-label={g.name}>
 						<div class="flex items-start gap-2">
 							<span class="dot mt-1.5" style:background="var(--cat-{g.color})" aria-hidden="true"></span>
@@ -214,11 +251,11 @@
 							{/each}
 						</div>
 						{#if g.people.length}
-							<ul class="m-0 p-0 list-none vstack gap-1">
+							<ul class="m-0 p-0 list-none vstack gap-1 members">
 								{#each byRole(g.people) as p (p.user_id)}
 									<li class="flex items-center gap-2">
 										<span class="grow min-w-0 truncate small">{p.name}{#if p.self_joined}<span class="text-xs muted">{' · '}{tr("chose it")}</span>{/if}</span>
-										<select class="select select-xs w-auto" value={p.role} aria-label={tr("Role of {0}", [p.name])} disabled={busy} onchange={(e) => setRole(g, p, e.currentTarget.value as Role)}>
+										<select class="select select-xs w-auto role" value={p.role} aria-label={tr("Role of {0}", [p.name])} disabled={busy} onchange={(e) => setRole(g, p, e.currentTarget.value as Role)}>
 											{#each ROLES as r (r.v)}<option value={r.v}>{roleLabel(r.v)}</option>{/each}
 										</select>
 										<button class="btn btn-ghost btn-xs" aria-label={tr("Take {0} out of {1}", [p.name, g.name])} disabled={busy} onclick={() => take(g, p)}><Icon name="x" size={13} /></button>
@@ -229,13 +266,29 @@
 							<p class="m-0 small muted">{tr("No students yet.")}</p>
 						{/if}
 						{#if out.length}
-							<div class="flex items-center gap-1">
-								<select class="select select-sm grow" bind:value={adding[g.id]} aria-label={tr("Add a student to {0}", [g.name])}>
-									<option value="">{tr("Add a student…")}</option>
-									{#each out as s (s.user_id)}<option value={s.enrolment_id}>{s.name}{s.student_number ? ` (${s.student_number})` : ''}</option>{/each}
-								</select>
-								<button class="btn btn-sm" disabled={busy || !adding[g.id]} onclick={() => add(g)}>{tr("Add")}</button>
-							</div>
+							<button class="btn btn-sm self-start" aria-expanded={picking === g.id} onclick={() => openPicker(g)}><Icon name="plus" size={14} />{tr("Add students")}</button>
+							{#if picking === g.id}
+								<div class="vstack gap-2 rounded-box border border-base-300 p-2" role="group" aria-label={tr("Add students to {0}", [g.name])}>
+									<!-- svelte-ignore a11y_autofocus -->
+									<textarea class="textarea textarea-sm w-full min-h-0" rows={pickQ.includes('\n') ? 3 : 1} bind:value={pickQ} autofocus placeholder={tr("Name or ID; paste several, one a line or comma-separated")} aria-label={tr("Find students to add to {0}", [g.name])}></textarea>
+									<div class="flex flex-wrap items-center gap-2 small">
+										<label class="flex items-center gap-1"><input type="checkbox" class="checkbox checkbox-xs" bind:checked={pickLoose} />{tr("Only those in no group")}</label>
+										<span class="grow"></span>
+										{#if list.length}<button class="btn btn-ghost btn-xs" onclick={() => pickAll(list)}>{list.every((s) => picked.has(s.enrolment_id!)) ? tr("Clear these") : tr("Tick all {0}", [list.length])}</button>{/if}
+									</div>
+									<ul class="m-0 p-0 list-none pick">
+										{#each list as s (s.user_id)}
+											<li><label class="flex items-center gap-2 small py-0.5"><input type="checkbox" class="checkbox checkbox-xs" checked={picked.has(s.enrolment_id!)} onchange={() => togglePick(s.enrolment_id!)} /><span class="truncate">{s.name}{#if s.student_number && s.student_number !== s.name}<span class="muted"> · {s.student_number}</span>{/if}</span></label></li>
+										{:else}
+											<li class="small muted">{tr("Nobody matches.")}</li>
+										{/each}
+									</ul>
+									<div class="flex gap-2">
+										<button class="btn btn-primary btn-sm" disabled={busy || !picked.size} onclick={() => addPicked(g)}>{picked.size ? tr("Add {0}", [picked.size]) : tr("Add")}</button>
+										<button class="btn btn-ghost btn-sm" onclick={() => (picking = null)}>{tr("Cancel")}</button>
+									</div>
+								</div>
+							{/if}
 						{/if}
 					</section>
 				{/each}
@@ -252,6 +305,9 @@
 		border-radius: 999px;
 		flex: none;
 	}
+	.members { max-height: 22rem; overflow-y: auto; }
+	.pick { max-height: 16rem; overflow-y: auto; }
+	.role { height: 1.75rem; min-height: 1.75rem; font-size: 0.8rem; padding-inline: 0.5rem 1.6rem; }
 	.swatch {
 		width: 1.25rem;
 		height: 1.25rem;
