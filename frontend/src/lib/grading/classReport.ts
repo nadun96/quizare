@@ -14,12 +14,12 @@ export type GroupRule = 'average' | 'total' | 'highest' | 'lowest';
 export type ReportItem = { topic_id?: string; module_id?: string; kind: 'quiz' | 'tutorial' | 'poll' | 'offline'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number; date?: string };
 export type ReportMark = { score: number; max: number; pct: number; points?: number; submissions: number; pending?: boolean };
 export type ReportStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, ReportMark>; total: number; missing: number; final: number | null; violations?: Record<string, number>; violations_total?: number };
-export type ReportOptions = { violations: boolean; attendance: boolean; dates: boolean };
+export type ReportOptions = { violations: boolean; attendance: boolean; dates: boolean; attended_only?: boolean };
 export type ResultException = { kind: string; id: string; user_id: string; detail: Detail; review_minutes: number | null };
 export type GroupMark = { score: number; max: number; pct: number; points?: number; marked: number };
 export type GroupRow = { id: string; name: string; members: string[]; marks: Record<string, GroupMark>; total: number; final: number | null };
 export type ItemGroups = { kind: string; id: string; groups: GroupRow[] };
-export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; out_of: number; exceptions: ResultException[]; class_groups: GroupRow[]; item_groups: ItemGroups[]; options?: ReportOptions; scope?: ReportScope; sessions?: ReportSession[] };
+export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; out_of: number; exceptions: ResultException[]; class_groups: GroupRow[]; item_groups: ItemGroups[]; options?: ReportOptions; scope?: ReportScope; sessions?: ReportSession[]; attended_only?: boolean };
 
 // ---------- reports of part of the classroom (D-160) ----------
 
@@ -83,7 +83,7 @@ export function reviewParts(minutes: number | null | undefined): { n: number | n
 
 export const toMinutes = (n: number, unit: Unit) => Math.round(n * (unit === 'days' ? 1440 : unit === 'hours' ? 60 : 1));
 
-const NO_OPTIONS: ReportOptions = { violations: false, attendance: false, dates: false };
+const NO_OPTIONS: ReportOptions = { violations: false, attendance: false, dates: false, attended_only: false };
 export const optionsOf = (r: ClassReport): ReportOptions => ({ ...NO_OPTIONS, ...r.options });
 
 export function draftFrom(r: ClassReport): Draft {

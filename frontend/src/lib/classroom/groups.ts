@@ -4,7 +4,7 @@
 
 export type Role = 'member' | 'leader' | 'assistant';
 
-export type GroupPerson = { enrolment_id?: string; user_id: string; name: string; student_number?: string | null; role: Role; self_joined?: boolean };
+export type GroupPerson = { enrolment_id?: string; user_id: string; name: string; student_number?: string | null; role: Role; self_joined?: boolean; gender?: string };
 
 export type ClassGroup = { id: string; classroom_id: string; name: string; color: number; position: number; members: number; public_name: string | null; people: GroupPerson[] };
 

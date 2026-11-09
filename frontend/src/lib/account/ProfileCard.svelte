@@ -18,6 +18,17 @@
 
 	async function load() {
 		st = await api.get<EmailStatus>('/api/auth/me/email');
+		gender = (await api.get<{ gender: string }>('/api/auth/me/gender')).gender;
+	}
+	// Used only to balance groups (D-162).
+	let gender = $state('');
+	async function saveGender() {
+		try {
+			await api.put('/api/auth/me/gender', { gender });
+			toast(tr("Saved"));
+		} catch (err) {
+			fail(err, 'Could not save');
+		}
 	}
 	load();
 
@@ -89,6 +100,16 @@
 			</div>
 			<button class="btn" disabled={name.trim() === auth.user?.name}>{tr("Save name")}</button>
 		</form>
+	{/if}
+	{#if auth.user?.role === 'student'}
+		<div class="flex flex-wrap items-end gap-2">
+			<label class="vstack gap-1"><span class="font-semibold">{tr("Gender")}</span>
+				<select class="select w-auto" bind:value={gender} onchange={saveGender}>
+					<option value="">{tr("Prefer not to say")}</option><option value="female">{tr("Female")}</option><option value="male">{tr("Male")}</option>
+				</select>
+			</label>
+			<p class="m-0 small muted grow">{tr("Only your teachers see it. It’s used to make groups with a mix of everyone.")}</p>
+		</div>
 	{/if}
 
 	{#if st}

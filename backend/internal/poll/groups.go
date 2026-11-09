@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
 	"sort"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nadun96/quizplatform/internal/platform/balance"
 	"github.com/nadun96/quizplatform/internal/platform/groupscore"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 )
@@ -423,6 +423,8 @@ type GenerateInput struct {
 	From     string `json:"from"`     // random | categories
 	Count    int    `json:"count"`    // random: number of groups
 	Reassign bool   `json:"reassign"` // also move participants who already have a group
+	Max      int    `json:"max"`      // random: most a group, 0 none; who doesn't fit stays out (D-162)
+	Balance  bool   `json:"balance"`  // random: spread each gender evenly (D-162)
 }
 
 func (s *Service) GenerateGroups(ctx context.Context, teacherID, pollID string, in GenerateInput) (GroupsView, error) {
@@ -435,7 +437,10 @@ func (s *Service) GenerateGroups(ctx context.Context, teacherID, pollID string, 
 		if in.Count < 2 || in.Count > MaxGroups {
 			return GroupsView{}, httpx.Invalid(map[string]string{"count": fmt.Sprintf("make 2-%d groups", MaxGroups)})
 		}
-		err = s.randomGroups(ctx, p, in.Count, in.Reassign)
+		if in.Max < 0 || in.Max > 1000 {
+			return GroupsView{}, httpx.Invalid(map[string]string{"max": "at most 1000 a group, or 0 for no limit"})
+		}
+		err = s.randomGroups(ctx, p, in.Count, in.Reassign, in.Max, in.Balance)
 	case "categories":
 		err = s.categoryGroups(ctx, p, in.Reassign)
 	default:
@@ -451,7 +456,7 @@ func (s *Service) GenerateGroups(ctx context.Context, teacherID, pollID string, 
 	return s.Groups(ctx, teacherID, pollID)
 }
 
-func (s *Service) randomGroups(ctx context.Context, p *Poll, count int, reassign bool) error {
+func (s *Service) randomGroups(ctx context.Context, p *Poll, count int, reassign bool, max int, byGender bool) error {
 	gs, err := s.listGroups(ctx, p.ID)
 	if err != nil {
 		return err
@@ -469,40 +474,47 @@ func (s *Service) randomGroups(ctx context.Context, p *Poll, count int, reassign
 			return err
 		}
 	}
-	sizes := make([]int, len(gs))
-	pos := map[string]int{}
+	ids := make([]string, len(gs))
 	for i, g := range gs {
-		pos[g.ID] = i
+		ids[i] = g.ID
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id, group_id FROM poll.participants WHERE poll_id=$1`, p.ID)
+	pos := map[string]int{}
+	for i, id := range ids {
+		pos[id] = i
+	}
+	groups := make([]balance.Group, len(ids))
+	for i := range groups {
+		groups[i].Genders = map[string]int{}
+	}
+	rows, err := s.pool.Query(ctx, `SELECT pa.id::text, pa.group_id::text, coalesce(u.gender, '') FROM poll.participants pa LEFT JOIN auth.users u ON u.id = pa.user_id WHERE pa.poll_id = $1`, p.ID)
 	if err != nil {
 		return err
 	}
-	var free []string
+	var free []balance.Person
 	for rows.Next() {
-		var id string
+		var id, gender string
 		var g *string
-		if err := rows.Scan(&id, &g); err != nil {
+		if err := rows.Scan(&id, &g, &gender); err != nil {
 			rows.Close()
 			return err
 		}
 		if g == nil {
-			free = append(free, id)
+			free = append(free, balance.Person{ID: id, Gender: gender})
 		} else if i, ok := pos[*g]; ok {
-			sizes[i]++
+			groups[i].Size++
+			groups[i].Genders[gender]++
 		}
 	}
 	rows.Close()
-	rand.Shuffle(len(free), func(i, j int) { free[i], free[j] = free[j], free[i] })
-	for _, id := range free {
-		best := 0
-		for i := range sizes {
-			if sizes[i] < sizes[best] {
-				best = i
-			}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// Evenly, each gender spread evenly if asked; who doesn't fit stays out (D-162).
+	for i, at := range balance.Share(free, groups, max, byGender, nil) {
+		if at < 0 {
+			continue
 		}
-		sizes[best]++
-		if _, err := s.pool.Exec(ctx, `UPDATE poll.participants SET group_id=$2 WHERE id=$1`, id, gs[best].ID); err != nil {
+		if _, err := s.pool.Exec(ctx, `UPDATE poll.participants SET group_id=$2 WHERE id=$1`, free[i].ID, ids[at]); err != nil {
 			return err
 		}
 	}

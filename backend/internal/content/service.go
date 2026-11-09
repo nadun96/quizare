@@ -67,11 +67,16 @@ type Enrolment struct {
 	StudentEmail  string    `json:"student_email,omitempty"`
 	StudentAvatar string    `json:"student_avatar,omitempty"` // picture version (D-49)
 	Categories    []string  `json:"categories,omitempty"`     // category ids (teacher view, V2-03)
+	// Teacher view (D-162): the student's gender, and whether their ID fits
+	// the classroom's pattern.
+	Gender    string `json:"gender,omitempty"`
+	NumberBad bool   `json:"number_bad,omitempty"`
 }
 
 // Users is the slice of the auth module that content needs.
 type Users interface {
 	UsersByID(ctx context.Context, ids []string) (map[string]auth.User, error)
+	SetGender(ctx context.Context, actorID, userID, gender string) error
 }
 
 type Service struct {

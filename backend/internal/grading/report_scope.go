@@ -40,6 +40,56 @@ type ReportSession struct {
 	Students  int        `json:"students"` // who took part
 }
 
+// keepAttended drops, from a report of part of the classroom, the students who
+// didn't take part (D-163): in a session, those with no attempt in it;
+// otherwise those with no mark on what it covers. Their absence then leaves
+// group marks alone too.
+func (s *Service) keepAttended(ctx context.Context, classroomID, attended string, subs map[string]map[string][]submission, rep *ClassReport) error {
+	if rep.Scope.Kind == "all" {
+		return nil
+	}
+	on := attended == "1"
+	if attended == "" {
+		if err := s.pool.QueryRow(ctx, `SELECT coalesce((SELECT attended_only FROM grading.report_options WHERE classroom_id = $1), false)`, classroomID).Scan(&on); err != nil {
+			return err
+		}
+	}
+	rep.AttendedOnly = on
+	if !on {
+		return nil
+	}
+	took := map[string]bool{}
+	if id := rep.Scope.SessionID(); id != "" {
+		rows, err := s.pool.Query(ctx, `SELECT DISTINCT user_id::text FROM live.attempts WHERE session_id = $1`, id)
+		if err != nil {
+			return err
+		}
+		users, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return err
+		}
+		for _, u := range users {
+			took[u] = true
+		}
+	} else {
+		for user, byItem := range subs {
+			for _, it := range rep.Items {
+				if len(byItem[Key(it.Kind, it.ID)]) > 0 {
+					took[user] = true
+				}
+			}
+		}
+	}
+	kept := rep.Students[:0]
+	for _, st := range rep.Students {
+		if took[st.UserID] {
+			kept = append(kept, st)
+		}
+	}
+	rep.Students = kept
+	return nil
+}
+
 var errScope = httpx.Invalid(map[string]string{"scope": "this isn't part of this classroom's report"})
 
 // scopeReport lists the classroom's quiz sessions and keeps only the items

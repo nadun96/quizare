@@ -65,8 +65,10 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("PATCH", "/topics/{id}", httpx.Handler(s.hUpdateTopic))
 	r.Method("DELETE", "/topics/{id}", httpx.Handler(s.hDeleteTopic))
 	r.Method("GET", "/topics/{id}/delete-preview", httpx.Handler(s.hDeletePreview("topic")))
-	s.teacherRoutesCo(r) // co-teachers (D-121)
-	s.groupRoutes(r)     // the classroom's groups (D-158)
+	s.teacherRoutesCo(r)   // co-teachers (D-121)
+	s.groupRoutes(r)       // the classroom's groups (D-158)
+	s.studentIDRoutes(r)   // a classroom's student ID pattern (D-162)
+	s.randomGroupRoutes(r) // random groups, genders spread evenly (D-162)
 }
 
 // StudentRoutes mounts endpoints for any logged-in user (enrolment is by code).

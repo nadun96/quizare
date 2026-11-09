@@ -34,7 +34,8 @@ type GroupMember struct {
 	Name          string  `json:"name"`
 	StudentNumber *string `json:"student_number,omitempty"`
 	Role          string  `json:"role"`
-	SelfJoined    bool    `json:"self_joined"` // the student chose it
+	SelfJoined    bool    `json:"self_joined"`      // the student chose it
+	Gender        string  `json:"gender,omitempty"` // teachers only (D-162)
 }
 
 // ClassGroup is a group with its members.
@@ -126,14 +127,14 @@ func (s *Service) groupsWithMembers(ctx context.Context, classroomID, onlyUser s
 
 // activeStudents is everyone in the classroom, to put in groups.
 func (s *Service) activeStudents(ctx context.Context, classroomID string) ([]GroupMember, error) {
-	rows, err := s.pool.Query(ctx, `SELECT e.id, e.user_id, coalesce(u.name, ''), e.student_number FROM content.enrolments e
+	rows, err := s.pool.Query(ctx, `SELECT e.id, e.user_id, coalesce(u.name, ''), e.student_number, coalesce(u.gender, '') FROM content.enrolments e
 		LEFT JOIN auth.users u ON u.id = e.user_id WHERE e.classroom_id = $1 AND e.status = 'active' ORDER BY lower(u.name), e.created_at`, classroomID)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (GroupMember, error) {
 		m := GroupMember{Role: RoleMember}
-		err := r.Scan(&m.EnrolmentID, &m.UserID, &m.Name, &m.StudentNumber)
+		err := r.Scan(&m.EnrolmentID, &m.UserID, &m.Name, &m.StudentNumber, &m.Gender)
 		return m, err
 	})
 }

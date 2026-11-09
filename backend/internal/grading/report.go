@@ -115,6 +115,8 @@ type ReportOptions struct {
 	Violations bool `json:"violations"`
 	Attendance bool `json:"attendance"`
 	Dates      bool `json:"dates"`
+	// A report of part of the classroom lists only those who took part (D-163).
+	AttendedOnly bool `json:"attended_only"`
 }
 
 // ReportMark is the mark the report uses for one student on one item.
@@ -161,8 +163,10 @@ type ClassReport struct {
 	ClassGroups []GroupRow        `json:"class_groups"` // the whole class's groups (D-141)
 	ItemGroups  []ItemGroups      `json:"item_groups"`  // items with groups of their own
 	Options     ReportOptions     `json:"options"`
-	Scope       ReportScope       `json:"scope"`    // what it covers (D-160)
-	Sessions    []ReportSession   `json:"sessions"` // the classroom's quiz sessions, to report on one
+	Scope       ReportScope       `json:"scope"` // what it covers (D-160)
+	// Only the students who took part are listed (D-163).
+	AttendedOnly bool            `json:"attended_only"`
+	Sessions     []ReportSession `json:"sessions"` // the classroom's quiz sessions, to report on one
 }
 
 // submission is one valid mark a student has on an item.
@@ -200,8 +204,8 @@ func pickMark(list []submission, pick string) submission {
 
 // loadReportExtras fills in the options and each student's violations.
 func (s *Service) loadReportExtras(ctx context.Context, classroomID, session string, rep *ClassReport) error {
-	err := s.pool.QueryRow(ctx, `SELECT show_violations, show_attendance, show_dates FROM grading.report_options WHERE classroom_id = $1`, classroomID).
-		Scan(&rep.Options.Violations, &rep.Options.Attendance, &rep.Options.Dates)
+	err := s.pool.QueryRow(ctx, `SELECT show_violations, show_attendance, show_dates, attended_only FROM grading.report_options WHERE classroom_id = $1`, classroomID).
+		Scan(&rep.Options.Violations, &rep.Options.Attendance, &rep.Options.Dates, &rep.Options.AttendedOnly)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
@@ -242,12 +246,15 @@ func (s *Service) loadReportExtras(ctx context.Context, classroomID, session str
 
 // ClassReport builds the report from the current setup and marks.
 func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string) (ClassReport, error) {
-	return s.ScopedReport(ctx, teacherID, classroomID, "")
+	return s.ScopedReport(ctx, teacherID, classroomID, "", "")
 }
 
 // ScopedReport is the report of part of the classroom (D-160): a module, a
 // topic, one item, or one quiz session; "" is the whole classroom.
-func (s *Service) ScopedReport(ctx context.Context, teacherID, classroomID, scope string) (ClassReport, error) {
+//
+// attended "1" or "0" says whether to list only the students who took part,
+// for this report alone; "" follows the report's option (D-163).
+func (s *Service) ScopedReport(ctx context.Context, teacherID, classroomID, scope, attended string) (ClassReport, error) {
 	name, err := s.teaches(ctx, teacherID, classroomID)
 	if err != nil {
 		return ClassReport{}, err
@@ -411,6 +418,9 @@ func (s *Service) ScopedReport(ctx context.Context, teacherID, classroomID, scop
 			it.Avg, it.High, it.Low = &a, &h, &l
 		}
 	}
+	if err := s.keepAttended(ctx, classroomID, attended, subs, &rep); err != nil {
+		return rep, err
+	}
 	if err := s.loadReportExtras(ctx, classroomID, rep.Scope.SessionID(), &rep); err != nil {
 		return rep, err
 	}
@@ -548,9 +558,9 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 			}
 		}
 		if in.Options != nil {
-			if _, err := tx.Exec(ctx, `INSERT INTO grading.report_options (classroom_id, show_violations, show_attendance, show_dates) VALUES ($1, $2, $3, $4)
-				ON CONFLICT (classroom_id) DO UPDATE SET show_violations = $2, show_attendance = $3, show_dates = $4, updated_at = now()`,
-				classroomID, in.Options.Violations, in.Options.Attendance, in.Options.Dates); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO grading.report_options (classroom_id, show_violations, show_attendance, show_dates, attended_only) VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT (classroom_id) DO UPDATE SET show_violations = $2, show_attendance = $3, show_dates = $4, attended_only = $5, updated_at = now()`,
+				classroomID, in.Options.Violations, in.Options.Attendance, in.Options.Dates, in.Options.AttendedOnly); err != nil {
 				return err
 			}
 		}
