@@ -11,7 +11,7 @@ export type Detail = '' | 'marks' | 'correctness' | 'answers';
 export type Unit = 'minutes' | 'hours' | 'days';
 export type GroupRule = 'average' | 'total' | 'highest' | 'lowest';
 
-export type ReportItem = { kind: 'quiz' | 'tutorial' | 'poll' | 'offline'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number; date?: string };
+export type ReportItem = { topic_id?: string; module_id?: string; kind: 'quiz' | 'tutorial' | 'poll' | 'offline'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number; date?: string };
 export type ReportMark = { score: number; max: number; pct: number; points?: number; submissions: number; pending?: boolean };
 export type ReportStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, ReportMark>; total: number; missing: number; final: number | null; violations?: Record<string, number>; violations_total?: number };
 export type ReportOptions = { violations: boolean; attendance: boolean; dates: boolean };
@@ -19,7 +19,36 @@ export type ResultException = { kind: string; id: string; user_id: string; detai
 export type GroupMark = { score: number; max: number; pct: number; points?: number; marked: number };
 export type GroupRow = { id: string; name: string; members: string[]; marks: Record<string, GroupMark>; total: number; final: number | null };
 export type ItemGroups = { kind: string; id: string; groups: GroupRow[] };
-export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; out_of: number; exceptions: ResultException[]; class_groups: GroupRow[]; item_groups: ItemGroups[]; options?: ReportOptions };
+export type ClassReport = { classroom: string; items: ReportItem[]; students: ReportStudent[]; weight_total: number; out_of: number; exceptions: ResultException[]; class_groups: GroupRow[]; item_groups: ItemGroups[]; options?: ReportOptions; scope?: ReportScope; sessions?: ReportSession[] };
+
+// ---------- reports of part of the classroom (D-160) ----------
+
+/** What a report covers: all, or a module, topic, item (kind:id) or quiz session. */
+export type ReportScope = { kind: 'all' | 'module' | 'topic' | 'item' | 'session'; id?: string; label: string };
+export type ReportSession = { id: string; quiz_id: string; title: string; started_at: string; ended_at: string | null; students: number };
+
+const SCOPE_GROUPS: Record<string, string> = { quiz: 'Quizzes', tutorial: 'Tutorials', poll: 'Polls', offline: 'Offline assignments' };
+
+/** The parts of the classroom a report can be of, for the "Report for" picker. */
+export function reportScopeOptions(items: ReportItem[], sessions: ReportSession[], when: (iso: string) => string): { value: string; label: string; group: string }[] {
+	const out = [{ value: 'all', label: 'The whole classroom', group: '' }];
+	const seen = new Set<string>();
+	for (const it of items) if (it.module_id && !seen.has('m' + it.module_id)) {
+		seen.add('m' + it.module_id);
+		out.push({ value: `module:${it.module_id}`, label: it.module || 'Module', group: 'Modules' });
+	}
+	for (const it of items) if (it.topic_id && !seen.has('t' + it.topic_id)) {
+		seen.add('t' + it.topic_id);
+		out.push({ value: `topic:${it.topic_id}`, label: it.module ? `${it.topic} (${it.module})` : it.topic, group: 'Topics' });
+	}
+	for (const kind of ['quiz', 'tutorial', 'poll', 'offline'])
+		for (const it of items) if (it.kind === kind) out.push({ value: `item:${itemKey(it)}`, label: it.title, group: SCOPE_GROUPS[kind] });
+	for (const s of sessions) out.push({ value: `session:${s.id}`, label: `${s.title} · ${when(s.started_at)} · ${s.students}`, group: 'Quiz sessions (one run)' });
+	return out;
+}
+
+/** "Science: class report · Plants & Matter": a scoped report's name. */
+export const scopedName = (base: string, scope?: ReportScope) => (scope && scope.kind !== 'all' ? `${base} · ${scope.label}` : base);
 
 export type DraftItem = { groupRule: GroupRule; included: boolean; weight: number | null; pick: Pick; detail: Detail; reviewN: number | null; reviewUnit: Unit };
 export type DraftException = { item: string; user_id: string; detail: Detail; reviewN: number | null; reviewUnit: Unit };
