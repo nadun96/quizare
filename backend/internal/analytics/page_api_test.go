@@ -33,6 +33,23 @@ func TestSessionListsArePaginated(t *testing.T) {
 	if p := f.teacher.Page("/api/teacher/sessions/"+sess.ID+"/results?q=s3", "results", 1, 25); p.Total != 1 {
 		t.Fatalf("search by student ID: %d", p.Total)
 	}
+	// By name too, and filtered (D-161).
+	if p := f.teacher.Page("/api/teacher/sessions/"+sess.ID+"/results?q=ben", "results", 1, 25); p.Total != 1 || p.Rows[0]["name"] != "Ben" {
+		t.Fatalf("search by name: %+v", p.Rows)
+	}
+	passed := f.teacher.Page("/api/teacher/sessions/"+sess.ID+"/results?show=passed", "results", 1, 25)
+	failed := f.teacher.Page("/api/teacher/sessions/"+sess.ID+"/results?show=failed", "results", 1, 25)
+	if passed.Total+failed.Total != 3 || passed.Total == 0 {
+		t.Fatalf("passed %d, failed %d", passed.Total, failed.Total)
+	}
+	for _, r := range failed.Rows {
+		if r["passed"] != false {
+			t.Fatalf("a pass among the fails: %v", r)
+		}
+	}
+	if p := f.teacher.Page("/api/teacher/sessions/"+sess.ID+"/results?show=invalidated", "results", 1, 25); p.Total != 0 {
+		t.Fatalf("invalidated: %d", p.Total)
+	}
 
 	// The integrity log: join, admit and start events for 3 students.
 	first := f.teacher.Page("/api/teacher/sessions/"+sess.ID+"/events", "events", 1, 4)

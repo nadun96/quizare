@@ -358,6 +358,32 @@ type AttemptResult struct {
 	// Retries (D-131): the try shown, the best that counts, and how many the student took.
 	Try   int `json:"try"`
 	Tries int `json:"tries"`
+	// The student's name, and how many integrity violations they had (D-161).
+	Name       string `json:"name"`
+	Violations int    `json:"violations"`
+}
+
+// ResultFilter narrows a session's results (D-161).
+type ResultFilter struct {
+	Review bool   // only those with marks needing review
+	Show   string // passed, failed, incomplete, invalidated or violations; "" all
+}
+
+// shows says whether a result passes the Show filter.
+func (f ResultFilter) shows(r AttemptResult) bool {
+	switch f.Show {
+	case "passed":
+		return r.Passed && !r.Invalidated
+	case "failed":
+		return !r.Passed && !r.Invalidated
+	case "incomplete":
+		return !r.Complete
+	case "invalidated":
+		return r.Invalidated
+	case "violations":
+		return r.Violations > 0
+	}
+	return true
 }
 
 func (s *Service) loadMarks(ctx context.Context, attemptID string) (map[string]MarkView, error) {
@@ -432,13 +458,31 @@ func needsReview(m MarkView) bool {
 	return m.Status == "needs_manual" || m.Status == "pending" || m.Flagged || m.AIMarked
 }
 
-// SessionResultsPage returns one page of a session's results, optionally only
-// those needing review, searched by student ID, with the total. A session's
-// attempts are bounded by its size; without the review filter only the page's
-// attempts are marked up (ADR-25).
-func (s *Service) SessionResultsPage(ctx context.Context, teacherID, sessionID string, review bool, p page.Request) ([]AttemptResult, int, error) {
+// SessionResultsPage returns one page of a session's results, filtered,
+// searched by student ID or name, with the total. A session's attempts are
+// bounded by its size; without a filter only the page's attempts are marked
+// up (ADR-25).
+func (s *Service) SessionResultsPage(ctx context.Context, teacherID, sessionID string, f ResultFilter, p page.Request) ([]AttemptResult, int, error) {
+	review := f.Review
 	all, err := s.attempts.SessionMarkingData(ctx, teacherID, sessionID)
 	if err != nil {
+		return nil, 0, err
+	}
+	names := map[string]string{}
+	rows, err := s.pool.Query(ctx, `SELECT DISTINCT a.user_id::text, coalesce(u.name, '') FROM live.attempts a JOIN auth.users u ON u.id = a.user_id WHERE a.session_id = $1`, sessionID)
+	if err != nil {
+		return nil, 0, err
+	}
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		names[id] = name
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 	keep := all[:0]
@@ -447,12 +491,17 @@ func (s *Service) SessionResultsPage(ctx context.Context, teacherID, sessionID s
 		if d.StudentNumber != nil {
 			num = *d.StudentNumber
 		}
-		if p.Matches(num) {
+		if p.Matches(num, names[d.UserID]) {
 			keep = append(keep, d)
 		}
 	}
+	result := func(d *live.MarkingData) (AttemptResult, error) {
+		r, err := s.result(ctx, d)
+		r.Name, r.Violations = names[d.UserID], d.Violations
+		return r, err
+	}
 	// Results are needed before paging when the filter or the order depends on them.
-	if !review && p.Sort != "score" {
+	if !review && f.Show == "" && p.Sort != "score" {
 		if p.Sort == "number" {
 			sort.SliceStable(keep, func(i, j int) bool {
 				return (strings.ToLower(numberOf(keep[i])) < strings.ToLower(numberOf(keep[j]))) != p.Desc
@@ -465,7 +514,7 @@ func (s *Service) SessionResultsPage(ctx context.Context, teacherID, sessionID s
 		pg, total := page.Slice(keep, p)
 		out := make([]AttemptResult, 0, len(pg))
 		for _, d := range pg {
-			r, err := s.result(ctx, d)
+			r, err := result(d)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -475,11 +524,11 @@ func (s *Service) SessionResultsPage(ctx context.Context, teacherID, sessionID s
 	}
 	out := make([]AttemptResult, 0, len(keep))
 	for _, d := range keep {
-		r, err := s.result(ctx, d)
+		r, err := result(d)
 		if err != nil {
 			return nil, 0, err
 		}
-		if review && !slices.ContainsFunc(r.Marks, needsReview) {
+		if (review && !slices.ContainsFunc(r.Marks, needsReview)) || !f.shows(r) {
 			continue
 		}
 		out = append(out, r)

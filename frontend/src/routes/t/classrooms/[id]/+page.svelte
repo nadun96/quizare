@@ -158,7 +158,7 @@ if (!(await confirmDialog({ title: tr("Generate a new join code?"), body: tr("Th
 		{:else if tab === 'results'}
 			<Gradebook classroomId={id} classroomName={c.name} />
 		{:else if tab === 'report'}
-			<ClassReport classroomId={id} classroomName={c.name} />
+			<ClassReport classroomId={id} classroomName={c.name} initialScope={page.url.searchParams.get('scope') ?? 'all'} />
 		{:else if tab === 'teachers'}
 			<TeachersPanel classroomId={id} classroomName={c.name} {owner} />
 		{:else if tab === 'trends'}

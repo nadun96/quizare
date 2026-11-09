@@ -15,9 +15,10 @@
 	import { urlState } from '$lib/urlstate';
 	import ListSearch from '$lib/ui/ListSearch.svelte';
 	import Pager from '$lib/ui/Pager.svelte';
+	import Icon from '$lib/ui/Icon.svelte';
 
 	type Mark = { question_id: string; code: string; type: QType; text: string; response: Response | null; key: Key; method: string; status: string; score: number | null; max_score: number; correct: boolean | null; feedback: string; ai_feedback: string; ai_rationale?: string; ai_marked: boolean; flagged: boolean; flag_reason?: string };
-	type Result = { attempt_id: string; user_id: string; student_number: string | null; state: string; score: number; max_score: number; pct: number; passed: boolean; complete: boolean; invalidated: boolean; marks: Mark[]; try?: number; tries?: number };
+	type Result = { name?: string; violations?: number; attempt_id: string; user_id: string; student_number: string | null; state: string; score: number; max_score: number; pct: number; passed: boolean; complete: boolean; invalidated: boolean; marks: Mark[]; try?: number; tries?: number };
 	type Link = { id: string; scope?: string; token?: string; views: string[]; identify: string; show_answers: boolean; label: string; expires_at: string | null; revoked_at: string | null; created_at: string };
 	type Ev = { id: number; kind: string; attempt_id: string | null; details: Record<string, unknown>; created_at: string };
 
@@ -27,9 +28,11 @@
 	let session = $state<Session | null>(null);
 	let filter = $state<'all' | 'review'>(Paged.fromUrl(urlState, 'review', 'res') === '0' ? 'all' : 'review');
 	let kind = $state(Paged.fromUrl(urlState, 'kind', 'log'));
+	// Only some students (D-161): passed, failed, incomplete, invalidated or with violations.
+	let show = $state(Paged.fromUrl(urlState, 'show', 'res'));
 	// Results, links and the integrity log, one page at a time on the server (PL-FR-02).
 	const results = new Paged<Result>(() => '/api/teacher/sessions/' + id + '/results', 'results', {
-		url: urlState, prefix: 'res', sort: 'joined', filters: () => ({ review: filter === 'review' ? '1' : '0' })
+		url: urlState, prefix: 'res', sort: 'joined', filters: () => ({ review: filter === 'review' ? '1' : '0', show: show || undefined })
 	});
 	const links = new Paged<Link>(() => '/api/teacher/share-links', 'links', { sort: 'created', desc: true, filters: () => ({ target_id: id, scope: 'session' }) });
 	const events = new Paged<Ev>(() => '/api/teacher/sessions/' + id + '/events', 'events', { url: urlState, prefix: 'log', sort: 'time', filters: () => ({ kind }) });
@@ -126,6 +129,7 @@
 		<div class="row">
 			<h1 style="margin:0">{tr("Results: {0}", [session.title])}</h1>
 			<span class="spacer"></span>
+			{#if session.classroom_id}<a class="btn" href={`/t/classrooms/${session.classroom_id}?tab=report&scope=session:${id}`}><Icon name="table" size={16} />{tr("Class report")}</a>{/if}
 			<a class="btn" href={'/api/teacher/sessions/' + id + '/export.csv'} download>{tr("Export CSV")}</a>
 			<SaveToDrive kind="session" {id} />
 			{#if session.results_released_at}
@@ -146,7 +150,12 @@
 				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'review'} onchange={() => setFilter('review')} /> {tr("Needs review (manual, flagged or AI-marked)")}</label>
 				<label class="row" style="font-weight:400"><input class="radio" type="radio" name="rf" checked={filter === 'all'} onchange={() => setFilter('all')} /> {tr("All students")}</label>
 				<span class="spacer"></span>
-				<ListSearch list={results} placeholder={tr("Search student ID")} label={tr("Search results by student ID")} />
+				<ListSearch list={results} placeholder={tr("Name or student ID")} label={tr("Search results by name or student ID")} />
+				<label class="small muted flex items-center gap-2">{tr("Show")}
+					<select class="select select-sm w-auto" bind:value={show} onchange={() => results.refilter()}>
+						<option value="">{tr("Everyone")}</option><option value="passed">{tr("Passed")}</option><option value="failed">{tr("Didn’t pass")}</option>
+						<option value="incomplete">{tr("Still being marked")}</option><option value="invalidated">{tr("Invalidated")}</option><option value="violations">{tr("With violations")}</option>
+					</select></label>
 				<label class="small muted flex items-center gap-2">{tr("Sort")}
 					<select class="select select-sm w-auto" value={results.sort} onchange={(e) => results.sortBy(e.currentTarget.value)}>
 						<option value="joined">{tr("Join order")}</option><option value="number">{tr("Student ID")}</option><option value="score">{tr("Score")}</option>
@@ -155,7 +164,7 @@
 			{#each shown as r (r.attempt_id)}
 				<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 vstack">
 					<div class="row">
-						<strong>{names[r.attempt_id] ?? byUser[r.user_id] ?? tr("Student")}</strong><span class="muted small">{r.student_number ?? ''}</span>{#if (r.tries ?? 1) > 1}<span class="badge badge-soft badge-info badge-sm" title={tr("The best try counts")}>{tr("best of {0} tries · try {1}", [r.tries, r.try])}</span>{/if}
+						<strong>{r.name || names[r.attempt_id] || byUser[r.user_id] || tr("Student")}</strong><span class="muted small">{r.student_number ?? ''}</span>{#if (r.tries ?? 1) > 1}<span class="badge badge-soft badge-info badge-sm" title={tr("The best try counts")}>{tr("best of {0} tries · try {1}", [r.tries, r.try])}</span>{/if}
 						<span class="spacer"></span>
 						{#if r.invalidated}<span class="badge badge-soft badge-error">{tr("invalidated")}</span>{/if}
 						{#if !r.complete}<span class="badge badge-soft badge-warning">{tr("incomplete")}</span>{/if}
@@ -181,7 +190,7 @@
 						</div>
 					{/each}
 				</div>
-			{:else}<p class="muted">{!results.loaded ? tr("Loading…") : results.q ? tr("No results match.") : filter === 'review' ? tr("Nothing needs review.") : tr("No finished attempts yet.")}</p>{/each}
+			{:else}<p class="muted">{!results.loaded ? tr("Loading…") : results.q || show ? tr("No results match.") : filter === 'review' ? tr("Nothing needs review.") : tr("No finished attempts yet.")}</p>{/each}
 			<Pager list={results} label={tr("Results")} />
 		{:else if tab === 'analytics'}
 			{#if stats}<AnalyticsView cls={stats.class} questions={stats.questions} students={stats.students} />{:else}<Skeleton lines={4} />{/if}

@@ -1894,6 +1894,14 @@ paths:
   /api/teacher/categories/{id}/public-name:
     parameters: [{ $ref: '#/components/parameters/id' }]
     delete: { operationId: deleteTeacherGroupPublicName, tags: [classrooms], summary: "Remove the name a group's leader chose (D-158)", responses: { '204': { description: 'Removed' } } }
+  /api/teacher/classrooms/{id}/enrolments/pending:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherClassroomPendingEnrolments
+      tags: [classrooms]
+      summary: Approve or turn away students waiting to join, those listed or all of them (D-161)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, rejected] }, enrolment_ids: { type: array, items: { type: string, format: uuid }, description: 'Empty: everyone waiting' } } } } } }
+      responses: { '200': { description: 'How many changed', content: { application/json: { schema: { type: object, properties: { changed: { type: integer } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/classrooms/{id}/modules:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -2362,7 +2370,7 @@ paths:
       operationId: getTeacherSessionsResults
       tags: [marking]
       summary: Every finished attempt with its marks, for review (FR-EV-06)
-      parameters: [{ $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, number, score] } }, { name: review, in: query, description: '`1`: only results with marks to review', schema: { type: string, enum: ['1'] } }]
+      parameters: [{ name: show, in: query, schema: { type: string, enum: [passed, failed, incomplete, invalidated, violations] }, description: 'Only these (D-161)' }, { name: review, in: query, schema: { type: string, enum: ['0', '1'] } }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/size' }, { $ref: '#/components/parameters/q' }, { $ref: '#/components/parameters/dir' }, { name: sort, in: query, schema: { type: string, enum: [joined, number, score] } }, { name: review, in: query, description: '`1`: only results with marks to review', schema: { type: string, enum: ['1'] } }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { total: { type: integer, description: 'Rows matching, on all pages' }, page: { type: integer }, size: { type: integer }, results: { type: array, items: { $ref: '#/components/schemas/AttemptResult' } } } } } } } }
   /api/teacher/marks/{attempt}/{question}:
     put:

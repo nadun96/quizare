@@ -22,7 +22,7 @@ function fakeFetch() {
 		if (url.endsWith('/categories')) body = { categories: cats };
 		else if (url.includes('/enrolments')) {
 			const q = new URL(url, 'http://x').searchParams;
-			const rows = students.filter((s) => (!q.get('category') || s.categories?.includes(q.get('category')!)) && (!q.get('q') || s.student_name.toLowerCase().includes(q.get('q')!.toLowerCase())));
+			const rows = students.filter((s) => (!q.get('status') || s.status === q.get('status')) && (!q.get('category') || s.categories?.includes(q.get('category')!)) && (!q.get('q') || s.student_name.toLowerCase().includes(q.get('q')!.toLowerCase())));
 			body = { enrolments: rows, total: rows.length, page: 1, size: 25 };
 		}
 		return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -45,7 +45,8 @@ async function render() {
 	return { target, props, done: () => (unmount(c), target.remove()) };
 }
 const rows = (t: HTMLElement) => [...t.querySelectorAll('tbody tr')].map((r) => r.textContent ?? '');
-const lastList = () => calls.filter((c) => c.url.includes('/enrolments')).at(-1)!.url;
+// The list's own calls, not the count of students waiting (D-161).
+const lastList = () => calls.filter((c) => c.url.includes('/enrolments') && !c.url.includes('size=1')).at(-1)!.url;
 
 describe('StudentsPanel', () => {
 	test('the server filters by category and searches; the count comes from its total', async () => {
@@ -93,6 +94,16 @@ describe('StudentsPanel', () => {
 		expect(post?.url).toBe('/api/teacher/categories/c1/members');
 		expect(post?.body).toEqual({ enrolment_ids: ['e2', 'e3'], assigned: true });
 		await tick();
+		v.done();
+	});
+	test('says how many are waiting for approval, and shows only them on request (D-161)', async () => {
+		const v = await render();
+		await vi.waitFor(() => expect(v.target.querySelector('.alert')?.textContent).toContain('1 student is waiting for approval'));
+		const show = [...v.target.querySelectorAll<HTMLButtonElement>('.alert button')].find((b) => b.textContent?.includes('Show them'))!;
+		show.click();
+		await vi.waitFor(() => expect(rows(v.target)).toHaveLength(1));
+		expect(lastList()).toContain('status=pending');
+		expect(rows(v.target)[0]).toContain('Nimal');
 		v.done();
 	});
 });

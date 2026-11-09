@@ -108,7 +108,7 @@ export type Quiz = {
 export type PoolRule = { source: 'quiz' | 'bank' | 'class'; category: string; count: number };
 export type PoolCount = { category: string; count: number; marks: number };
 export type PoolInfo = { pools: PoolRule[]; quiz: PoolCount[]; bank: PoolCount[]; bank_id: string; class: PoolCount[]; class_pool_id: string };
-export type Session = { id: string; quiz_id: string; title: string; join_code: string; join_url: string; status: string; settings: Overrides; extension_sec: number; created_at: string; results_released_at?: string; started_at?: string };
+export type Session = { id: string; quiz_id: string; classroom_id?: string; title: string; join_code: string; join_url: string; status: string; settings: Overrides; extension_sec: number; created_at: string; results_released_at?: string; started_at?: string };
 export type DashboardRow = {
 	/** Which try this is (D-131). */
 	try?: number;

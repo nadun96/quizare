@@ -190,6 +190,7 @@
 				<span class="spacer"></span>
 				{#if !ended}<a class="btn" href={'/t/sessions/' + id + '/projector'} target="_blank"><Icon name="qr" size={16} />{tr("Show QR full screen")}</a>{/if}
 				<a class="btn" class:btn-primary={ended} href={'/t/sessions/' + id + '/results'}><Icon name="chart" size={16} />{tr("Results")}</a>
+				{#if d.session.classroom_id}<a class="btn" href={`/t/classrooms/${d.session.classroom_id}?tab=report&scope=session:${id}`}><Icon name="table" size={16} />{tr("Class report")}</a>{/if}
 				{#if !ended}<button class="btn btn-error btn-outline" onclick={end}>{tr("End session")}</button>{/if}
 			</div>
 

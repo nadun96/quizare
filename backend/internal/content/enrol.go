@@ -286,6 +286,31 @@ func (s *Service) UpdateEnrolment(ctx context.Context, teacherID, enrolmentID st
 	return e, err
 }
 
+// DecidePending approves or turns away students waiting to join (D-161):
+// those listed, or every one waiting when none are. It says how many changed.
+func (s *Service) DecidePending(ctx context.Context, teacherID, classroomID, status string, ids []string) (int, error) {
+	if status != "active" && status != "rejected" {
+		return 0, httpx.Invalid(map[string]string{"status": "must be active or rejected"})
+	}
+	if len(ids) > 5000 {
+		return 0, httpx.BadRequest("too many students at once")
+	}
+	if _, err := s.GetClassroom(ctx, teacherID, classroomID); err != nil {
+		return 0, err
+	}
+	var n int64
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE content.enrolments SET status = $2
+			WHERE classroom_id = $1 AND status = 'pending' AND (coalesce(cardinality($3::text[]), 0) = 0 OR id::text = ANY($3))`, classroomID, status, ids)
+		if err != nil {
+			return err
+		}
+		n = tag.RowsAffected()
+		return audit.Log(ctx, tx, teacherID, "enrolments_decided", "classroom", classroomID, map[string]any{"status": status, "count": n})
+	})
+	return int(n), err
+}
+
 // StudentClassroom is a classroom as listed for an enrolled student.
 type StudentClassroom struct {
 	ClassroomID   string  `json:"classroom_id"`
