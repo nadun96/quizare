@@ -16,6 +16,8 @@
 	import ClassActivities from '$lib/classroom/ClassActivities.svelte';
 	import type { Presentation } from '$lib/presentation/presentation';
 	import type { Tutorial } from '$lib/tutorial/tutorial';
+	import { fromLocalInput } from '$lib/tutorial/tutorial';
+	import { progress, type Mode, type Offline } from '$lib/offline/offline';
 
 	type Detail = Topic & { classroom_id: string; classroom_name: string; module_name: string };
 	const ready = requireRole('teacher');
@@ -35,6 +37,24 @@
 		await quizzes.load();
 		tutorials = (await api.get<{ tutorials: Tutorial[] }>('/api/teacher/topics/' + id + '/tutorials')).tutorials;
 		presentations = (await api.get<{ presentations: Presentation[] }>('/api/teacher/topics/' + id + '/presentations')).presentations;
+		offline = (await api.get<{ assignments: Offline[] }>('/api/teacher/topics/' + id + '/offline-assignments')).assignments;
+	}
+	// Offline assignments (D-159).
+	let offline = $state<Offline[]>([]);
+	let offlineTitle = $state('');
+	let offlineMax = $state<number | null>(null);
+	let offlineMode = $state<Mode>('individual');
+	let offlineDue = $state('');
+	let offlineError = $state('');
+	async function createOffline(e: SubmitEvent) {
+		e.preventDefault();
+		offlineError = '';
+		try {
+			const o = await api.post<Offline>('/api/teacher/topics/' + id + '/offline-assignments', { title: offlineTitle, max_marks: Number(offlineMax), mode: offlineMode, due_at: fromLocalInput(offlineDue) ?? null });
+			goto('/t/offline/' + o.id);
+		} catch (err) {
+			offlineError = err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("That didn’t work. Try again.");
+		}
 	}
 	// Presentations (D-76).
 	let presentations = $state<Presentation[]>([]);
@@ -141,6 +161,36 @@
 		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 row" onsubmit={createPresentation}>
 			<input class="input w-full" style="flex:1" bind:value={presentationTitle} placeholder={tr("New presentation title")} required maxlength="200" aria-label={tr("Presentation title")} />
 			<button class="btn btn-primary">{tr("Create presentation")}</button>
+		</form>
+		<h2 class="mb-0 flex items-center gap-2"><Icon name="pencil" size={20} />{tr("Offline assignments")}</h2>
+		<p class="small muted m-0">{tr("Work done away from the platform: a project, a practical, a paper test. Enter the marks here, or download the class list, fill it in and upload it. A group assignment gives each group one mark.")}</p>
+		{#if offline.length}
+			<div class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 table-wrap">
+				<table class="table">
+					<thead><tr><th>{tr("Assignment")}</th><th>{tr("Marked")}</th><th>{tr("Out of")}</th><th>{tr("Due")}</th><th>{tr("Students see marks")}</th></tr></thead>
+					<tbody>
+						{#each offline as o (o.id)}
+							<tr>
+								<td><a href={'/t/offline/' + o.id}>{o.title}</a>{#if o.mode === 'group'} <span class="badge badge-ghost badge-sm">{tr("Groups")}</span>{/if}</td>
+								<td class="small tabular">{tr(progress(o))}</td>
+								<td class="tabular">{o.max_marks}</td>
+								<td class="small tabular">{o.due_at ? new Date(o.due_at).toLocaleString(localeTag(), { dateStyle: 'medium', timeStyle: 'short' }) : ''}</td>
+								<td><span class="badge badge-soft" class:ok={!!o.released_at}>{o.released_at ? tr("Yes") : tr("Not yet")}</span></td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+		<form class="card card-border bg-base-100 shadow-sm p-4 sm:p-6 flex flex-wrap items-end gap-3" onsubmit={createOffline}>
+			<label class="vstack gap-1 small grow min-w-48">{tr("Title")}<input class="input w-full" bind:value={offlineTitle} placeholder={tr("New offline assignment")} required maxlength="200" /></label>
+			<label class="vstack gap-1 small">{tr("Out of")}<input class="input w-24 tabular" type="number" min="0.01" max="10000" step="any" bind:value={offlineMax} required /></label>
+			<label class="vstack gap-1 small">{tr("Marked")}
+				<select class="select w-auto" bind:value={offlineMode}><option value="individual">{tr("Student by student")}</option><option value="group">{tr("By group")}</option></select>
+			</label>
+			<label class="vstack gap-1 small">{tr("Due (optional)")}<input class="input w-auto" type="datetime-local" bind:value={offlineDue} /></label>
+			<button class="btn btn-primary">{tr("Create offline assignment")}</button>
+			{#if offlineError}<p class="m-0 w-full small text-error" role="alert">{offlineError}</p>{/if}
 		</form>
 		<ClassActivities classroomId={topic.classroom_id} topicId={topic.id} />
 		<details class="card card-border bg-base-100 shadow-sm p-4 sm:p-6">

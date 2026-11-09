@@ -26,7 +26,8 @@ export const KIND: Record<string, { label: string; icon: IconName }> = {
 	presentation: { label: 'Presentation', icon: 'monitor' },
 	meeting: { label: 'Meeting', icon: 'video' },
 	poll: { label: 'Poll', icon: 'chart' },
-	tutoring: { label: 'Tutoring', icon: 'users' }
+	tutoring: { label: 'Tutoring', icon: 'users' },
+	offline: { label: 'Offline assignment', icon: 'pencil' }
 };
 export const kindOf = (k: string) => KIND[k] ?? { label: k, icon: 'list' as IconName };
 
@@ -74,6 +75,7 @@ export function action(it: WorkItem): string {
 export function markLine(d: DoneItem): string {
 	if (d.score != null && d.max != null) return `${d.score} / ${d.max}${d.pct != null ? ` (${d.pct}%)` : ''}`;
 	if (d.pending) return 'Still being marked';
+	if (d.kind === 'offline') return 'No mark';
 	const waiting = d.kind === 'quiz' ? d.status !== 'invalidated' : d.kind === 'tutorial' && !d.released;
 	return waiting ? 'Marks not released yet' : '';
 }
