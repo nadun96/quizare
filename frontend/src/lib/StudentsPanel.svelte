@@ -19,7 +19,7 @@
 	import Pager from './ui/Pager.svelte';
 	import SortHeader from './ui/SortHeader.svelte';
 
-	export type Enrolment = { id: string; user_id?: string; student_name: string; student_email: string; student_avatar?: string; student_number: string | null; status: string; created_at: string; categories?: string[] };
+	export type Enrolment = { gender?: string; number_bad?: boolean; id: string; user_id?: string; student_name: string; student_email: string; student_avatar?: string; student_number: string | null; status: string; created_at: string; categories?: string[] };
 	export type Category = { id: string; classroom_id: string; name: string; color: number; position: number; members: number };
 
 	let {
@@ -74,6 +74,37 @@
 			toast(e instanceof ApiError ? e.message : tr("That didn’t work. Try again."), 'error');
 		}
 	}
+	// The classroom's student ID format (D-162).
+	let idRule = $state({ pattern: '', hint: '' });
+	let idOpen = $state(false);
+	let idBusy = $state(false);
+	$effect(() => {
+		if (classroomId) api.get<{ pattern: string; hint: string }>(`/api/teacher/classrooms/${classroomId}/student-ids`).then((r) => (idRule = r)).catch(() => {});
+	});
+	async function saveIdRule(e: SubmitEvent) {
+		e.preventDefault();
+		idBusy = true;
+		try {
+			const r = await api.put<{ pattern: string; hint: string; not_matching: number }>(`/api/teacher/classrooms/${classroomId}/student-ids`, idRule);
+			idRule = { pattern: r.pattern, hint: r.hint };
+			toast(r.not_matching ? tr("Saved. {0} current student IDs don’t match; they’re marked below.", [r.not_matching]) : tr("Saved"));
+			idOpen = false;
+			await reload();
+		} catch (err) {
+			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("That didn’t work. Try again."), 'error');
+		} finally {
+			idBusy = false;
+		}
+	}
+	async function setGender(en: Enrolment, g: string) {
+		try {
+			await api.patch('/api/teacher/enrolments/' + en.id, { gender: g });
+			en.gender = g;
+		} catch (err) {
+			toast(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : tr("That didn’t work. Try again."), 'error');
+		}
+	}
+	const badIds = $derived(list.rows.filter((e) => e.number_bad).length);
 	const selectedWaiting = $derived(list.rows.filter((e) => selected.has(e.id) && e.status === 'pending').map((e) => e.id));
 	$effect(() => {
 		if (classroomId) reload();
@@ -198,6 +229,19 @@
 		{/if}
 	</div>
 
+	<details class="card card-border bg-base-100 p-4" bind:open={idOpen}>
+		<summary class="cursor-pointer small"><strong>{tr("Student ID format")}</strong> <span class="muted">{idRule.pattern ? tr("like {0}", [idRule.hint || idRule.pattern]) : tr("any")}</span></summary>
+		<form class="vstack gap-2 mt-3" onsubmit={saveIdRule}>
+			<p class="m-0 small muted">{tr("A pattern (regular expression) every student ID must match in full. Students can’t join or save an ID that doesn’t; IDs already given are marked. Leave it empty to allow any ID.")}</p>
+			<div class="flex flex-wrap items-end gap-3">
+				<label class="vstack gap-1 small">{tr("Pattern")}<input class="input input-sm w-72 font-mono" bind:value={idRule.pattern} maxlength="200" placeholder={tr("MGT/\\d{4}/\\d{3}")} /></label>
+				<label class="vstack gap-1 small">{tr("Example shown to students")}<input class="input input-sm w-48" bind:value={idRule.hint} maxlength="100" placeholder={tr("MGT/2024/447")} /></label>
+				<button class="btn btn-sm btn-primary" disabled={idBusy}>{tr("Save")}</button>
+			</div>
+			<p class="m-0 text-xs muted">{tr("For example:")} <code>{'MGT/\\d{4}/\\d{3}'}</code> {tr("is MGT/, 4 digits, /, 3 digits;")} <code>{'[A-Z]{3}\\d+'}</code> {tr("is 3 capital letters then digits.")}</p>
+		</form>
+	</details>
+
 	{#if waiting}
 		<div class="alert alert-soft alert-warning flex flex-wrap items-center gap-2" role="status">
 			<Icon name="clock" size={18} />
@@ -240,7 +284,7 @@
 				<thead>
 					<tr>
 						<th class="w-10"><input type="checkbox" class="checkbox checkbox-sm" checked={allShownSelected} onchange={toggleAll} aria-label={tr("Select all on this page")} /></th>
-						<th><SortHeader {list} key="name" label={tr("Name")} /></th><th><SortHeader {list} key="number" label={tr("Student ID")} /></th><th>{tr("Groups")}</th><th><SortHeader {list} key="status" label={tr("Status")} /></th><th><span class="sr-only">{tr("Actions")}</span></th>
+						<th><SortHeader {list} key="name" label={tr("Name")} /></th><th><SortHeader {list} key="number" label={tr("Student ID")} /></th><th>{tr("Gender")}</th><th>{tr("Groups")}</th><th><SortHeader {list} key="status" label={tr("Status")} /></th><th><span class="sr-only">{tr("Actions")}</span></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -248,7 +292,12 @@
 						<tr class:sel={selected.has(en.id)}>
 							<td><input type="checkbox" class="checkbox checkbox-sm" checked={selected.has(en.id)} onchange={() => toggle(en.id)} aria-label={tr("Select {0}", [en.student_name])} /></td>
 							<td><span class="flex items-center gap-2"><Avatar id={en.user_id ?? ''} name={en.student_name} avatar={en.student_avatar} size={30} /><span class="min-w-0">{en.student_name}<br /><span class="small muted">{en.student_email}</span></span></span></td>
-							<td class="whitespace-nowrap">{en.student_number ?? '—'} <button class="btn btn-ghost btn-xs" onclick={() => editNumber(en)}>{tr("Edit")}</button></td>
+							<td class="whitespace-nowrap">{en.student_number ?? '—'}{#if en.number_bad} <span class="badge badge-warning badge-soft badge-sm" title={tr("Doesn’t match the classroom’s student ID format")}>{tr("check")}</span>{/if} <button class="btn btn-ghost btn-xs" onclick={() => editNumber(en)}>{tr("Edit")}</button></td>
+							<td>
+								<select class="select select-xs w-auto" value={en.gender ?? ''} onchange={(e) => setGender(en, e.currentTarget.value)} aria-label={tr("Gender of {0}", [en.student_name])}>
+									<option value="">{tr("Not given")}</option><option value="female">{tr("Female")}</option><option value="male">{tr("Male")}</option>
+								</select>
+							</td>
 							<td>
 								<div class="flex flex-wrap gap-1">
 									{#each en.categories ?? [] as cid (cid)}
@@ -267,7 +316,7 @@
 							</td>
 						</tr>
 					{:else}
-						<tr><td colspan="6" class="muted">{list.loaded ? tr("No students match.") : tr("Loading…")}</td></tr>
+						<tr><td colspan="7" class="muted">{list.loaded ? tr("No students match.") : tr("Loading…")}</td></tr>
 					{/each}
 				</tbody>
 			</table>

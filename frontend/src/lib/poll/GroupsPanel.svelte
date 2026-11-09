@@ -15,6 +15,9 @@
 	let view = $state<GroupsView | null>(null);
 	let count = $state(4);
 	let reassign = $state(false);
+	// D-162: at most so many a group (empty: no limit), each gender spread evenly.
+	let most = $state<number | null>(null);
+	let balance = $state(true);
 	let busy = $state(false);
 	let selected = $state<Set<string>>(new Set());
 
@@ -44,7 +47,7 @@
 		}
 	}
 	const generate = (from: 'random' | 'categories') =>
-		run(() => api.post('/api/teacher/polls/' + pollId + '/groups/generate', { from, count: Number(count), reassign }), from === 'random' ? 'Groups shuffled' : 'Groups made from categories');
+		run(() => api.post('/api/teacher/polls/' + pollId + '/groups/generate', { from, count: Number(count), reassign, max: Number(most) || 0, balance }), from === 'random' ? 'Groups shuffled' : 'Groups made from categories');
 	const add = () => run(() => api.post('/api/teacher/polls/' + pollId + '/groups', {}), 'Group added');
 	const move = (ids: string[], group: string) => run(async () => {
 		await api.post('/api/teacher/polls/' + pollId + '/groups/members', { participant_ids: ids, group_id: group });
@@ -90,6 +93,8 @@
 	<div class="card card-border bg-base-100 p-4 shadow-sm">
 		<div class="flex flex-wrap items-end gap-2">
 			<div class="w-24"><label for="gp-n">{tr("Groups")}</label><input id="gp-n" class="input input-sm w-full" type="number" min="2" max="50" bind:value={count} /></div>
+			<div class="w-28"><label for="gp-max">{tr("Most a group")}</label><input id="gp-max" class="input input-sm w-full" type="number" min="1" max="1000" placeholder={tr("No limit")} bind:value={most} /></div>
+			{#if settings.identity !== 'anonymous'}<label class="m-0 flex items-center gap-2 font-normal small pb-1"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={balance} />{tr("Spread genders evenly")}</label>{/if}
 			<button class="btn btn-sm btn-primary" disabled={busy} onclick={() => generate('random')}><Icon name="shuffle" size={14} />{tr("Make random groups")}</button>
 			{#if hasClassroom && settings.identity !== 'anonymous'}<button class="btn btn-sm" disabled={busy} onclick={() => generate('categories')}><Icon name="users" size={14} />{tr("From categories")}</button>{/if}
 			<button class="btn btn-sm" disabled={busy} onclick={add}><Icon name="plus" size={14} />{tr("Add a group")}</button>

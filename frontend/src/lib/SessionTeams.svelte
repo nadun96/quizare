@@ -16,6 +16,9 @@
 	let standings = $state<TeamStanding[]>([]);
 	let count = $state(4);
 	let reassign = $state(false);
+	// D-162: at most so many a team (empty: no limit), each gender spread evenly.
+	let most = $state<number | null>(null);
+	let balance = $state(true);
 	let busy = $state(false);
 
 	async function load() {
@@ -54,7 +57,7 @@
 		}
 	}
 	const base = $derived('/api/teacher/sessions/' + sessionId + '/teams');
-	const generate = (from: 'random' | 'categories') => run(() => api.post(base + '/generate', { from, count: Number(count), reassign }), from === 'random' ? 'Teams shuffled' : 'Teams made from categories');
+	const generate = (from: 'random' | 'categories') => run(() => api.post(base + '/generate', { from, count: Number(count), reassign, max: Number(most) || 0, balance }), from === 'random' ? 'Teams shuffled' : 'Teams made from categories');
 	const add = () => run(() => api.post(base, {}), 'Team added');
 	const move = (m: TeamMember, team: string) => run(() => api.post(base + '/members', { attempt_ids: [m.attempt_id], team_id: team }));
 	const captain = (m: TeamMember) => run(() => api.post(base + '/members', { attempt_ids: [m.attempt_id], captain: !m.captain }));
@@ -114,6 +117,8 @@
 	{#if !ended}
 		<div class="flex flex-wrap items-end gap-2">
 			<div class="w-20"><label for="st-n">{tr("Teams")}</label><input id="st-n" class="input input-sm w-full" type="number" min="2" max="50" bind:value={count} /></div>
+			<div class="w-28"><label for="st-max">{tr("Most a team")}</label><input id="st-max" class="input input-sm w-full" type="number" min="1" max="1000" placeholder={tr("No limit")} bind:value={most} /></div>
+			<label class="m-0 flex items-center gap-2 font-normal small pb-1"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={balance} />{tr("Spread genders evenly")}</label>
 			<button class="btn btn-sm btn-primary" disabled={busy} onclick={() => generate('random')}><Icon name="shuffle" size={14} />{tr("Random teams")}</button>
 			<button class="btn btn-sm" disabled={busy} onclick={() => generate('categories')}>{tr("From categories")}</button>
 			<button class="btn btn-sm" disabled={busy} onclick={add}><Icon name="plus" size={14} />{tr("Add a team")}</button>

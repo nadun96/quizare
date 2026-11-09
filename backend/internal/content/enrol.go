@@ -116,6 +116,11 @@ func (s *Service) enrol(ctx context.Context, c Classroom, eff settings.Effective
 	if eff.StudentIDRequired && studentNumber == "" && (!ok || existing.StudentNumber == nil) {
 		return existing, errNeedStudentNum
 	}
+	if !ok || existing.StudentNumber == nil {
+		if err := s.checkID(ctx, c.ID, studentNumber); err != nil {
+			return existing, err
+		}
+	}
 	var num any
 	if studentNumber != "" {
 		num = studentNumber
@@ -233,10 +238,33 @@ func (s *Service) ListEnrolments(ctx context.Context, teacherID, classroomID, st
 	if err != nil {
 		return nil, err
 	}
+	genders := map[string]string{}
+	grows, err := s.pool.Query(ctx, `SELECT id::text, gender FROM auth.users WHERE id::text = ANY($1) AND gender IS NOT NULL`, ids)
+	if err != nil {
+		return nil, err
+	}
+	for grows.Next() {
+		var id, g string
+		if err := grows.Scan(&id, &g); err != nil {
+			grows.Close()
+			return nil, err
+		}
+		genders[id] = g
+	}
+	grows.Close()
+	if err := grows.Err(); err != nil {
+		return nil, err
+	}
+	_, re, err := s.idRule(ctx, classroomID)
+	if err != nil {
+		return nil, err
+	}
 	for i := range list {
 		u := users[list[i].UserID]
 		list[i].StudentName, list[i].StudentEmail, list[i].StudentAvatar = u.Name, u.Email, u.Avatar
 		list[i].Categories = cats[list[i].ID]
+		list[i].Gender = genders[list[i].UserID]
+		list[i].NumberBad = re != nil && list[i].StudentNumber != nil && !re.MatchString(*list[i].StudentNumber)
 	}
 	return list, nil
 }
@@ -244,6 +272,7 @@ func (s *Service) ListEnrolments(ctx context.Context, teacherID, classroomID, st
 type EnrolmentUpdate struct {
 	Status        *string `json:"status"`         // active (approve), rejected, removed
 	StudentNumber *string `json:"student_number"` // teacher may correct it
+	Gender        *string `json:"gender"`         // and the student's gender (D-162)
 }
 
 // UpdateEnrolment lets the teacher approve, reject or remove an enrolment
@@ -260,6 +289,12 @@ func (s *Service) UpdateEnrolment(ctx context.Context, teacherID, enrolmentID st
 	if in.StudentNumber != nil {
 		if v := strings.TrimSpace(*in.StudentNumber); v != "" {
 			num = v
+			var classroom string
+			if err := s.pool.QueryRow(ctx, `SELECT classroom_id::text FROM content.enrolments WHERE id = $1`, enrolmentID).Scan(&classroom); err == nil {
+				if err := s.checkID(ctx, classroom, v); err != nil {
+					return Enrolment{}, err
+				}
+			}
 		}
 	}
 	var e Enrolment
@@ -283,6 +318,9 @@ func (s *Service) UpdateEnrolment(ctx context.Context, teacherID, enrolmentID st
 		}
 		return audit.Log(ctx, tx, teacherID, "enrolment_updated", "enrolment", enrolmentID, in)
 	})
+	if err == nil && in.Gender != nil {
+		err = s.users.SetGender(ctx, teacherID, e.UserID, *in.Gender)
+	}
 	return e, err
 }
 
@@ -379,6 +417,9 @@ func (s *Service) SetMyStudentNumber(ctx context.Context, userID, classroomID, n
 		return Enrolment{}, httpx.Invalid(map[string]string{"student_number": "at most 64 characters"})
 	case number == "" && eff.StudentIDRequired:
 		return Enrolment{}, errNeedStudentNum
+	}
+	if err := s.checkID(ctx, classroomID, number); err != nil {
+		return Enrolment{}, err
 	}
 	var num any
 	if number != "" {

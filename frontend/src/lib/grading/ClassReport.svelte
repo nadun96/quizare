@@ -34,6 +34,8 @@
 	// Part of the classroom (D-160): all, module:, topic:, item:kind:id or session:.
 	// svelte-ignore state_referenced_locally
 	let scope = $state(initialScope);
+	// Only students who took part, for this view (D-163); '' follows the saved option.
+	let attended = $state<'' | '0' | '1'>('');
 	const scoped = $derived(scope !== 'all');
 	const when = (iso: string) => new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 	let scopeChoices = $state<{ value: string; label: string; group: string }[]>([]);
@@ -51,7 +53,7 @@
 				draft = draftFrom(whole);
 				scopeChoices = reportScopeOptions(whole.items, whole.sessions ?? [], when);
 			}
-			const r = await api.get<ClassReport>(scoped ? `${url}?scope=${encodeURIComponent(scope)}` : url);
+			const r = await api.get<ClassReport>(scoped ? `${url}?scope=${encodeURIComponent(scope)}${attended ? `&attended=${attended}` : ''}` : url);
 			// A run's date in the viewer's time, as the picker shows it.
 			const choice = scopeChoices.find((o) => o.value === scope);
 			if (r.scope?.kind === 'session' && choice) r.scope.label = choice.label.replace(/ · \d+$/, '');
@@ -67,10 +69,12 @@
 	$effect(() => {
 		void url;
 		void scope;
+		void attended;
 		load();
 	});
 	function chooseScope(v: string) {
 		scope = v;
+		attended = '';
 		setupOpen = managing = false;
 	}
 
@@ -182,6 +186,7 @@
 		<div class="flex flex-wrap items-center gap-2">
 			{#if scopeChoices.length > 1}<ScopePicker options={scopeChoices} value={scope} onchange={chooseScope} />{/if}
 			<p class="m-0 small muted grow">{#if scoped && rep.scope}<strong>{tr(rep.scope.label)}</strong>{rep.scope.kind === 'session' ? tr(": only the marks from this run of the quiz") : ''}{#if rep.out_of} · {tr("total out of {0}", [rep.out_of])}{/if}{:else}{tr("{0} of {1} in the report · total out of {2}", [cols.length, rep.items.length, rep.out_of])}{/if}</p>
+			{#if scoped}<label class="flex items-center gap-2 small"><input class="checkbox checkbox-sm" type="checkbox" checked={!!rep.attended_only} onchange={(e) => (attended = e.currentTarget.checked ? '1' : '0')} />{rep.scope?.kind === 'session' ? tr("Only students who came") : tr("Only students with a mark")}</label>{/if}
 			{#if !scoped}<button class="btn btn-sm" class:btn-primary={!setupOpen} aria-expanded={setupOpen} onclick={() => (setupOpen = !setupOpen)}><Icon name="settings" size={16} />{tr("Set up")}</button>{/if}
 			<button class="btn btn-sm" onclick={csv}><Icon name="download" size={16} />{tr("CSV")}</button>
 			<ReportPdfButton {classroomId} title={scopedName(`${classroomName}: ${view === 'groups' ? 'group marks' : 'class report'}`, rep.scope)} fileName={scopedName(`${classroomName} ${view === 'groups' ? 'group marks' : 'class report'}`, rep.scope)} {sheets} disabled={!cols.length || (view === 'groups' ? !sheets().length : !shownStudents.length)} onbands={(b) => (bands = b)} />
@@ -236,6 +241,7 @@
 					<label class="flex items-center gap-2 font-normal"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={draft.options.dates} />{tr("Date of each item")}</label>
 					<label class="flex items-center gap-2 font-normal"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={draft.options.violations} />{tr("Violations")}</label>
 					<label class="flex items-center gap-2 font-normal"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={draft.options.attendance} />{tr("Attendance ({0})", [ATTENDANCE_SPAN])}</label>
+					<label class="flex items-center gap-2 font-normal"><input class="checkbox checkbox-sm" type="checkbox" bind:checked={draft.options.attended_only} />{tr("In a report of one session, item, topic or module: only students who took part")}</label>
 				</fieldset>
 
 				<h3 class="m-0 text-sm">{tr("Exceptions for one student")}</h3>

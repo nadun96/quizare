@@ -239,6 +239,18 @@ paths:
       tags: [auth]
       summary: Cancel a change of email address not yet confirmed (D-98)
       responses: { '204': { description: 'Cancelled' } }
+  /api/auth/me/gender:
+    get:
+      operationId: getMyGender
+      tags: [auth]
+      summary: "My gender, used only to balance groups (D-162): female, male or empty"
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { gender: { type: string, enum: [female, male, ''] } } } } } } }
+    put:
+      operationId: putMyGender
+      tags: [auth]
+      summary: Set my gender; empty is "prefer not to say"
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [gender], properties: { gender: { type: string, enum: [female, male, ''] } } } } } }
+      responses: { '200': { description: 'Saved' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/auth/me/profile:
     put:
       operationId: putMyProfile
@@ -1698,7 +1710,7 @@ paths:
       tags: [classrooms]
       summary: The class report per student, with its setup and what students see (D-140); or of part of the classroom (D-160)
       description: "With scope, only what it covers is in the report and its totals: module:<id>, topic:<id>, item:<kind>:<id> (quiz, tutorial, poll or offline) or session:<id> (one run of a quiz, using only its marks). An item or session asked for is shown even if the setup leaves it out. The answer always lists the classroom's quiz sessions."
-      parameters: [{ name: scope, in: query, schema: { type: string }, description: 'Empty or all: the whole classroom' }]
+      parameters: [{ name: scope, in: query, schema: { type: string }, description: 'Empty or all: the whole classroom' }, { name: attended, in: query, schema: { type: string, enum: ['0', '1'] }, description: "With a scope: list only students who took part (1) or everyone (0), for this report alone; left out, the report's attended_only option decides (D-163)" }]
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/ClassReport' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
     put:
       operationId: putTeacherClassroomClassReport
@@ -1902,6 +1914,27 @@ paths:
       summary: Approve or turn away students waiting to join, those listed or all of them (D-161)
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, rejected] }, enrolment_ids: { type: array, items: { type: string, format: uuid }, description: 'Empty: everyone waiting' } } } } } }
       responses: { '200': { description: 'How many changed', content: { application/json: { schema: { type: object, properties: { changed: { type: integer } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/student-ids:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomStudentIDs
+      tags: [classrooms]
+      summary: "The classroom's student ID pattern (a regular expression the whole ID must match) and its example (D-162)"
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { pattern: { type: string }, hint: { type: string } } } } } } }
+    put:
+      operationId: putTeacherClassroomStudentIDs
+      tags: [classrooms]
+      summary: "Set or clear the pattern; students can't enter an ID that doesn't match; says how many current IDs don't"
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { pattern: { type: string, maxLength: 200 }, hint: { type: string, maxLength: 100, description: 'An example ID; must match the pattern' } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { type: object, properties: { pattern: { type: string }, hint: { type: string }, not_matching: { type: integer } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/classrooms/{id}/groups/random:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherClassroomRandomGroups
+      tags: [classrooms]
+      summary: "Make new groups and share the active students among them at random, evenly, each gender spread evenly if asked, at most so many a group (D-162)"
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [count], properties: { count: { type: integer, minimum: 2, maximum: 50 }, max: { type: integer, minimum: 0, maximum: 1000 }, balance: { type: boolean }, prefix: { type: string, maxLength: 50, description: 'Names are "<prefix> 1"...; empty: Group' } } } } } }
+      responses: { '201': { description: 'Made', content: { application/json: { schema: { type: object, properties: { groups: { type: array, items: { type: string } }, placed: { type: integer }, left: { type: integer, description: "Students who didn't fit" } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/classrooms/{id}/modules:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -2334,7 +2367,7 @@ paths:
       operationId: postTeacherSessionsTeamsGenerate
       tags: [sessions]
       summary: Form teams at random (balanced) or from the classroom's categories
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [from], properties: { from: { type: string, enum: [random, categories] }, count: { type: integer, minimum: 2, maximum: 50 }, reassign: { type: boolean, description: 'Also move students who already have a team' } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [from], properties: { from: { type: string, enum: [random, categories] }, count: { type: integer, minimum: 2, maximum: 50 }, reassign: { type: boolean, description: 'Also move students who already have a team' }, max: { type: integer, minimum: 0, maximum: 1000, description: 'random: most a group, 0 none; who does not fit stays out (D-162)' }, balance: { type: boolean, description: 'random: spread each gender evenly (D-162)' } } } } } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/TeamsView' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/sessions/{id}/teams/members:
     parameters: [{ $ref: '#/components/parameters/id' }]
@@ -3097,7 +3130,7 @@ paths:
       tags: [polls]
       summary: Form groups at random (balanced) or from the classroom's categories
       description: Without `reassign`, only participants who have no group are placed. Groups without a captain get their earliest member as captain.
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [from], properties: { from: { type: string, enum: [random, categories] }, count: { type: integer, minimum: 2, maximum: 50, description: 'random only' }, reassign: { type: boolean } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [from], properties: { from: { type: string, enum: [random, categories] }, count: { type: integer, minimum: 2, maximum: 50, description: 'random only' }, reassign: { type: boolean }, max: { type: integer, minimum: 0, maximum: 1000, description: 'random: most a group, 0 none; who does not fit stays out (D-162)' }, balance: { type: boolean, description: 'random: spread each gender evenly (D-162)' } } } } } }
       responses: { '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/PollGroupsView' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/teacher/polls/{id}/groups/members:
     parameters: [{ $ref: '#/components/parameters/id' }]

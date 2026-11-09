@@ -142,3 +142,48 @@ func dashboard(t *testing.T, f *fixture) live.Dashboard {
 	f.teacher.Call("GET", "/api/teacher/sessions/"+f.sess.ID, nil, 200, &d)
 	return d
 }
+
+// D-162: random teams with each gender spread evenly, at most so many a team;
+// who doesn't fit stays out, and the teacher can still move anyone.
+func TestBalancedRandomTeams(t *testing.T) {
+	f := setup(t, nil, nil, map[string]any{"team_mode": "manual"})
+	ctx := context.Background()
+	genders := []string{"female", "female", "male", "male", "male", "male"}
+	girls := map[string]bool{}
+	for _, g := range genders {
+		s, st := f.join(t)
+		if err := f.e.App.Auth.SetGender(ctx, s.User.ID, s.User.ID, g); err != nil {
+			t.Fatal(err)
+		}
+		girls[st.AttemptID] = g == "female"
+	}
+	url := "/api/teacher/sessions/" + f.sess.ID + "/teams/generate"
+	f.teacher.Call("POST", url, map[string]any{"from": "random", "count": 2, "max": -1}, 422, nil)
+	var gv live.TeamsView
+	f.teacher.Call("POST", url, map[string]any{"from": "random", "count": 2, "balance": true, "reassign": true}, 200, &gv)
+	for _, tm := range gv.Teams {
+		n := 0
+		for _, m := range tm.List {
+			if girls[m.AttemptID] {
+				n++
+			}
+		}
+		if len(tm.List) != 3 || n != 1 {
+			t.Fatalf("%s: %d members, %d girls", tm.Name, len(tm.List), n)
+		}
+	}
+	f.teacher.Call("POST", url, map[string]any{"from": "random", "count": 2, "max": 2, "balance": true, "reassign": true}, 200, &gv)
+	placed := len(gv.Teams[0].List) + len(gv.Teams[1].List)
+	if placed != 4 || len(gv.Teams[0].List) != 2 {
+		t.Fatalf("at most 2 a team: %d placed", placed)
+	}
+	// The teacher moves everyone into one team, past the limit.
+	ids := []string{}
+	for id := range girls {
+		ids = append(ids, id)
+	}
+	f.teacher.Call("POST", "/api/teacher/sessions/"+f.sess.ID+"/teams/members", map[string]any{"attempt_ids": ids, "team_id": gv.Teams[0].ID}, 204, nil)
+	if v := f.teams(t); len(v.Teams[0].List) != 6 {
+		t.Fatalf("moved by hand: %d", len(v.Teams[0].List))
+	}
+}
