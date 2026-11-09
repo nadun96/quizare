@@ -206,9 +206,9 @@ describe('what else the class report shows (D-156)', () => {
 	});
 	it('sends the options when saved, and starts from what’s saved', () => {
 		const d = draftFrom(withExtras({ dates: true }));
-		expect(d.options).toEqual({ violations: false, attendance: false, dates: true });
+		expect(d.options).toEqual({ violations: false, attendance: false, dates: true, attended_only: false });
 		expect(setupPayload(d).options).toEqual(d.options);
-		expect(draftFrom(report()).options).toEqual({ violations: false, attendance: false, dates: false });
+		expect(draftFrom(report()).options).toEqual({ violations: false, attendance: false, dates: false, attended_only: false });
 	});
 });
 

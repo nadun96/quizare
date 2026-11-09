@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nadun96/quizplatform/internal/platform/balance"
 	"github.com/nadun96/quizplatform/internal/platform/httpx"
 	"github.com/nadun96/quizplatform/internal/settings"
 )
@@ -365,6 +365,8 @@ type TeamGenerate struct {
 	From     string `json:"from"`  // random | categories
 	Count    int    `json:"count"` // random
 	Reassign bool   `json:"reassign"`
+	Max      int    `json:"max"`     // random: most a team, 0 none; who doesn't fit stays out (D-162)
+	Balance  bool   `json:"balance"` // random: spread each gender evenly (D-162)
 }
 
 func (s *Service) GenerateTeams(ctx context.Context, teacherID, sessionID string, in TeamGenerate) (TeamsView, error) {
@@ -377,7 +379,10 @@ func (s *Service) GenerateTeams(ctx context.Context, teacherID, sessionID string
 		if in.Count < 2 || in.Count > MaxTeams {
 			return TeamsView{}, httpx.Invalid(map[string]string{"count": fmt.Sprintf("make 2-%d teams", MaxTeams)})
 		}
-		err = s.randomTeams(ctx, sess.ID, in.Count, in.Reassign)
+		if in.Max < 0 || in.Max > 1000 {
+			return TeamsView{}, httpx.Invalid(map[string]string{"max": "at most 1000 a team, or 0 for no limit"})
+		}
+		err = s.randomTeams(ctx, sess.ID, in.Count, in.Reassign, in.Max, in.Balance)
 	case "categories":
 		err = s.categoryTeams(ctx, sess, in.Reassign)
 	default:
@@ -393,7 +398,7 @@ func (s *Service) GenerateTeams(ctx context.Context, teacherID, sessionID string
 	return s.Teams(ctx, teacherID, sessionID)
 }
 
-func (s *Service) randomTeams(ctx context.Context, sessionID string, count int, reassign bool) error {
+func (s *Service) randomTeams(ctx context.Context, sessionID string, count int, reassign bool, max int, byGender bool) error {
 	ts, err := s.teamInfos(ctx, sessionID)
 	if err != nil {
 		return err
@@ -411,40 +416,58 @@ func (s *Service) randomTeams(ctx context.Context, sessionID string, count int, 
 			return err
 		}
 	}
-	pos := map[string]int{}
+	return s.placeRandomly(ctx, `SELECT a.id::text, a.team_id::text, coalesce(u.gender, '') FROM live.attempts a LEFT JOIN auth.users u ON u.id = a.user_id WHERE a.session_id = $1`,
+		`UPDATE live.attempts SET team_id = $2 WHERE id = $1`, sessionID, teamIDs(ts), max, byGender)
+}
+
+func teamIDs(ts []TeamInfo) []string {
+	ids := make([]string, len(ts))
 	for i, t := range ts {
-		pos[t.ID] = i
+		ids[i] = t.ID
 	}
-	sizes := make([]int, len(ts))
-	rows, err := s.pool.Query(ctx, `SELECT id, team_id FROM live.attempts WHERE session_id=$1`, sessionID)
+	return ids
+}
+
+// placeRandomly shares those in no team among the teams at random, evenly
+// and, if asked, with each gender spread evenly (D-162); at most max a team.
+// list gives (id, team or null, gender); place sets one's team.
+func (s *Service) placeRandomly(ctx context.Context, list, place, sessionID string, teams []string, max int, byGender bool) error {
+	pos := map[string]int{}
+	for i, id := range teams {
+		pos[id] = i
+	}
+	groups := make([]balance.Group, len(teams))
+	for i := range groups {
+		groups[i].Genders = map[string]int{}
+	}
+	rows, err := s.pool.Query(ctx, list, sessionID)
 	if err != nil {
 		return err
 	}
-	var free []string
+	var free []balance.Person
 	for rows.Next() {
-		var id string
-		var t *string
-		if err := rows.Scan(&id, &t); err != nil {
+		var id, gender string
+		var team *string
+		if err := rows.Scan(&id, &team, &gender); err != nil {
 			rows.Close()
 			return err
 		}
-		if t == nil {
-			free = append(free, id)
-		} else if i, ok := pos[*t]; ok {
-			sizes[i]++
+		if team == nil {
+			free = append(free, balance.Person{ID: id, Gender: gender})
+		} else if i, ok := pos[*team]; ok {
+			groups[i].Size++
+			groups[i].Genders[gender]++
 		}
 	}
 	rows.Close()
-	rand.Shuffle(len(free), func(i, j int) { free[i], free[j] = free[j], free[i] })
-	for _, id := range free {
-		best := 0
-		for i := range sizes {
-			if sizes[i] < sizes[best] {
-				best = i
-			}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i, at := range balance.Share(free, groups, max, byGender, nil) {
+		if at < 0 {
+			continue // no room: the teacher places them
 		}
-		sizes[best]++
-		if _, err := s.pool.Exec(ctx, `UPDATE live.attempts SET team_id=$2 WHERE id=$1`, id, ts[best].ID); err != nil {
+		if _, err := s.pool.Exec(ctx, place, free[i].ID, teams[at]); err != nil {
 			return err
 		}
 	}

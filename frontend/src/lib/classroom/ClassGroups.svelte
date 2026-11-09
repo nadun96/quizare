@@ -18,6 +18,12 @@
 	let view = $state<GroupsView | null>(null);
 	let busy = $state(false);
 	let newName = $state('');
+	// Random groups (D-162).
+	let randomOpen = $state(false);
+	let rCount = $state(4);
+	let rMax = $state<number | null>(null);
+	let rBalance = $state(true);
+	let rPrefix = $state('Group');
 	let adding = $state<Record<string, string>>({});
 	let q = $state('');
 	// The policy being edited.
@@ -64,6 +70,19 @@
 		}
 	}
 
+	const genderCounts = $derived.by(() => {
+		const out = { female: 0, male: 0, unknown: 0 };
+		for (const s of view?.students ?? []) out[(s.gender as 'female' | 'male') || 'unknown'] = (out[(s.gender as 'female' | 'male') || 'unknown'] ?? 0) + 1;
+		return out;
+	});
+	function makeRandom(e: SubmitEvent) {
+		e.preventDefault();
+		run(async () => {
+			const r = await api.post<{ groups: string[]; placed: number; left: number }>(`${base}/groups/random`, { count: Number(rCount), max: Number(rMax) || 0, balance: rBalance, prefix: rPrefix });
+			randomOpen = false;
+			toast(r.left ? tr("{0} groups made; {1} students placed, {2} didn’t fit", [r.groups.length, r.placed, r.left]) : tr("{0} groups made; {1} students placed", [r.groups.length, r.placed]));
+		});
+	}
 	function create(e: SubmitEvent) {
 		e.preventDefault();
 		const name = newName.trim();
@@ -151,9 +170,23 @@
 				<button class="btn btn-sm" disabled={busy || !newName.trim()}><Icon name="plus" size={14} />{tr("Add group")}</button>
 			</form>
 			<button class="btn btn-sm" disabled={busy || !view.groups.length || !loose.length} onclick={share}><Icon name="shuffle" size={15} />{tr("Share out students in no group")}</button>
+			<button class="btn btn-sm" aria-expanded={randomOpen} onclick={() => (randomOpen = !randomOpen)}><Icon name="shuffle" size={15} />{tr("Random groups")}</button>
 			<span class="grow"></span>
 			{#if view.groups.length}<input class="input input-sm w-full sm:w-56" type="search" bind:value={q} placeholder={tr("Group or student")} aria-label={tr("Search groups")} />{/if}
 		</div>
+		{#if randomOpen}
+			<form class="card card-border bg-base-100 p-4 vstack gap-3" onsubmit={makeRandom} aria-label={tr("Random groups")}>
+				<p class="m-0 small muted">{tr("Makes new groups and shares all {0} students among them at random. Students keep their other groups. Those who don’t fit stay out for you to place; you can move anyone afterwards, past the limit.", [view.students.length])}</p>
+				<div class="flex flex-wrap items-end gap-3">
+					<label class="vstack gap-1 small">{tr("Groups")}<input class="input input-sm w-24 tabular" type="number" min="2" max="50" required bind:value={rCount} /></label>
+					<label class="vstack gap-1 small">{tr("Most a group")}<input class="input input-sm w-28 tabular" type="number" min="1" max="1000" placeholder={tr("No limit")} bind:value={rMax} /></label>
+					<label class="vstack gap-1 small">{tr("Named")}<input class="input input-sm w-32" maxlength="50" bind:value={rPrefix} /></label>
+					<label class="flex items-center gap-2 small pb-1"><input type="checkbox" class="checkbox checkbox-sm" bind:checked={rBalance} />{tr("Spread genders evenly")}</label>
+				</div>
+				<p class="m-0 text-xs muted">{tr("In this classroom: {0} female, {1} male, {2} not given.", [genderCounts.female, genderCounts.male, genderCounts.unknown])}{#if rCount > 0}{' '}{tr("About {0} a group.", [Math.ceil(view.students.length / Number(rCount))])}{/if}</p>
+				<div class="flex gap-2"><button class="btn btn-primary btn-sm" disabled={busy}>{tr("Make the groups")}</button><button type="button" class="btn btn-ghost btn-sm" onclick={() => (randomOpen = false)}>{tr("Cancel")}</button></div>
+			</form>
+		{/if}
 		{#if loose.length && view.groups.length}<p class="m-0 small text-warning">{tr("In no group: {0}", [loose.map((s) => s.name).join(', ')])}</p>{/if}
 
 		{#if !view.groups.length}
