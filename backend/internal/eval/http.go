@@ -16,7 +16,8 @@ func uid(r *http.Request) string { return auth.MustUser(r.Context()).ID }
 func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("GET", "/sessions/{id}/results", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		p := page.Parse(r, ResultSorts, "joined", false)
-		list, total, err := s.SessionResultsPage(r.Context(), uid(r), chi.URLParam(r, "id"), r.URL.Query().Get("review") == "1", p)
+		q := r.URL.Query()
+		list, total, err := s.SessionResultsPage(r.Context(), uid(r), chi.URLParam(r, "id"), ResultFilter{Review: q.Get("review") == "1", Show: q.Get("show")}, p)
 		if err != nil {
 			return err
 		}

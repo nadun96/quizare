@@ -40,13 +40,41 @@
 
 	let categories = $state<Category[]>([]);
 	let filter = $state<string | null>(Paged.fromUrl(urlState, 'category', 'st') || null); // category id, or null for everyone
+	let status = $state(Paged.fromUrl(urlState, 'status', 'st'));
 	const list = new Paged<Enrolment>(() => '/api/teacher/classrooms/' + classroomId + '/enrolments', 'enrolments', {
-		url: urlState, prefix: 'st', sort: 'joined', filters: () => ({ category: filter ?? undefined })
+		url: urlState, prefix: 'st', sort: 'joined', filters: () => ({ category: filter ?? undefined, status: status || undefined })
 	});
+	// Students waiting for approval (D-161).
+	let waiting = $state(0);
+	async function countWaiting() {
+		waiting = (await api.get<{ total: number }>(`/api/teacher/classrooms/${classroomId}/enrolments?status=pending&size=1`)).total;
+	}
 	async function reload() {
 		await list.load();
-		if (!filter && !list.q) count = list.total;
+		if (!filter && !list.q && !status) count = list.total;
+		await countWaiting();
 	}
+	async function setStatusFilter(v: string) {
+		status = v;
+		selected = new Set();
+		await list.refilter();
+	}
+	async function decide(approve: boolean, ids: string[] = []) {
+		const n = ids.length || waiting;
+		const ok = await confirmDialog(approve
+			? { title: tr("Approve {0}?", [n === 1 ? tr("1 student") : tr("{0} students", [n])]), body: tr("They join the classroom and see its work."), confirm: tr("Approve") }
+			: { title: tr("Turn away {0}?", [n === 1 ? tr("1 student") : tr("{0} students", [n])]), body: tr("They can’t join this classroom with its code again."), confirm: tr("Turn away"), danger: true });
+		if (!ok) return;
+		try {
+			const r = await api.post<{ changed: number }>(`/api/teacher/classrooms/${classroomId}/enrolments/pending`, { status: approve ? 'active' : 'rejected', enrolment_ids: ids });
+			toast(approve ? tr("Approved: {0}", [r.changed]) : tr("Turned away: {0}", [r.changed]));
+			selected = new Set();
+			await reload();
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work. Try again."), 'error');
+		}
+	}
+	const selectedWaiting = $derived(list.rows.filter((e) => selected.has(e.id) && e.status === 'pending').map((e) => e.id));
 	$effect(() => {
 		if (classroomId) reload();
 	});
@@ -54,7 +82,7 @@
 		filter = id;
 		selected = new Set();
 		await list.refilter();
-		if (!filter && !list.q) count = list.total;
+		if (!filter && !list.q && !status) count = list.total;
 	}
 	let selected = $state<Set<string>>(new Set());
 	let newName = $state('');
@@ -170,12 +198,30 @@
 		{/if}
 	</div>
 
+	{#if waiting}
+		<div class="alert alert-soft alert-warning flex flex-wrap items-center gap-2" role="status">
+			<Icon name="clock" size={18} />
+			<span class="grow">{waiting === 1 ? tr("1 student is waiting for approval.") : tr("{0} students are waiting for approval.", [waiting])}</span>
+			{#if status !== 'pending'}<button class="btn btn-sm" onclick={() => setStatusFilter('pending')}>{tr("Show them")}</button>{/if}
+			<button class="btn btn-sm btn-primary" onclick={() => decide(true)}><Icon name="check" size={15} />{tr("Approve all")}</button>
+			<button class="btn btn-sm btn-ghost" onclick={() => decide(false)}>{tr("Turn all away")}</button>
+		</div>
+	{/if}
+
 	<!-- Search and bulk actions -->
 	<div class="flex flex-wrap items-center gap-2">
 		<ListSearch {list} placeholder={tr("Search name, email or student ID")} label={tr("Search students")} />
+		<select class="select select-sm w-auto" value={status} onchange={(e) => setStatusFilter(e.currentTarget.value)} aria-label={tr("Status")}>
+			<option value="">{tr("Everyone")}</option>
+			<option value="pending">{tr("Waiting for approval")}</option>
+			<option value="active">{tr("Active")}</option>
+			<option value="rejected">{tr("Turned away")}</option>
+			<option value="removed">{tr("Removed")}</option>
+		</select>
 		<span class="spacer"></span>
 		{#if selected.size}
 			<span class="small" in:fadeIn><strong>{selected.size}</strong> {tr("selected")}</span>
+			{#if selectedWaiting.length}<button class="btn btn-sm btn-primary" onclick={() => decide(true, selectedWaiting)}>{tr("Approve {0}", [selectedWaiting.length])}</button>{/if}
 			<select class="select select-sm w-auto" bind:value={target} aria-label={tr("Group")}>
 				<option value="">{tr("Group…")}</option>
 				{#each categories as c (c.id)}<option value={c.id}>{c.name}</option>{/each}

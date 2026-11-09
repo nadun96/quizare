@@ -21,7 +21,7 @@
 	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
 	import { reportScopeOptions, scopedName, ATTENDANCE_SPAN, attendanceText, dateText, optionsOf, violationsText, classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, markTone, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type GroupRow, type ReportStudent, type Unit } from './classReport';
 
-	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
+	let { classroomId, classroomName = 'classroom', initialScope = 'all' }: { classroomId: string; classroomName?: string; initialScope?: string } = $props();
 	let rep = $state<ClassReport | null>(null);
 	let draft = $state<Draft | null>(null);
 	let error = $state('');
@@ -32,7 +32,8 @@
 	let managing = $state(false);
 	const url = $derived(`/api/teacher/classrooms/${classroomId}/class-report`);
 	// Part of the classroom (D-160): all, module:, topic:, item:kind:id or session:.
-	let scope = $state('all');
+	// svelte-ignore state_referenced_locally
+	let scope = $state(initialScope);
 	const scoped = $derived(scope !== 'all');
 	const when = (iso: string) => new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 	let scopeChoices = $state<{ value: string; label: string; group: string }[]>([]);
@@ -44,6 +45,12 @@
 	async function load() {
 		error = '';
 		try {
+			// The picker's choices come from the whole report, even when the link starts with part of it.
+			if (!scopeChoices.length && scoped) {
+				const whole = await api.get<ClassReport>(url);
+				draft = draftFrom(whole);
+				scopeChoices = reportScopeOptions(whole.items, whole.sessions ?? [], when);
+			}
 			const r = await api.get<ClassReport>(scoped ? `${url}?scope=${encodeURIComponent(scope)}` : url);
 			// A run's date in the viewer's time, as the picker shows it.
 			const choice = scopeChoices.find((o) => o.value === scope);
