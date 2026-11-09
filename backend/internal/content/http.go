@@ -33,6 +33,21 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("POST", "/classrooms/{id}/join-code", httpx.Handler(s.hRegenerateCode))
 	r.Method("GET", "/classrooms/{id}/enrolments", httpx.Handler(s.hListEnrolments))
 	r.Method("PATCH", "/enrolments/{id}", httpx.Handler(s.hUpdateEnrolment))
+	r.Method("POST", "/classrooms/{id}/enrolments/pending", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Status       string   `json:"status"`
+			EnrolmentIDs []string `json:"enrolment_ids"`
+		}
+		if err := httpx.Decode(w, r, &in); err != nil {
+			return err
+		}
+		n, err := s.DecidePending(r.Context(), uid(r), chi.URLParam(r, "id"), in.Status, in.EnrolmentIDs)
+		if err != nil {
+			return err
+		}
+		httpx.JSON(w, http.StatusOK, map[string]int{"changed": n})
+		return nil
+	}))
 	r.Method("GET", "/classrooms/{id}/categories", httpx.Handler(s.hListCategories))
 	r.Method("POST", "/classrooms/{id}/categories", httpx.Handler(s.hCreateCategory))
 	r.Method("PATCH", "/categories/{id}", httpx.Handler(s.hUpdateCategory))

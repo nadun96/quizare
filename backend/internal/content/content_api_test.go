@@ -165,6 +165,29 @@ func TestEnrolmentApprovalFlow(t *testing.T) {
 	teacher.Call("PATCH", "/api/teacher/enrolments/"+en.ID, map[string]string{"status": "rejected"}, 200, nil)
 	s.Call("POST", "/api/enrolments", map[string]string{"join_code": c.JoinCode}, 403, nil)
 	teacher.Call("PATCH", "/api/teacher/enrolments/"+en.ID, map[string]string{"status": "bogus"}, 422, nil)
+
+	// D-161: approve chosen students waiting, then everyone waiting, at once.
+	waiting := make([]content.Enrolment, 3)
+	for i := range waiting {
+		e.NewUser(auth.RoleStudent).Call("POST", "/api/enrolments", map[string]string{"join_code": c.JoinCode}, 200, &waiting[i])
+	}
+	url := "/api/teacher/classrooms/" + c.ID + "/enrolments/pending"
+	var res struct{ Changed int }
+	teacher.Call("POST", url, map[string]any{"status": "removed"}, 422, nil)
+	e.NewUser(auth.RoleTeacher).Call("POST", url, map[string]any{"status": "active"}, 404, nil)
+	teacher.Call("POST", url, map[string]any{"status": "active", "enrolment_ids": []string{waiting[0].ID, en.ID}}, 200, &res)
+	if res.Changed != 1 { // the rejected one isn't waiting
+		t.Fatalf("approved chosen: %d", res.Changed)
+	}
+	teacher.Call("POST", url, map[string]any{"status": "active"}, 200, &res)
+	if res.Changed != 2 {
+		t.Fatalf("approved everyone waiting: %d", res.Changed)
+	}
+	var list struct{ Total int }
+	teacher.Call("GET", "/api/teacher/classrooms/"+c.ID+"/enrolments?status=pending", nil, 200, &list)
+	if list.Total != 0 {
+		t.Fatalf("still waiting: %d", list.Total)
+	}
 }
 
 func TestEnsureEnrolledForSessionJoin(t *testing.T) {
