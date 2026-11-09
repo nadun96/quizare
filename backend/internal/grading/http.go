@@ -38,7 +38,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 		return nil
 	}))
 	r.Method("GET", "/classrooms/{id}/class-report", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
-		rep, err := s.ClassReport(r.Context(), uid(r), chi.URLParam(r, "id"))
+		rep, err := s.ScopedReport(r.Context(), uid(r), chi.URLParam(r, "id"), r.URL.Query().Get("scope"))
 		if err != nil {
 			return err
 		}

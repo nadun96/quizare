@@ -14,10 +14,12 @@
 	import GroupsEditor from './GroupsEditor.svelte';
 	import ReportControls from './ReportControls.svelte';
 	import ReportPdfButton from './ReportPdfButton.svelte';
+	import ScopePicker from './ScopePicker.svelte';
+	import { localeTag } from '$lib/i18n/i18n.svelte';
 	import ReportTh from './ReportTh.svelte';
 	import { bandOptions, inBand, matches, newView, numberSheet, shownNote, sortRows, type ViewCol } from './reportView';
 	import { DEFAULT_BANDS, toned, toneFor, type Bands } from './reportPdf';
-	import { ATTENDANCE_SPAN, attendanceText, dateText, optionsOf, violationsText, classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, markTone, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type GroupRow, type ReportStudent, type Unit } from './classReport';
+	import { reportScopeOptions, scopedName, ATTENDANCE_SPAN, attendanceText, dateText, optionsOf, violationsText, classReportCSV, columns, DETAIL, draftFrom, draftProblem, draftWeightTotal, finalRange, GROUP_RULES, groupMarkText, groupSheets, groupsCSV, individualSheet, itemKey, KIND_LABEL, markText, markTone, memberNames, setAllPicks, setupPayload, ungrouped, weightText, type ClassReport, type Draft, type GroupRow, type ReportStudent, type Unit } from './classReport';
 
 	let { classroomId, classroomName = 'classroom' }: { classroomId: string; classroomName?: string } = $props();
 	let rep = $state<ClassReport | null>(null);
@@ -29,6 +31,11 @@
 	let bands = $state<Bands>(DEFAULT_BANDS);
 	let managing = $state(false);
 	const url = $derived(`/api/teacher/classrooms/${classroomId}/class-report`);
+	// Part of the classroom (D-160): all, module:, topic:, item:kind:id or session:.
+	let scope = $state('all');
+	const scoped = $derived(scope !== 'all');
+	const when = (iso: string) => new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+	let scopeChoices = $state<{ value: string; label: string; group: string }[]>([]);
 	const cols = $derived(rep ? columns(rep) : []);
 	const range = $derived(rep ? finalRange(rep) : null);
 	const problem = $derived(draft ? draftProblem(draft) : '');
@@ -37,17 +44,28 @@
 	async function load() {
 		error = '';
 		try {
-			const r = await api.get<ClassReport>(url);
+			const r = await api.get<ClassReport>(scoped ? `${url}?scope=${encodeURIComponent(scope)}` : url);
+			// A run's date in the viewer's time, as the picker shows it.
+			const choice = scopeChoices.find((o) => o.value === scope);
+			if (r.scope?.kind === 'session' && choice) r.scope.label = choice.label.replace(/ · \d+$/, '');
 			rep = r;
-			draft = draftFrom(r);
+			if (!scoped) {
+				draft = draftFrom(r);
+				scopeChoices = reportScopeOptions(r.items, r.sessions ?? [], when);
+			}
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : tr("The report didn’t load");
 		}
 	}
 	$effect(() => {
 		void url;
+		void scope;
 		load();
 	});
+	function chooseScope(v: string) {
+		scope = v;
+		setupOpen = managing = false;
+	}
 
 	async function save() {
 		if (!draft || problem) return;
@@ -131,8 +149,8 @@
 	const groupsNote = $derived(rep ? shownNote(shownGroups.length, rep.class_groups.length, 'groups') : '');
 	function csv() {
 		if (!rep || !groupsRep) return;
-		if (view === 'groups') saveFile(`${classroomName} group marks.csv`, groupsCSV(groupsRep));
-		else saveFile(`${classroomName} class report.csv`, classReportCSV(rep, shownStudents, attendance));
+		if (view === 'groups') saveFile(`${scopedName(`${classroomName} group marks`, rep.scope)}.csv`, groupsCSV(groupsRep));
+		else saveFile(`${scopedName(`${classroomName} class report`, rep.scope)}.csv`, classReportCSV(rep, shownStudents, attendance));
 	}
 	const noted = (heading: string | undefined, note: string) => (note ? `${heading ?? ''}. ${note}` : heading);
 	const sheets = () => {
@@ -150,15 +168,16 @@
 	<p class="alert alert-soft alert-warning">{error}</p>
 {:else if !rep || !draft}
 	<Skeleton lines={6} />
-{:else if !rep.items.length}
+{:else if !rep.items.length && !scoped}
 	<p class="muted">{tr("Run a quiz or publish a tutorial with questions in this classroom, and it appears here.")}</p>
 {:else}
 	<div class="vstack">
 		<div class="flex flex-wrap items-center gap-2">
-			<p class="m-0 small muted grow">{tr("{0} of {1} in the report · total out of {2}", [cols.length, rep.items.length, rep.out_of])}</p>
-			<button class="btn btn-sm" class:btn-primary={!setupOpen} aria-expanded={setupOpen} onclick={() => (setupOpen = !setupOpen)}><Icon name="settings" size={16} />{tr("Set up")}</button>
+			{#if scopeChoices.length > 1}<ScopePicker options={scopeChoices} value={scope} onchange={chooseScope} />{/if}
+			<p class="m-0 small muted grow">{#if scoped && rep.scope}<strong>{tr(rep.scope.label)}</strong>{rep.scope.kind === 'session' ? tr(": only the marks from this run of the quiz") : ''}{#if rep.out_of} · {tr("total out of {0}", [rep.out_of])}{/if}{:else}{tr("{0} of {1} in the report · total out of {2}", [cols.length, rep.items.length, rep.out_of])}{/if}</p>
+			{#if !scoped}<button class="btn btn-sm" class:btn-primary={!setupOpen} aria-expanded={setupOpen} onclick={() => (setupOpen = !setupOpen)}><Icon name="settings" size={16} />{tr("Set up")}</button>{/if}
 			<button class="btn btn-sm" onclick={csv}><Icon name="download" size={16} />{tr("CSV")}</button>
-			<ReportPdfButton {classroomId} title={`${classroomName}: ${view === 'groups' ? 'group marks' : 'class report'}`} fileName={`${classroomName} ${view === 'groups' ? 'group marks' : 'class report'}`} {sheets} disabled={!cols.length || (view === 'groups' ? !sheets().length : !shownStudents.length)} onbands={(b) => (bands = b)} />
+			<ReportPdfButton {classroomId} title={scopedName(`${classroomName}: ${view === 'groups' ? 'group marks' : 'class report'}`, rep.scope)} fileName={scopedName(`${classroomName} ${view === 'groups' ? 'group marks' : 'class report'}`, rep.scope)} {sheets} disabled={!cols.length || (view === 'groups' ? !sheets().length : !shownStudents.length)} onbands={(b) => (bands = b)} />
 		</div>
 
 		{#if setupOpen}
@@ -242,7 +261,7 @@
 				<button class="btn btn-sm join-item" class:btn-primary={view === 'individual'} aria-pressed={view === 'individual'} onclick={() => (view = 'individual')}>{tr("Individual")}</button>
 				<button class="btn btn-sm join-item" class:btn-primary={view === 'groups'} aria-pressed={view === 'groups'} onclick={() => (view = 'groups')}>{tr("Groups")}</button>
 			</div>
-			{#if view === 'groups'}<button class="btn btn-sm" aria-expanded={managing} onclick={() => (managing = !managing)}><Icon name="users" size={16} />{tr("Manage groups")}</button>{/if}
+			{#if view === 'groups' && !scoped}<button class="btn btn-sm" aria-expanded={managing} onclick={() => (managing = !managing)}><Icon name="users" size={16} />{tr("Manage groups")}</button>{/if}
 		</div>
 		{#if view === 'individual' && cols.length && rep.students.length}
 			<ReportControls bind:view={peopleView} cols={peopleCols} show={peopleShow} groups={rep.class_groups} shown={shownStudents.length} total={rep.students.length} noun="students" />
