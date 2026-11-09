@@ -5,7 +5,7 @@ import type { ClassroomReport } from '../tutoring/types';
 import { numberCSV } from './reportView';
 import { toCSV } from '../tutoring/types';
 
-export type Item = { kind: 'quiz' | 'tutorial'; id: string; title: string; topic: string; topic_id?: string; module_id?: string; module?: string; weight: number | null; taken: number; avg: number | null; high?: number | null; low?: number | null; max_marks?: number };
+export type Item = { kind: 'quiz' | 'tutorial' | 'offline'; id: string; title: string; topic: string; topic_id?: string; module_id?: string; module?: string; weight: number | null; taken: number; avg: number | null; high?: number | null; low?: number | null; max_marks?: number };
 export type SessionRef = { id: string; quiz_id: string; title: string; status: string; at: string; attempts: number; results: number; avg: number | null };
 export type Mark = { pct: number; points?: number; score?: number; max?: number };
 export type GradeStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, Mark>; average: number | null; total: number; missing: number; final: number | null; marks_total?: number; marks_max?: number };

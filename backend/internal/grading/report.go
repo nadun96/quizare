@@ -262,6 +262,10 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 			LEFT JOIN content.topics ptp ON ptp.id = p.topic_id LEFT JOIN content.modules pm ON pm.id = ptp.module_id
 			WHERE p.classroom_id = $1 AND p.scoring AND p.identity <> 'anonymous' AND p.status <> 'draft'
 				AND EXISTS (SELECT 1 FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL AND x.points > 0)
+			UNION ALL
+			SELECT 'offline', a.id, a.title, tp.name, m.name, coalesce(a.due_at, a.created_at)
+			FROM grading.offline_assignments a JOIN content.topics tp ON tp.id = a.topic_id JOIN content.modules m ON m.id = tp.module_id
+			WHERE a.classroom_id = $1
 		)
 		SELECT i.kind, i.id::text, i.title, i.topic, i.module, coalesce(ri.included, true),
 			coalesce(ri.weight, w.weight / 100, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average'), i.at
@@ -303,7 +307,10 @@ func (s *Service) ClassReport(ctx context.Context, teacherID, classroomID string
 		JOIN poll.responses r ON r.participant_id = pa.id
 		CROSS JOIN LATERAL (SELECT sum(x.points) AS points FROM poll.questions x WHERE x.poll_id = p.id AND x.key IS NOT NULL) mx
 		WHERE p.classroom_id = $1 AND p.scoring AND p.identity <> 'anonymous' AND p.status <> 'draft' AND mx.points > 0
-		GROUP BY pa.user_id, p.id, mx.points`, classroomID)
+		GROUP BY pa.user_id, p.id, mx.points
+		UNION ALL
+		SELECT o.user_id, 'offline:' || o.assignment_id, o.score, o.max_marks, 100 * o.score / o.max_marks, true
+		FROM (`+offlineMarksSQL+`) o`, classroomID)
 	if err != nil {
 		return rep, err
 	}
@@ -473,8 +480,8 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 			bad["items"] = "choose what students see"
 		case it.ReviewMinutes < 0 || it.ReviewMinutes > maxReviewMinutes:
 			bad["items"] = "a review time can be up to a year"
-		case it.Kind == "poll" && (it.Detail != "" || it.ReviewMinutes != 0):
-			bad["items"] = "what students see of a poll follows the poll's own settings"
+		case (it.Kind == "poll" || it.Kind == KindOffline) && (it.Detail != "" || it.ReviewMinutes != 0):
+			bad["items"] = "what students see of a poll or an offline assignment follows its own settings"
 		case it.GroupRule != "" && it.GroupRule != RuleAverage && it.GroupRule != RuleTotal && it.GroupRule != RuleHighest && it.GroupRule != RuleLowest:
 			bad["items"] = "choose how a group's mark is worked out"
 		}
@@ -484,7 +491,7 @@ func (s *Service) SetClassReport(ctx context.Context, teacherID, classroomID str
 	for _, x := range in.Exceptions {
 		k := Key(x.Kind, x.ID) + ":" + x.UserID
 		switch {
-		case !known[Key(x.Kind, x.ID)] || x.Kind == "poll":
+		case !known[Key(x.Kind, x.ID)] || x.Kind == "poll" || x.Kind == KindOffline:
 			bad["exceptions"] = "one of these isn't a quiz or tutorial of this classroom"
 		case !students[x.UserID]:
 			bad["exceptions"] = "one of these students isn't in this classroom"

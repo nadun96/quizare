@@ -187,6 +187,8 @@
 									<td><select class="select select-sm w-28" bind:value={d.groupRule} aria-label={tr("Group mark for {0}", [it.title])}>{#each GROUP_RULES as o (o.v)}<option value={o.v}>{tr(o.label)}</option>{/each}</select></td>
 									{#if it.kind === 'poll'}
 										<td colspan="2"><span class="small muted">{tr("The poll’s own settings")}</span></td>
+									{:else if it.kind === 'offline'}
+										<td colspan="2"><a class="small" href={'/t/offline/' + it.id}>{tr("Shown when you release its marks")}</a></td>
 									{:else}
 										<td><select class="select select-sm w-52" bind:value={d.detail} aria-label={tr("What students see of {0}", [it.title])}>{#each DETAIL as o (o.v)}<option value={o.v} title={tr(o.hint)}>{tr(o.label)}</option>{/each}</select></td>
 										<td class="whitespace-nowrap">
@@ -216,7 +218,7 @@
 						{#each draft.exceptions as x, i (i)}
 							<li class="flex flex-wrap items-center gap-2">
 								<select class="select select-sm w-48" bind:value={x.user_id} aria-label={tr("Student")}><option value="">{tr("Student…")}</option>{#each rep.students as s (s.user_id)}<option value={s.user_id}>{s.name}</option>{/each}</select>
-								<select class="select select-sm w-48" bind:value={x.item} aria-label={tr("Quiz or tutorial")}><option value="">{tr("Quiz or tutorial…")}</option>{#each rep.items.filter((x) => x.kind !== 'poll') as it (itemKey(it))}<option value={itemKey(it)}>{it.title}</option>{/each}</select>
+								<select class="select select-sm w-48" bind:value={x.item} aria-label={tr("Quiz or tutorial")}><option value="">{tr("Quiz or tutorial…")}</option>{#each rep.items.filter((x) => x.kind !== 'poll' && x.kind !== 'offline') as it (itemKey(it))}<option value={itemKey(it)}>{it.title}</option>{/each}</select>
 								<select class="select select-sm w-52" bind:value={x.detail} aria-label={tr("What this student sees")}><option value="">{tr("Same as the class")}</option>{#each DETAIL.slice(1) as o (o.v)}<option value={o.v}>{tr(o.label)}</option>{/each}</select>
 								<input class="input input-sm w-20 tabular" type="number" min="0" step="any" placeholder={tr("Same")} bind:value={x.reviewN} aria-label={tr("This student's review time; 0 is no limit")} title={tr("Blank: same as the class. 0: no limit.")} />
 								<select class="select select-sm w-24" bind:value={x.reviewUnit} aria-label={tr("Review time unit")}>{#each units as u (u.v)}<option value={u.v}>{tr(u.label)}</option>{/each}</select>

@@ -98,9 +98,9 @@ func TestClassGroups(t *testing.T) {
 		t.Fatalf("open now: %+v", pol)
 	}
 	students[2].Call("POST", "/api/my/groups/"+blue.ID, nil, 204, nil)
-	students[2].Call("POST", "/api/my/groups/"+blue.ID, nil, 204, nil) // already in: nothing changes
-	students[3].Call("POST", "/api/my/groups/"+blue.ID, nil, 409, nil) // full
-	students[2].Call("POST", "/api/my/groups/"+red.ID, nil, 409, nil)  // one group of their own choosing
+	students[2].Call("POST", "/api/my/groups/"+blue.ID, nil, 204, nil)  // already in: nothing changes
+	students[3].Call("POST", "/api/my/groups/"+blue.ID, nil, 409, nil)  // full
+	students[2].Call("POST", "/api/my/groups/"+red.ID, nil, 409, nil)   // one group of their own choosing
 	students[0].Call("DELETE", "/api/my/groups/"+red.ID, nil, 409, nil) // the teacher put them there
 
 	var mine content.MyGroupsView
