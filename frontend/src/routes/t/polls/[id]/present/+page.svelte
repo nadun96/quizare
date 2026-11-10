@@ -28,12 +28,43 @@
 	import Icon from '$lib/ui/Icon.svelte';
 	import IconBtn from '$lib/ui/IconBtn.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
+	import { step, type Stage } from '$lib/poll/present';
 	import { flyIn, reduced } from '$lib/ui/motion';
 	import { toast } from '$lib/ui/toast.svelte';
 
 	const ready = requireRole('teacher');
 	const id = $derived(page.params.id ?? '');
 	let data = $state<TeacherResults | null>(null);
+	// A presentation on the screen (D-165): shown over everything, followed live.
+	let stage = $state<Stage | null>(null);
+	let stageTimer: ReturnType<typeof setTimeout> | null = null;
+	function stageSoon() {
+		if (stageTimer) return;
+		stageTimer = setTimeout(async () => {
+			stageTimer = null;
+			try {
+				stage = (await api.get<{ stage: Stage | null }>(`/api/teacher/polls/${id}/presentations`)).stage;
+			} catch {
+				/* the next message tries again */
+			}
+		}, 150);
+	}
+	async function turnStage(n: number | null) {
+		if (n == null) return;
+		try {
+			await api.put(`/api/teacher/polls/${id}/stage/slide`, { n });
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work. Try again."), 'error');
+		}
+	}
+	async function stopStage() {
+		try {
+			await api.del(`/api/teacher/polls/${id}/stage`);
+			stage = null;
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : tr("That didn’t work. Try again."), 'error');
+		}
+	}
 	let index = $state(0); // self-paced: what this screen shows
 	let showCode = $state(true);
 	let board = $state(false); // leaderboard instead of the question
@@ -98,6 +129,7 @@
 				return;
 			}
 			if (m.type !== 'results') return;
+			stageSoon();
 			const first = !data;
 			data = m as unknown as TeacherResults;
 			clockOffset = data.server_time - Date.now();
@@ -252,6 +284,21 @@
 			</aside>
 		{/if}
 		<main class="main">
+			{#if stage}
+				{@const st = stage}
+				<section class="stage-over" aria-label={tr("Presentation")}>
+					<div class="stage-bar">
+						<strong class="truncate">{st.title}</strong>
+						<span class="muted truncate">{st.owner}{st.presenter_name ? ' · ' + tr("{0} is presenting", [st.presenter_name]) : ''}</span>
+						<span class="grow"></span>
+						<button class="btn btn-sm" disabled={step(st, -1) == null} onclick={() => turnStage(step(st, -1))} aria-label={tr("Back")}><Icon name="chevron-left" size={18} /></button>
+						<span class="tabular">{st.slide} / {st.slides}</span>
+						<button class="btn btn-sm" disabled={step(st, 1) == null} onclick={() => turnStage(step(st, 1))} aria-label={tr("Next")}><Icon name="chevron-right" size={18} /></button>
+						<button class="btn btn-sm btn-ghost" onclick={stopStage}>{tr("Stop")}</button>
+					</div>
+					<img class="stage-slide" src={`/api/teacher/poll-submissions/${st.submission_id}/slides/${st.slide}`} alt={tr("Slide {0} of {1}", [st.slide, st.slides])} />
+				</section>
+			{/if}
 			{#if showCode}
 				<section class="lobby" in:flyIn>
 					<div class="qr-box"><QrCode text={poll.join_url} size={320} /></div>
@@ -434,4 +481,7 @@
 	.dot::before { content: ''; width: 0.75rem; height: 0.75rem; border-radius: 999px; background: #fff; border: 2px solid var(--toon-ink); transition: transform var(--motion-fast), background-color var(--motion-fast); }
 	.dot.on::before { background: #ffc72e; transform: scale(1.4); }
 	.keys { text-align: center; margin: 0 0 0.75rem; }
+	.stage-over { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: #111; }
+	.stage-bar { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.9rem; background: var(--color-base-100); color: var(--color-base-content); }
+	.stage-slide { flex: 1; min-height: 0; width: 100%; object-fit: contain; }
 </style>

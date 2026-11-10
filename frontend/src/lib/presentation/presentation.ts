@@ -127,6 +127,22 @@ async function renderSlide(doc: PdfDoc, n: number): Promise<{ image: Blob; text:
 	return { image, text };
 }
 
+/**
+ * Renders each page of a PDF to a JPEG with its text, one at a time, for
+ * slides uploaded elsewhere (poll presentations, D-165).
+ */
+export async function renderPdfSlides(file: File, max: number, each: (n: number, total: number, slide: { image: Blob; text: string }) => Promise<void>): Promise<number> {
+	const doc = await openPdf(await file.arrayBuffer());
+	try {
+		const total = doc.numPages;
+		if (total > max) throw new Error(`This PDF has ${total} pages; at most ${max}, please`);
+		for (let n = 1; n <= total; n++) await each(n, total, await renderSlide(doc, n));
+		return total;
+	} finally {
+		await doc.destroy();
+	}
+}
+
 /** How many pages a PDF has, to check it before uploading. */
 export async function countPages(file: File): Promise<number> {
 	const doc = await openPdf(await file.arrayBuffer());
@@ -203,6 +219,15 @@ export async function deckToPdf(file: File): Promise<File> {
 		method: 'POST', credentials: 'same-origin', body: file,
 		headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) }
 	});
+	return pdfFrom(res, file.name.replace(/\.[a-z0-9]+$/i, '') + '.pdf');
+}
+
+/** The same through another route, such as a poll's for its participants (D-165). */
+export async function deckToPdfVia(url: string, file: File, token = ''): Promise<File> {
+	if (file.size > MAX_DECK_BYTES) throw new Error('A presentation of at most 100 MB, please');
+	const headers: Record<string, string> = { 'X-Requested-With': 'fetch', 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) };
+	if (token) headers['X-Poll-Token'] = token;
+	const res = await fetch(url, { method: 'POST', credentials: 'same-origin', body: file, headers });
 	return pdfFrom(res, file.name.replace(/\.[a-z0-9]+$/i, '') + '.pdf');
 }
 

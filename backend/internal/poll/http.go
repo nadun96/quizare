@@ -51,6 +51,7 @@ func (s *Service) TeacherRoutes(r chi.Router) {
 	r.Method("PATCH", "/poll-groups/{id}", httpx.Handler(s.hUpdateGroup))
 	r.Method("DELETE", "/poll-groups/{id}", httpx.Handler(s.hDeleteGroup))
 	s.boardTeacherRoutes(r)
+	s.presTeacherRoutes(r) // presentations (D-165)
 }
 
 func (s *Service) hGroups(w http.ResponseWriter, r *http.Request) error {
@@ -129,6 +130,7 @@ func (s *Service) PublicRoutes(r chi.Router) {
 	r.Method("PUT", "/{code}/answers/{question}", httpx.Handler(s.hAnswer))
 	r.Method("POST", "/{code}/files/{question}", httpx.Handler(s.hUpload))
 	s.boardPublicRoutes(r)
+	s.presPublicRoutes(r) // presentations (D-165)
 }
 
 // WSRoutes mounts the live sockets under /ws.
