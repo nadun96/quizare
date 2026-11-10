@@ -15,6 +15,7 @@
 	import PollResults from '$lib/poll/PollResults.svelte';
 	import PollSettingsForm from '$lib/poll/PollSettingsForm.svelte';
 	import GroupsPanel from '$lib/poll/GroupsPanel.svelte';
+	import PresentationsPanel from '$lib/poll/PresentationsPanel.svelte';
 	import LiveLinks from '$lib/LiveLinks.svelte';
 	import Leaderboard from '$lib/poll/Leaderboard.svelte';
 	import { fmtPoints, groupRanks, SCORABLE, settingsOf } from '$lib/poll/scoring';
@@ -36,7 +37,9 @@
 	let poll = $state<Poll | null>(null);
 	let results = $state<TeacherResults | null>(null);
 	let classrooms = $state<Classroom[]>([]);
-	let tab = $state<'questions' | 'results' | 'groups' | 'settings' | 'share' | 'people'>('questions');
+	let tab = $state<'questions' | 'results' | 'groups' | 'presentations' | 'settings' | 'share' | 'people'>('questions');
+	// Bumped on each live message, so the presentations tab refreshes (D-165).
+	let liveVersion = $state(0);
 	let editing = $state<PollQuestion | 'new' | null>(null);
 	let settings = $state<PollSettings | null>(null);
 	let classroomId = $state<string | null>(null);
@@ -60,6 +63,7 @@
 		socket.onMessage = (m) => {
 			if (m.type === 'results') {
 				results = m as unknown as TeacherResults;
+				liveVersion++;
 				if (poll) {
 					poll.participants = results.participants;
 					poll.status = results.poll.status;
@@ -170,7 +174,7 @@
 		</div>
 
 		<div class="tabs tabs-border tabs-scroll" role="tablist">
-			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ['people', `Participants (${poll.participants})`], ...(poll.groups !== 'off' ? [['groups', 'Groups']] : []), ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
+			{#each [['questions', `Questions (${questions.length})`], ['results', 'Live results'], ['people', `Participants (${poll.participants})`], ...(poll.groups !== 'off' ? [['groups', 'Groups']] : []), ['presentations', 'Presentations'], ['settings', 'Settings'], ['share', 'Share']] as [k, l] (k)}
 				<button class="tab" role="tab" aria-selected={tab === k} class:tab-active={tab === k} onclick={() => (tab = k as typeof tab)}>{l}</button>
 			{/each}
 		</div>
@@ -244,6 +248,8 @@
 			<ParticipantList pollId={id} scoring={poll.scoring} groups={poll.groups !== 'off'} />
 		{:else if tab === 'groups'}
 			<GroupsPanel pollId={id} settings={settingsOf(poll)} hasClassroom={!!poll.classroom_id} participants={poll.participants} />
+		{:else if tab === 'presentations'}
+			<PresentationsPanel pollId={id} hasClassroom={!!poll.classroom_id} version={liveVersion} />
 		{:else if tab === 'settings'}
 			<div class="card card-border vstack bg-base-100 p-4 shadow-sm sm:p-6">
 				<PollSettingsForm bind:settings bind:classroomId bind:topicId {classrooms} locked={poll.participants > 0} />

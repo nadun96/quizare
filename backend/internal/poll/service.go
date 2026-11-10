@@ -44,13 +44,14 @@ type Service struct {
 	log       *slog.Logger
 	now       func() time.Time
 	hub       *Hub
-	joins     *auth.Limiter // per IP
-	answers   *auth.Limiter // per participant
-	boardRate *auth.Limiter // per participant: board writes
-	uploads   *auth.Limiter // per participant
-	bc        *boardCache   // whiteboard access and stroke counts
-	reads     boardReads    // whiteboard loads that share a read
-	gate      Gate          // pausing new activities (D-90)
+	joins     *auth.Limiter  // per IP
+	answers   *auth.Limiter  // per participant
+	boardRate *auth.Limiter  // per participant: board writes
+	uploads   *auth.Limiter  // per participant
+	bc        *boardCache    // whiteboard access and stroke counts
+	reads     boardReads     // whiteboard loads that share a read
+	gate      Gate           // pausing new activities (D-90)
+	convert   SlideConverter // PowerPoint to PDF through the teacher's Drive (D-165)
 }
 
 func NewService(pool *pgxpool.Pool, classes Classrooms, users Users, baseURL string, log *slog.Logger) *Service {
@@ -968,6 +969,22 @@ type PublicPoll struct {
 	MyGroup          string                 `json:"my_group,omitempty"`
 	Captain          bool                   `json:"captain,omitempty"`
 	GroupAnswers     map[string]GroupAnswer `json:"group_answers,omitempty"` // teammates' answers (first-answer, captain)
+	// Presentations (D-165): whether the poll asks for them, and what's on the screen.
+	Presentations string `json:"presentations,omitempty"` // student, poll_group or class_group
+	Stage         *Stage `json:"stage,omitempty"`
+}
+
+// presView adds the presentations' mode and the stage.
+func (s *Service) presView(ctx context.Context, p *Poll, v *PublicPoll) error {
+	st, err := s.presSettings(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	if st.Mode != PresOff {
+		v.Presentations = st.Mode
+	}
+	v.Stage, err = s.stage(ctx, p)
+	return err
 }
 
 // groupView adds what everyone may see of the groups.
@@ -1113,6 +1130,9 @@ func (s *Service) View(ctx context.Context, code string, c Caller) (PublicPoll, 
 	if err := s.groupView(ctx, p, &v); err != nil {
 		return v, err
 	}
+	if err := s.presView(ctx, p, &v); err != nil {
+		return v, err
+	}
 	for _, q := range p.visibleQuestions(all) {
 		if p.answersVisible(q, answered[q.ID], false) {
 			if v.Keys == nil {
@@ -1173,6 +1193,9 @@ func (s *Service) publicUpdate(ctx context.Context, p *Poll) (PublicPoll, error)
 		Total: len(p.Questions), Questions: publicQuestions(p.visibleQuestions(p.Questions))}
 	p.competition(&v)
 	if err := s.groupView(ctx, p, &v); err != nil {
+		return v, err
+	}
+	if err := s.presView(ctx, p, &v); err != nil {
 		return v, err
 	}
 	if p.Status == "draft" {

@@ -186,6 +186,9 @@ export type PublicPoll = Omit<PollSettings, 'leaderboard'> & {
 	captain?: boolean;
 	group_answers?: Record<string, GroupAnswer>;
 	board_open?: boolean;
+	/** Presentations (D-165): whether the poll asks for them, and what's on the screen. */
+	presentations?: 'student' | 'poll_group' | 'class_group';
+	stage?: import('./present').Stage;
 };
 
 export type TeacherResults = { type: 'results'; server_time: number; poll: Poll; participants: number; results: Record<string, PollResult>; leaderboard?: Rank[]; group_leaderboard?: GroupRank[] };
