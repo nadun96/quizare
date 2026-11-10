@@ -1656,6 +1656,186 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OfflineAssignmentInput' } } } }
       responses: { '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/OfflineAssignment' } } } }, '422': { $ref: '#/components/responses/Invalid' } }
     delete: { operationId: deleteTeacherOfflineAssignment, tags: [classrooms], summary: 'Delete an offline assignment and its marks', responses: { '204': { description: 'Deleted' } } }
+  /api/teacher/classrooms/{id}/presentation-tasks:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherPresentationTasks
+      tags: [presentations]
+      summary: A classroom's group presentation tasks and what's on its screen (D-166)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: postTeacherPresentationTask
+      tags: [presentations]
+      summary: Add a group presentation task
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { title: { type: string, maxLength: 200 }, instructions: { type: string, maxLength: 5000 }, topic_id: { type: string }, upload_by: { type: string, enum: [any, leader] }, out_of: { type: number }, rating: { type: boolean }, due_at: { type: string, format: date-time, nullable: true } } } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentation-tasks/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherPresentationTask
+      tags: [presentations]
+      summary: A task with every group's presentation
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putTeacherPresentationTask
+      tags: [presentations]
+      summary: Change a task
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { title: { type: string, maxLength: 200 }, instructions: { type: string, maxLength: 5000 }, topic_id: { type: string }, upload_by: { type: string, enum: [any, leader] }, out_of: { type: number }, rating: { type: boolean }, due_at: { type: string, format: date-time, nullable: true } } } } } }
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteTeacherPresentationTask
+      tags: [presentations]
+      summary: Delete a task with its presentations, marks and ratings
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/presentation-tasks/{id}/slides:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    delete:
+      operationId: deleteTeacherPresentationTaskSlides
+      tags: [presentations]
+      summary: Delete every group's uploaded slides; marks and ratings stay
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/group-presentations/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    delete:
+      operationId: deleteTeacherGroupPresentation
+      tags: [presentations]
+      summary: Delete a group's presentation with its slides, mark and ratings
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/group-presentations/{id}/allowed:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherGroupPresentationAllowed
+      tags: [presentations]
+      summary: Let the group present it, or stop letting it (which ends their presenting)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { allowed: { type: boolean } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/group-presentations/{id}/mark:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherGroupPresentationMark
+      tags: [presentations]
+      summary: Mark a group's presentation; every member gets it in the class report
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { mark: { type: number, nullable: true }, comment: { type: string, maxLength: 1000 } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/group-presentations/{id}/slides:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    delete:
+      operationId: deleteTeacherGroupPresentationSlides
+      tags: [presentations]
+      summary: Delete a group's uploaded slides; the mark and ratings stay
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/group-presentations/{id}/slides/{n}:
+    parameters: [{ $ref: '#/components/parameters/id' }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+    get:
+      operationId: getTeacherGroupPresentationSlide
+      tags: [presentations]
+      summary: A slide of a group's presentation
+      responses: { '200': { description: 'The slide', content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/group-presentations/{id}/show:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postTeacherGroupPresentationShow
+      tags: [presentations]
+      summary: Present it yourself, or take over from the student presenting it
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/classrooms/{id}/stage:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherClassroomStage
+      tags: [presentations]
+      summary: What's on the classroom's screen
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteTeacherClassroomStage
+      tags: [presentations]
+      summary: Take it off the screen
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/classrooms/{id}/stage/slide:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherClassroomStageSlide
+      tags: [presentations]
+      summary: Turn to a slide
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { n: { type: integer, minimum: 1 } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/classrooms/{id}/presentations:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getMyClassroomPresentations
+      tags: [presentations]
+      summary: A student's presentation tasks, their groups' presentations and the screen (D-166)
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/classrooms/{id}/stage:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getMyClassroomStage
+      tags: [presentations]
+      summary: What's on the classroom's screen, to follow
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteMyClassroomStage
+      tags: [presentations]
+      summary: End your presenting
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/classrooms/{id}/stage/slide:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putMyClassroomStageSlide
+      tags: [presentations]
+      summary: Turn to a slide, while presenting
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { n: { type: integer, minimum: 1 } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/classrooms/{id}/presentations/convert:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postMyClassroomPresentationConvert
+      tags: [presentations]
+      summary: Turn a PowerPoint file into a PDF through the classroom owner's Google Drive
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses: { '200': { description: 'The PDF', content: { application/pdf: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/presentation-tasks/{id}/presentations:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postMyGroupPresentation
+      tags: [presentations]
+      summary: Start (or replace) your group's presentation; slides come next
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { group_id: { type: string }, title: { type: string }, file_name: { type: string }, slides: { type: integer, minimum: 1, maximum: 100 } } } } } }
+      responses: { '201': { description: 'Created', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/group-presentations/{id}/slides/{n}:
+    parameters: [{ $ref: '#/components/parameters/id' }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+    put:
+      operationId: putMyGroupPresentationSlide
+      tags: [presentations]
+      summary: Upload a slide (multipart, the JPEG as image and its text as text)
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, properties: { image: { type: string, format: binary }, text: { type: string } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
+    get:
+      operationId: getMyGroupPresentationSlide
+      tags: [presentations]
+      summary: A slide of your group's presentation, or of what's on the screen
+      responses: { '200': { description: 'The slide', content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/group-presentations/{id}/finish:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postMyGroupPresentationFinish
+      tags: [presentations]
+      summary: Every slide is in
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/group-presentations/{id}/present:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      operationId: postMyGroupPresentationPresent
+      tags: [presentations]
+      summary: Present it on the classroom's screen, once the teacher allows it
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/my/group-presentations/{id}/rating:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putMyGroupPresentationRating
+      tags: [presentations]
+      summary: Rate a classmates' presentation 1-5
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { stars: { type: integer, minimum: 1, maximum: 5 } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/teacher/offline-assignments/{id}/release:
     parameters: [{ $ref: '#/components/parameters/id' }]
     put:
