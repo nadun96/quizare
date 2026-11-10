@@ -121,6 +121,7 @@ func (s *Service) offlineRoutes(r chi.Router) {
 
 // StudentRoutes are what students see of offline assignments.
 func (s *Service) StudentRoutes(r chi.Router) {
+	s.presStudentRoutes(r) // group presentations (D-166)
 	r.Method("GET", "/my/offline-assignments/{id}", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		v, err := s.MyOfflineView(r.Context(), uid(r), chi.URLParam(r, "id"))
 		if err != nil {

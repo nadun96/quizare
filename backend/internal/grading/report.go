@@ -292,6 +292,13 @@ func (s *Service) ScopedReport(ctx context.Context, teacherID, classroomID, scop
 			FROM poll.polls p JOIN poll.pres_settings ps ON ps.poll_id = p.id AND ps.mode <> 'off' AND ps.out_of > 0
 			LEFT JOIN content.topics ptp ON ptp.id = p.topic_id LEFT JOIN content.modules pm ON pm.id = ptp.module_id
 			WHERE p.classroom_id = $1 AND EXISTS (SELECT 1 FROM poll.submissions x WHERE x.poll_id = p.id AND x.mark IS NOT NULL)
+			UNION ALL
+			-- A classroom presentation task, once a group's is marked (D-166).
+			SELECT 'presentation', t.id, t.title, coalesce(tp.name, ''), coalesce(m.name, ''), coalesce(t.due_at, t.created_at),
+				coalesce(tp.id::text, ''), coalesce(m.id::text, '')
+			FROM grading.pres_tasks t
+			LEFT JOIN content.topics tp ON tp.id = t.topic_id LEFT JOIN content.modules m ON m.id = tp.module_id
+			WHERE t.classroom_id = $1 AND t.out_of > 0 AND EXISTS (SELECT 1 FROM grading.pres_submissions x WHERE x.task_id = t.id AND x.mark IS NOT NULL)
 		)
 		SELECT i.kind, i.id::text, i.title, i.topic, i.module, coalesce(ri.included, true),
 			coalesce(ri.weight, w.weight / 100, 0)::float8, coalesce(ri.pick, 'high'), coalesce(ri.detail, ''), coalesce(ri.review_minutes, 0), coalesce(ri.group_rule, 'average'), i.at,
@@ -349,7 +356,12 @@ func (s *Service) ScopedReport(ctx context.Context, teacherID, classroomID, scop
 			UNION SELECT pa.user_id::text FROM poll.participants pa WHERE x.owner_kind = 'poll_group' AND pa.group_id = x.owner_id AND pa.user_id IS NOT NULL
 			UNION SELECT e.user_id::text FROM content.enrolment_categories ec JOIN content.enrolments e ON e.id = ec.enrolment_id
 				WHERE x.owner_kind = 'class_group' AND ec.category_id = x.owner_id) m
-		WHERE p.classroom_id = $1 AND x.mark IS NOT NULL AND ps.out_of > 0`, classroomID, rep.Scope.SessionID())
+		WHERE p.classroom_id = $1 AND x.mark IS NOT NULL AND ps.out_of > 0
+		UNION ALL
+		SELECT e.user_id::text, 'presentation:' || t.id::text, x.mark::float8, t.out_of::float8, 100 * x.mark::float8 / t.out_of::float8, true
+		FROM grading.pres_submissions x JOIN grading.pres_tasks t ON t.id = x.task_id
+		JOIN content.enrolment_categories ec ON ec.category_id = x.category_id JOIN content.enrolments e ON e.id = ec.enrolment_id
+		WHERE t.classroom_id = $1 AND x.mark IS NOT NULL AND t.out_of > 0`, classroomID, rep.Scope.SessionID())
 	if err != nil {
 		return rep, err
 	}
