@@ -17,6 +17,8 @@
 	import Whiteboard from '$lib/board/Whiteboard.svelte';
 	import { BoardState, type BoardEvent } from '$lib/board/strokes.svelte';
 	import PollResults from '$lib/poll/PollResults.svelte';
+	import StageView from '$lib/poll/StageView.svelte';
+	import MySubmission from '$lib/poll/MySubmission.svelte';
 	import { describeKey, fmtPoints, groupRanks, ordinal, secondsLeft } from '$lib/poll/scoring';
 	import type { PollAnswer, PollKey, PollQuestion, PollScore, PublicPoll } from '$lib/poll/types';
 	import { LiveSocket } from '$lib/socket';
@@ -107,7 +109,9 @@
 			}
 			const revealed = Object.keys(u.keys ?? {}).some((k) => !ownScores[k] && v?.answers?.[k]);
 			v = { ...v, ...u, joined: v.joined, identified: v.identified, answers: v.answers, me: v.me, me_key: v.me_key, nickname: v.nickname, scores: v.scores,
-				my_group: v.my_group, captain: v.captain, group_answers: v.group_answers };
+				my_group: v.my_group, captain: v.captain, group_answers: v.group_answers,
+				// Left out of an update when it's gone: not kept from before.
+				stage: u.stage, presentations: u.presentations };
 			clockOffset = u.server_time - Date.now();
 			// Own rank (outside the shared top 10) and newly revealed scores
 			// come from the personal view, fetched at most every few seconds.
@@ -302,6 +306,8 @@
 			{#if v.status === 'closed'}
 				<div class="alert alert-soft alert-info" in:flyIn><Icon name="info" /><span>{tr("This poll has closed. Thanks for taking part!")}</span></div>
 			{/if}
+			{#if v.stage}<StageView {code} stage={v.stage} meKey={v.me_key} />{/if}
+			{#if v.presentations && !compact}<MySubmission {code} closed={v.status === 'closed'} />{/if}
 			{#if v.board_open && wbLoaded}
 				<section class="card card-border bg-base-100 p-3 shadow-sm sm:p-4" aria-labelledby="wb-h" in:flyIn>
 					<h2 id="wb-h" class="m-0 mb-2 flex items-center gap-2 text-base"><Icon name="brush" size={16} />{tr("Whiteboard")}{#if wb.canDraw}<span class="badge badge-soft badge-success badge-sm">{tr("you can draw")}</span>{/if}</h2>

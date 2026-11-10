@@ -3071,6 +3071,50 @@ paths:
       parameters: [{ $ref: '#/components/parameters/id' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { question_id: { type: string, format: uuid }, participant_id: { type: string, format: uuid }, word: { type: string }, hidden: { type: boolean }, nickname: { type: string, maxLength: 30 } } } } } }
       responses: { '204': { description: 'Done' } }
+  /api/teacher/polls/{id}/presentations:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      operationId: getTeacherPollPresentations
+      tags: [polls]
+      summary: "The poll's presentations (D-165): what's asked, every submission with its mark and audience rating, and what's on the screen"
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object, properties: { settings: { type: object, properties: { mode: { type: string, enum: [off, student, poll_group, class_group] }, upload_by: { type: string, enum: [any, leader] }, out_of: { type: number, description: '0: not marked' }, rating: { type: boolean }, instructions: { type: string, maxLength: 2000 } } }, submissions: { type: array, items: { type: object } }, stage: { type: object, nullable: true }, presenter_id: { type: string, nullable: true } } } } } } }
+    put:
+      operationId: putTeacherPollPresentations
+      tags: [polls]
+      summary: Ask for presentations, one a student, poll group or classroom group; how they're marked and rated
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { mode: { type: string, enum: [off, student, poll_group, class_group] }, upload_by: { type: string, enum: [any, leader] }, out_of: { type: number, description: '0: not marked' }, rating: { type: boolean }, instructions: { type: string, maxLength: 2000 } } } } } }
+      responses: { '200': { description: 'Saved', content: { application/json: { schema: { type: object, properties: { mode: { type: string, enum: [off, student, poll_group, class_group] }, upload_by: { type: string, enum: [any, leader] }, out_of: { type: number, description: '0: not marked' }, rating: { type: boolean }, instructions: { type: string, maxLength: 2000 } } } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/polls/{id}/stage:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherPollStage
+      tags: [polls]
+      summary: "Put a presentation on the screen; its presenter (by default who uploaded it; 'teacher' keeps control) turns the slides"
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [submission_id], properties: { submission_id: { type: string, format: uuid }, presenter: { type: string } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+    delete: { operationId: deleteTeacherPollStage, tags: [polls], summary: 'Take it off the screen', responses: { '204': { description: 'Done' } } }
+  /api/teacher/polls/{id}/stage/slide:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    put:
+      operationId: putTeacherPollStageSlide
+      tags: [polls]
+      summary: Go to a slide of what's on the screen (the teacher can always take over)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [n], properties: { n: { type: integer } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/poll-submissions/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    delete: { operationId: deleteTeacherPollSubmission, tags: [polls], summary: 'Delete a presentation with its slides, mark and ratings', responses: { '204': { description: 'Deleted' } } }
+  /api/teacher/poll-submissions/{id}/mark:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    put:
+      operationId: putTeacherPollSubmissionMark
+      tags: [polls]
+      summary: Mark a presentation; no mark takes it away. Marks count in the class report.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { mark: { type: number, nullable: true }, comment: { type: string, maxLength: 1000 } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/teacher/poll-submissions/{id}/slides/{n}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+    get: { operationId: getTeacherPollSubmissionSlide, tags: [polls], summary: 'A slide of a presentation', responses: { '200': { description: 'The slide', content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } } }
   /api/teacher/polls/{id}/board:
     parameters: [{ $ref: '#/components/parameters/id' }]
     get:
@@ -3189,6 +3233,59 @@ paths:
       parameters: [{ $ref: '#/components/parameters/code' }, { $ref: '#/components/parameters/question' }, { $ref: '#/components/parameters/pollToken' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' } } } } } }
       responses: { '200': { description: 'Saved (normalised)', content: { application/json: { schema: { type: object, properties: { value: { $ref: '#/components/schemas/PollAnswer' }, key: { $ref: '#/components/schemas/PollKey' }, score: { $ref: '#/components/schemas/PollScore' } } } } } }, '409': { description: '`poll_closed`, `question_not_active`, `time_up`, `answer_revealed`, `group_answered`, `captain_only` or editing is off' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/polls/{code}/presentations:
+    parameters: [{ $ref: '#/components/parameters/code' }]
+    get:
+      operationId: getPollMyPresentations
+      tags: [polls]
+      summary: "What's asked, who the participant submits for (they or their groups), and what's been submitted (D-165)"
+      responses: { '200': { description: 'OK', content: { application/json: { schema: { type: object } } } } }
+    post:
+      operationId: postPollPresentation
+      tags: [polls]
+      summary: Start (or replace) a presentation; its slides come next. Leaders only when the teacher says so.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { owner_id: { type: string }, title: { type: string }, file_name: { type: string }, slides: { type: integer, minimum: 1, maximum: 100 } } } } } }
+      responses: { '201': { description: 'Started', content: { application/json: { schema: { type: object } } } }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Conflict' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/polls/{code}/presentations/convert:
+    parameters: [{ $ref: '#/components/parameters/code' }]
+    post:
+      operationId: postPollPresentationConvert
+      tags: [polls]
+      summary: "A PowerPoint file in, a PDF out, through the teacher's Google Drive (X-File-Name header)"
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses: { '200': { description: 'The PDF', content: { application/pdf: { schema: { type: string, format: binary } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/polls/{code}/presentations/{id}/slides/{n}:
+    parameters: [{ $ref: '#/components/parameters/code' }, { name: id, in: path, required: true, schema: { type: string, format: uuid } }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+    get: { operationId: getPollPresentationSlide, tags: [polls], summary: "A slide: of what's on the screen, or of one's own presentation", responses: { '200': { description: 'The slide', content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } } }
+    put:
+      operationId: putPollPresentationSlide
+      tags: [polls]
+      summary: Upload one slide as a JPEG (multipart image, with its text)
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, properties: { image: { type: string, format: binary }, text: { type: string } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/polls/{code}/presentations/{id}/finish:
+    parameters: [{ $ref: '#/components/parameters/code' }, { name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    post:
+      operationId: postPollPresentationFinish
+      tags: [polls]
+      summary: Say every slide is in; it can then be presented
+      responses: { '200': { description: 'Ready', content: { application/json: { schema: { type: object } } } }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/polls/{code}/presentations/{id}/rating:
+    parameters: [{ $ref: '#/components/parameters/code' }, { name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    put:
+      operationId: putPollPresentationRating
+      tags: [polls]
+      summary: Rate a presentation that has been presented, 1-5; not one's own
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [stars], properties: { stars: { type: integer, minimum: 1, maximum: 5 } } } } } }
+      responses: { '204': { description: 'Done' }, '404': { $ref: '#/components/responses/NotFound' }, '422': { $ref: '#/components/responses/Invalid' } }
+  /api/polls/{code}/stage/slide:
+    parameters: [{ $ref: '#/components/parameters/code' }]
+    put:
+      operationId: putPollStageSlide
+      tags: [polls]
+      summary: The participant the teacher lets present turns the slides
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [n], properties: { n: { type: integer } } } } } }
+      responses: { '204': { description: 'Done' }, '403': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Invalid' } }
   /api/polls/{code}/board:
     get:
       operationId: getPollsBoard

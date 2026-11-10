@@ -11,7 +11,7 @@ export type Detail = '' | 'marks' | 'correctness' | 'answers';
 export type Unit = 'minutes' | 'hours' | 'days';
 export type GroupRule = 'average' | 'total' | 'highest' | 'lowest';
 
-export type ReportItem = { topic_id?: string; module_id?: string; kind: 'quiz' | 'tutorial' | 'poll' | 'offline'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number; date?: string };
+export type ReportItem = { topic_id?: string; module_id?: string; kind: 'quiz' | 'tutorial' | 'poll' | 'offline' | 'presentation'; group_rule: GroupRule; id: string; title: string; topic: string; module: string; included: boolean; weight: number; pick: Pick; detail: Detail; review_minutes: number; taken: number; avg: number | null; high: number | null; low: number | null; max_marks: number; date?: string };
 export type ReportMark = { score: number; max: number; pct: number; points?: number; submissions: number; pending?: boolean };
 export type ReportStudent = { user_id: string; name: string; student_number?: string; marks: Record<string, ReportMark>; total: number; missing: number; final: number | null; violations?: Record<string, number>; violations_total?: number };
 export type ReportOptions = { violations: boolean; attendance: boolean; dates: boolean; attended_only?: boolean };
@@ -27,7 +27,7 @@ export type ClassReport = { classroom: string; items: ReportItem[]; students: Re
 export type ReportScope = { kind: 'all' | 'module' | 'topic' | 'item' | 'session'; id?: string; label: string };
 export type ReportSession = { id: string; quiz_id: string; title: string; started_at: string; ended_at: string | null; students: number };
 
-const SCOPE_GROUPS: Record<string, string> = { quiz: 'Quizzes', tutorial: 'Tutorials', poll: 'Polls', offline: 'Offline assignments' };
+const SCOPE_GROUPS: Record<string, string> = { quiz: 'Quizzes', tutorial: 'Tutorials', poll: 'Polls', offline: 'Offline assignments', presentation: 'Presentations' };
 
 /** The parts of the classroom a report can be of, for the "Report for" picker. */
 export function reportScopeOptions(items: ReportItem[], sessions: ReportSession[], when: (iso: string) => string): { value: string; label: string; group: string }[] {
@@ -41,7 +41,7 @@ export function reportScopeOptions(items: ReportItem[], sessions: ReportSession[
 		seen.add('t' + it.topic_id);
 		out.push({ value: `topic:${it.topic_id}`, label: it.module ? `${it.topic} (${it.module})` : it.topic, group: 'Topics' });
 	}
-	for (const kind of ['quiz', 'tutorial', 'poll', 'offline'])
+	for (const kind of ['quiz', 'tutorial', 'poll', 'offline', 'presentation'])
 		for (const it of items) if (it.kind === kind) out.push({ value: `item:${itemKey(it)}`, label: it.title, group: SCOPE_GROUPS[kind] });
 	for (const s of sessions) out.push({ value: `session:${s.id}`, label: `${s.title} · ${when(s.started_at)} · ${s.students}`, group: 'Quiz sessions (one run)' });
 	return out;
@@ -70,7 +70,7 @@ export const GROUP_RULES: { v: GroupRule; label: string }[] = [
 	{ v: 'lowest', label: 'Lowest' }
 ];
 
-export const KIND_LABEL: Record<string, string> = { quiz: 'Quiz', tutorial: 'Tutorial', poll: 'Poll', offline: 'Offline assignment' };
+export const KIND_LABEL: Record<string, string> = { quiz: 'Quiz', tutorial: 'Tutorial', poll: 'Poll', offline: 'Offline assignment', presentation: 'Presentations' };
 
 /** The largest unit that says a number of minutes exactly: 2880 is 2 days. */
 export function reviewParts(minutes: number | null | undefined): { n: number | null; unit: Unit } {

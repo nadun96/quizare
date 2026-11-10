@@ -282,3 +282,56 @@ func TestReportColorRanges(t *testing.T) {
 		t.Run(name, func(t *testing.T) { f.teacher.Call("PUT", url, x, 422, nil) })
 	}
 }
+
+// D-165: a poll's marked presentations are an item of the class report: a
+// student's own, and a group's for each of its members.
+func TestPresentationsInClassReport(t *testing.T) {
+	f := newReportFx(t)
+	ctx := context.Background()
+	amaya, ben, chen := f.student(t), f.student(t), f.student(t)
+	f.classGroup(t, "Lions", amaya, ben)
+	var id string
+	if err := f.e.Pool.QueryRow(ctx, `INSERT INTO poll.polls (teacher_id, classroom_id, title, join_code, identity, status)
+		VALUES ($1, $2, 'Talks', substr(md5(random()::text), 1, 8), 'identified', 'closed') RETURNING id::text`, f.teacher.User.ID, f.class.ID).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	f.teacher.Call("PUT", "/api/teacher/polls/"+id+"/presentations", map[string]any{"mode": "class_group", "out_of": 20}, 200, nil)
+	var lions string
+	if err := f.e.Pool.QueryRow(ctx, `SELECT id::text FROM content.categories WHERE classroom_id = $1 AND name = 'Lions'`, f.class.ID).Scan(&lions); err != nil {
+		t.Fatal(err)
+	}
+	var sub string
+	if err := f.e.Pool.QueryRow(ctx, `INSERT INTO poll.submissions (poll_id, owner_kind, owner_id, title, slides, ready) VALUES ($1, 'class_group', $2, 'Volcanoes', 1, true) RETURNING id::text`, id, lions).Scan(&sub); err != nil {
+		t.Fatal(err)
+	}
+	url := "/api/teacher/classrooms/" + f.class.ID + "/class-report"
+	var r grading.ClassReport
+	f.teacher.Call("GET", url, nil, 200, &r)
+	for _, it := range r.Items {
+		if it.Kind == "presentation" {
+			t.Fatal("in the report before a mark")
+		}
+	}
+	f.teacher.Call("PUT", "/api/teacher/poll-submissions/"+sub+"/mark", map[string]any{"mark": 15}, 204, nil)
+	f.teacher.Call("GET", url, nil, 200, &r)
+	found := false
+	for _, it := range r.Items {
+		found = found || (it.Kind == "presentation" && it.ID == id)
+	}
+	if !found {
+		t.Fatalf("items: %+v", r.Items)
+	}
+	for _, st := range r.Students {
+		m, ok := st.Marks["presentation:"+id]
+		switch st.UserID {
+		case amaya.User.ID, ben.User.ID:
+			if !ok || m.Score != 15 || m.Max != 20 || m.Pct != 75 {
+				t.Fatalf("%s: %+v", st.Name, m)
+			}
+		case chen.User.ID:
+			if ok {
+				t.Fatalf("not in the group: %+v", m)
+			}
+		}
+	}
+}
