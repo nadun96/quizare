@@ -20,7 +20,8 @@ import (
 )
 
 type Service struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	convert SlideConverter // PowerPoint through Drive, for group presentations (D-166)
 }
 
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool} }

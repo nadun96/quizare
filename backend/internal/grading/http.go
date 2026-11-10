@@ -14,7 +14,8 @@ func uid(r *http.Request) string { return auth.MustUser(r.Context()).ID }
 
 // TeacherRoutes mounts the gradebook and attendance under /api/teacher.
 func (s *Service) TeacherRoutes(r chi.Router) {
-	s.offlineRoutes(r) // offline assignments (D-159)
+	s.offlineRoutes(r)     // offline assignments (D-159)
+	s.presTeacherRoutes(r) // group presentations (D-166)
 	r.Method("GET", "/classrooms/{id}/gradebook", httpx.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		g, err := s.Gradebook(r.Context(), uid(r), chi.URLParam(r, "id"))
 		if err != nil {
